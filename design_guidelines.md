@@ -1,176 +1,181 @@
-# Travel Housing Finder - Design Guidelines
+# Ready Set Fly - Design Guidelines
 
-## Design Approach: Reference-Based (Travel Industry Leaders)
+## Design Approach: Reference-Based (Aviation Marketplace + Rental Platform)
 
-Drawing primary inspiration from **Airbnb** and **Booking.com** - establishing trust through visual appeal, showcasing properties effectively, and creating seamless search experiences. This approach prioritizes visual richness, user confidence, and intuitive discovery.
+Drawing inspiration from **Controller** (aviation marketplace), **Turo** (rental model), and **Airbnb** (search/filter UX), while establishing professional credibility essential for aviation transactions. Prioritizes trust through precision, certification clarity, and comprehensive aircraft showcasing.
 
 **Core Principles:**
-- Image-first property presentation with generous whitespace
-- Trust-building through professional photography and clean layouts
-- Seamless filtering without overwhelming users
-- Accessibility as foundational, not additive
+- Professional-first aesthetic appealing to pilots and aircraft owners
+- Dual navigation architecture (Rentals | Marketplace) with clear context switching
+- Certification-aware search and matching
+- Transaction transparency and security signals throughout
+- Image-rich aircraft presentations with technical specification accessibility
 
 ## Color Palette
 
 **Light Mode:**
-- Primary: 220 75% 45% (Deep blue - trust and reliability)
-- Background: 0 0% 98% (Soft white)
-- Surface: 0 0% 100% (Pure white cards)
-- Text Primary: 220 15% 20%
-- Text Secondary: 220 10% 45%
-- Success: 145 65% 42% (Availability indicators)
-- Border: 220 12% 88%
+- Primary: 215 85% 35% (Aviation blue - authority and sky)
+- Secondary: 215 20% 25% (Professional charcoal)
+- Background: 0 0% 97%
+- Surface: 0 0% 100%
+- Text Primary: 215 15% 18%
+- Text Secondary: 215 10% 42%
+- Success: 145 60% 40% (Certification badges, available)
+- Warning: 35 90% 55% (Aviation orange for CTAs, urgent items)
+- Border: 215 15% 88%
 
 **Dark Mode:**
-- Primary: 220 75% 55%
-- Background: 220 15% 10%
-- Surface: 220 12% 14%
-- Text Primary: 220 10% 95%
-- Text Secondary: 220 8% 65%
-- Success: 145 55% 48%
-- Border: 220 10% 22%
-
-**Accent (Sparingly):**
-- Coral: 12 85% 58% (CTAs, featured badges)
+- Primary: 215 75% 50%
+- Background: 215 18% 12%
+- Surface: 215 15% 16%
+- Text Primary: 215 8% 94%
+- Text Secondary: 215 8% 68%
+- Success: 145 55% 45%
+- Warning: 35 85% 60%
+- Border: 215 12% 24%
 
 ## Typography
 
-**Font Families:**
-- Primary: 'Inter' (Google Fonts) - UI elements, body text
-- Display: 'Poppins' (Google Fonts) - Headlines, property titles
+**Fonts:** Inter (UI/body), Outfit (headers/aircraft names)
 
 **Scale:**
-- Hero/Display: text-5xl font-bold (Poppins)
-- Property Titles: text-2xl font-semibold (Poppins)
-- Section Headers: text-3xl font-bold (Poppins)
-- Body: text-base font-normal (Inter)
-- Captions/Meta: text-sm font-medium (Inter)
-- Filter Labels: text-sm font-medium (Inter)
+- Hero Display: text-6xl font-bold (Outfit)
+- Section Headers: text-4xl font-bold (Outfit)
+- Aircraft Names: text-3xl font-semibold (Outfit)
+- Listings Titles: text-xl font-semibold (Outfit)
+- Body: text-base (Inter)
+- Technical Specs: text-sm font-medium (Inter)
+- Badges/Labels: text-xs font-semibold uppercase tracking-wide (Inter)
 
 ## Layout System
 
-**Tailwind Spacing Units:** 2, 4, 6, 8, 12, 16, 20, 24
-- Micro spacing (badges, icons): 2, 4
-- Component padding: 6, 8
-- Section spacing: 12, 16, 20
-- Major sections: 24
+**Spacing Units:** 2, 4, 6, 8, 12, 16, 20, 24, 32
+- Icons/badges: 2, 4
+- Card padding: 6, 8
+- Component gaps: 8, 12
+- Section spacing: 16, 20, 24
+- Major vertical rhythm: 32
 
-**Container Strategy:**
-- Max-width: max-w-7xl for main content
-- Search bar: max-w-4xl centered
-- Property grids: grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4
-- Filters sidebar: w-72 on desktop, full-width drawer on mobile
+**Containers:**
+- Main content: max-w-7xl
+- Search/filters: max-w-5xl
+- Detail views: max-w-6xl
+- Grids: grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4
 
 ## Component Library
 
-### A. Search & Filters
-**Hero Search Bar:**
-- Elevated card (shadow-lg) with rounded-2xl corners
-- Three-section layout: Destination | Dates | Guests + Search button
-- Each section separated by subtle dividers
-- Coral accent for primary search button with rounded-full shape
+### Navigation Architecture
+**Header:** Dual-tab system (Rentals | Marketplace) with active state indicators, user profile with certification badges visible, "List Your Aircraft" CTA (warning color), notifications bell
 
-**Filter Panel:**
-- Sticky sidebar on desktop, bottom sheet on mobile
-- Collapsible sections with smooth transitions
-- Multi-select checkboxes with custom styling
-- Price range slider with dual handles
-- "Clear All" and "Apply Filters" actions at bottom
+**Marketplace Sub-Nav:** Pills for Aircraft Sales | Jobs | CFIs | Flight Schools | Mechanics | Charter Services - horizontal scroll on mobile
 
-**Amenity Tags:**
-- Pill-shaped badges with icons from Heroicons
-- Checkbox-style selection (outline when unselected, filled when selected)
-- Grid layout: grid-cols-2 md:grid-cols-3 gap-3
+### Search & Discovery
 
-### B. Property Listings
+**Hero Section (Rentals):**
+- Full-width image (h-[600px]): Professional pilot pre-flighting modern aircraft on tarmac at golden hour
+- Gradient overlay (from-black/60 via-black/30 to-transparent)
+- Centered search card (shadow-2xl, rounded-2xl, backdrop-blur) with:
+  - Aircraft Type dropdown | Certification Required | Location | Dates
+  - Primary CTA: "Find Aircraft" (warning accent, rounded-full)
+  - Quick filters below: IFR Equipped, Multi-Engine, Glass Cockpit (pill badges)
 
-**Property Cards:**
-- 4:3 aspect ratio hero image with rounded-t-xl
-- Hover: subtle scale and shadow enhancement
-- Heart icon (top-right) for favorites with backdrop blur
-- Image carousel indicators (bottom)
-- Content padding: p-4
-- Price displayed prominently (text-xl font-bold)
-- Rating stars + review count
-- Key amenities (max 3) as small icons with text
-- Location with map pin icon
+**Filter Sidebar (Rentals):**
+- Sticky w-80 on desktop, drawer on mobile
+- Certification matching (auto-filters based on user's certs with explanatory text)
+- Price range slider
+- Aircraft category checkboxes with count badges
+- Avionics suite multi-select
+- Insurance included toggle
+- Hour requirements slider
+- "Advanced Filters" collapsible: Year range, total time available, wet/dry rate
 
-**List View Alternative:**
-- Horizontal card: image left (w-64), content right
-- More amenities visible (6-8)
-- Larger description preview
+**Marketplace Filters:**
+- Category-specific (e.g., Jobs: Full-time/Contract/CFI, location radius)
+- Price ranges, experience requirements, certifications needed
 
-### C. Detail View
+### Listing Cards
 
-**Property Header:**
-- Full-width image gallery (primary + 4 thumbnails in grid)
-- Breadcrumb navigation above
-- Title, rating, location in overlay or below gallery
-- Share and Save buttons (top-right with blur background)
+**Aircraft Rental Cards:**
+- 3:2 aspect ratio primary image, rounded-xl
+- Certification badge overlay (top-left): PPL, CPL, ATP with color coding
+- Favorite heart (top-right, backdrop-blur background)
+- Owner verification checkmark badge
+- Card content (p-6):
+  - Aircraft make/model (text-xl font-semibold)
+  - Hourly rate prominent (text-2xl font-bold) + insurance included indicator
+  - Key specs row: Year | Total Time | Avionics (icons from Heroicons)
+  - Location with distance from user
+  - Availability calendar preview (mini 7-day strip)
+  - Quick stats: Response time, acceptance rate
 
-**Information Sections:**
-- Two-column layout: Details (left 2/3) | Booking card (right 1/3 sticky)
-- Amenities grid with Heroicons
-- Description with "Read more" expansion
-- Map integration placeholder
-- Reviews with star ratings and user avatars
+**Marketplace Cards (Sales/Services):**
+- Similar layout adapted: Sales show asking price, Jobs show salary range, CFIs show hourly rate
+- Category badge (top-left colored by type)
+- Listing age indicator
+- Contact options preview
+
+### Detail Views
+
+**Aircraft Detail (Rentals):**
+- Image gallery: Primary large + 8 thumbnails in grid, lightbox expansion
+- Two-column: Left (specifications, description, owner info) | Right (booking card sticky)
+- Specifications table: Make/Model, Year, Registration, Total Time, Engine, Avionics suite, Insurance details
+- Required certifications prominent with user match indicator
+- Reviews section with pilot verification badges
+- Similar aircraft recommendations
 
 **Booking Card:**
-- Sticky position, shadow-xl
-- Price per night prominent
-- Date picker inline
-- Guest counter
-- Total price calculation
-- "Reserve" CTA (coral accent)
+- Price breakdown: Base rate × hours, insurance, tax, platform fee (15%)
+- Date picker with hourly blocks
+- Estimated flight hours input
+- Total calculation
+- "Request to Book" CTA
+- Messaging owner button (outline variant with blur background)
+- Cancellation policy summary
 
-### D. Accessibility Features
+**Marketplace Detail Views:**
+- Adapted layout per category
+- Contact forms, application forms as needed
+- Seller/poster profiles with transaction history
 
-**High Contrast Toggle:**
-- Icon button in header (adjustable-icon from Heroicons)
-- Applies WCAG AAA contrast ratios when enabled
+### Profiles & Trust Signals
 
-**Keyboard Navigation:**
-- Visible focus rings (ring-2 ring-primary ring-offset-2)
-- Skip to content link
-- Logical tab order through filters and listings
+**Pilot Profiles:**
+- Certification badges grid (PPL, IR, CPL, Multi-Engine, ATP) with dates
+- Total flight hours, aircraft types flown
+- Verification indicators: ID, pilot license, background check
+- Review score and rental history
+- Aircraft owner indicator if applicable
 
-**Screen Reader Optimization:**
-- ARIA labels on all interactive elements
-- Live regions for filter results count
-- Descriptive alt text for all images
-- Form field labels and error messages
+**Owner Profiles:**
+- Fleet overview (if multiple aircraft)
+- Response metrics
+- Insurance coverage details
+- Maintenance records indicator
+- Years on platform badge
 
-**Text Sizing:**
-- User preference toggle (small/medium/large)
-- Affects body text while maintaining layout integrity
+### Transactional Features
+
+**Dashboard:**
+- Tab navigation: Active Rentals | Upcoming | Past | Listings | Financials
+- Active rentals: Timeline view with pre-flight checklist integration, messaging thread preview
+- Financial tracking: Revenue graph, pending deposits, transaction history table
+- Listing management: Status toggles, calendar management, pricing updates
+
+**Messaging:**
+- In-app chat during active rentals
+- Quick actions: Share flight plan, report issues, extend rental
+- Timestamp and read receipts
+- File attachments for documents
 
 ## Images
 
-**Hero Section:**
-- Large hero image (h-96 md:h-[500px]): Diverse travelers browsing accommodations on laptop/phone in modern, bright space
-- Overlay with gradient (from-black/50 to-transparent) for text legibility
-- Search bar positioned center, overlaying bottom third
+**Hero:** Full-width professional aviation photography - modern aircraft on tarmac with pilot conducting preflight, warm lighting, aspirational yet authentic
 
-**Property Images:**
-- High-quality photographs showing room interiors, exteriors, key amenities
-- Consistent 4:3 aspect ratio for cards
-- Gallery view: Primary large (2/3 width) + 4 grid thumbnails (1/3)
+**Listings:** High-quality aircraft photos from multiple angles (exterior, cockpit, panel, interior), consistent lighting and backgrounds when possible
 
-**Supporting Images:**
-- Trust badges/partner logos in footer
-- Placeholder user avatars (circular) for reviews
-- Icon-based amenity indicators (no photos)
+**Category Images:** Supporting images for marketplace sections - flight schools show classroom/simulators, mechanics show hangars, charter shows luxury cabin interiors
 
-**Image Treatment:**
-- Lazy loading for performance
-- Subtle rounded corners (rounded-xl)
-- Maintain accessibility with proper alt descriptions
+**Trust Elements:** Verification badges, certification logos (FAA, insurance providers), payment security icons in footer
 
-## Animations
-
-**Minimal and Purposeful:**
-- Card hover: transition-transform duration-200 hover:scale-[1.02]
-- Filter apply: Subtle fade-in for results (opacity transition)
-- Modal/drawer: Slide-in transitions (translate-y or translate-x)
-- Loading states: Skeleton screens with pulse animation
-- NO complex scroll-triggered animations
+**Image Treatment:** Lazy loading, rounded-xl corners, subtle hover scale (1.02) on cards, blur-up loading placeholders

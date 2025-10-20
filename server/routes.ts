@@ -3,8 +3,48 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema } from "@shared/schema";
+import { setupAuth, isAuthenticated } from "./replitAuth";
+
+// Verification middleware - checks if user is verified
+const isVerified: Express.RequestHandler = async (req: any, res, next) => {
+  try {
+    const userId = req.user.claims.sub;
+    const user = await storage.getUser(userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    
+    if (!user.isVerified) {
+      return res.status(403).json({ 
+        error: "Account verification required",
+        message: "You must complete account verification before creating listings."
+      });
+    }
+    
+    next();
+  } catch (error) {
+    console.error("Error checking verification:", error);
+    res.status(500).json({ error: "Verification check failed" });
+  }
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Auth middleware (from blueprint:javascript_log_in_with_replit)
+  await setupAuth(app);
+
+  // Auth routes (from blueprint:javascript_log_in_with_replit)
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
   // Stripe payment intent endpoint (requires STRIPE_SECRET_KEY)
   app.post("/api/create-payment-intent", async (req, res) => {
     try {
@@ -58,9 +98,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/aircraft", async (req, res) => {
+  app.post("/api/aircraft", isAuthenticated, isVerified, async (req: any, res) => {
     try {
-      const validatedData = insertAircraftListingSchema.parse(req.body);
+      const userId = req.user.claims.sub;
+      const validatedData = insertAircraftListingSchema.parse({ ...req.body, ownerId: userId });
       const listing = await storage.createAircraftListing(validatedData);
       res.status(201).json(listing);
     } catch (error: any) {
@@ -144,9 +185,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/marketplace", async (req, res) => {
+  app.post("/api/marketplace", isAuthenticated, isVerified, async (req: any, res) => {
     try {
-      const validatedData = insertMarketplaceListingSchema.parse(req.body);
+      const userId = req.user.claims.sub;
+      const validatedData = insertMarketplaceListingSchema.parse({ ...req.body, userId });
       const listing = await storage.createMarketplaceListing(validatedData);
       res.status(201).json(listing);
     } catch (error: any) {

@@ -6,13 +6,16 @@ import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, X } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { isUnauthorizedError } from "@/lib/authUtils";
+import { Upload, X, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Form,
   FormControl,
@@ -55,6 +58,7 @@ export default function ListAircraft() {
   const [selectedCertifications, setSelectedCertifications] = useState<string[]>(["PPL"]);
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -78,6 +82,31 @@ export default function ListAircraft() {
       navigate("/dashboard");
     },
     onError: (error: any) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+        return;
+      }
+      
+      // Handle 403 verification error
+      if (error.message.includes("403") || error.message.includes("verification")) {
+        toast({
+          title: "Verification Required",
+          description: "Please complete account verification to list aircraft.",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          navigate("/profile");
+        }, 1000);
+        return;
+      }
+      
       toast({
         title: "Error",
         description: error.message || "Failed to list aircraft",
@@ -87,12 +116,20 @@ export default function ListAircraft() {
   });
 
   const onSubmit = (data: ListingFormData) => {
-    // Assume ownerId would come from auth context - using mock ID for now
-    const mockOwnerId = "user-123";
+    // Prevent submission if not verified
+    if (!isVerified) {
+      toast({
+        title: "Verification Required",
+        description: "Please complete account verification before listing aircraft.",
+        variant: "destructive",
+      });
+      navigate("/profile");
+      return;
+    }
     
+    // ownerId is now automatically set by the backend from auth session
     createListingMutation.mutate({
       ...data,
-      ownerId: mockOwnerId,
       requiredCertifications: selectedCertifications,
       images: imageFiles.length > 0 ? imageFiles : ["https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=800"],
     });
@@ -100,9 +137,21 @@ export default function ListAircraft() {
 
   const certifications = ["PPL", "IR", "CPL", "Multi-Engine", "ATP"];
 
+  const isVerified = user?.isVerified || false;
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
+        {/* Verification Alert */}
+        {!isVerified && (
+          <Alert className="mb-6 border-destructive" data-testid="alert-verification-required">
+            <ShieldAlert className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Account Verification Required</strong> - You must complete account verification before listing aircraft. 
+              Please visit your <a href="/profile" className="underline font-medium">profile page</a> to complete verification.
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="mb-8">
           <h1 className="font-display text-4xl font-bold mb-2" data-testid="text-list-aircraft-title">
             List Your Aircraft
@@ -448,8 +497,8 @@ export default function ListAircraft() {
                 type="submit" 
                 size="lg" 
                 className="flex-1 bg-accent text-accent-foreground hover:bg-accent" 
+                disabled={!isVerified || createListingMutation.isPending}
                 data-testid="button-submit-listing"
-                disabled={createListingMutation.isPending}
               >
                 {createListingMutation.isPending ? "Listing..." : "List Aircraft"}
               </Button>

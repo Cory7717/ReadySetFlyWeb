@@ -1,21 +1,33 @@
 import { Link, useLocation } from "wouter";
-import { Plane, User, Bell } from "lucide-react";
+import { Plane, User, Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "./theme-toggle";
+import { useAuth } from "@/hooks/useAuth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 export function Header() {
   const [location] = useLocation();
+  const { user } = useAuth();
   
   const isRentals = location === "/" || location.startsWith("/aircraft");
   const isMarketplace = location.startsWith("/marketplace");
+  
+  const displayName = user?.firstName && user?.lastName 
+    ? `${user.firstName} ${user.lastName}`
+    : user?.email || "User";
+  
+  const initials = user?.firstName && user?.lastName
+    ? `${user.firstName[0]}${user.lastName[0]}`
+    : user?.email?.[0].toUpperCase() || "U";
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -66,11 +78,21 @@ export function Header() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" data-testid="button-profile-menu" aria-label="User menu">
-                  <User className="h-5 w-5" />
+                <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-profile-menu" aria-label="User menu">
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src={user?.profileImageUrl || undefined} alt={displayName} />
+                    <AvatarFallback>{initials}</AvatarFallback>
+                  </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{displayName}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/dashboard" data-testid="link-dashboard">Dashboard</Link>
                 </DropdownMenuItem>
@@ -84,7 +106,8 @@ export function Header() {
                   <Link href="/messages" data-testid="link-messages">Messages</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem data-testid="button-logout">
+                <DropdownMenuItem onClick={() => window.location.href = '/api/logout'} data-testid="button-logout">
+                  <LogOut className="mr-2 h-4 w-4" />
                   Log out
                 </DropdownMenuItem>
               </DropdownMenuContent>

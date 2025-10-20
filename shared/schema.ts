@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -10,14 +10,28 @@ export const marketplaceCategories = ["aircraft-sale", "charter", "cfi", "flight
 export const rentalStatuses = ["pending", "approved", "active", "completed", "cancelled"] as const;
 export const listingTiers = ["basic", "standard", "premium"] as const;
 
-// Users / Pilots
+// Session storage table (REQUIRED for Replit Auth - from blueprint:javascript_log_in_with_replit)
+export const sessions = pgTable(
+  "sessions",
+  {
+    sid: varchar("sid").primaryKey(),
+    sess: jsonb("sess").notNull(),
+    expire: timestamp("expire").notNull(),
+  },
+  (table) => [index("IDX_session_expire").on(table.expire)],
+);
+
+// Users / Pilots (Merged with Replit Auth requirements - from blueprint:javascript_log_in_with_replit)
 export const users = pgTable("users", {
+  // Auth fields (from blueprint - REQUIRED)
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: text("email").notNull().unique(),
-  password: text("password").notNull(),
-  name: text("name").notNull(),
+  email: varchar("email").unique(),
+  firstName: varchar("first_name"),
+  lastName: varchar("last_name"),
+  profileImageUrl: varchar("profile_image_url"),
+  
+  // Additional user fields
   phone: text("phone"),
-  avatarUrl: text("avatar_url"),
   
   // Pilot information
   certifications: text("certifications").array().notNull().default(sql`ARRAY[]::text[]`),
@@ -33,7 +47,9 @@ export const users = pgTable("users", {
   bankAccountConnected: boolean("bank_account_connected").default(false),
   stripeAccountId: text("stripe_account_id"),
   
+  // Timestamps (from blueprint)
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Aircraft Listings (for rent)
@@ -185,6 +201,7 @@ export const transactions = pgTable("transactions", {
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 }).extend({
   certifications: z.array(z.enum(certificationTypes)).default([]),
   totalFlightHours: z.number().min(0).default(0),
@@ -235,6 +252,7 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type UpsertUser = typeof users.$inferInsert; // For Replit Auth (from blueprint:javascript_log_in_with_replit)
 
 export type AircraftListing = typeof aircraftListings.$inferSelect;
 export type InsertAircraftListing = z.infer<typeof insertAircraftListingSchema>;

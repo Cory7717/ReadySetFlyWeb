@@ -5,7 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "./components/theme-provider";
 import { Header } from "./components/header";
+import { useAuth } from "@/hooks/useAuth";
 import Home from "@/pages/home";
+import Landing from "@/pages/landing";
 import Marketplace from "@/pages/marketplace";
 import Dashboard from "@/pages/dashboard";
 import Profile from "@/pages/profile";
@@ -13,15 +15,24 @@ import AircraftDetail from "@/pages/aircraft-detail";
 import ListAircraft from "@/pages/list-aircraft";
 import NotFound from "@/pages/not-found";
 
+// Router component handles authenticated vs unauthenticated routing (from blueprint:javascript_log_in_with_replit)
 function Router() {
+  const { isAuthenticated, isLoading } = useAuth();
+
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/marketplace" component={Marketplace} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/profile" component={Profile} />
-      <Route path="/aircraft/:id" component={AircraftDetail} />
-      <Route path="/list-aircraft" component={ListAircraft} />
+      {isLoading || !isAuthenticated ? (
+        <Route path="/" component={Landing} />
+      ) : (
+        <>
+          <Route path="/" component={Home} />
+          <Route path="/marketplace" component={Marketplace} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/profile" component={Profile} />
+          <Route path="/aircraft/:id" component={AircraftDetail} />
+          <Route path="/list-aircraft" component={ListAircraft} />
+        </>
+      )}
       <Route component={NotFound} />
     </Switch>
   );
@@ -33,7 +44,8 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <div className="min-h-screen bg-background">
-            <Header />
+            {/* Only show Header for authenticated users */}
+            <AuthenticatedHeader />
             <Router />
           </div>
           <Toaster />
@@ -41,6 +53,17 @@ function App() {
       </ThemeProvider>
     </QueryClientProvider>
   );
+}
+
+// Helper component to conditionally render Header
+function AuthenticatedHeader() {
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading || !isAuthenticated) {
+    return null;
+  }
+  
+  return <Header />;
 }
 
 export default App;

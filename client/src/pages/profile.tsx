@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import type { User } from "@shared/schema";
 import { Shield, Award, Plane, Clock, CheckCircle2, Edit } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import { VerificationBadges } from "@/components/verification-badges";
 import {
   Dialog,
   DialogContent,
@@ -32,25 +34,25 @@ const aircraftTypes = [
   "Cessna 172", "Cessna 182", "Piper Cherokee", "Cirrus SR22", "Diamond DA40"
 ];
 
-// Mock user ID - in real app would come from auth context
-const CURRENT_USER_ID = "user-123";
-
 export default function Profile() {
   const [isEditing, setIsEditing] = useState(false);
   const { toast } = useToast();
+  const { user: authUser } = useAuth();
   
-  // Fetch user data
+  // Fetch full user data
   const { data: user, isLoading } = useQuery<User>({
-    queryKey: ["/api/users", CURRENT_USER_ID],
+    queryKey: ["/api/users", authUser?.id],
+    enabled: !!authUser?.id,
   });
 
   // Update user mutation
   const updateUserMutation = useMutation({
     mutationFn: async (updates: Partial<User>) => {
-      return await apiRequest("PATCH", `/api/users/${CURRENT_USER_ID}`, updates);
+      return await apiRequest("PATCH", `/api/users/${authUser?.id}`, updates);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users", CURRENT_USER_ID] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users", authUser?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({
         title: "Profile Updated",
         description: "Your profile has been successfully updated.",
@@ -102,9 +104,12 @@ export default function Profile() {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <h1 className="font-display text-3xl font-bold mb-1" data-testid="text-profile-name">
-                      {user.name}
+                      {user.firstName} {user.lastName}
                     </h1>
-                    <p className="text-muted-foreground">{user.email}</p>
+                    <p className="text-muted-foreground mb-3">{user.email}</p>
+                    
+                    {/* Verification Badges */}
+                    <VerificationBadges user={user} type="renter" size="md" />
                   </div>
                   <Dialog open={isEditing} onOpenChange={setIsEditing}>
                     <DialogTrigger asChild>

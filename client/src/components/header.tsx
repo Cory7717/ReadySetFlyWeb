@@ -105,6 +105,16 @@ export function Header() {
                 <DropdownMenuItem asChild>
                   <Link href="/messages" data-testid="link-messages">Messages</Link>
                 </DropdownMenuItem>
+                {user?.isAdmin && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin" data-testid="link-admin" className="text-primary font-medium">
+                        🛡️ Admin Dashboard
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => window.location.href = '/api/logout'} data-testid="button-logout">
                   <LogOut className="mr-2 h-4 w-4" />

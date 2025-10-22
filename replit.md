@@ -12,8 +12,41 @@ Ready Set Fly is a comprehensive aviation marketplace and rental platform connec
 - **Protected Routes**: All listing creation endpoints require authentication + verification
 - **Session Management**: PostgreSQL-backed sessions with 7-day TTL
 - **Landing Page**: Professional landing page for logged-out users with feature highlights and CTAs
+- **Admin System**: Role-based access for @readysetfly.us emails and coryarmer@gmail.com
+  - Admin dashboard with user search and listing management
+  - Admin link in header for admin users
 
-### Verification Requirements
+### Phase 1: Comprehensive Verification System ✅
+**Database Schema** (all fields added and deployed):
+
+*Renter Verification Fields (users table)*:
+- Identity: legalFirstName, legalLastName, dateOfBirth, phoneVerified, emailVerified
+- Documents: governmentIdFrontUrl, governmentIdBackUrl, selfieUrl
+- Verification: identityVerified, identityVerifiedAt
+- Payment: paymentMethodOnFile, paymentVerified, paymentVerifiedAt
+- FAA Pilot (optional): faaCertificateNumber, pilotCertificateName, pilotCertificatePhotoUrl, faaVerified, faaVerifiedMonth, faaVerifiedAt
+
+*Owner/Aircraft Verification Fields (aircraftListings table)*:
+- Ownership: serialNumber, registrationDocUrl, llcAuthorizationUrl, ownershipVerified, ownerNameMatch, registryCheckedAt
+- Annual Inspection: annualInspectionDocUrl, annualInspectionDate, annualDueDate, annualSignerName, annualSignerCertNumber, annualSignerIaNumber, annualApVerified
+- 100-Hour: requires100Hour, hour100InspectionDocUrl, hour100InspectionTach, currentTach, hour100Remaining
+- Maintenance Tracking: maintenanceTrackingProvider, maintenanceTrackingDocUrl, hasMaintenanceTracking
+- Verification Status: maintenanceVerified, maintenanceVerifiedAt
+
+*Verification Submissions Table*:
+- Admin review queue for all verification types
+- Stores submission data as JSONB for flexibility
+- FAA registry cross-check fields and audit trail
+- Document URLs and file hashes for security
+
+**Badge System**:
+- Created `VerificationBadges` component with tooltips
+- Renter badges: Identity Verified, Payment Verified, FAA Verified (MM/YYYY)
+- Owner badges: Ownership Verified, Annual Current/Overdue, 100-Hour tracking, Maintenance Tracking
+- Integrated into profile page display
+- Color-coded: green (verified), yellow (pending), red (overdue/issues)
+
+### Verification Requirements (Legacy - kept for backward compatibility)
 - **Middleware**: `isVerified` middleware checks user.isVerified before allowing listing creation
 - **Protected Endpoints**:
   - POST /api/aircraft (requires auth + verification)
@@ -57,12 +90,15 @@ Ready Set Fly is a comprehensive aviation marketplace and rental platform connec
 
 ## Development Status
 - ✅ Full backend API with PostgreSQL
-- ✅ Authentication & authorization
-- ✅ Verification requirements enforced
+- ✅ Authentication & authorization with Replit Auth
+- ✅ Admin system with role-based access
+- ✅ **Phase 1: Verification schema + badge system**
 - ✅ Frontend pages (home, marketplace, dashboard, profile, list-aircraft, aircraft-detail)
 - ✅ WebSocket messaging infrastructure
 - ✅ Stripe payment scaffolding
-- ⏳ Modal listing views (in progress)
+- ⏳ **Phase 2: Renter verification workflow** (pending)
+- ⏳ **Phase 3: Owner/aircraft verification workflow** (pending)
+- ⏳ Modal listing views (pending)
 - ⏳ End-to-end testing (pending)
 
 ## Integration Points
@@ -70,9 +106,43 @@ Ready Set Fly is a comprehensive aviation marketplace and rental platform connec
 - Database: `npm run db:push` to sync schema changes
 - Auth: Login via `/api/login`, logout via `/api/logout`
 - User API: `GET /api/auth/user` (requires authentication)
+- Admin: Visit `/admin` when logged in as admin user
 
-## Next Steps
-1. Create modal listing views (half/full screen expandable)
-2. Complete end-to-end testing
-3. Add production Stripe keys
-4. Deploy to production
+## Next Steps (Phase 2 & 3)
+
+### Phase 2: Renter Verification Workflow
+1. **Verification Start Page** (`/verify-identity`)
+   - Step 1: Legal name + date of birth + phone verification
+   - Step 2: Government ID upload (front/back) + selfie
+   - Step 3: Payment method (Stripe integration)
+   - Step 4 (Optional): FAA pilot certificate upload
+   - Submit to admin review queue
+
+2. **File Upload System**
+   - Cloud storage integration for document uploads
+   - SHA-256 hashing for audit trail
+   - Image validation and compression
+
+3. **Admin Review Interface**
+   - Queue of pending verifications in admin dashboard
+   - Document viewer with approve/reject actions
+   - Rejection with notes and re-submission
+
+### Phase 3: Owner/Aircraft Verification Workflow
+1. **Aircraft Verification Form** (extends `/list-aircraft`)
+   - Serial number + registration doc upload
+   - LLC authorization (if applicable)
+   - Annual inspection doc + signer details
+   - 100-hour inspection tracking
+   - Maintenance tracking provider (optional)
+
+2. **FAA Registry Integration**
+   - Automatic N-number lookup from FAA database
+   - Owner name matching validation
+   - Airworthiness certificate verification
+
+3. **Maintenance Tracking**
+   - Annual inspection due date calculation
+   - 100-hour countdown from current tach
+   - Automatic badge updates (current/overdue)
+   - Admin override for corrections

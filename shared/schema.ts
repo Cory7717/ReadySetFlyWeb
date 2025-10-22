@@ -38,11 +38,38 @@ export const users = pgTable("users", {
   totalFlightHours: integer("total_flight_hours").default(0),
   aircraftTypesFlown: text("aircraft_types_flown").array().default(sql`ARRAY[]::text[]`),
   
-  // Verification
+  // Basic Verification (legacy - keep for backward compatibility)
   isVerified: boolean("is_verified").default(false),
   licenseVerified: boolean("license_verified").default(false),
   backgroundCheckCompleted: boolean("background_check_completed").default(false),
   isAdmin: boolean("is_admin").default(false),
+  
+  // Renter Verification (new comprehensive system)
+  legalFirstName: text("legal_first_name"),
+  legalLastName: text("legal_last_name"),
+  dateOfBirth: text("date_of_birth"), // YYYY-MM-DD
+  phoneVerified: boolean("phone_verified").default(false),
+  emailVerified: boolean("email_verified").default(false),
+  
+  // Identity Documents
+  governmentIdFrontUrl: text("government_id_front_url"),
+  governmentIdBackUrl: text("government_id_back_url"),
+  selfieUrl: text("selfie_url"),
+  identityVerified: boolean("identity_verified").default(false),
+  identityVerifiedAt: timestamp("identity_verified_at"),
+  
+  // Payment Verification
+  paymentMethodOnFile: boolean("payment_method_on_file").default(false),
+  paymentVerified: boolean("payment_verified").default(false),
+  paymentVerifiedAt: timestamp("payment_verified_at"),
+  
+  // Pilot License Verification (optional for renters)
+  faaCertificateNumber: text("faa_certificate_number"),
+  pilotCertificateName: text("pilot_certificate_name"),
+  pilotCertificatePhotoUrl: text("pilot_certificate_photo_url"),
+  faaVerified: boolean("faa_verified").default(false),
+  faaVerifiedMonth: text("faa_verified_month"), // MM/YYYY format
+  faaVerifiedAt: timestamp("faa_verified_at"),
   
   // Bank/payout information
   bankAccountConnected: boolean("bank_account_connected").default(false),
@@ -93,6 +120,40 @@ export const aircraftListings = pgTable("aircraft_listings", {
   // Owner metrics
   responseTime: integer("response_time_hours").default(24),
   acceptanceRate: integer("acceptance_rate").default(100),
+  
+  // Owner/Aircraft Verification
+  serialNumber: text("serial_number"),
+  registrationDocUrl: text("registration_doc_url"), // AC 8050-3 or 8050-64
+  llcAuthorizationUrl: text("llc_authorization_url"), // If LLC owns aircraft
+  ownershipVerified: boolean("ownership_verified").default(false),
+  ownershipVerifiedAt: timestamp("ownership_verified_at"),
+  registryCheckedAt: timestamp("registry_checked_at"),
+  ownerNameMatch: boolean("owner_name_match"),
+  
+  // Maintenance & Inspections
+  annualInspectionDocUrl: text("annual_inspection_doc_url"),
+  annualInspectionDate: text("annual_inspection_date"), // YYYY-MM-DD
+  annualDueDate: text("annual_due_date"), // YYYY-MM-DD (computed)
+  annualSignerName: text("annual_signer_name"),
+  annualSignerCertNumber: text("annual_signer_cert_number"),
+  annualSignerIaNumber: text("annual_signer_ia_number"),
+  annualApVerified: boolean("annual_ap_verified").default(false),
+  
+  // 100-Hour (if applicable)
+  requires100Hour: boolean("requires_100_hour").default(false),
+  hour100InspectionDocUrl: text("hour_100_inspection_doc_url"),
+  hour100InspectionTach: integer("hour_100_inspection_tach"),
+  currentTach: integer("current_tach"),
+  hour100Remaining: integer("hour_100_remaining"), // computed
+  
+  // Maintenance Tracking (optional)
+  maintenanceTrackingProvider: text("maintenance_tracking_provider"), // CAMP, Traxxall, etc.
+  maintenanceTrackingDocUrl: text("maintenance_tracking_doc_url"),
+  hasMaintenanceTracking: boolean("has_maintenance_tracking").default(false),
+  
+  // Verification Status
+  maintenanceVerified: boolean("maintenance_verified").default(false),
+  maintenanceVerifiedAt: timestamp("maintenance_verified_at"),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -198,6 +259,43 @@ export const transactions = pgTable("transactions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Verification Submissions (admin review queue)
+export const verificationSubmissions = pgTable("verification_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  // Type of verification
+  type: text("type").notNull(), // renter_identity, renter_payment, renter_pilot, owner_aircraft, owner_maintenance
+  status: text("status").notNull().default("pending"), // pending, approved, rejected
+  
+  // Related entity (for owner verifications)
+  aircraftId: varchar("aircraft_id").references(() => aircraftListings.id),
+  
+  // Submission data (stored as JSON for flexibility)
+  submissionData: jsonb("submission_data").notNull(),
+  
+  // Documents uploaded with this submission
+  documentUrls: text("document_urls").array().default(sql`ARRAY[]::text[]`),
+  
+  // Admin review
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  rejectionReason: text("rejection_reason"),
+  
+  // FAA registry verification results
+  faaRegistryChecked: boolean("faa_registry_checked").default(false),
+  faaRegistryMatch: boolean("faa_registry_match"),
+  faaRegistryData: jsonb("faa_registry_data"),
+  
+  // Audit trail
+  sources: text("sources").array().default(sql`ARRAY[]::text[]`), // e.g., ["FAA Aircraft Registry", "FAA Airmen Database"]
+  fileHashes: text("file_hashes").array().default(sql`ARRAY[]::text[]`), // SHA-256 hashes of uploaded files
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -268,6 +366,9 @@ export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 
 export type Transaction = typeof transactions.$inferSelect;
+
+export type VerificationSubmission = typeof verificationSubmissions.$inferSelect;
+export type InsertVerificationSubmission = Omit<VerificationSubmission, 'id' | 'createdAt' | 'updatedAt'>;
 
 // Certification types
 export type CertificationType = typeof certificationTypes[number];

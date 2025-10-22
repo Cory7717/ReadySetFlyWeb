@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import type { MarketplaceListing } from "@shared/schema";
 import { MarketplaceCard } from "@/components/marketplace-card";
@@ -16,6 +17,7 @@ const categories = [
 
 export default function Marketplace() {
   const [selectedCategory, setSelectedCategory] = useState("aircraft-sale");
+  const [, navigate] = useLocation();
 
   const { data: allListings = [], isLoading } = useQuery<MarketplaceListing[]>({
     queryKey: ["/api/marketplace"],
@@ -73,7 +75,12 @@ export default function Marketplace() {
               <span data-testid="text-marketplace-count">{categoryListings.length}</span> active listings
             </p>
           </div>
-          <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent" data-testid="button-create-listing">
+          <Button 
+            variant="default" 
+            className="bg-accent text-accent-foreground hover:bg-accent" 
+            onClick={() => navigate("/create-marketplace-listing")}
+            data-testid="button-create-listing"
+          >
             Create Listing
           </Button>
         </div>

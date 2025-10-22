@@ -42,6 +42,7 @@ export const users = pgTable("users", {
   isVerified: boolean("is_verified").default(false),
   licenseVerified: boolean("license_verified").default(false),
   backgroundCheckCompleted: boolean("background_check_completed").default(false),
+  isAdmin: boolean("is_admin").default(false),
   
   // Bank/payout information
   bankAccountConnected: boolean("bank_account_connected").default(false),

@@ -107,8 +107,8 @@ export default function Marketplace() {
                 description={listing.description}
                 price={listing.price ? `$${parseFloat(listing.price).toLocaleString()}` : ""}
                 location={listing.location || "N/A"}
-                image={listing.images[0]}
-                images={listing.images.length}
+                image={listing.images?.[0]}
+                images={listing.images?.length || 0}
                 tier={listing.tier || undefined}
               />
             ))}

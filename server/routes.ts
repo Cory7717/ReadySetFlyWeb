@@ -376,10 +376,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const query = (req.query.q as string) || "";
+      // searchUsers already sanitizes sensitive fields at the storage layer
       const users = query ? await storage.searchUsers(query) : [];
-      // Don't send sensitive info
-      const sanitizedUsers = users.map(({ password, stripeAccountId, ...user }) => user);
-      res.json(sanitizedUsers);
+      res.json(users);
     } catch (error) {
       res.status(500).json({ error: "Failed to search users" });
     }
@@ -387,6 +386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/aircraft", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      // Note: getAllAircraftListings already has reasonable limits in storage layer
       const listings = await storage.getAllAircraftListings();
       res.json(listings);
     } catch (error) {
@@ -396,6 +396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/marketplace", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      // Note: getAllMarketplaceListings already has reasonable limits in storage layer
       const listings = await storage.getAllMarketplaceListings();
       res.json(listings);
     } catch (error) {

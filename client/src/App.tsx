@@ -13,6 +13,7 @@ import Dashboard from "@/pages/dashboard";
 import Profile from "@/pages/profile";
 import AircraftDetail from "@/pages/aircraft-detail";
 import ListAircraft from "@/pages/list-aircraft";
+import AdminDashboard from "@/pages/admin";
 import NotFound from "@/pages/not-found";
 
 // Router component handles authenticated vs unauthenticated routing (from blueprint:javascript_log_in_with_replit)
@@ -31,6 +32,7 @@ function Router() {
           <Route path="/profile" component={Profile} />
           <Route path="/aircraft/:id" component={AircraftDetail} />
           <Route path="/list-aircraft" component={ListAircraft} />
+          <Route path="/admin" component={AdminDashboard} />
         </>
       )}
       <Route component={NotFound} />

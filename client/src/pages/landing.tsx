@@ -152,6 +152,21 @@ export default function Landing() {
           </Button>
         </div>
       </div>
+
+      {/* Admin Login */}
+      <div className="py-8">
+        <div className="container mx-auto px-4 text-center">
+          <Button 
+            variant="ghost"
+            size="sm"
+            onClick={() => window.location.href = '/api/login'}
+            data-testid="button-admin-login"
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Admin Login
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

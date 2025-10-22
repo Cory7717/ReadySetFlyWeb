@@ -123,7 +123,18 @@ export class DatabaseStorage implements IStorage {
   async searchUsers(query: string): Promise<User[]> {
     const searchPattern = `%${query}%`;
     return await db
-      .select()
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+        totalFlightHours: users.totalFlightHours,
+        certifications: users.certifications,
+        isVerified: users.isVerified,
+        isAdmin: users.isAdmin,
+        createdAt: users.createdAt,
+      })
       .from(users)
       .where(
         or(

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema } from "@shared/schema";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 
 // Verification middleware - checks if user is verified
 const isVerified: Express.RequestHandler = async (req: any, res, next) => {
@@ -369,6 +369,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(transaction);
     } catch (error) {
       res.status(500).json({ error: "Failed to update transaction" });
+    }
+  });
+
+  // Admin routes
+  app.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const query = (req.query.q as string) || "";
+      const users = query ? await storage.searchUsers(query) : [];
+      // Don't send sensitive info
+      const sanitizedUsers = users.map(({ password, stripeAccountId, ...user }) => user);
+      res.json(sanitizedUsers);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to search users" });
+    }
+  });
+
+  app.get("/api/admin/aircraft", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const listings = await storage.getAllAircraftListings();
+      res.json(listings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch aircraft listings" });
+    }
+  });
+
+  app.get("/api/admin/marketplace", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const listings = await storage.getAllMarketplaceListings();
+      res.json(listings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch marketplace listings" });
     }
   });
 

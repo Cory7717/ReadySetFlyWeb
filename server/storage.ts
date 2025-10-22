@@ -19,7 +19,7 @@ import {
   transactions,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, or, ilike } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -28,6 +28,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>; // REQUIRED for Replit Auth
+  searchUsers(query: string): Promise<User[]>; // Admin search by name
 
   // Aircraft Listings
   getAircraftListing(id: string): Promise<AircraftListing | undefined>;
@@ -117,6 +118,21 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async searchUsers(query: string): Promise<User[]> {
+    const searchPattern = `%${query}%`;
+    return await db
+      .select()
+      .from(users)
+      .where(
+        or(
+          ilike(users.firstName, searchPattern),
+          ilike(users.lastName, searchPattern),
+          ilike(users.email, searchPattern)
+        )
+      )
+      .limit(50);
   }
 
   // Aircraft Listings

@@ -138,6 +138,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           maintenanceTrackingDocUrl
         ].filter((url): url is string => url !== null);
         
+        // Calculate annual due date (12 months from inspection date)
+        let annualDueDate = null;
+        if (listingData.annualInspectionDate) {
+          const inspectionDate = new Date(listingData.annualInspectionDate);
+          annualDueDate = new Date(inspectionDate);
+          annualDueDate.setFullYear(annualDueDate.getFullYear() + 1);
+        }
+        
+        // Calculate 100-hour remaining (currentTach - hour100InspectionTach)
+        let hour100Remaining = null;
+        if (listingData.requires100Hour && 
+            listingData.currentTach !== undefined && listingData.currentTach !== null &&
+            listingData.hour100InspectionTach !== undefined && listingData.hour100InspectionTach !== null) {
+          const remaining = 100 - (listingData.currentTach - listingData.hour100InspectionTach);
+          hour100Remaining = Math.max(0, remaining);
+        }
+        
         // Create listing - if verification docs provided, keep unlisted until admin approval
         // Otherwise, publish immediately (preserves existing behavior for JSON-only submissions)
         const validatedData = insertAircraftListingSchema.parse({
@@ -147,6 +164,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ownershipVerified: false,
           maintenanceVerified: false,
           hasMaintenanceTracking: !!listingData.maintenanceTrackingProvider,
+          // Automatic calculations
+          annualDueDate,
+          hour100Remaining,
           // Include verification doc URLs in listing for reference
           registrationDocUrl,
           llcAuthorizationUrl,

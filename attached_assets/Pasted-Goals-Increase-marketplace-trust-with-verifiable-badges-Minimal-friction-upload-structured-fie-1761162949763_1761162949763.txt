@@ -1,0 +1,142 @@
+Goals
+
+Increase marketplace trust with verifiable badges.
+
+Minimal friction: upload + structured fields + automated checks + light manual review.
+
+Clear profile status badges visible to all users.
+
+1) Renter Verification
+Data to Collect
+
+Full legal name
+
+DOB (YYYY-MM-DD)
+
+Phone + email (verified)
+
+Government ID upload (front/back)
+
+Selfie liveness (optional, if provider available)
+
+Payment method on file (Stripe)
+
+Optional: Pilot license (if renter flies, else skip):
+
+FAA certificate number + name → auto-match
+
+Optional photo of certificate
+
+Automation & Checks
+
+Email + phone OTP verification.
+
+If pilot info provided:
+
+Validate certificate number + name against FAA Airmen Registry (local dataset or live look-up).
+
+Store “verified_on: MM/YYYY” for badge.
+
+Badges (Renter)
+
+Identity Verified (ID + contact confirmed)
+
+Payment Verified (Stripe attached)
+
+Pilot: FAA Verified (MM/YYYY) (only if applicable)
+
+UI/Copy
+
+Section: “Verify Your Account”
+
+Progress steps: Contact → ID → Payment → (Optional) Pilot License
+
+Show badges on renter profile & booking modal.
+
+2) Owner (Aircraft) Verification
+Proof of Ownership
+
+Collect:
+
+N-Number (tail), make/model, serial
+
+Upload: Certificate of Aircraft Registration (AC 8050-3) or temporary authority (8050-64)
+
+If registrant is an LLC and lister differs: authorization letter (PDF) or dry lease doc
+
+Automate:
+
+Query FAA Aircraft Registration by N-Number → match owner/entity, make/model
+
+Store “registry_checked_at” and “owner_match: true/false”
+
+Maintenance & Inspection Currency
+
+Collect uploads:
+
+Annual inspection sign-off (last 12 calendar months)
+
+If applicable (for hire/flight instruction): 100-hour inspection entry
+
+Signer details: A&P name, cert #, IA # (if annual)
+
+Optional: AD compliance / tracking snapshot (CAMP/Traxxall/Flightdocs/SierraTrax PDF)
+
+Validate (form rules + reviewer checklist):
+
+Annual entry includes: type, date, aircraft TT, signer name, signature, cert #, IA if annual
+
+Compute due:
+
+Annual_due = end of month (last_annual_date + 12 calendar months)
+
+100-hour_remaining = 100 − (current_tach − last_100hr_tach) (if required)
+
+Mechanic Verification:
+
+Cross-check signer A&P/IA by name/cert # in FAA Airmen (Mechanic) search (store “ap_verified: true/false”).
+
+Badges (Owner/Aircraft)
+
+Ownership Verified (FAA Match)
+
+Annual: Current (expires MMM DD, YYYY) or Overdue
+
+100-Hour: N hrs remaining or Not applicable
+
+Optional: Maintenance Tracking on file (CAMP/Traxxall/…)
+
+UI/Copy
+
+Owner Profile → “Aircraft Verification” wizard steps:
+
+Ownership (N-Number → auto-pull → upload reg doc; LLC letter if needed)
+
+Maintenance (upload annual/100-hr pages + signer details)
+
+Tracking (optional PDF)
+
+Review & Submit (computed due dates + preview of badges)
+
+3) Admin Review Workflow
+Queue
+
+New submissions land in /admin/verifications
+
+Filters: type (renter/owner), status (pending/approved/rejected), aircraft
+
+Reviewer Actions
+
+View side-by-side: user/aircraft metadata + uploaded docs
+
+Click “Open FAA Registry” (N-Number) and “Open Airmen Registry” (mechanic/pilot)
+
+Approve → set badges + timestamps
+
+Reject → reason + resubmit request (auto-email)
+
+Audit Log
+
+verified_by, verified_at, sources (FAA Registry, Airmen lookup), notes
+
+Keep original file URLs (secured) + hash

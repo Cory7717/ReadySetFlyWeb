@@ -102,16 +102,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/aircraft", isAuthenticated, isVerified, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const validatedData = insertAircraftListingSchema.parse({ ...req.body, ownerId: userId });
-      const listing = await storage.createAircraftListing(validatedData);
-      res.status(201).json(listing);
-    } catch (error: any) {
-      res.status(400).json({ error: error.message || "Invalid aircraft data" });
+  app.post("/api/aircraft", 
+    isAuthenticated, 
+    isVerified,
+    upload.fields([
+      { name: 'registrationDoc', maxCount: 1 },
+      { name: 'llcAuthorization', maxCount: 1 },
+      { name: 'annualInspectionDoc', maxCount: 1 },
+      { name: 'hour100InspectionDoc', maxCount: 1 },
+      { name: 'maintenanceTrackingDoc', maxCount: 1 },
+    ]),
+    async (req: any, res) => {
+      try {
+        const userId = req.user.claims.sub;
+        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+        
+        // Parse listing data - handle both multipart and JSON
+        const hasFiles = files && Object.keys(files).length > 0;
+        const listingData = hasFiles ? JSON.parse(req.body.listingData || '{}') : req.body;
+        
+        // Create individual placeholder URLs for each verification document type (only if files present)
+        const timestamp = Date.now();
+        const registrationDocUrl = hasFiles && files.registrationDoc ? `/uploads/reg-doc-${userId}-${timestamp}.pdf` : null;
+        const llcAuthorizationUrl = hasFiles && files.llcAuthorization ? `/uploads/llc-auth-${userId}-${timestamp}.pdf` : null;
+        const annualInspectionDocUrl = hasFiles && files.annualInspectionDoc ? `/uploads/annual-${userId}-${timestamp}.pdf` : null;
+        const hour100InspectionDocUrl = hasFiles && files.hour100InspectionDoc ? `/uploads/100hr-${userId}-${timestamp}.pdf` : null;
+        const maintenanceTrackingDocUrl = hasFiles && files.maintenanceTrackingDoc ? `/uploads/maintenance-${userId}-${timestamp}.pdf` : null;
+        
+        // Collect all non-null document URLs for verification submission
+        const docUrls = [
+          registrationDocUrl,
+          llcAuthorizationUrl,
+          annualInspectionDocUrl,
+          hour100InspectionDocUrl,
+          maintenanceTrackingDocUrl
+        ].filter((url): url is string => url !== null);
+        
+        // Create listing - if verification docs provided, keep unlisted until admin approval
+        // Otherwise, publish immediately (preserves existing behavior for JSON-only submissions)
+        const validatedData = insertAircraftListingSchema.parse({
+          ...listingData,
+          ownerId: userId,
+          isListed: !hasFiles || docUrls.length === 0, // Publish immediately if no verification docs
+          ownershipVerified: false,
+          maintenanceVerified: false,
+          hasMaintenanceTracking: !!listingData.maintenanceTrackingProvider,
+          // Include verification doc URLs in listing for reference
+          registrationDocUrl,
+          llcAuthorizationUrl,
+          annualInspectionDocUrl,
+          hour100InspectionDocUrl,
+          maintenanceTrackingDocUrl,
+        });
+        
+        const listing = await storage.createAircraftListing(validatedData);
+        
+        // Create verification submission for admin review (only if verification docs provided)
+        if (hasFiles && docUrls.length > 0) {
+          await storage.createVerificationSubmission({
+            userId,
+            type: 'owner_aircraft',
+            status: 'pending',
+            aircraftId: listing.id,
+            submissionData: {
+              ...listingData,
+              registration: listing.registration,
+              make: listing.make,
+              model: listing.model,
+            },
+            documentUrls: docUrls,
+            reviewedBy: null,
+            reviewedAt: null,
+            reviewNotes: null,
+            rejectionReason: null,
+            faaRegistryChecked: false,
+            faaRegistryMatch: null,
+            faaRegistryData: null,
+            sources: [],
+            fileHashes: [],
+          });
+        }
+        
+        res.status(201).json(listing);
+      } catch (error: any) {
+        console.error("Create aircraft listing error:", error);
+        res.status(400).json({ error: error.message || "Invalid aircraft data" });
+      }
     }
-  });
+  );
 
   app.patch("/api/aircraft/:id", async (req, res) => {
     try {
@@ -481,25 +559,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // If approved, update user verification status
-      if (req.body.status === 'approved' && submission.type === 'renter_identity') {
-        const submissionData = submission.submissionData as any;
-        await storage.updateUser(submission.userId, {
-          legalFirstName: submissionData.legalFirstName,
-          legalLastName: submissionData.legalLastName,
-          dateOfBirth: submissionData.dateOfBirth,
-          identityVerified: true,
-          identityVerifiedAt: new Date(),
-          isVerified: true, // Legacy field
-        });
-        
-        // If FAA data provided, update that too
-        if (submissionData.faaCertificateNumber) {
+      if (req.body.status === 'approved') {
+        if (submission.type === 'renter_identity') {
+          const submissionData = submission.submissionData as any;
           await storage.updateUser(submission.userId, {
-            faaCertificateNumber: submissionData.faaCertificateNumber,
-            pilotCertificateName: submissionData.pilotCertificateName,
-            faaVerified: true,
-            faaVerifiedMonth: new Date().toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' }),
-            faaVerifiedAt: new Date(),
+            legalFirstName: submissionData.legalFirstName,
+            legalLastName: submissionData.legalLastName,
+            dateOfBirth: submissionData.dateOfBirth,
+            identityVerified: true,
+            identityVerifiedAt: new Date(),
+            isVerified: true, // Legacy field
+          });
+          
+          // If FAA data provided, update that too
+          if (submissionData.faaCertificateNumber) {
+            await storage.updateUser(submission.userId, {
+              faaCertificateNumber: submissionData.faaCertificateNumber,
+              pilotCertificateName: submissionData.pilotCertificateName,
+              faaVerified: true,
+              faaVerifiedMonth: new Date().toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' }),
+              faaVerifiedAt: new Date(),
+            });
+          }
+        } else if (submission.type === 'owner_aircraft' && submission.aircraftId) {
+          // Approve owner/aircraft verification - publish the listing
+          await storage.updateAircraftListing(submission.aircraftId, {
+            ownershipVerified: true,
+            maintenanceVerified: true,
+            maintenanceVerifiedAt: new Date(),
+            isListed: true, // Publish the listing
           });
         }
       }

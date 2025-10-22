@@ -49,6 +49,15 @@ const listingSchema = z.object({
   insuranceIncluded: z.boolean().default(true),
   wetRate: z.boolean().default(true),
   minFlightHours: z.coerce.number().min(0).default(0),
+  // Owner/Aircraft Verification Fields
+  serialNumber: z.string().min(1, "Serial number is required"),
+  annualInspectionDate: z.string().optional(),
+  annualSignerName: z.string().optional(),
+  annualSignerCertNumber: z.string().optional(),
+  requires100Hour: z.boolean().default(false),
+  currentTach: z.coerce.number().optional(),
+  hour100InspectionTach: z.coerce.number().optional(),
+  maintenanceTrackingProvider: z.string().optional(),
 });
 
 type ListingFormData = z.infer<typeof listingSchema>;
@@ -56,9 +65,22 @@ type ListingFormData = z.infer<typeof listingSchema>;
 export default function ListAircraft() {
   const [imageFiles, setImageFiles] = useState<string[]>([]);
   const [selectedCertifications, setSelectedCertifications] = useState<string[]>(["PPL"]);
+  const [verificationDocs, setVerificationDocs] = useState<{
+    registrationDoc: File | null;
+    llcAuthorization: File | null;
+    annualInspectionDoc: File | null;
+    hour100InspectionDoc: File | null;
+    maintenanceTrackingDoc: File | null;
+  }>({
+    registrationDoc: null,
+    llcAuthorization: null,
+    annualInspectionDoc: null,
+    hour100InspectionDoc: null,
+    maintenanceTrackingDoc: null,
+  });
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user} = useAuth();
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -66,12 +88,28 @@ export default function ListAircraft() {
       insuranceIncluded: true,
       wetRate: true,
       minFlightHours: 0,
+      requires100Hour: false,
     },
   });
 
   const createListingMutation = useMutation({
-    mutationFn: async (data: any) => {
-      return await apiRequest("POST", "/api/aircraft", data);
+    mutationFn: async ({ formData, hasFiles }: { formData: any; hasFiles: boolean }) => {
+      if (hasFiles) {
+        // Use fetch for FormData (multipart/form-data)
+        const response = await fetch("/api/aircraft", {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Submission failed");
+        }
+        return await response.json();
+      } else {
+        // Use apiRequest for JSON
+        return await apiRequest("POST", "/api/aircraft", formData);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/aircraft"] });
@@ -127,12 +165,42 @@ export default function ListAircraft() {
       return;
     }
     
-    // ownerId is now automatically set by the backend from auth session
-    createListingMutation.mutate({
+    // Check if verification documents are provided
+    const hasVerificationDocs = Object.values(verificationDocs).some(doc => doc !== null);
+    
+    const listingPayload = {
       ...data,
       requiredCertifications: selectedCertifications,
       images: imageFiles.length > 0 ? imageFiles : ["https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=800"],
-    });
+    };
+    
+    if (hasVerificationDocs) {
+      // Create FormData for multipart upload
+      const formData = new FormData();
+      formData.append('listingData', JSON.stringify(listingPayload));
+      
+      // Append verification document files
+      if (verificationDocs.registrationDoc) {
+        formData.append('registrationDoc', verificationDocs.registrationDoc);
+      }
+      if (verificationDocs.llcAuthorization) {
+        formData.append('llcAuthorization', verificationDocs.llcAuthorization);
+      }
+      if (verificationDocs.annualInspectionDoc) {
+        formData.append('annualInspectionDoc', verificationDocs.annualInspectionDoc);
+      }
+      if (verificationDocs.hour100InspectionDoc) {
+        formData.append('hour100InspectionDoc', verificationDocs.hour100InspectionDoc);
+      }
+      if (verificationDocs.maintenanceTrackingDoc) {
+        formData.append('maintenanceTrackingDoc', verificationDocs.maintenanceTrackingDoc);
+      }
+      
+      createListingMutation.mutate({ formData, hasFiles: true });
+    } else {
+      // No files, use regular JSON submission
+      createListingMutation.mutate({ formData: listingPayload, hasFiles: false });
+    }
   };
 
   const certifications = ["PPL", "IR", "CPL", "Multi-Engine", "ATP"];
@@ -448,6 +516,153 @@ export default function ListAircraft() {
                         />
                       </FormControl>
                       <FormLabel className="!mt-0">Wet rate (fuel included)</FormLabel>
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Owner/Aircraft Verification */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Owner & Aircraft Verification</CardTitle>
+                <CardDescription>
+                  Provide ownership and maintenance documentation for verification
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="serialNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Aircraft Serial Number</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter serial number" {...field} data-testid="input-serial-number" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="space-y-2">
+                  <Label>Registration Document</Label>
+                  <Input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setVerificationDocs(prev => ({ ...prev, registrationDoc: file }));
+                    }}
+                    data-testid="input-registration-doc"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Upload aircraft registration document
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Annual Inspection</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="annualInspectionDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Inspection Date</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} data-testid="input-annual-date" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="annualSignerName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Signer Name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="A&P/IA name" {...field} data-testid="input-signer-name" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <Input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setVerificationDocs(prev => ({ ...prev, annualInspectionDoc: file }));
+                    }}
+                    data-testid="input-annual-doc"
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="requires100Hour"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center space-x-2">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="checkbox-requires-100-hour"
+                        />
+                      </FormControl>
+                      <FormLabel className="!mt-0">Aircraft requires 100-hour inspection</FormLabel>
+                    </FormItem>
+                  )}
+                />
+
+                {form.watch("requires100Hour") && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-l-2 border-primary/30 pl-4">
+                    <FormField
+                      control={form.control}
+                      name="currentTach"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Current Tachometer</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.1" placeholder="2450.5" {...field} data-testid="input-current-tach" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="hour100InspectionTach"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Last 100-Hour Tach</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.1" placeholder="2375.0" {...field} data-testid="input-100-hour-tach" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="maintenanceTrackingProvider"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Maintenance Tracking (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Savvy Aviation, MxManager" {...field} data-testid="input-maintenance-provider" />
+                      </FormControl>
+                      <FormDescription>
+                        If you use a maintenance tracking service, specify the provider
+                      </FormDescription>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />

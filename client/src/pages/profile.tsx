@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -109,7 +110,17 @@ export default function Profile() {
                     <p className="text-muted-foreground mb-3">{user.email}</p>
                     
                     {/* Verification Badges */}
-                    <VerificationBadges user={user} type="renter" size="md" />
+                    <div className="flex gap-2 flex-wrap items-center">
+                      <VerificationBadges user={user} type="renter" size="md" />
+                      {!user.identityVerified && (
+                        <Link href="/verify-identity">
+                          <Button variant="outline" size="sm" data-testid="button-start-verification">
+                            <Shield className="h-4 w-4 mr-2" />
+                            Start Verification
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
                   </div>
                   <Dialog open={isEditing} onOpenChange={setIsEditing}>
                     <DialogTrigger asChild>

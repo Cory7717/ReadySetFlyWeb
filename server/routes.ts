@@ -1,12 +1,16 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import multer from "multer";
 import { storage } from "./storage";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 
+// Multer setup for file uploads (store in memory for now, can be upgraded to cloud storage)
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit
+
 // Verification middleware - checks if user is verified
-const isVerified: Express.RequestHandler = async (req: any, res, next) => {
+const isVerified = async (req: any, res: any, next: any) => {
   try {
     const userId = req.user.claims.sub;
     const user = await storage.getUser(userId);
@@ -372,6 +376,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Verification Submissions
+  app.post("/api/verification-submissions", 
+    isAuthenticated, 
+    upload.fields([
+      { name: 'governmentIdFront', maxCount: 1 },
+      { name: 'governmentIdBack', maxCount: 1 },
+      { name: 'selfie', maxCount: 1 },
+      { name: 'pilotCertificatePhoto', maxCount: 1 },
+    ]), 
+    async (req: any, res) => {
+      try {
+        const userId = req.user.claims.sub;
+        const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+        
+        // Parse submission data from form
+        const submissionData = JSON.parse(req.body.submissionData || '{}');
+        const type = req.body.type || 'renter_identity';
+        
+        // In production, upload files to cloud storage (S3, Replit Object Storage, etc.)
+        // For now, create placeholder URLs
+        const documentUrls: string[] = [];
+        
+        if (files.governmentIdFront) {
+          documentUrls.push(`/uploads/id-front-${userId}-${Date.now()}.jpg`);
+        }
+        if (files.governmentIdBack) {
+          documentUrls.push(`/uploads/id-back-${userId}-${Date.now()}.jpg`);
+        }
+        if (files.selfie) {
+          documentUrls.push(`/uploads/selfie-${userId}-${Date.now()}.jpg`);
+        }
+        if (files.pilotCertificatePhoto) {
+          documentUrls.push(`/uploads/pilot-cert-${userId}-${Date.now()}.jpg`);
+        }
+        
+        // Create verification submission
+        const submission = await storage.createVerificationSubmission({
+          userId,
+          type,
+          status: 'pending',
+          aircraftId: null,
+          submissionData,
+          documentUrls,
+          reviewedBy: null,
+          reviewedAt: null,
+          reviewNotes: null,
+          rejectionReason: null,
+          faaRegistryChecked: false,
+          faaRegistryMatch: null,
+          faaRegistryData: null,
+          sources: [],
+          fileHashes: [],
+        });
+        
+        res.json(submission);
+      } catch (error: any) {
+        console.error("Verification submission error:", error);
+        res.status(500).json({ error: error.message || "Failed to submit verification" });
+      }
+    }
+  );
+
+  app.get("/api/verification-submissions/user/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const requestingUserId = req.user.claims.sub;
+      const targetUserId = req.params.userId;
+      
+      // Only allow users to view their own submissions (or admins)
+      const requestingUser = await storage.getUser(requestingUserId);
+      if (requestingUserId !== targetUserId && !requestingUser?.isAdmin) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const submissions = await storage.getVerificationSubmissionsByUser(targetUserId);
+      res.json(submissions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch verification submissions" });
+    }
+  });
+
+  app.get("/api/verification-submissions/pending", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const submissions = await storage.getPendingVerificationSubmissions();
+      res.json(submissions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch pending verifications" });
+    }
+  });
+
+  app.patch("/api/verification-submissions/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const reviewerId = req.user.claims.sub;
+      const updates = {
+        ...req.body,
+        reviewedBy: reviewerId,
+        reviewedAt: new Date(),
+      };
+      
+      const submission = await storage.updateVerificationSubmission(req.params.id, updates);
+      
+      if (!submission) {
+        return res.status(404).json({ error: "Verification submission not found" });
+      }
+      
+      // If approved, update user verification status
+      if (req.body.status === 'approved' && submission.type === 'renter_identity') {
+        const submissionData = submission.submissionData as any;
+        await storage.updateUser(submission.userId, {
+          legalFirstName: submissionData.legalFirstName,
+          legalLastName: submissionData.legalLastName,
+          dateOfBirth: submissionData.dateOfBirth,
+          identityVerified: true,
+          identityVerifiedAt: new Date(),
+          isVerified: true, // Legacy field
+        });
+        
+        // If FAA data provided, update that too
+        if (submissionData.faaCertificateNumber) {
+          await storage.updateUser(submission.userId, {
+            faaCertificateNumber: submissionData.faaCertificateNumber,
+            pilotCertificateName: submissionData.pilotCertificateName,
+            faaVerified: true,
+            faaVerifiedMonth: new Date().toLocaleDateString('en-US', { month: '2-digit', year: 'numeric' }),
+            faaVerifiedAt: new Date(),
+          });
+        }
+      }
+      
+      res.json(submission);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update verification submission" });
+    }
+  });
+
   // Admin routes
   app.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
     try {
@@ -411,9 +549,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      // Don't send password
-      const { password, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      res.json(user);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch user" });
     }
@@ -421,14 +557,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/users/:id", async (req, res) => {
     try {
-      // Don't allow updating password through this endpoint
-      const { password, ...updates } = req.body;
-      const user = await storage.updateUser(req.params.id, updates);
+      const user = await storage.updateUser(req.params.id, req.body);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      res.json(user);
     } catch (error) {
       res.status(500).json({ error: "Failed to update user" });
     }
@@ -462,6 +595,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.createMessage({
             rentalId: message.rentalId,
             senderId: message.senderId,
+            receiverId: message.receiverId || rental.ownerId, // Default to owner if not specified
             content: message.content,
           });
           

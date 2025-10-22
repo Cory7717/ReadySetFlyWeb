@@ -15,6 +15,7 @@ import AircraftDetail from "@/pages/aircraft-detail";
 import ListAircraft from "@/pages/list-aircraft";
 import CreateMarketplaceListing from "@/pages/create-marketplace-listing";
 import AdminDashboard from "@/pages/admin";
+import VerifyIdentity from "@/pages/verify-identity";
 import NotFound from "@/pages/not-found";
 
 // Router component handles authenticated vs unauthenticated routing (from blueprint:javascript_log_in_with_replit)
@@ -35,6 +36,7 @@ function Router() {
           <Route path="/list-aircraft" component={ListAircraft} />
           <Route path="/create-marketplace-listing" component={CreateMarketplaceListing} />
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/verify-identity" component={VerifyIdentity} />
         </>
       )}
       <Route component={NotFound} />

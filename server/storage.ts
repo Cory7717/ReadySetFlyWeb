@@ -11,12 +11,15 @@ import {
   type Message,
   type InsertMessage,
   type Transaction,
+  type VerificationSubmission,
+  type InsertVerificationSubmission,
   users,
   aircraftListings,
   marketplaceListings,
   rentals,
   messages,
   transactions,
+  verificationSubmissions,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike } from "drizzle-orm";
@@ -66,6 +69,12 @@ export interface IStorage {
   getTransactionsByUser(userId: string): Promise<Transaction[]>;
   createTransaction(transaction: Omit<Transaction, 'id' | 'createdAt'>): Promise<Transaction>;
   updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction | undefined>;
+
+  // Verification Submissions
+  createVerificationSubmission(submission: InsertVerificationSubmission): Promise<VerificationSubmission>;
+  getVerificationSubmissionsByUser(userId: string): Promise<VerificationSubmission[]>;
+  getPendingVerificationSubmissions(): Promise<VerificationSubmission[]>;
+  updateVerificationSubmission(id: string, updates: Partial<VerificationSubmission>): Promise<VerificationSubmission | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -123,18 +132,7 @@ export class DatabaseStorage implements IStorage {
   async searchUsers(query: string): Promise<User[]> {
     const searchPattern = `%${query}%`;
     return await db
-      .select({
-        id: users.id,
-        email: users.email,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        profileImageUrl: users.profileImageUrl,
-        totalFlightHours: users.totalFlightHours,
-        certifications: users.certifications,
-        isVerified: users.isVerified,
-        isAdmin: users.isAdmin,
-        createdAt: users.createdAt,
-      })
+      .select()
       .from(users)
       .where(
         or(
@@ -388,6 +386,40 @@ export class DatabaseStorage implements IStorage {
       .where(eq(transactions.id, id))
       .returning();
     return transaction;
+  }
+
+  // Verification Submissions
+  async createVerificationSubmission(insertSubmission: InsertVerificationSubmission): Promise<VerificationSubmission> {
+    const [submission] = await db
+      .insert(verificationSubmissions)
+      .values(insertSubmission)
+      .returning();
+    return submission;
+  }
+
+  async getVerificationSubmissionsByUser(userId: string): Promise<VerificationSubmission[]> {
+    return await db
+      .select()
+      .from(verificationSubmissions)
+      .where(eq(verificationSubmissions.userId, userId))
+      .orderBy(desc(verificationSubmissions.createdAt));
+  }
+
+  async getPendingVerificationSubmissions(): Promise<VerificationSubmission[]> {
+    return await db
+      .select()
+      .from(verificationSubmissions)
+      .where(eq(verificationSubmissions.status, 'pending'))
+      .orderBy(asc(verificationSubmissions.createdAt));
+  }
+
+  async updateVerificationSubmission(id: string, updates: Partial<VerificationSubmission>): Promise<VerificationSubmission | undefined> {
+    const [submission] = await db
+      .update(verificationSubmissions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(verificationSubmissions.id, id))
+      .returning();
+    return submission;
   }
 }
 

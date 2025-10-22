@@ -1,17 +1,26 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Search, Users, Plane, List } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { User, AircraftListing, MarketplaceListing } from "@shared/schema";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { User, AircraftListing, MarketplaceListing, VerificationSubmission } from "@shared/schema";
 
 export default function AdminDashboard() {
   const [userSearch, setUserSearch] = useState("");
   const [activeTab, setActiveTab] = useState("users");
+  const [selectedSubmission, setSelectedSubmission] = useState<VerificationSubmission | null>(null);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [rejectionNotes, setRejectionNotes] = useState("");
+  const { toast } = useToast();
 
   // User search query
   const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
@@ -31,6 +40,45 @@ export default function AdminDashboard() {
     enabled: activeTab === "marketplace",
   });
 
+  // Pending verification submissions query (always fetch for badge count)
+  const { data: verificationSubmissions = [], isLoading: verificationsLoading } = useQuery<VerificationSubmission[]>({
+    queryKey: ["/api/verification-submissions/pending"],
+  });
+
+  // Approve submission mutation
+  const approveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("PATCH", `/api/verification-submissions/${id}`, { status: "approved" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/verification-submissions/pending"] });
+      toast({
+        title: "Verification Approved",
+        description: "User verification has been approved successfully.",
+      });
+      setReviewDialogOpen(false);
+    },
+  });
+
+  // Reject submission mutation
+  const rejectMutation = useMutation({
+    mutationFn: async ({ id, notes }: { id: string; notes: string }) => {
+      return await apiRequest("PATCH", `/api/verification-submissions/${id}`, {
+        status: "rejected",
+        rejectionReason: notes,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/verification-submissions/pending"] });
+      toast({
+        title: "Verification Rejected",
+        description: "User has been notified of the rejection.",
+      });
+      setReviewDialogOpen(false);
+      setRejectionNotes("");
+    },
+  });
+
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-8">
@@ -43,10 +91,19 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="users" data-testid="tab-users">
             <Users className="h-4 w-4 mr-2" />
             Users
+          </TabsTrigger>
+          <TabsTrigger value="verifications" data-testid="tab-verifications">
+            <Shield className="h-4 w-4 mr-2" />
+            Verifications
+            {verificationSubmissions.length > 0 && (
+              <Badge variant="destructive" className="ml-2">
+                {verificationSubmissions.length}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="aircraft" data-testid="tab-aircraft">
             <Plane className="h-4 w-4 mr-2" />
@@ -57,6 +114,82 @@ export default function AdminDashboard() {
             Marketplace Listings
           </TabsTrigger>
         </TabsList>
+
+        {/* Verifications Tab */}
+        <TabsContent value="verifications" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Verification Review Queue</CardTitle>
+              <CardDescription>
+                Review and approve user verification submissions
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {verificationsLoading && (
+                <div className="text-center py-8 text-muted-foreground">
+                  Loading verifications...
+                </div>
+              )}
+
+              {!verificationsLoading && verificationSubmissions.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No pending verification submissions
+                </div>
+              )}
+
+              {!verificationsLoading && verificationSubmissions.length > 0 && (
+                <div className="space-y-3">
+                  {verificationSubmissions.map((submission) => {
+                    const submissionData = submission.submissionData as any;
+                    return (
+                      <Card key={submission.id} data-testid={`card-verification-${submission.id}`}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge variant="outline">
+                                  {submission.type === "renter_identity" ? "Renter Identity" : "Owner/Aircraft"}
+                                </Badge>
+                                <span className="text-sm text-muted-foreground">
+                                  Submitted {submission.createdAt ? new Date(submission.createdAt).toLocaleDateString() : "Unknown"}
+                                </span>
+                              </div>
+                              <div className="font-semibold text-foreground mb-1">
+                                {submissionData.legalFirstName} {submissionData.legalLastName}
+                              </div>
+                              <div className="text-sm text-muted-foreground space-y-1">
+                                <div>User ID: {submission.userId}</div>
+                                <div>DOB: {submissionData.dateOfBirth}</div>
+                                {submissionData.faaCertificateNumber && (
+                                  <div>FAA Certificate: {submissionData.faaCertificateNumber}</div>
+                                )}
+                                <div>Documents: {submission.documentUrls?.length || 0} files</div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedSubmission(submission);
+                                  setReviewDialogOpen(true);
+                                }}
+                                data-testid={`button-review-${submission.id}`}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Review
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Users Tab */}
         <TabsContent value="users" className="space-y-4">
@@ -238,6 +371,154 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Verification Review Dialog */}
+      <Dialog 
+        open={reviewDialogOpen} 
+        onOpenChange={(open) => {
+          setReviewDialogOpen(open);
+          if (!open) {
+            // Reset state when dialog closes
+            setSelectedSubmission(null);
+            setRejectionNotes("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Review Verification Submission</DialogTitle>
+            <DialogDescription>
+              Review the submitted documents and information carefully before approving or rejecting.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedSubmission && (
+            <div className="space-y-4">
+              {/* Submission Details */}
+              <div className="space-y-2">
+                <h3 className="font-semibold">Submission Information</h3>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Type:</span>{" "}
+                    {selectedSubmission.type === "renter_identity" ? "Renter Identity" : "Owner/Aircraft"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Status:</span>{" "}
+                    <Badge variant="outline">{selectedSubmission.status}</Badge>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Submitted:</span>{" "}
+                    {selectedSubmission.createdAt ? new Date(selectedSubmission.createdAt).toLocaleString() : "Unknown"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">User ID:</span> {selectedSubmission.userId}
+                  </div>
+                </div>
+              </div>
+
+              {/* User Data */}
+              {(() => {
+                const data = selectedSubmission.submissionData as any;
+                return (
+                  <div className="space-y-2">
+                    <h3 className="font-semibold">User Information</h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Legal Name:</span>{" "}
+                        {data.legalFirstName} {data.legalLastName}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Date of Birth:</span> {data.dateOfBirth}
+                      </div>
+                      {data.faaCertificateNumber && (
+                        <>
+                          <div>
+                            <span className="text-muted-foreground">FAA Certificate:</span> {data.faaCertificateNumber}
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Certificate Name:</span> {data.pilotCertificateName}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Documents */}
+              <div className="space-y-2">
+                <h3 className="font-semibold">Documents ({selectedSubmission.documentUrls?.length || 0})</h3>
+                <div className="space-y-1 text-sm">
+                  {(selectedSubmission.documentUrls || []).map((url, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">
+                        Document {index + 1}
+                      </Badge>
+                      <span className="text-muted-foreground truncate">{url}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Note: Document URLs are placeholders. In production, these will link to cloud storage.
+                </p>
+              </div>
+
+              {/* Rejection Notes (if rejecting) */}
+              <div className="space-y-2">
+                <Label htmlFor="rejection-notes">Rejection Notes (optional)</Label>
+                <Textarea
+                  id="rejection-notes"
+                  placeholder="Provide feedback on why this verification is being rejected..."
+                  value={rejectionNotes}
+                  onChange={(e) => setRejectionNotes(e.target.value)}
+                  rows={3}
+                  data-testid="textarea-rejection-notes"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReviewDialogOpen(false);
+                setRejectionNotes("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (selectedSubmission) {
+                  rejectMutation.mutate({ 
+                    id: selectedSubmission.id, 
+                    notes: rejectionNotes || "No reason provided" 
+                  });
+                }
+              }}
+              disabled={rejectMutation.isPending}
+              data-testid="button-reject-verification"
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              {rejectMutation.isPending ? "Rejecting..." : "Reject"}
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedSubmission) {
+                  approveMutation.mutate(selectedSubmission.id);
+                }
+              }}
+              disabled={approveMutation.isPending}
+              data-testid="button-approve-verification"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              {approveMutation.isPending ? "Approving..." : "Approve"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

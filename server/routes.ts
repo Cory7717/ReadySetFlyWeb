@@ -142,8 +142,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let annualDueDate = null;
         if (listingData.annualInspectionDate) {
           const inspectionDate = new Date(listingData.annualInspectionDate);
-          annualDueDate = new Date(inspectionDate);
-          annualDueDate.setFullYear(annualDueDate.getFullYear() + 1);
+          const dueDate = new Date(inspectionDate);
+          dueDate.setFullYear(dueDate.getFullYear() + 1);
+          // Convert back to YYYY-MM-DD string format for text field
+          annualDueDate = dueDate.toISOString().split('T')[0];
         }
         
         // Calculate 100-hour remaining (currentTach - hour100InspectionTach)

@@ -154,16 +154,8 @@ export default function ListAircraft() {
   });
 
   const onSubmit = (data: ListingFormData) => {
-    // Prevent submission if not verified
-    if (!isVerified) {
-      toast({
-        title: "Verification Required",
-        description: "Please complete account verification before listing aircraft.",
-        variant: "destructive",
-      });
-      navigate("/profile");
-      return;
-    }
+    // Note: Backend middleware enforces verification requirement
+    // Frontend check removed to avoid UX issues with cached user data
     
     // Check if verification documents are provided
     const hasVerificationDocs = Object.values(verificationDocs).some(doc => doc !== null);
@@ -210,13 +202,13 @@ export default function ListAircraft() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Verification Alert */}
+        {/* Verification Info */}
         {!isVerified && (
-          <Alert className="mb-6 border-destructive" data-testid="alert-verification-required">
+          <Alert className="mb-6 border-yellow-500" data-testid="alert-verification-info">
             <ShieldAlert className="h-4 w-4" />
             <AlertDescription>
-              <strong>Account Verification Required</strong> - You must complete account verification before listing aircraft. 
-              Please visit your <a href="/profile" className="underline font-medium">profile page</a> to complete verification.
+              <strong>Verification Recommended</strong> - Verified aircraft listings get priority placement and build trust with renters. 
+              Visit your <a href="/profile" className="underline font-medium">profile page</a> to complete verification.
             </AlertDescription>
           </Alert>
         )}
@@ -712,7 +704,7 @@ export default function ListAircraft() {
                 type="submit" 
                 size="lg" 
                 className="flex-1 bg-accent text-accent-foreground hover:bg-accent" 
-                disabled={!isVerified || createListingMutation.isPending}
+                disabled={createListingMutation.isPending}
                 data-testid="button-submit-listing"
               >
                 {createListingMutation.isPending ? "Listing..." : "List Aircraft"}

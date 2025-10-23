@@ -722,7 +722,12 @@ export default function AdminDashboard() {
               {!aircraftLoading && aircraftListings.length > 0 && (
                 <div className="space-y-3">
                   {aircraftListings.map((listing) => (
-                    <Card key={listing.id} data-testid={`card-aircraft-${listing.id}`}>
+                    <Card 
+                      key={listing.id} 
+                      data-testid={`card-aircraft-${listing.id}`}
+                      className="hover-elevate cursor-pointer transition-all"
+                      onClick={() => setSelectedAircraft(listing)}
+                    >
                       <CardContent className="p-4">
                         <div className="flex justify-between items-start gap-4">
                           <div className="flex-1">
@@ -736,7 +741,7 @@ export default function AdminDashboard() {
                               ${listing.hourlyRate}/hr • Owner ID: {listing.ownerId}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <Badge variant={listing.isListed ? "default" : "secondary"}>
                               {listing.isListed ? "Listed" : "Unlisted"}
                             </Badge>
@@ -793,7 +798,12 @@ export default function AdminDashboard() {
               {!marketplaceLoading && marketplaceListings.length > 0 && (
                 <div className="space-y-3">
                   {marketplaceListings.map((listing) => (
-                    <Card key={listing.id} data-testid={`card-marketplace-${listing.id}`}>
+                    <Card 
+                      key={listing.id} 
+                      data-testid={`card-marketplace-${listing.id}`}
+                      className="hover-elevate cursor-pointer transition-all"
+                      onClick={() => setSelectedMarketplace(listing)}
+                    >
                       <CardContent className="p-4">
                         <div className="flex justify-between items-start gap-4">
                           <div className="flex-1">
@@ -808,7 +818,7 @@ export default function AdminDashboard() {
                               {listing.monthlyFee === "0" && " • FREE"}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <Badge variant={listing.isActive ? "default" : "secondary"}>
                               {listing.isActive ? "Active" : "Inactive"}
                             </Badge>
@@ -1172,6 +1182,236 @@ export default function AdminDashboard() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Aircraft Detail Dialog */}
+      <Dialog open={!!selectedAircraft} onOpenChange={(open) => !open && setSelectedAircraft(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Aircraft Listing Details</DialogTitle>
+            <DialogDescription>Review full aircraft listing information</DialogDescription>
+          </DialogHeader>
+          
+          {selectedAircraft && (
+            <div className="space-y-6">
+              {/* Images */}
+              {selectedAircraft.images && selectedAircraft.images.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {selectedAircraft.images.slice(0, 6).map((img, i) => (
+                    <div key={i} className="aspect-video rounded-lg overflow-hidden bg-muted">
+                      <img src={img} alt={`Aircraft ${i + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Basic Info */}
+              <div>
+                <h3 className="font-semibold text-lg mb-3">
+                  {selectedAircraft.year} {selectedAircraft.make} {selectedAircraft.model}
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Registration:</span>{" "}
+                    <span className="font-medium">{selectedAircraft.registration}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Location:</span>{" "}
+                    <span className="font-medium">{selectedAircraft.location}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Hourly Rate:</span>{" "}
+                    <span className="font-medium">${selectedAircraft.hourlyRate}/hr</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Total Time:</span>{" "}
+                    <span className="font-medium">{selectedAircraft.totalTime} hrs</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Owner ID:</span>{" "}
+                    <span className="font-medium">{selectedAircraft.ownerId}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Status:</span>{" "}
+                    <Badge variant={selectedAircraft.isListed ? "default" : "secondary"}>
+                      {selectedAircraft.isListed ? "Listed" : "Unlisted"}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              {selectedAircraft.description && (
+                <div>
+                  <h4 className="font-semibold mb-2">Description</h4>
+                  <p className="text-sm text-muted-foreground">{selectedAircraft.description}</p>
+                </div>
+              )}
+
+              {/* Certifications */}
+              {selectedAircraft.requiredCertifications && selectedAircraft.requiredCertifications.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2">Required Certifications</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedAircraft.requiredCertifications.map((cert, i) => (
+                      <Badge key={i} variant="outline">{cert}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Admin Actions */}
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    toggleAircraftMutation.mutate({ id: selectedAircraft.id, isListed: !selectedAircraft.isListed });
+                    setSelectedAircraft(null);
+                  }}
+                >
+                  {selectedAircraft.isListed ? "Unlist" : "List"} Aircraft
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setDeleteTarget({ type: 'aircraft', id: selectedAircraft.id });
+                    setDeleteDialogOpen(true);
+                    setSelectedAircraft(null);
+                  }}
+                >
+                  Delete Listing
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Marketplace Detail Dialog */}
+      <Dialog open={!!selectedMarketplace} onOpenChange={(open) => !open && setSelectedMarketplace(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Marketplace Listing Details</DialogTitle>
+            <DialogDescription>Review full marketplace listing information</DialogDescription>
+          </DialogHeader>
+          
+          {selectedMarketplace && (
+            <div className="space-y-6">
+              {/* Images */}
+              {selectedMarketplace.images && selectedMarketplace.images.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {selectedMarketplace.images.slice(0, 6).map((img, i) => (
+                    <div key={i} className="aspect-video rounded-lg overflow-hidden bg-muted">
+                      <img src={img} alt={`Listing ${i + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Basic Info */}
+              <div>
+                <h3 className="font-semibold text-lg mb-3">{selectedMarketplace.title}</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Category:</span>{" "}
+                    <Badge variant="outline" className="ml-1">{selectedMarketplace.category}</Badge>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Location:</span>{" "}
+                    <span className="font-medium">{selectedMarketplace.location || "Not specified"}</span>
+                  </div>
+                  {selectedMarketplace.price && (
+                    <div>
+                      <span className="text-muted-foreground">Price:</span>{" "}
+                      <span className="font-medium">${selectedMarketplace.price}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground">Monthly Fee:</span>{" "}
+                    <span className="font-medium">
+                      ${selectedMarketplace.monthlyFee}
+                      {selectedMarketplace.monthlyFee === "0" && " (FREE)"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">User ID:</span>{" "}
+                    <span className="font-medium">{selectedMarketplace.userId}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Status:</span>{" "}
+                    <Badge variant={selectedMarketplace.isActive ? "default" : "secondary"}>
+                      {selectedMarketplace.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                  </div>
+                  {selectedMarketplace.isPaid && (
+                    <div>
+                      <span className="text-muted-foreground">Payment:</span>{" "}
+                      <Badge variant="default">Paid</Badge>
+                    </div>
+                  )}
+                  {selectedMarketplace.expiresAt && (
+                    <div>
+                      <span className="text-muted-foreground">Expires:</span>{" "}
+                      <span className="font-medium">{new Date(selectedMarketplace.expiresAt).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Description */}
+              {selectedMarketplace.description && (
+                <div>
+                  <h4 className="font-semibold mb-2">Description</h4>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedMarketplace.description}</p>
+                </div>
+              )}
+
+              {/* Contact Info */}
+              {(selectedMarketplace.contactEmail || selectedMarketplace.contactPhone) && (
+                <div>
+                  <h4 className="font-semibold mb-2">Contact Information</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    {selectedMarketplace.contactEmail && (
+                      <div>
+                        <span className="text-muted-foreground">Email:</span>{" "}
+                        <span className="font-medium">{selectedMarketplace.contactEmail}</span>
+                      </div>
+                    )}
+                    {selectedMarketplace.contactPhone && (
+                      <div>
+                        <span className="text-muted-foreground">Phone:</span>{" "}
+                        <span className="font-medium">{selectedMarketplace.contactPhone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Admin Actions */}
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    toggleMarketplaceMutation.mutate({ id: selectedMarketplace.id, isActive: !selectedMarketplace.isActive });
+                    setSelectedMarketplace(null);
+                  }}
+                >
+                  {selectedMarketplace.isActive ? "Deactivate" : "Activate"} Listing
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setDeleteTarget({ type: 'marketplace', id: selectedMarketplace.id });
+                    setDeleteDialogOpen(true);
+                    setSelectedMarketplace(null);
+                  }}
+                >
+                  Delete Listing
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

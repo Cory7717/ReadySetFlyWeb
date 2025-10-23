@@ -15,6 +15,11 @@ Ready Set Fly is a comprehensive aviation marketplace and rental platform connec
 - **Admin System**: Role-based access for @readysetfly.us emails and coryarmer@gmail.com
   - Admin dashboard with user search and listing management
   - Admin link in header for admin users
+  - **Analytics Dashboard**: Revenue and transaction tracking with calendar-based metrics
+    - Daily/weekly/monthly/yearly revenue from 15% platform commission
+    - Transaction counts (completed platform fees only)
+    - Rental statistics (total and active rentals)
+    - Proper calendar boundaries (first of month/year, not rolling windows)
 
 ### Phase 1: Comprehensive Verification System ✅
 **Database Schema** (all fields added and deployed):

@@ -1,10 +1,11 @@
-import { DollarSign, TrendingUp, Plane, Calendar } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import type { AircraftListing, Transaction } from "@shared/schema";
+import { DollarSign, TrendingUp, Plane, Calendar, CreditCard, AlertCircle, CheckCircle2 } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import type { AircraftListing, Transaction, Rental, User } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -13,35 +14,94 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-// Mock user ID - in real app would come from auth context
-const CURRENT_USER_ID = "user-123";
+import { useAuth } from "@/hooks/useAuth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
+  const { user: authUser } = useAuth();
+  const { toast } = useToast();
+
+  // Fetch user's full data
+  const { data: user } = useQuery<User>({
+    queryKey: ["/api/users", authUser?.id],
+    enabled: !!authUser?.id,
+  });
+
   // Fetch user's aircraft listings
   const { data: allAircraft = [] } = useQuery<AircraftListing[]>({
     queryKey: ["/api/aircraft"],
   });
 
-  // Filter to current user's aircraft (in real app, would use /api/aircraft/owner/:ownerId)
-  const userAircraft = allAircraft.filter(a => a.ownerId === CURRENT_USER_ID);
+  // Filter to current user's aircraft
+  const userAircraft = allAircraft.filter(a => a.ownerId === authUser?.id);
   
-  // Fetch user's transactions
-  const { data: transactions = [] } = useQuery<Transaction[]>({
-    queryKey: ["/api/transactions/user", CURRENT_USER_ID],
+  // Fetch owner's rentals
+  const { data: ownerRentals = [] } = useQuery<Rental[]>({
+    queryKey: ["/api/rentals/owner", authUser?.id],
+    enabled: !!authUser?.id,
   });
 
-  // Calculate stats
-  const totalEarnings = transactions
-    .filter(t => t.type === "rental" && t.status === "completed")
-    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+  // Fetch user's transactions
+  const { data: transactions = [] } = useQuery<Transaction[]>({
+    queryKey: ["/api/transactions/user", authUser?.id],
+    enabled: !!authUser?.id,
+  });
 
-  const pendingDeposits = transactions
-    .filter(t => t.type === "rental" && t.status === "pending")
-    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+  // Calculate stats from actual rentals
+  const completedRentals = ownerRentals.filter(r => r.status === "completed");
+  const totalEarnings = completedRentals
+    .filter(r => r.payoutCompleted)
+    .reduce((sum, r) => sum + parseFloat(r.ownerPayout), 0);
+
+  const pendingPayouts = completedRentals
+    .filter(r => !r.payoutCompleted)
+    .reduce((sum, r) => sum + parseFloat(r.ownerPayout), 0);
 
   const activeListings = userAircraft.filter(a => a.isListed).length;
-  const upcomingRentals = 5; // Would come from rentals API
+  const activeRentals = ownerRentals.filter(r => r.status === "active").length;
+
+  // Bank account setup mutation
+  const setupBankAccountMutation = useMutation({
+    mutationFn: async () => {
+      // This will redirect to Stripe Connect onboarding
+      return await apiRequest("POST", "/api/stripe/connect/create-account", {});
+    },
+    onSuccess: (data: any) => {
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to setup bank account",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Request payout mutation
+  const requestPayoutMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/stripe/payout/request", {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rentals/owner", authUser?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions/user", authUser?.id] });
+      toast({
+        title: "Payout Requested",
+        description: "Your payout request has been submitted. Funds will be transferred within 2-7 business days.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to request payout",
+        variant: "destructive",
+      });
+    },
+  });
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
@@ -73,15 +133,15 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Deposits</CardTitle>
+              <CardTitle className="text-sm font-medium">Pending Payouts</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-pending-deposits">
-                ${pendingDeposits.toFixed(2)}
+              <div className="text-2xl font-bold" data-testid="text-pending-payouts">
+                ${pendingPayouts.toFixed(2)}
               </div>
               <p className="text-xs text-muted-foreground">
-                From {transactions.filter(t => t.status === "pending").length} pending rentals
+                From {completedRentals.filter(r => !r.payoutCompleted).length} completed rentals
               </p>
             </CardContent>
           </Card>
@@ -101,17 +161,45 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Upcoming Rentals</CardTitle>
+              <CardTitle className="text-sm font-medium">Active Rentals</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-upcoming-rentals">{upcomingRentals}</div>
+              <div className="text-2xl font-bold" data-testid="text-active-rentals">{activeRentals}</div>
               <p className="text-xs text-muted-foreground">
-                Next rental in 2 days
+                Currently rented
               </p>
             </CardContent>
           </Card>
         </div>
+
+        {/* Bank Account Setup Alert */}
+        {!user?.bankAccountConnected && pendingPayouts > 0 && (
+          <Alert className="mb-6 border-accent" data-testid="alert-bank-setup">
+            <CreditCard className="h-4 w-4" />
+            <AlertTitle>Bank Account Required</AlertTitle>
+            <AlertDescription className="flex items-center justify-between">
+              <span>Set up your bank account to receive payouts of ${pendingPayouts.toFixed(2)}</span>
+              <Button 
+                onClick={() => setupBankAccountMutation.mutate()}
+                disabled={setupBankAccountMutation.isPending}
+                data-testid="button-setup-bank"
+              >
+                {setupBankAccountMutation.isPending ? "Connecting..." : "Setup Bank Account"}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {user?.bankAccountConnected && (
+          <Alert className="mb-6 border-chart-2" data-testid="alert-bank-connected">
+            <CheckCircle2 className="h-4 w-4 text-chart-2" />
+            <AlertTitle>Bank Account Connected</AlertTitle>
+            <AlertDescription>
+              Your bank account is connected and ready to receive payouts
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Main Tabs */}
         <Tabs defaultValue="active" className="space-y-6">
@@ -209,8 +297,14 @@ export default function Dashboard() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2">
                 <CardTitle>Financial Transactions</CardTitle>
-                <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent" data-testid="button-request-deposit">
-                  Request Deposit
+                <Button 
+                  variant="default" 
+                  className="bg-accent text-accent-foreground hover:bg-accent" 
+                  onClick={() => requestPayoutMutation.mutate()}
+                  disabled={!user?.bankAccountConnected || pendingPayouts === 0 || requestPayoutMutation.isPending}
+                  data-testid="button-request-payout"
+                >
+                  {requestPayoutMutation.isPending ? "Processing..." : `Request Payout ($${pendingPayouts.toFixed(2)})`}
                 </Button>
               </CardHeader>
               <CardContent>
@@ -225,23 +319,36 @@ export default function Dashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <TableRow key={i} data-testid={`transaction-${i}`}>
-                        <TableCell>Dec {i}, 2024</TableCell>
-                        <TableCell>Rental payout - Cessna 172</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">Payout</Badge>
-                        </TableCell>
-                        <TableCell className="font-semibold">$456.75</TableCell>
-                        <TableCell>
-                          {i <= 2 ? (
-                            <Badge className="bg-chart-2 text-white">Completed</Badge>
-                          ) : (
-                            <Badge variant="outline">Pending</Badge>
-                          )}
+                    {completedRentals.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground">
+                          No completed rentals yet
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      completedRentals.map((rental) => {
+                        const aircraft = allAircraft.find(a => a.id === rental.aircraftId);
+                        return (
+                          <TableRow key={rental.id} data-testid={`transaction-${rental.id}`}>
+                            <TableCell>{new Date(rental.endDate).toLocaleDateString()}</TableCell>
+                            <TableCell>
+                              Rental payout - {aircraft?.make || "Unknown"} {aircraft?.model || ""}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">Payout</Badge>
+                            </TableCell>
+                            <TableCell className="font-semibold">${parseFloat(rental.ownerPayout).toFixed(2)}</TableCell>
+                            <TableCell>
+                              {rental.payoutCompleted ? (
+                                <Badge className="bg-chart-2 text-white">Completed</Badge>
+                              ) : (
+                                <Badge variant="outline">Pending</Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
                   </TableBody>
                 </Table>
               </CardContent>

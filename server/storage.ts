@@ -169,16 +169,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
-    // First, try to find existing user by email
-    const existingUser = userData.email ? await this.getUserByEmail(userData.email) : undefined;
+    if (!userData.id) {
+      throw new Error("User ID is required for upsert");
+    }
+    
+    // First, try to find existing user by ID (primary key from OIDC sub claim)
+    let existingUser = await this.getUser(userData.id);
+    
+    // If not found by ID, try by email (for migration from old auth system)
+    if (!existingUser && userData.email) {
+      existingUser = await this.getUserByEmail(userData.email);
+    }
     
     if (existingUser) {
-      // Update existing user, preserving their ID
+      // Update existing user with new data (including potentially new ID if email matched)
       const [user] = await db
         .update(users)
         .set({
           ...userData,
-          id: existingUser.id, // Preserve existing ID
           updatedAt: new Date(),
         })
         .where(eq(users.id, existingUser.id))

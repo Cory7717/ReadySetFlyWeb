@@ -341,6 +341,7 @@ export default function CreateMarketplaceListing() {
     
     // Super admins can create listings without verification
     if (!isVerified && !isSuperAdmin) {
+      console.error("Verification check failed:", { isVerified, isSuperAdmin, user });
       toast({
         title: "Verification Required",
         description: "Please complete account verification before creating listings.",
@@ -400,6 +401,7 @@ export default function CreateMarketplaceListing() {
 
     // Super admins bypass payment and create listing directly
     if (isSuperAdmin) {
+      console.log("Super admin creating listing directly...");
       createListingMutation.mutate({
         ...data,
         price: data.price ? parseFloat(data.price) : null,

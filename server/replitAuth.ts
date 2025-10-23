@@ -64,7 +64,7 @@ async function upsertUser(
   const isAdmin = email === "coryarmer@gmail.com" || 
                  (email && email.endsWith("@readysetfly.us"));
   
-  await storage.upsertUser({
+  return await storage.upsertUser({
     id: claims["sub"],
     email: email,
     firstName: claims["first_name"],
@@ -89,8 +89,12 @@ export async function setupAuth(app: Express) {
     console.log("[AUTH] Verify function called with claims:", tokens.claims());
     const user = {};
     updateUserSession(user, tokens);
-    await upsertUser(tokens.claims());
-    console.log("[AUTH] User upserted successfully");
+    try {
+      const upsertedUser = await upsertUser(tokens.claims());
+      console.log("[AUTH] User upserted successfully:", { id: upsertedUser.id, email: upsertedUser.email });
+    } catch (error) {
+      console.error("[AUTH] Error upserting user:", error);
+    }
     verified(null, user);
   };
 

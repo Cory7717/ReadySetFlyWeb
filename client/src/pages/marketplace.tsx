@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { MarketplaceListing } from "@shared/schema";
 import { MarketplaceCard } from "@/components/marketplace-card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
 
 const categories = [
   { id: "aircraft-sale", label: "Aircraft For Sale", fee: "$40-125/mo" },
@@ -17,6 +18,7 @@ const categories = [
 
 export default function Marketplace() {
   const [selectedCategory, setSelectedCategory] = useState("aircraft-sale");
+  const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const [, navigate] = useLocation();
 
   const { data: allListings = [], isLoading } = useQuery<MarketplaceListing[]>({
@@ -99,22 +101,32 @@ export default function Marketplace() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {categoryListings.map((listing) => (
-              <MarketplaceCard
-                key={listing.id}
-                id={listing.id}
-                category={listing.category}
-                title={listing.title}
-                description={listing.description}
-                price={listing.price ? `$${parseFloat(listing.price).toLocaleString()}` : ""}
-                location={listing.location || "N/A"}
-                image={listing.images?.[0]}
-                images={listing.images?.length || 0}
-                tier={listing.tier || undefined}
-              />
+              <div key={listing.id} onClick={() => setSelectedListingId(listing.id)} className="cursor-pointer">
+                <MarketplaceCard
+                  id={listing.id}
+                  category={listing.category}
+                  title={listing.title}
+                  description={listing.description}
+                  price={listing.price ? `$${parseFloat(listing.price).toLocaleString()}` : ""}
+                  location={listing.location || "N/A"}
+                  image={listing.images?.[0]}
+                  images={listing.images?.length || 0}
+                  tier={listing.tier || undefined}
+                />
+              </div>
             ))}
           </div>
         )}
       </section>
+
+      {/* Listing Detail Modal */}
+      {selectedListingId && (
+        <MarketplaceListingModal
+          listingId={selectedListingId}
+          open={!!selectedListingId}
+          onOpenChange={(open) => !open && setSelectedListingId(null)}
+        />
+      )}
     </div>
   );
 }

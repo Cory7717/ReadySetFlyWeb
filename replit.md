@@ -12,6 +12,12 @@ The platform is built with a **React frontend** utilizing Wouter for routing, Ta
 Key architectural decisions include a robust **verification system** for both renters and aircraft owners, involving multi-step forms, document uploads, and an admin review interface. This system integrates a **badge system** to visually indicate verification statuses. The platform employs a **platform-captured payments with transfers** model via **Stripe** for all financial transactions, including rental payments, owner payouts, and marketplace listing fees. This involves detailed fee calculations (sales tax, platform commission, processing fees) and comprehensive webhook handling for asynchronous event processing. An **admin dashboard** provides role-based access for user and listing management, and analytics tracking.
 
 ## Recent Changes (October 23, 2025)
+- **Marketplace Listing Detail Modal**: Implemented full-screen modal that opens when users click on marketplace listings
+  - Shows all listing details including category-specific information
+  - Image carousel for listings with multiple photos
+  - Contact buttons (email and phone) for direct seller communication
+  - Responsive design that works on all devices
+  - Supports all listing categories: aircraft sales, jobs, CFI services, flight schools, mechanics, charter services
 - **Aircraft Detail Fields**: Added comprehensive aircraft information fields for marketplace listings:
   - Avionics Package (detailed description field)
   - Number of Seats
@@ -25,6 +31,8 @@ Key architectural decisions include a robust **verification system** for both re
   - Implemented server-side pricing calculation for all marketplace listings to prevent client-side price manipulation
   - Added PaymentIntent verification before listing creation to ensure payment completed successfully
   - Fixed user authentication upsert logic to check both ID and email, preventing 404 errors
+  - Fixed `monthlyFee` validation schema to be optional (calculated server-side)
+  - Fixed `price` field type handling to remain as string throughout the submission process
 - **Responsive Design**: All marketplace listing forms now use responsive grid layouts (`grid-cols-1 md:grid-cols-2/3`) for optimal mobile, tablet, and desktop display
 
 ## External Dependencies

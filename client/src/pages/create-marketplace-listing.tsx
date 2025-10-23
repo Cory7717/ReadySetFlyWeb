@@ -220,7 +220,7 @@ export default function CreateMarketplaceListing() {
         listingType,
         details,
       });
-      return response as unknown as { description: string };
+      return await response.json() as { description: string };
     },
     onSuccess: (data) => {
       form.setValue("description", data.description);

@@ -330,12 +330,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { promoCode, ...listingData } = req.body;
       
+      // Check if user is a Super Admin
+      const user = await storage.getUser(userId);
+      const email = req.user.claims.email;
+      const isSuperAdmin = 
+        email?.endsWith('@readysetfly.us') || 
+        email === 'coryarmer@gmail.com';
+      
       let monthlyFee = 25; // Default fee
       let isPaid = false;
       let expiresAt: Date | null = null;
       
+      // Super Admins get free listings for testing (no expiration)
+      if (isSuperAdmin) {
+        monthlyFee = 0;
+        isPaid = true; // Mark as paid since it's free for testing
+        expiresAt = null; // No expiration for Super Admin test listings
+      }
       // Check if promo code is LAUNCH2025 for free 7-day listing
-      if (promoCode && promoCode.toUpperCase() === "LAUNCH2025") {
+      else if (promoCode && promoCode.toUpperCase() === "LAUNCH2025") {
         monthlyFee = 0;
         isPaid = true; // Mark as paid since it's free
         expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now

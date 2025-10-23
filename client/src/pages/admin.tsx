@@ -722,52 +722,68 @@ export default function AdminDashboard() {
               {!aircraftLoading && aircraftListings.length > 0 && (
                 <div className="space-y-3">
                   {aircraftListings.map((listing) => (
-                    <Card 
-                      key={listing.id} 
+                    <div
+                      key={listing.id}
                       data-testid={`card-aircraft-${listing.id}`}
-                      className="hover-elevate cursor-pointer transition-all"
+                      className="border rounded-lg overflow-visible hover-elevate cursor-pointer transition-all"
                       onClick={() => setSelectedAircraft(listing)}
                     >
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start gap-4">
-                          <div className="flex-1">
-                            <div className="font-semibold text-foreground">
-                              {listing.year} {listing.make} {listing.model}
+                      <div className="p-4">
+                        <div className="flex gap-4">
+                          {/* Main Image */}
+                          {listing.images && listing.images.length > 0 && (
+                            <div className="w-32 h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                              <img 
+                                src={listing.images[0]} 
+                                alt={`${listing.make} ${listing.model}`}
+                                className="w-full h-full object-cover"
+                              />
                             </div>
-                            <div className="text-sm text-muted-foreground">
-                              {listing.registration} • {listing.location}
+                          )}
+                          
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-start gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-foreground">
+                                  {listing.year} {listing.make} {listing.model}
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  {listing.registration} • {listing.location}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  ${listing.hourlyRate}/hr • Owner ID: {listing.ownerId}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <Badge variant={listing.isListed ? "default" : "secondary"}>
+                                  {listing.isListed ? "Listed" : "Unlisted"}
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => toggleAircraftMutation.mutate({ id: listing.id, isListed: !listing.isListed })}
+                                  data-testid={`button-toggle-aircraft-${listing.id}`}
+                                >
+                                  {listing.isListed ? "Unlist" : "List"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setDeleteTarget({ type: 'aircraft', id: listing.id });
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                  data-testid={`button-delete-aircraft-${listing.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              ${listing.hourlyRate}/hr • Owner ID: {listing.ownerId}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                            <Badge variant={listing.isListed ? "default" : "secondary"}>
-                              {listing.isListed ? "Listed" : "Unlisted"}
-                            </Badge>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => toggleAircraftMutation.mutate({ id: listing.id, isListed: !listing.isListed })}
-                              data-testid={`button-toggle-aircraft-${listing.id}`}
-                            >
-                              {listing.isListed ? "Unlist" : "List"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setDeleteTarget({ type: 'aircraft', id: listing.id });
-                                setDeleteDialogOpen(true);
-                              }}
-                              data-testid={`button-delete-aircraft-${listing.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

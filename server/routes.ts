@@ -662,6 +662,178 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // CRM - Leads (Admin only)
+  app.get("/api/crm/leads", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const leads = await storage.getAllLeads();
+      res.json(leads);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch leads" });
+    }
+  });
+
+  app.post("/api/crm/leads", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const lead = await storage.createLead(req.body);
+      res.json(lead);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create lead" });
+    }
+  });
+
+  app.patch("/api/crm/leads/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const lead = await storage.updateLead(req.params.id, req.body);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+      res.json(lead);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update lead" });
+    }
+  });
+
+  app.delete("/api/crm/leads/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteLead(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete lead" });
+    }
+  });
+
+  // CRM - Contacts (Admin only)
+  app.get("/api/crm/contacts", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const contacts = await storage.getAllContacts();
+      res.json(contacts);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch contacts" });
+    }
+  });
+
+  app.post("/api/crm/contacts", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const contact = await storage.createContact(req.body);
+      res.json(contact);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create contact" });
+    }
+  });
+
+  app.patch("/api/crm/contacts/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const contact = await storage.updateContact(req.params.id, req.body);
+      if (!contact) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      res.json(contact);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update contact" });
+    }
+  });
+
+  app.delete("/api/crm/contacts/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteContact(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Contact not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete contact" });
+    }
+  });
+
+  // CRM - Deals (Admin only)
+  app.get("/api/crm/deals", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const deals = await storage.getAllDeals();
+      res.json(deals);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch deals" });
+    }
+  });
+
+  app.post("/api/crm/deals", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const deal = await storage.createDeal(req.body);
+      res.json(deal);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create deal" });
+    }
+  });
+
+  app.patch("/api/crm/deals/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const deal = await storage.updateDeal(req.params.id, req.body);
+      if (!deal) {
+        return res.status(404).json({ error: "Deal not found" });
+      }
+      res.json(deal);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update deal" });
+    }
+  });
+
+  app.delete("/api/crm/deals/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteDeal(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Deal not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete deal" });
+    }
+  });
+
+  // CRM - Activities (Admin only)
+  app.get("/api/crm/activities", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const activities = await storage.getAllActivities();
+      res.json(activities);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch activities" });
+    }
+  });
+
+  app.post("/api/crm/activities", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const activity = await storage.createActivity(req.body);
+      res.json(activity);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create activity" });
+    }
+  });
+
+  app.patch("/api/crm/activities/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const activity = await storage.updateActivity(req.params.id, req.body);
+      if (!activity) {
+        return res.status(404).json({ error: "Activity not found" });
+      }
+      res.json(activity);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update activity" });
+    }
+  });
+
+  app.delete("/api/crm/activities/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteActivity(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Activity not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete activity" });
+    }
+  });
+
   // Users/Profile
   app.get("/api/users/:id", async (req, res) => {
     try {

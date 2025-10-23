@@ -13,6 +13,14 @@ import {
   type Transaction,
   type VerificationSubmission,
   type InsertVerificationSubmission,
+  type CrmLead,
+  type InsertCrmLead,
+  type CrmContact,
+  type InsertCrmContact,
+  type CrmDeal,
+  type InsertCrmDeal,
+  type CrmActivity,
+  type InsertCrmActivity,
   users,
   aircraftListings,
   marketplaceListings,
@@ -20,6 +28,10 @@ import {
   messages,
   transactions,
   verificationSubmissions,
+  crmLeads,
+  crmContacts,
+  crmDeals,
+  crmActivities,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike } from "drizzle-orm";
@@ -89,6 +101,34 @@ export interface IStorage {
     totalRentals: number;
     activeRentals: number;
   }>;
+
+  // CRM - Leads
+  getAllLeads(): Promise<CrmLead[]>;
+  getLead(id: string): Promise<CrmLead | undefined>;
+  createLead(lead: InsertCrmLead): Promise<CrmLead>;
+  updateLead(id: string, updates: Partial<CrmLead>): Promise<CrmLead | undefined>;
+  deleteLead(id: string): Promise<boolean>;
+
+  // CRM - Contacts
+  getAllContacts(): Promise<CrmContact[]>;
+  getContact(id: string): Promise<CrmContact | undefined>;
+  createContact(contact: InsertCrmContact): Promise<CrmContact>;
+  updateContact(id: string, updates: Partial<CrmContact>): Promise<CrmContact | undefined>;
+  deleteContact(id: string): Promise<boolean>;
+
+  // CRM - Deals
+  getAllDeals(): Promise<CrmDeal[]>;
+  getDeal(id: string): Promise<CrmDeal | undefined>;
+  createDeal(deal: InsertCrmDeal): Promise<CrmDeal>;
+  updateDeal(id: string, updates: Partial<CrmDeal>): Promise<CrmDeal | undefined>;
+  deleteDeal(id: string): Promise<boolean>;
+
+  // CRM - Activities
+  getAllActivities(): Promise<CrmActivity[]>;
+  getActivity(id: string): Promise<CrmActivity | undefined>;
+  createActivity(activity: InsertCrmActivity): Promise<CrmActivity>;
+  updateActivity(id: string, updates: Partial<CrmActivity>): Promise<CrmActivity | undefined>;
+  deleteActivity(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -498,6 +538,106 @@ export class DatabaseStorage implements IStorage {
       totalRentals,
       activeRentals,
     };
+  }
+
+  // CRM - Leads
+  async getAllLeads(): Promise<CrmLead[]> {
+    return await db.select().from(crmLeads).orderBy(desc(crmLeads.createdAt));
+  }
+
+  async getLead(id: string): Promise<CrmLead | undefined> {
+    const [lead] = await db.select().from(crmLeads).where(eq(crmLeads.id, id));
+    return lead;
+  }
+
+  async createLead(insertLead: InsertCrmLead): Promise<CrmLead> {
+    const [lead] = await db.insert(crmLeads).values(insertLead).returning();
+    return lead;
+  }
+
+  async updateLead(id: string, updates: Partial<CrmLead>): Promise<CrmLead | undefined> {
+    const [lead] = await db.update(crmLeads).set({ ...updates, updatedAt: new Date() }).where(eq(crmLeads.id, id)).returning();
+    return lead;
+  }
+
+  async deleteLead(id: string): Promise<boolean> {
+    const result = await db.delete(crmLeads).where(eq(crmLeads.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // CRM - Contacts
+  async getAllContacts(): Promise<CrmContact[]> {
+    return await db.select().from(crmContacts).orderBy(desc(crmContacts.createdAt));
+  }
+
+  async getContact(id: string): Promise<CrmContact | undefined> {
+    const [contact] = await db.select().from(crmContacts).where(eq(crmContacts.id, id));
+    return contact;
+  }
+
+  async createContact(insertContact: InsertCrmContact): Promise<CrmContact> {
+    const [contact] = await db.insert(crmContacts).values(insertContact).returning();
+    return contact;
+  }
+
+  async updateContact(id: string, updates: Partial<CrmContact>): Promise<CrmContact | undefined> {
+    const [contact] = await db.update(crmContacts).set({ ...updates, updatedAt: new Date() }).where(eq(crmContacts.id, id)).returning();
+    return contact;
+  }
+
+  async deleteContact(id: string): Promise<boolean> {
+    const result = await db.delete(crmContacts).where(eq(crmContacts.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // CRM - Deals
+  async getAllDeals(): Promise<CrmDeal[]> {
+    return await db.select().from(crmDeals).orderBy(desc(crmDeals.createdAt));
+  }
+
+  async getDeal(id: string): Promise<CrmDeal | undefined> {
+    const [deal] = await db.select().from(crmDeals).where(eq(crmDeals.id, id));
+    return deal;
+  }
+
+  async createDeal(insertDeal: InsertCrmDeal): Promise<CrmDeal> {
+    const [deal] = await db.insert(crmDeals).values(insertDeal).returning();
+    return deal;
+  }
+
+  async updateDeal(id: string, updates: Partial<CrmDeal>): Promise<CrmDeal | undefined> {
+    const [deal] = await db.update(crmDeals).set({ ...updates, updatedAt: new Date() }).where(eq(crmDeals.id, id)).returning();
+    return deal;
+  }
+
+  async deleteDeal(id: string): Promise<boolean> {
+    const result = await db.delete(crmDeals).where(eq(crmDeals.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // CRM - Activities
+  async getAllActivities(): Promise<CrmActivity[]> {
+    return await db.select().from(crmActivities).orderBy(desc(crmActivities.createdAt));
+  }
+
+  async getActivity(id: string): Promise<CrmActivity | undefined> {
+    const [activity] = await db.select().from(crmActivities).where(eq(crmActivities.id, id));
+    return activity;
+  }
+
+  async createActivity(insertActivity: InsertCrmActivity): Promise<CrmActivity> {
+    const [activity] = await db.insert(crmActivities).values(insertActivity).returning();
+    return activity;
+  }
+
+  async updateActivity(id: string, updates: Partial<CrmActivity>): Promise<CrmActivity | undefined> {
+    const [activity] = await db.update(crmActivities).set({ ...updates, updatedAt: new Date() }).where(eq(crmActivities.id, id)).returning();
+    return activity;
+  }
+
+  async deleteActivity(id: string): Promise<boolean> {
+    const result = await db.delete(crmActivities).where(eq(crmActivities.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 }
 

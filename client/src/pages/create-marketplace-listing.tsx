@@ -106,7 +106,7 @@ export default function CreateMarketplaceListing() {
       title: "",
       description: "",
       location: "",
-      contactEmail: "",
+      contactEmail: user?.email || "",
       contactPhone: "",
       price: "",
       tier: "basic",
@@ -115,6 +115,13 @@ export default function CreateMarketplaceListing() {
       isActive: true,
     },
   });
+
+  // Auto-fill contact email when user data loads
+  useEffect(() => {
+    if (user?.email && !form.getValues("contactEmail")) {
+      form.setValue("contactEmail", user.email);
+    }
+  }, [user?.email, form]);
 
   // Watch category to render category-specific fields
   const selectedCategory = form.watch("category");
@@ -461,7 +468,19 @@ export default function CreateMarketplaceListing() {
       )}
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
+          console.error("Form validation errors:", errors);
+          // Show first error in a toast
+          const firstErrorField = Object.keys(errors)[0];
+          const firstError = errors[firstErrorField as keyof typeof errors];
+          if (firstError && typeof firstError === 'object' && 'message' in firstError) {
+            toast({
+              title: "Form Validation Error",
+              description: String(firstError.message) || "Please check all required fields",
+              variant: "destructive",
+            });
+          }
+        })} className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Basic Information</CardTitle>

@@ -41,7 +41,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      let user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Grant Super Admin access to @readysetfly.us emails and coryarmer@gmail.com
+      const email = user.email?.toLowerCase();
+      const shouldBeSuperAdmin = 
+        email?.endsWith('@readysetfly.us') || 
+        email === 'coryarmer@gmail.com';
+      
+      // Update super admin status if needed
+      if (shouldBeSuperAdmin && !user.isSuperAdmin) {
+        await storage.updateUser(userId, { isSuperAdmin: true, isAdmin: true, isVerified: true });
+        user = await storage.getUser(userId); // Refetch updated user
+      }
+      
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);

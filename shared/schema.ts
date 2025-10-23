@@ -47,6 +47,7 @@ export const users = pgTable("users", {
   licenseVerified: boolean("license_verified").default(false),
   backgroundCheckCompleted: boolean("background_check_completed").default(false),
   isAdmin: boolean("is_admin").default(false),
+  isSuperAdmin: boolean("is_super_admin").default(false),
   
   // Renter Verification (new comprehensive system)
   legalFirstName: text("legal_first_name"),
@@ -261,6 +262,42 @@ export const transactions = pgTable("transactions", {
   depositedToBankAt: timestamp("deposited_to_bank_at"),
   
   description: text("description"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Promo Codes (for free/discounted listings)
+export const promoCodes = pgTable("promo_codes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  
+  // Promo details
+  description: text("description"),
+  discountType: text("discount_type").notNull(), // "free_7_day", "percentage", "fixed_amount"
+  discountValue: decimal("discount_value", { precision: 10, scale: 2 }), // For percentage or fixed amount
+  
+  // Usage limits
+  maxUses: integer("max_uses"), // null = unlimited
+  usedCount: integer("used_count").default(0),
+  
+  // Validity
+  isActive: boolean("is_active").default(true),
+  validFrom: timestamp("valid_from").defaultNow(),
+  validUntil: timestamp("valid_until"),
+  
+  // Restrictions
+  applicableCategories: text("applicable_categories").array().default(sql`ARRAY[]::text[]`), // empty = all categories
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Promo Code Usage Tracking
+export const promoCodeUsages = pgTable("promo_code_usages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  promoCodeId: varchar("promo_code_id").notNull().references(() => promoCodes.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  marketplaceListingId: varchar("marketplace_listing_id").references(() => marketplaceListings.id),
   
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -536,6 +573,12 @@ export type InsertCrmDeal = z.infer<typeof insertCrmDealSchema>;
 
 export type CrmActivity = typeof crmActivities.$inferSelect;
 export type InsertCrmActivity = z.infer<typeof insertCrmActivitySchema>;
+
+export type PromoCode = typeof promoCodes.$inferSelect;
+export type InsertPromoCode = typeof promoCodes.$inferInsert;
+
+export type PromoCodeUsage = typeof promoCodeUsages.$inferSelect;
+export type InsertPromoCodeUsage = typeof promoCodeUsages.$inferInsert;
 
 // Enum types
 export type CertificationType = typeof certificationTypes[number];

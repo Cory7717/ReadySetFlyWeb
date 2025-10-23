@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { AlertCircle, ArrowLeft, DollarSign } from "lucide-react";
+import { AlertCircle, ArrowLeft, DollarSign, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -94,7 +94,7 @@ export default function CreateMarketplaceListing() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
-  const [imageFiles] = useState<string[]>([]);
+  const [imageFiles, setImageFiles] = useState<string[]>([]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(baseFormSchema),
@@ -115,6 +115,59 @@ export default function CreateMarketplaceListing() {
 
   // Watch category to render category-specific fields
   const selectedCategory = form.watch("category");
+  const selectedTier = form.watch("details.tier");
+  
+  // Calculate max images based on category and tier
+  const getMaxImages = (category: string, tier?: string) => {
+    if (category === "aircraft-sale") {
+      if (tier === "basic") return 3;
+      if (tier === "standard") return 5;
+      if (tier === "premium") return 10;
+      return 3; // default to basic
+    }
+    if (category === "job") return 1;
+    if (category === "cfi") return 1;
+    if (category === "flight-school") return 3;
+    if (category === "mechanic") return 3;
+    if (category === "charter") return 5;
+    return 5; // default
+  };
+
+  const maxImages = getMaxImages(selectedCategory, selectedTier);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length + imageFiles.length > maxImages) {
+      toast({
+        title: "Too many images",
+        description: `You can only upload up to ${maxImages} images for this category${selectedCategory === 'aircraft-sale' ? ' and tier' : ''}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    // In production, upload to cloud storage and get URLs
+    // For now, create object URLs for preview
+    const urls = files.map(file => URL.createObjectURL(file));
+    setImageFiles([...imageFiles, ...urls]);
+  };
+
+  const removeImage = (index: number) => {
+    setImageFiles(imageFiles.filter((_, i) => i !== index));
+  };
+
+  // Trim images when category or tier changes to enforce new limits
+  useEffect(() => {
+    if (imageFiles.length > maxImages) {
+      const trimmedImages = imageFiles.slice(0, maxImages);
+      setImageFiles(trimmedImages);
+      toast({
+        title: "Images Trimmed",
+        description: `Reduced to ${maxImages} images for this ${selectedCategory === 'aircraft-sale' ? 'tier' : 'category'}.`,
+      });
+    }
+  }, [selectedCategory, selectedTier, maxImages, imageFiles, toast]);
+
+  const isVerified = user?.isVerified || false;
 
   const createListingMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -215,14 +268,22 @@ export default function CreateMarketplaceListing() {
       return;
     }
 
+    // Validate image count doesn't exceed category/tier limits
+    if (imageFiles.length > maxImages) {
+      toast({
+        title: "Too Many Images",
+        description: `Please reduce to ${maxImages} images for this ${data.category === 'aircraft-sale' ? 'tier' : 'category'}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     createListingMutation.mutate({
       ...data,
       price: data.price ? parseFloat(data.price) : null,
       images: imageFiles.length > 0 ? imageFiles : [],
     });
   };
-
-  const isVerified = user?.isVerified || false;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -409,6 +470,62 @@ export default function CreateMarketplaceListing() {
               />
             </CardContent>
           </Card>
+
+          {/* Image Upload */}
+          {selectedCategory && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Photos</CardTitle>
+                <CardDescription>
+                  Upload up to {maxImages} {maxImages === 1 ? 'photo' : 'photos'} 
+                  {selectedCategory === 'aircraft-sale' ? ` (${selectedTier || 'basic'} tier)` : ''}
+                  {selectedCategory === 'job' && ' - Company logo or branding'}
+                  {selectedCategory === 'cfi' && ' - Professional headshot'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {imageFiles.map((url, index) => (
+                    <div key={index} className="relative aspect-square rounded-md border overflow-hidden group">
+                      <img src={url} alt={`Upload ${index + 1}`} className="w-full h-full object-cover" />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => removeImage(index)}
+                        data-testid={`button-remove-image-${index}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                  {imageFiles.length < maxImages && (
+                    <label className="aspect-square rounded-md border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover-elevate active-elevate-2 transition-all">
+                      <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                      <span className="text-sm text-muted-foreground">Upload</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handleImageUpload}
+                        data-testid="input-upload-images"
+                      />
+                    </label>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {imageFiles.length} of {maxImages} photos uploaded
+                  {selectedCategory === 'aircraft-sale' && selectedTier && (
+                    <span className="ml-2 text-accent">
+                      (Upgrade tier for more photos)
+                    </span>
+                  )}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Aircraft for Sale - Category Specific Fields */}
           {selectedCategory === "aircraft-sale" && (

@@ -50,6 +50,8 @@ export default function Dashboard() {
 
   // Calculate stats from actual rentals
   const completedRentals = ownerRentals.filter(r => r.status === "completed");
+  const activeRentalsArray = ownerRentals.filter(r => r.status === "active");
+  
   const totalEarnings = completedRentals
     .filter(r => r.payoutCompleted)
     .reduce((sum, r) => sum + parseFloat(r.ownerPayout), 0);
@@ -59,7 +61,7 @@ export default function Dashboard() {
     .reduce((sum, r) => sum + parseFloat(r.ownerPayout), 0);
 
   const activeListings = userAircraft.filter(a => a.isListed).length;
-  const activeRentals = ownerRentals.filter(r => r.status === "active").length;
+  const activeRentals = activeRentalsArray.length;
 
   // Bank account setup mutation
   const setupBankAccountMutation = useMutation({
@@ -218,24 +220,35 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {[1, 2].map((i) => (
-                    <div key={i} className="flex items-center justify-between p-4 border rounded-lg hover-elevate" data-testid={`rental-active-${i}`}>
-                      <div className="flex-1">
-                        <h4 className="font-semibold mb-1">2018 Cessna 172 Skyhawk</h4>
-                        <p className="text-sm text-muted-foreground">
-                          Rented to: John Smith • Dec 15-17, 2024
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="font-bold">$870.00</p>
-                          <p className="text-sm text-muted-foreground">6 hours</p>
-                        </div>
-                        <Badge className="bg-chart-2 text-white">Active</Badge>
-                        <Button size="sm" data-testid={`button-message-${i}`}>Message</Button>
-                      </div>
+                  {activeRentalsArray.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No active rentals at this time
                     </div>
-                  ))}
+                  ) : (
+                    activeRentalsArray.map((rental) => {
+                      const aircraft = allAircraft.find(a => a.id === rental.aircraftId);
+                      return (
+                        <div key={rental.id} className="flex items-center justify-between p-4 border rounded-lg hover-elevate" data-testid={`rental-active-${rental.id}`}>
+                          <div className="flex-1">
+                            <h4 className="font-semibold mb-1">
+                              {aircraft?.year || ''} {aircraft?.make || 'Unknown'} {aircraft?.model || ''}
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              Rented to: Renter #{rental.renterId.substring(0, 8)} • {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <p className="font-bold">${parseFloat(rental.totalCost).toFixed(2)}</p>
+                              <p className="text-sm text-muted-foreground">Your payout: ${parseFloat(rental.ownerPayout).toFixed(2)}</p>
+                            </div>
+                            <Badge className="bg-chart-2 text-white">Active</Badge>
+                            <Button size="sm" data-testid={`button-message-${rental.id}`}>Message</Button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </CardContent>
             </Card>

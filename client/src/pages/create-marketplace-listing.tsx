@@ -411,7 +411,7 @@ export default function CreateMarketplaceListing() {
       console.log("Super admin creating listing directly...");
       createListingMutation.mutate({
         ...data,
-        price: data.price ? parseFloat(data.price) : null,
+        price: data.price || undefined,
         images: imageFiles.length > 0 ? imageFiles : [],
         promoCode: promoCodeValid ? promoCode : undefined,
       });
@@ -421,7 +421,7 @@ export default function CreateMarketplaceListing() {
     // Regular users: redirect to payment
     const listingPayload = {
       ...data,
-      price: data.price ? parseFloat(data.price) : null,
+      price: data.price || undefined,
       images: imageFiles.length > 0 ? imageFiles : [],
       promoCode: promoCodeValid ? promoCode : undefined,
     };

@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { AircraftCard } from "@/components/aircraft-card";
 import { AircraftFilters } from "@/components/aircraft-filters";
+import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
 
 const quickFilters = [
   { label: "IFR Equipped", value: "ifr" },
@@ -23,6 +24,7 @@ const quickFilters = [
 
 export default function Home() {
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedAircraftId, setSelectedAircraftId] = useState<string | null>(null);
 
   const { data: aircraft = [], isLoading } = useQuery<AircraftListing[]>({
     queryKey: ["/api/aircraft"],
@@ -182,9 +184,10 @@ export default function Home() {
                     certifications={listing.requiredCertifications}
                     totalTime={listing.totalTime}
                     avionics={listing.avionicsSuite || "N/A"}
-                    insuranceIncluded={listing.insuranceIncluded}
-                    responseTime={listing.responseTime}
-                    acceptanceRate={listing.acceptanceRate}
+                    insuranceIncluded={listing.insuranceIncluded || false}
+                    responseTime={listing.responseTime || 24}
+                    acceptanceRate={listing.acceptanceRate || 95}
+                    onCardClick={() => setSelectedAircraftId(listing.id)}
                   />
                 ))}
               </div>
@@ -230,6 +233,15 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Aircraft Detail Modal */}
+      {selectedAircraftId && (
+        <AircraftDetailModal
+          aircraftId={selectedAircraftId}
+          open={!!selectedAircraftId}
+          onOpenChange={(open) => !open && setSelectedAircraftId(null)}
+        />
+      )}
     </div>
   );
 }

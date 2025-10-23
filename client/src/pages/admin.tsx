@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,23 @@ export default function AdminDashboard() {
   // Pending verification submissions query (always fetch for badge count)
   const { data: verificationSubmissions = [], isLoading: verificationsLoading } = useQuery<VerificationSubmission[]>({
     queryKey: ["/api/verification-submissions/pending"],
+  });
+
+  // Analytics query
+  const { data: analytics, isLoading: analyticsLoading } = useQuery<{
+    transactionsToday: number;
+    transactionsWeek: number;
+    transactionsMonth: number;
+    transactionsYear: number;
+    revenueToday: string;
+    revenueWeek: string;
+    revenueMonth: string;
+    revenueYear: string;
+    totalRentals: number;
+    activeRentals: number;
+  }>({
+    queryKey: ["/api/admin/analytics"],
+    enabled: activeTab === "analytics",
   });
 
   // Approve submission mutation
@@ -91,7 +108,11 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="analytics" data-testid="tab-analytics">
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Analytics
+          </TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">
             <Users className="h-4 w-4 mr-2" />
             Users
@@ -107,13 +128,119 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="aircraft" data-testid="tab-aircraft">
             <Plane className="h-4 w-4 mr-2" />
-            Aircraft Listings
+            Aircraft
           </TabsTrigger>
           <TabsTrigger value="marketplace" data-testid="tab-marketplace">
             <List className="h-4 w-4 mr-2" />
-            Marketplace Listings
+            Marketplace
           </TabsTrigger>
         </TabsList>
+
+        {/* Analytics Tab */}
+        <TabsContent value="analytics" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {/* Revenue Cards */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${analytics?.revenueToday || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  {analytics?.transactionsToday || 0} transactions
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Revenue This Week</CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${analytics?.revenueWeek || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  {analytics?.transactionsWeek || 0} transactions
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Revenue This Month</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${analytics?.revenueMonth || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  {analytics?.transactionsMonth || 0} transactions
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Revenue This Year</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${analytics?.revenueYear || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  {analytics?.transactionsYear || 0} transactions
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Rental Stats */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Rental Activity</CardTitle>
+                <CardDescription>Current rental statistics</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-chart-2" />
+                    <span className="text-sm font-medium">Active Rentals</span>
+                  </div>
+                  <Badge className="bg-chart-2">{analytics?.activeRentals || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Plane className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium">Total Rentals</span>
+                  </div>
+                  <Badge variant="outline">{analytics?.totalRentals || 0}</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Commission Details</CardTitle>
+                <CardDescription>Ready Set Fly takes 15% commission</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="text-sm text-muted-foreground">
+                  <p>• Renter commission: 7.5%</p>
+                  <p>• Owner commission: 7.5%</p>
+                  <p className="mt-2 font-medium text-foreground">
+                    Platform fees are automatically calculated and tracked in the transactions table.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {analyticsLoading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+            </div>
+          )}
+        </TabsContent>
 
         {/* Verifications Tab */}
         <TabsContent value="verifications" className="space-y-4">

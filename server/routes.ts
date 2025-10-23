@@ -652,6 +652,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin Analytics
+  app.get("/api/admin/analytics", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const analytics = await storage.getAnalytics();
+      res.json(analytics);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
   // Users/Profile
   app.get("/api/users/:id", async (req, res) => {
     try {

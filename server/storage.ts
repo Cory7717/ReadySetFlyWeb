@@ -75,6 +75,20 @@ export interface IStorage {
   getVerificationSubmissionsByUser(userId: string): Promise<VerificationSubmission[]>;
   getPendingVerificationSubmissions(): Promise<VerificationSubmission[]>;
   updateVerificationSubmission(id: string, updates: Partial<VerificationSubmission>): Promise<VerificationSubmission | undefined>;
+  
+  // Analytics
+  getAnalytics(): Promise<{
+    transactionsToday: number;
+    transactionsWeek: number;
+    transactionsMonth: number;
+    transactionsYear: number;
+    revenueToday: string;
+    revenueWeek: string;
+    revenueMonth: string;
+    revenueYear: string;
+    totalRentals: number;
+    activeRentals: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -420,6 +434,70 @@ export class DatabaseStorage implements IStorage {
       .where(eq(verificationSubmissions.id, id))
       .returning();
     return submission;
+  }
+
+  // Analytics
+  async getAnalytics(): Promise<{
+    transactionsToday: number;
+    transactionsWeek: number;
+    transactionsMonth: number;
+    transactionsYear: number;
+    revenueToday: string;
+    revenueWeek: string;
+    revenueMonth: string;
+    revenueYear: string;
+    totalRentals: number;
+    activeRentals: number;
+  }> {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const firstOfYear = new Date(now.getFullYear(), 0, 1);
+
+    // Get all transactions
+    const allTransactions = await db.select().from(transactions);
+    
+    // Filter only completed platform_fee transactions for both counts and revenue
+    const platformFeeTransactions = allTransactions.filter(
+      t => t.type === 'platform_fee' && t.status === 'completed'
+    );
+
+    // Count transactions by time periods (only completed platform fees)
+    const transactionsToday = platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= today).length;
+    const transactionsWeek = platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= weekAgo).length;
+    const transactionsMonth = platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= firstOfMonth).length;
+    const transactionsYear = platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= firstOfYear).length;
+
+    // Calculate RSF revenue (15% commission = 7.5% from renter + 7.5% from owner)
+    const calculateRevenue = (txs: typeof platformFeeTransactions) => {
+      return txs
+        .reduce((sum, t) => sum + parseFloat(t.amount || "0"), 0)
+        .toFixed(2);
+    };
+
+    const revenueToday = calculateRevenue(platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= today));
+    const revenueWeek = calculateRevenue(platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= weekAgo));
+    const revenueMonth = calculateRevenue(platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= firstOfMonth));
+    const revenueYear = calculateRevenue(platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= firstOfYear));
+
+    // Get rental stats
+    const allRentals = await db.select().from(rentals);
+    const totalRentals = allRentals.length;
+    const activeRentals = allRentals.filter(r => r.status === 'active').length;
+
+    return {
+      transactionsToday,
+      transactionsWeek,
+      transactionsMonth,
+      transactionsYear,
+      revenueToday,
+      revenueWeek,
+      revenueMonth,
+      revenueYear,
+      totalRentals,
+      activeRentals,
+    };
   }
 }
 

@@ -2,7 +2,6 @@ import { Heart, Clock, CheckCircle2, Gauge } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
 
 interface AircraftCardProps {
   id: string;
@@ -18,6 +17,7 @@ interface AircraftCardProps {
   insuranceIncluded: boolean;
   responseTime: number;
   acceptanceRate: number;
+  onCardClick?: () => void;
 }
 
 export function AircraftCard({
@@ -34,9 +34,14 @@ export function AircraftCard({
   insuranceIncluded,
   responseTime,
   acceptanceRate,
+  onCardClick,
 }: AircraftCardProps) {
   return (
-    <Card className="overflow-hidden hover-elevate transition-all duration-200 hover:scale-[1.02]" data-testid={`card-aircraft-${id}`}>
+    <Card 
+      className="overflow-hidden hover-elevate transition-all duration-200 hover:scale-[1.02] cursor-pointer" 
+      onClick={onCardClick}
+      data-testid={`card-aircraft-${id}`}
+    >
       <div className="relative aspect-[3/2] overflow-hidden rounded-t-xl">
         <img
           src={image}
@@ -68,11 +73,9 @@ export function AircraftCard({
       </div>
 
       <CardContent className="p-6">
-        <Link href={`/aircraft/${id}`} data-testid={`link-aircraft-${id}`}>
-          <h3 className="font-display text-xl font-semibold mb-1 hover:text-primary transition-colors">
-            {year} {make} {model}
-          </h3>
-        </Link>
+        <h3 className="font-display text-xl font-semibold mb-1 hover:text-primary transition-colors" data-testid={`title-aircraft-${id}`}>
+          {year} {make} {model}
+        </h3>
 
         <div className="flex items-baseline gap-2 mb-4">
           <span className="text-2xl font-bold" data-testid={`text-rate-${id}`}>${hourlyRate}</span>

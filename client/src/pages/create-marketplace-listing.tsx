@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { AlertCircle, ArrowLeft, DollarSign, Upload, X } from "lucide-react";
+import { AlertCircle, ArrowLeft, DollarSign, Upload, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -214,12 +214,77 @@ export default function CreateMarketplaceListing() {
     }
   };
 
+  const generateDescriptionMutation = useMutation({
+    mutationFn: async ({ listingType, details }: { listingType: string; details: any }) => {
+      const response = await apiRequest("POST", "/api/generate-description", {
+        listingType,
+        details,
+      });
+      return response as unknown as { description: string };
+    },
+    onSuccess: (data) => {
+      form.setValue("description", data.description);
+      toast({
+        title: "Description Generated",
+        description: "AI-generated description added. Feel free to customize it!",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Generation Failed",
+        description: error.message || "Could not generate description",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleGenerateDescription = () => {
+    const values = form.getValues();
+    
+    if (!values.category) {
+      toast({
+        title: "Category Required",
+        description: "Please select a category first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!values.title) {
+      toast({
+        title: "Title Required",
+        description: "Please enter a title first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Map category to listing type for API
+    const categoryToListingType: Record<string, string> = {
+      "aircraft-sale": "aircraft-sale",
+      "job": "aviation-job",
+      "cfi": "cfi-listing",
+      "flight-school": "flight-school",
+      "mechanic": "mechanic",
+      "charter": "charter",
+    };
+
+    const listingType = categoryToListingType[values.category];
+    
+    generateDescriptionMutation.mutate({
+      listingType,
+      details: {
+        title: values.title,
+        price: values.price,
+        location: values.location,
+        ...values.details,
+      },
+    });
+  };
+
   const createListingMutation = useMutation({
     mutationFn: async (data: any) => {
-      return await apiRequest("/api/marketplace", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return await apiRequest("POST", "/api/marketplace", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
@@ -426,9 +491,29 @@ export default function CreateMarketplaceListing() {
                         data-testid="textarea-description"
                       />
                     </FormControl>
-                    <FormDescription>
-                      Include all relevant details potential customers should know
-                    </FormDescription>
+                    <div className="flex items-center justify-between gap-2">
+                      <FormDescription className="flex-1">
+                        Include all relevant details potential customers should know
+                      </FormDescription>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateDescription}
+                        disabled={generateDescriptionMutation.isPending}
+                        data-testid="button-generate-description"
+                        className="shrink-0"
+                      >
+                        {generateDescriptionMutation.isPending ? (
+                          <>Generating...</>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            Generate with AI
+                          </>
+                        )}
+                      </Button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

@@ -8,7 +8,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Upload, X, ShieldAlert } from "lucide-react";
+import { Upload, X, ShieldAlert, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -152,6 +152,55 @@ export default function ListAircraft() {
       });
     },
   });
+
+  const generateDescriptionMutation = useMutation({
+    mutationFn: async (details: any) => {
+      const response = await apiRequest("POST", "/api/generate-description", {
+        listingType: "aircraft-rental",
+        details,
+      });
+      return response as unknown as { description: string };
+    },
+    onSuccess: (data) => {
+      form.setValue("description", data.description);
+      toast({
+        title: "Description Generated",
+        description: "AI-generated description added. Feel free to customize it!",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Generation Failed",
+        description: error.message || "Could not generate description",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleGenerateDescription = () => {
+    const values = form.getValues();
+    
+    // Check if we have enough information to generate a description
+    if (!values.make || !values.model) {
+      toast({
+        title: "More Information Needed",
+        description: "Please fill in at least the Make and Model to generate a description.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    generateDescriptionMutation.mutate({
+      make: values.make,
+      model: values.model,
+      year: values.year,
+      category: values.category,
+      engine: values.engine,
+      avionics: values.avionics,
+      totalTime: values.totalTime,
+      location: values.location,
+    });
+  };
 
   const onSubmit = (data: ListingFormData) => {
     // Note: Backend middleware enforces verification requirement
@@ -375,9 +424,29 @@ export default function ListAircraft() {
                           data-testid="textarea-description"
                         />
                       </FormControl>
-                      <FormDescription>
-                        Provide detailed information to help renters understand your aircraft
-                      </FormDescription>
+                      <div className="flex items-center justify-between gap-2">
+                        <FormDescription className="flex-1">
+                          Provide detailed information to help renters understand your aircraft
+                        </FormDescription>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleGenerateDescription}
+                          disabled={generateDescriptionMutation.isPending}
+                          data-testid="button-generate-description"
+                          className="shrink-0"
+                        >
+                          {generateDescriptionMutation.isPending ? (
+                            <>Generating...</>
+                          ) : (
+                            <>
+                              <Sparkles className="w-4 h-4 mr-2" />
+                              Generate with AI
+                            </>
+                          )}
+                        </Button>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}

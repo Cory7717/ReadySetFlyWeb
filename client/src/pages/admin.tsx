@@ -29,6 +29,12 @@ export default function AdminDashboard() {
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<CrmLead | null>(null);
   
+  // Listing management state
+  const [selectedAircraft, setSelectedAircraft] = useState<AircraftListing | null>(null);
+  const [selectedMarketplace, setSelectedMarketplace] = useState<MarketplaceListing | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'aircraft' | 'marketplace'; id: string } | null>(null);
+  
   // Lead form with Zod validation
   const leadForm = useForm<InsertCrmLead>({
     resolver: zodResolver(insertCrmLeadSchema),
@@ -162,6 +168,62 @@ export default function AdminDashboard() {
       toast({ title: "Lead deleted successfully" });
     },
   });
+
+  // Aircraft listing mutations
+  const toggleAircraftMutation = useMutation({
+    mutationFn: async ({ id, isListed }: { id: string; isListed: boolean }) => {
+      return await apiRequest("PATCH", `/api/aircraft/${id}`, { isListed });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/aircraft"] });
+      toast({ title: "Aircraft listing updated" });
+    },
+  });
+
+  const deleteAircraftMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/aircraft/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/aircraft"] });
+      toast({ title: "Aircraft listing deleted" });
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+    },
+  });
+
+  // Marketplace listing mutations
+  const toggleMarketplaceMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      return await apiRequest("PATCH", `/api/marketplace/${id}`, { isActive });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/marketplace"] });
+      toast({ title: "Marketplace listing updated" });
+    },
+  });
+
+  const deleteMarketplaceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/marketplace/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/marketplace"] });
+      toast({ title: "Marketplace listing deleted" });
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+    },
+  });
+
+  const handleDeleteListing = () => {
+    if (!deleteTarget) return;
+    
+    if (deleteTarget.type === 'aircraft') {
+      deleteAircraftMutation.mutate(deleteTarget.id);
+    } else {
+      deleteMarketplaceMutation.mutate(deleteTarget.id);
+    }
+  };
 
   const handleEditLead = (lead: CrmLead) => {
     setEditingLead(lead);
@@ -662,7 +724,7 @@ export default function AdminDashboard() {
                   {aircraftListings.map((listing) => (
                     <Card key={listing.id} data-testid={`card-aircraft-${listing.id}`}>
                       <CardContent className="p-4">
-                        <div className="flex justify-between items-start">
+                        <div className="flex justify-between items-start gap-4">
                           <div className="flex-1">
                             <div className="font-semibold text-foreground">
                               {listing.year} {listing.make} {listing.model}
@@ -674,9 +736,30 @@ export default function AdminDashboard() {
                               ${listing.hourlyRate}/hr • Owner ID: {listing.ownerId}
                             </div>
                           </div>
-                          <Badge variant={listing.isListed ? "default" : "secondary"}>
-                            {listing.isListed ? "Listed" : "Unlisted"}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={listing.isListed ? "default" : "secondary"}>
+                              {listing.isListed ? "Listed" : "Unlisted"}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleAircraftMutation.mutate({ id: listing.id, isListed: !listing.isListed })}
+                              data-testid={`button-toggle-aircraft-${listing.id}`}
+                            >
+                              {listing.isListed ? "Unlist" : "List"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setDeleteTarget({ type: 'aircraft', id: listing.id });
+                                setDeleteDialogOpen(true);
+                              }}
+                              data-testid={`button-delete-aircraft-${listing.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -712,7 +795,7 @@ export default function AdminDashboard() {
                   {marketplaceListings.map((listing) => (
                     <Card key={listing.id} data-testid={`card-marketplace-${listing.id}`}>
                       <CardContent className="p-4">
-                        <div className="flex justify-between items-start">
+                        <div className="flex justify-between items-start gap-4">
                           <div className="flex-1">
                             <div className="font-semibold text-foreground">
                               {listing.title}
@@ -722,11 +805,33 @@ export default function AdminDashboard() {
                             </div>
                             <div className="text-xs text-muted-foreground mt-1">
                               {listing.price && `$${listing.price}`} • User ID: {listing.userId}
+                              {listing.monthlyFee === "0" && " • FREE"}
                             </div>
                           </div>
-                          <Badge variant={listing.isActive ? "default" : "secondary"}>
-                            {listing.isActive ? "Active" : "Inactive"}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={listing.isActive ? "default" : "secondary"}>
+                              {listing.isActive ? "Active" : "Inactive"}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => toggleMarketplaceMutation.mutate({ id: listing.id, isActive: !listing.isActive })}
+                              data-testid={`button-toggle-marketplace-${listing.id}`}
+                            >
+                              {listing.isActive ? "Deactivate" : "Activate"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setDeleteTarget({ type: 'marketplace', id: listing.id });
+                                setDeleteDialogOpen(true);
+                              }}
+                              data-testid={`button-delete-marketplace-${listing.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -1067,6 +1172,38 @@ export default function AdminDashboard() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Listing Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Listing</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this {deleteTarget?.type === 'aircraft' ? 'aircraft' : 'marketplace'} listing? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setDeleteTarget(null);
+              }}
+              data-testid="button-cancel-delete"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteListing}
+              disabled={deleteAircraftMutation.isPending || deleteMarketplaceMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteAircraftMutation.isPending || deleteMarketplaceMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

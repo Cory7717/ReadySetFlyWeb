@@ -479,7 +479,7 @@ export const insertMarketplaceListingSchema = createInsertSchema(marketplaceList
   category: z.enum(marketplaceCategories),
   images: z.array(z.string()).max(15),
   price: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
-  monthlyFee: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  monthlyFee: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
 });
 
 export const insertRentalSchema = createInsertSchema(rentals).omit({

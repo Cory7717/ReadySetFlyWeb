@@ -42,7 +42,7 @@ const listingSchema = z.object({
   totalTime: z.coerce.number().min(0),
   engine: z.string().optional(),
   avionics: z.string().optional(),
-  hourlyRate: z.coerce.number().min(1, "Hourly rate is required"),
+  hourlyRate: z.string().regex(/^\d+(\.\d{1,2})?$/, "Enter a valid price (e.g., 150 or 150.50)").min(1, "Hourly rate is required"),
   location: z.string().min(1, "Location is required"),
   airportCode: z.string().optional(),
   description: z.string().min(20, "Description must be at least 20 characters"),

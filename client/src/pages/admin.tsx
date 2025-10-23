@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,9 +12,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { User, AircraftListing, MarketplaceListing, VerificationSubmission, CrmLead, InsertCrmLead } from "@shared/schema";
+import { insertCrmLeadSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead } from "@shared/schema";
 
 export default function AdminDashboard() {
   const [userSearch, setUserSearch] = useState("");
@@ -24,14 +28,20 @@ export default function AdminDashboard() {
   // CRM state
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<CrmLead | null>(null);
-  const [leadFormData, setLeadFormData] = useState<Partial<InsertCrmLead>>({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    company: "",
-    status: "new",
-    source: undefined,
+  
+  // Lead form with Zod validation
+  const leadForm = useForm<InsertCrmLead>({
+    resolver: zodResolver(insertCrmLeadSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      company: "",
+      status: "new",
+      source: undefined,
+      notes: "",
+    },
   });
   
   const { toast } = useToast();
@@ -125,7 +135,8 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
       toast({ title: "Lead created successfully" });
       setLeadDialogOpen(false);
-      resetLeadForm();
+      leadForm.reset();
+      setEditingLead(null);
     },
   });
 
@@ -137,7 +148,8 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
       toast({ title: "Lead updated successfully" });
       setLeadDialogOpen(false);
-      resetLeadForm();
+      leadForm.reset();
+      setEditingLead(null);
     },
   });
 
@@ -151,39 +163,26 @@ export default function AdminDashboard() {
     },
   });
 
-  const resetLeadForm = () => {
-    setLeadFormData({
-      firstName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      company: "",
-      status: "new",
-      source: undefined,
-    });
-    setEditingLead(null);
-  };
-
   const handleEditLead = (lead: CrmLead) => {
     setEditingLead(lead);
-    setLeadFormData({
+    leadForm.reset({
       firstName: lead.firstName,
       lastName: lead.lastName,
       email: lead.email,
       phone: lead.phone || "",
       company: lead.company || "",
       status: lead.status as any,
-      source: lead.source as any || undefined,
+      source: lead.source as any,
       notes: lead.notes || "",
     });
     setLeadDialogOpen(true);
   };
 
-  const handleSubmitLead = () => {
+  const handleSubmitLead = (data: InsertCrmLead) => {
     if (editingLead) {
-      updateLeadMutation.mutate({ id: editingLead.id, data: leadFormData });
+      updateLeadMutation.mutate({ id: editingLead.id, data });
     } else {
-      createLeadMutation.mutate(leadFormData as InsertCrmLead);
+      createLeadMutation.mutate(data);
     }
   };
 
@@ -345,7 +344,7 @@ export default function AdminDashboard() {
                 <CardTitle>Sales & Marketing CRM</CardTitle>
                 <CardDescription>Manage leads, contacts, and deal pipeline</CardDescription>
               </div>
-              <Button onClick={() => { resetLeadForm(); setLeadDialogOpen(true); }} data-testid="button-add-lead">
+              <Button onClick={() => { leadForm.reset(); setEditingLead(null); setLeadDialogOpen(true); }} data-testid="button-add-lead">
                 <Plus className="h-4 w-4 mr-2" />
                 Add Lead
               </Button>
@@ -897,134 +896,177 @@ export default function AdminDashboard() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="lead-first-name">First Name *</Label>
-                <Input
-                  id="lead-first-name"
-                  value={leadFormData.firstName}
-                  onChange={(e) => setLeadFormData({ ...leadFormData, firstName: e.target.value })}
-                  data-testid="input-lead-first-name"
-                  required
+          <Form {...leadForm}>
+            <form onSubmit={leadForm.handleSubmit(handleSubmitLead)} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={leadForm.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>First Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} data-testid="input-lead-first-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={leadForm.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Last Name</FormLabel>
+                      <FormControl>
+                        <Input {...field} data-testid="input-lead-last-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="lead-last-name">Last Name *</Label>
-                <Input
-                  id="lead-last-name"
-                  value={leadFormData.lastName}
-                  onChange={(e) => setLeadFormData({ ...leadFormData, lastName: e.target.value })}
-                  data-testid="input-lead-last-name"
-                  required
-                />
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="lead-email">Email *</Label>
-              <Input
-                id="lead-email"
-                type="email"
-                value={leadFormData.email}
-                onChange={(e) => setLeadFormData({ ...leadFormData, email: e.target.value })}
-                data-testid="input-lead-email"
-                required
+              <FormField
+                control={leadForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" {...field} data-testid="input-lead-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="lead-phone">Phone</Label>
-                <Input
-                  id="lead-phone"
-                  value={leadFormData.phone || ""}
-                  onChange={(e) => setLeadFormData({ ...leadFormData, phone: e.target.value })}
-                  data-testid="input-lead-phone"
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={leadForm.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input {...field} value={field.value || ""} data-testid="input-lead-phone" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={leadForm.control}
+                  name="company"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company</FormLabel>
+                      <FormControl>
+                        <Input {...field} value={field.value || ""} data-testid="input-lead-company" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="lead-company">Company</Label>
-                <Input
-                  id="lead-company"
-                  value={leadFormData.company || ""}
-                  onChange={(e) => setLeadFormData({ ...leadFormData, company: e.target.value })}
-                  data-testid="input-lead-company"
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={leadForm.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-lead-status">
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="new">New</SelectItem>
+                          <SelectItem value="contacted">Contacted</SelectItem>
+                          <SelectItem value="qualified">Qualified</SelectItem>
+                          <SelectItem value="proposal">Proposal</SelectItem>
+                          <SelectItem value="negotiation">Negotiation</SelectItem>
+                          <SelectItem value="won">Won</SelectItem>
+                          <SelectItem value="lost">Lost</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={leadForm.control}
+                  name="source"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Source</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-lead-source">
+                            <SelectValue placeholder="Select source" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="website">Website</SelectItem>
+                          <SelectItem value="referral">Referral</SelectItem>
+                          <SelectItem value="social_media">Social Media</SelectItem>
+                          <SelectItem value="advertising">Advertising</SelectItem>
+                          <SelectItem value="cold_outreach">Cold Outreach</SelectItem>
+                          <SelectItem value="event">Event</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="lead-status">Status</Label>
-                <select
-                  id="lead-status"
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                  value={leadFormData.status}
-                  onChange={(e) => setLeadFormData({ ...leadFormData, status: e.target.value as any })}
-                  data-testid="select-lead-status"
-                >
-                  <option value="new">New</option>
-                  <option value="contacted">Contacted</option>
-                  <option value="qualified">Qualified</option>
-                  <option value="proposal">Proposal</option>
-                  <option value="negotiation">Negotiation</option>
-                  <option value="won">Won</option>
-                  <option value="lost">Lost</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lead-source">Source</Label>
-                <select
-                  id="lead-source"
-                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                  value={leadFormData.source || ""}
-                  onChange={(e) => setLeadFormData({ ...leadFormData, source: e.target.value as any })}
-                  data-testid="select-lead-source"
-                >
-                  <option value="">Select source...</option>
-                  <option value="website">Website</option>
-                  <option value="referral">Referral</option>
-                  <option value="social_media">Social Media</option>
-                  <option value="advertising">Advertising</option>
-                  <option value="cold_outreach">Cold Outreach</option>
-                  <option value="event">Event</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="lead-notes">Notes</Label>
-              <Textarea
-                id="lead-notes"
-                value={leadFormData.notes || ""}
-                onChange={(e) => setLeadFormData({ ...leadFormData, notes: e.target.value })}
-                data-testid="textarea-lead-notes"
-                placeholder="Add any notes about this lead..."
-                rows={4}
+              <FormField
+                control={leadForm.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="textarea-lead-notes"
+                        placeholder="Add any notes about this lead..."
+                        rows={4}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
-          </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setLeadDialogOpen(false);
-                resetLeadForm();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmitLead}
-              disabled={!leadFormData.firstName || !leadFormData.lastName || !leadFormData.email || createLeadMutation.isPending || updateLeadMutation.isPending}
-              data-testid="button-submit-lead"
-            >
-              {createLeadMutation.isPending || updateLeadMutation.isPending ? "Saving..." : editingLead ? "Update Lead" : "Create Lead"}
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setLeadDialogOpen(false);
+                    leadForm.reset();
+                    setEditingLead(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createLeadMutation.isPending || updateLeadMutation.isPending}
+                  data-testid="button-submit-lead"
+                >
+                  {createLeadMutation.isPending || updateLeadMutation.isPending ? "Saving..." : editingLead ? "Update Lead" : "Create Lead"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>

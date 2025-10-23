@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,14 +12,28 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { User, AircraftListing, MarketplaceListing, VerificationSubmission } from "@shared/schema";
+import type { User, AircraftListing, MarketplaceListing, VerificationSubmission, CrmLead, InsertCrmLead } from "@shared/schema";
 
 export default function AdminDashboard() {
   const [userSearch, setUserSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("users");
+  const [activeTab, setActiveTab] = useState("analytics");
   const [selectedSubmission, setSelectedSubmission] = useState<VerificationSubmission | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [rejectionNotes, setRejectionNotes] = useState("");
+  
+  // CRM state
+  const [leadDialogOpen, setLeadDialogOpen] = useState(false);
+  const [editingLead, setEditingLead] = useState<CrmLead | null>(null);
+  const [leadFormData, setLeadFormData] = useState<Partial<InsertCrmLead>>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    company: "",
+    status: "new",
+    source: undefined,
+  });
+  
   const { toast } = useToast();
 
   // User search query
@@ -62,6 +76,12 @@ export default function AdminDashboard() {
     enabled: activeTab === "analytics",
   });
 
+  // CRM Leads query
+  const { data: leads = [], isLoading: leadsLoading } = useQuery<CrmLead[]>({
+    queryKey: ["/api/crm/leads"],
+    enabled: activeTab === "crm",
+  });
+
   // Approve submission mutation
   const approveMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -96,6 +116,77 @@ export default function AdminDashboard() {
     },
   });
 
+  // CRM Lead mutations
+  const createLeadMutation = useMutation({
+    mutationFn: async (data: InsertCrmLead) => {
+      return await apiRequest("POST", "/api/crm/leads", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
+      toast({ title: "Lead created successfully" });
+      setLeadDialogOpen(false);
+      resetLeadForm();
+    },
+  });
+
+  const updateLeadMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<CrmLead> }) => {
+      return await apiRequest("PATCH", `/api/crm/leads/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
+      toast({ title: "Lead updated successfully" });
+      setLeadDialogOpen(false);
+      resetLeadForm();
+    },
+  });
+
+  const deleteLeadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/crm/leads/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
+      toast({ title: "Lead deleted successfully" });
+    },
+  });
+
+  const resetLeadForm = () => {
+    setLeadFormData({
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      company: "",
+      status: "new",
+      source: undefined,
+    });
+    setEditingLead(null);
+  };
+
+  const handleEditLead = (lead: CrmLead) => {
+    setEditingLead(lead);
+    setLeadFormData({
+      firstName: lead.firstName,
+      lastName: lead.lastName,
+      email: lead.email,
+      phone: lead.phone || "",
+      company: lead.company || "",
+      status: lead.status as any,
+      source: lead.source as any || undefined,
+      notes: lead.notes || "",
+    });
+    setLeadDialogOpen(true);
+  };
+
+  const handleSubmitLead = () => {
+    if (editingLead) {
+      updateLeadMutation.mutate({ id: editingLead.id, data: leadFormData });
+    } else {
+      createLeadMutation.mutate(leadFormData as InsertCrmLead);
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-8">
@@ -108,10 +199,14 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="analytics" data-testid="tab-analytics">
             <TrendingUp className="h-4 w-4 mr-2" />
             Analytics
+          </TabsTrigger>
+          <TabsTrigger value="crm" data-testid="tab-crm">
+            <Briefcase className="h-4 w-4 mr-2" />
+            CRM
           </TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">
             <Users className="h-4 w-4 mr-2" />
@@ -240,6 +335,151 @@ export default function AdminDashboard() {
               <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
             </div>
           )}
+        </TabsContent>
+
+        {/* CRM Tab - Sales & Marketing */}
+        <TabsContent value="crm" className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle>Sales & Marketing CRM</CardTitle>
+                <CardDescription>Manage leads, contacts, and deal pipeline</CardDescription>
+              </div>
+              <Button onClick={() => { resetLeadForm(); setLeadDialogOpen(true); }} data-testid="button-add-lead">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Lead
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {leadsLoading && (
+                <div className="text-center py-8 text-muted-foreground">
+                  Loading leads...
+                </div>
+              )}
+
+              {!leadsLoading && leads.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No leads yet. Add your first lead to get started.
+                </div>
+              )}
+
+              {!leadsLoading && leads.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-muted/50">
+                      <tr className="border-b">
+                        <th className="text-left p-3 font-medium text-sm">Name</th>
+                        <th className="text-left p-3 font-medium text-sm">Email</th>
+                        <th className="text-left p-3 font-medium text-sm">Company</th>
+                        <th className="text-left p-3 font-medium text-sm">Status</th>
+                        <th className="text-left p-3 font-medium text-sm">Source</th>
+                        <th className="text-right p-3 font-medium text-sm">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leads.map((lead) => (
+                        <tr key={lead.id} className="border-b last:border-b-0" data-testid={`row-lead-${lead.id}`}>
+                          <td className="p-3">
+                            <div className="font-medium">{lead.firstName} {lead.lastName}</div>
+                            {lead.phone && (
+                              <div className="text-sm text-muted-foreground flex items-center gap-1 mt-1">
+                                <Phone className="h-3 w-3" />
+                                {lead.phone}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-1 text-sm">
+                              <Mail className="h-3 w-3" />
+                              {lead.email}
+                            </div>
+                          </td>
+                          <td className="p-3 text-sm">{lead.company || "-"}</td>
+                          <td className="p-3">
+                            <Badge variant={
+                              lead.status === "won" ? "default" :
+                              lead.status === "lost" ? "destructive" :
+                              lead.status === "new" ? "secondary" :
+                              "outline"
+                            }>
+                              {lead.status}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-sm text-muted-foreground">{lead.source || "-"}</td>
+                          <td className="p-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleEditLead(lead)}
+                                data-testid={`button-edit-lead-${lead.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  if (confirm("Are you sure you want to delete this lead?")) {
+                                    deleteLeadMutation.mutate(lead.id);
+                                  }
+                                }}
+                                data-testid={`button-delete-lead-${lead.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Lead Summary Stats */}
+          <div className="grid gap-6 md:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Leads</CardTitle>
+                <UserPlus className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{leads.length}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">New Leads</CardTitle>
+                <Activity className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{leads.filter(l => l.status === "new").length}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Won</CardTitle>
+                <CheckCircle className="h-4 w-4 text-chart-2" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{leads.filter(l => l.status === "won").length}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">In Progress</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {leads.filter(l => ["contacted", "qualified", "proposal", "negotiation"].includes(l.status)).length}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Verifications Tab */}
@@ -642,6 +882,147 @@ export default function AdminDashboard() {
             >
               <CheckCircle className="h-4 w-4 mr-2" />
               {approveMutation.isPending ? "Approving..." : "Approve"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lead Form Dialog */}
+      <Dialog open={leadDialogOpen} onOpenChange={setLeadDialogOpen}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-lead-form">
+          <DialogHeader>
+            <DialogTitle>{editingLead ? "Edit Lead" : "Add New Lead"}</DialogTitle>
+            <DialogDescription>
+              {editingLead ? "Update lead information" : "Add a new sales lead to your CRM"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="lead-first-name">First Name *</Label>
+                <Input
+                  id="lead-first-name"
+                  value={leadFormData.firstName}
+                  onChange={(e) => setLeadFormData({ ...leadFormData, firstName: e.target.value })}
+                  data-testid="input-lead-first-name"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lead-last-name">Last Name *</Label>
+                <Input
+                  id="lead-last-name"
+                  value={leadFormData.lastName}
+                  onChange={(e) => setLeadFormData({ ...leadFormData, lastName: e.target.value })}
+                  data-testid="input-lead-last-name"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lead-email">Email *</Label>
+              <Input
+                id="lead-email"
+                type="email"
+                value={leadFormData.email}
+                onChange={(e) => setLeadFormData({ ...leadFormData, email: e.target.value })}
+                data-testid="input-lead-email"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="lead-phone">Phone</Label>
+                <Input
+                  id="lead-phone"
+                  value={leadFormData.phone || ""}
+                  onChange={(e) => setLeadFormData({ ...leadFormData, phone: e.target.value })}
+                  data-testid="input-lead-phone"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lead-company">Company</Label>
+                <Input
+                  id="lead-company"
+                  value={leadFormData.company || ""}
+                  onChange={(e) => setLeadFormData({ ...leadFormData, company: e.target.value })}
+                  data-testid="input-lead-company"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="lead-status">Status</Label>
+                <select
+                  id="lead-status"
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                  value={leadFormData.status}
+                  onChange={(e) => setLeadFormData({ ...leadFormData, status: e.target.value as any })}
+                  data-testid="select-lead-status"
+                >
+                  <option value="new">New</option>
+                  <option value="contacted">Contacted</option>
+                  <option value="qualified">Qualified</option>
+                  <option value="proposal">Proposal</option>
+                  <option value="negotiation">Negotiation</option>
+                  <option value="won">Won</option>
+                  <option value="lost">Lost</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lead-source">Source</Label>
+                <select
+                  id="lead-source"
+                  className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                  value={leadFormData.source || ""}
+                  onChange={(e) => setLeadFormData({ ...leadFormData, source: e.target.value as any })}
+                  data-testid="select-lead-source"
+                >
+                  <option value="">Select source...</option>
+                  <option value="website">Website</option>
+                  <option value="referral">Referral</option>
+                  <option value="social_media">Social Media</option>
+                  <option value="advertising">Advertising</option>
+                  <option value="cold_outreach">Cold Outreach</option>
+                  <option value="event">Event</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lead-notes">Notes</Label>
+              <Textarea
+                id="lead-notes"
+                value={leadFormData.notes || ""}
+                onChange={(e) => setLeadFormData({ ...leadFormData, notes: e.target.value })}
+                data-testid="textarea-lead-notes"
+                placeholder="Add any notes about this lead..."
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLeadDialogOpen(false);
+                resetLeadForm();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitLead}
+              disabled={!leadFormData.firstName || !leadFormData.lastName || !leadFormData.email || createLeadMutation.isPending || updateLeadMutation.isPending}
+              data-testid="button-submit-lead"
+            >
+              {createLeadMutation.isPending || updateLeadMutation.isPending ? "Saving..." : editingLead ? "Update Lead" : "Create Lead"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -14,6 +14,7 @@ import Profile from "@/pages/profile";
 import AircraftDetail from "@/pages/aircraft-detail";
 import ListAircraft from "@/pages/list-aircraft";
 import CreateMarketplaceListing from "@/pages/create-marketplace-listing";
+import MarketplaceListingCheckout from "@/pages/marketplace-listing-checkout";
 import AdminDashboard from "@/pages/admin";
 import VerifyIdentity from "@/pages/verify-identity";
 import NotFound from "@/pages/not-found";
@@ -35,6 +36,7 @@ function Router() {
           <Route path="/aircraft/:id" component={AircraftDetail} />
           <Route path="/list-aircraft" component={ListAircraft} />
           <Route path="/create-marketplace-listing" component={CreateMarketplaceListing} />
+          <Route path="/marketplace/listing/checkout" component={MarketplaceListingCheckout} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/verify-identity" component={VerifyIdentity} />
         </>

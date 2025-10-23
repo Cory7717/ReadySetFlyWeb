@@ -398,12 +398,30 @@ export default function CreateMarketplaceListing() {
       return;
     }
 
-    createListingMutation.mutate({
+    // Super admins bypass payment and create listing directly
+    if (isSuperAdmin) {
+      createListingMutation.mutate({
+        ...data,
+        price: data.price ? parseFloat(data.price) : null,
+        images: imageFiles.length > 0 ? imageFiles : [],
+        promoCode: promoCodeValid ? promoCode : undefined,
+      });
+      return;
+    }
+
+    // Regular users: redirect to payment
+    const listingPayload = {
       ...data,
       price: data.price ? parseFloat(data.price) : null,
       images: imageFiles.length > 0 ? imageFiles : [],
       promoCode: promoCodeValid ? promoCode : undefined,
-    });
+    };
+
+    // Store listing data in localStorage for checkout page
+    localStorage.setItem('pendingListingData', JSON.stringify(listingPayload));
+    
+    // Navigate to checkout
+    navigate("/marketplace/listing/checkout");
   };
 
   return (

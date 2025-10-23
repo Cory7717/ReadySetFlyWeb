@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import multer from "multer";
 import OpenAI from "openai";
+import Stripe from "stripe";
 import { storage } from "./storage";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
@@ -11,6 +12,14 @@ import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+// Initialize Stripe client (from blueprint:javascript_stripe)
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2024-11-20.acacia",
 });
 
 // Multer setup for file uploads (store in memory for now, can be upgraded to cloud storage)
@@ -73,24 +82,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Stripe payment intent endpoint (requires STRIPE_SECRET_KEY)
+  // Stripe payment intent endpoint for marketplace listing fees (from blueprint:javascript_stripe)
+  app.post("/api/create-listing-payment-intent", isAuthenticated, async (req, res) => {
+    try {
+      const { amount, listingType, tier, listingData } = req.body;
+      const userId = req.user.claims.sub;
+      
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+      
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: "usd",
+        metadata: {
+          userId,
+          listingType: listingType || "marketplace",
+          tier: tier || "basic",
+          purpose: "marketplace_listing_fee",
+        },
+      });
+      
+      res.json({ clientSecret: paymentIntent.client_secret });
+    } catch (error: any) {
+      console.error("Stripe payment intent error:", error);
+      res.status(500).json({ error: error.message || "Payment intent failed" });
+    }
+  });
+  
+  // Stripe payment intent endpoint for rental payments (requires STRIPE_SECRET_KEY)
   app.post("/api/create-payment-intent", async (req, res) => {
     try {
       const { amount, rentalId } = req.body;
       
-      // TODO: Initialize Stripe when API keys are available
-      // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-      // const paymentIntent = await stripe.paymentIntents.create({
-      //   amount: Math.round(amount * 100),
-      //   currency: "usd",
-      //   metadata: { rentalId },
-      // });
-      
-      // For now, return mock client secret
-      res.json({ 
-        clientSecret: "mock_client_secret_" + Date.now(),
-        message: "Stripe integration pending - API keys required"
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100),
+        currency: "usd",
+        metadata: { rentalId },
       });
+      
+      res.json({ clientSecret: paymentIntent.client_secret });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Payment intent failed" });
     }

@@ -306,11 +306,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Promo code validation
+  app.post("/api/promo-codes/validate", isAuthenticated, async (req: any, res) => {
+    try {
+      const { code } = req.body;
+      // For now, accept "LAUNCH2024" as a valid free 7-day promo code
+      if (code && code.toUpperCase() === "LAUNCH2024") {
+        return res.json({ 
+          valid: true, 
+          description: "Free 7-day marketplace listing!",
+          discountType: "free_7_day",
+        });
+      }
+      res.json({ valid: false, message: "Invalid promo code" });
+    } catch (error: any) {
+      console.error("Promo code validation error:", error);
+      res.status(500).json({ valid: false, message: "Failed to validate promo code" });
+    }
+  });
+
   app.post("/api/marketplace", isAuthenticated, isVerified, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const validatedData = insertMarketplaceListingSchema.parse({ ...req.body, userId });
-      const listing = await storage.createMarketplaceListing(validatedData);
+      const { promoCode, ...listingData } = req.body;
+      
+      let monthlyFee = 25; // Default fee
+      let isPaid = false;
+      let expiresAt: Date | null = null;
+      
+      // Check if promo code is LAUNCH2024 for free 7-day listing
+      if (promoCode && promoCode.toUpperCase() === "LAUNCH2024") {
+        monthlyFee = 0;
+        isPaid = true; // Mark as paid since it's free
+        expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+      }
+      
+      // Validate the base listing data first
+      const validatedData = insertMarketplaceListingSchema.parse({ 
+        ...listingData, 
+        userId,
+        monthlyFee: monthlyFee.toString(),
+      });
+      
+      // Create listing with promo code benefits directly in storage
+      const listing = await storage.createMarketplaceListing({
+        ...validatedData,
+        isPaid,
+        expiresAt,
+      });
+      
       res.status(201).json(listing);
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Invalid listing data" });

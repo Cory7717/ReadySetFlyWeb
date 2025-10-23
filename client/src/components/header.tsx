@@ -76,6 +76,13 @@ export function Header() {
 
             <ThemeToggle />
 
+            {/* Super Admin Badge */}
+            {user?.isSuperAdmin && (
+              <Badge variant="default" className="bg-primary text-primary-foreground" data-testid="badge-super-admin">
+                Super Admin
+              </Badge>
+            )}
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-profile-menu" aria-label="User menu">
@@ -88,7 +95,14 @@ export function Header() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">{displayName}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium leading-none">{displayName}</p>
+                      {user?.isSuperAdmin && (
+                        <Badge variant="default" className="text-xs h-5 bg-primary text-primary-foreground">
+                          Super Admin
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
                   </div>
                 </DropdownMenuLabel>

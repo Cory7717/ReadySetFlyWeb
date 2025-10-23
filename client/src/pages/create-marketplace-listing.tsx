@@ -95,6 +95,9 @@ export default function CreateMarketplaceListing() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [imageFiles, setImageFiles] = useState<string[]>([]);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoCodeValid, setPromoCodeValid] = useState<boolean | null>(null);
+  const [promoCodeChecking, setPromoCodeChecking] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(baseFormSchema),
@@ -168,6 +171,48 @@ export default function CreateMarketplaceListing() {
   }, [selectedCategory, selectedTier, maxImages, imageFiles, toast]);
 
   const isVerified = user?.isVerified || false;
+
+  // Check promo code validity
+  const checkPromoCode = async () => {
+    if (!promoCode.trim()) {
+      setPromoCodeValid(null);
+      return;
+    }
+    
+    setPromoCodeChecking(true);
+    try {
+      const response = await fetch(`/api/promo-codes/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: promoCode, category: selectedCategory }),
+      });
+      
+      const data = await response.json();
+      setPromoCodeValid(data.valid);
+      
+      if (data.valid) {
+        toast({
+          title: "Promo Code Applied!",
+          description: data.description || "You've unlocked a free 7-day listing!",
+        });
+      } else {
+        toast({
+          title: "Invalid Promo Code",
+          description: data.message || "This promo code is not valid",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      setPromoCodeValid(false);
+      toast({
+        title: "Error",
+        description: "Failed to validate promo code",
+        variant: "destructive",
+      });
+    } finally {
+      setPromoCodeChecking(false);
+    }
+  };
 
   const createListingMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -282,6 +327,7 @@ export default function CreateMarketplaceListing() {
       ...data,
       price: data.price ? parseFloat(data.price) : null,
       images: imageFiles.length > 0 ? imageFiles : [],
+      promoCode: promoCodeValid ? promoCode : undefined,
     });
   };
 
@@ -468,6 +514,48 @@ export default function CreateMarketplaceListing() {
                   </FormItem>
                 )}
               />
+            </CardContent>
+          </Card>
+
+          {/* Promo Code */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Promo Code (Optional)</CardTitle>
+              <CardDescription>
+                Enter a promo code for a free 7-day listing or other discounts
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Enter promo code"
+                  value={promoCode}
+                  onChange={(e) => {
+                    setPromoCode(e.target.value.toUpperCase());
+                    setPromoCodeValid(null);
+                  }}
+                  data-testid="input-promo-code"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  onClick={checkPromoCode}
+                  disabled={!promoCode.trim() || promoCodeChecking}
+                  data-testid="button-check-promo"
+                >
+                  {promoCodeChecking ? "Checking..." : "Apply"}
+                </Button>
+              </div>
+              {promoCodeValid === true && (
+                <div className="mt-2 text-sm text-chart-2 flex items-center gap-1">
+                  ✓ Promo code applied! Your listing is free for 7 days.
+                </div>
+              )}
+              {promoCodeValid === false && (
+                <div className="mt-2 text-sm text-destructive flex items-center gap-1">
+                  ✗ Invalid promo code
+                </div>
+              )}
             </CardContent>
           </Card>
 

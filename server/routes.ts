@@ -18,9 +18,7 @@ const openai = new OpenAI({
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
 }
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-11-20.acacia",
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // Multer setup for file uploads (store in memory for now, can be upgraded to cloud storage)
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit
@@ -83,13 +81,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Stripe payment intent endpoint for marketplace listing fees (from blueprint:javascript_stripe)
-  app.post("/api/create-listing-payment-intent", isAuthenticated, async (req, res) => {
+  app.post("/api/create-listing-payment-intent", isAuthenticated, async (req: any, res) => {
     try {
-      const { amount, listingType, tier, listingData } = req.body;
+      const { category, tier, listingData } = req.body;
       const userId = req.user.claims.sub;
       
-      if (!amount || amount <= 0) {
-        return res.status(400).json({ error: "Invalid amount" });
+      if (!category) {
+        return res.status(400).json({ error: "Missing category" });
+      }
+      
+      // Server-side pricing calculation - NEVER trust client
+      const TIER_PRICING: Record<string, number> = {
+        basic: 25,
+        standard: 100,
+        premium: 250,
+      };
+      
+      // Calculate amount server-side based on category and tier
+      let amount: number;
+      if (category === 'aircraft-sale' && tier) {
+        amount = TIER_PRICING[tier] || 25;
+      } else {
+        amount = 25; // Fixed fee for other marketplace categories
       }
       
       const paymentIntent = await stripe.paymentIntents.create({
@@ -97,13 +110,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currency: "usd",
         metadata: {
           userId,
-          listingType: listingType || "marketplace",
+          category,
           tier: tier || "basic",
           purpose: "marketplace_listing_fee",
+          listingData: JSON.stringify(listingData), // Store listing data for webhook
         },
       });
       
-      res.json({ clientSecret: paymentIntent.client_secret });
+      res.json({ 
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        amount,
+      });
     } catch (error: any) {
       console.error("Stripe payment intent error:", error);
       res.status(500).json({ error: error.message || "Payment intent failed" });
@@ -443,7 +461,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/marketplace", isAuthenticated, isVerified, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { promoCode, ...listingData } = req.body;
+      const { promoCode, paymentIntentId, ...listingData } = req.body;
       
       // Check if user is a Super Admin
       const user = await storage.getUser(userId);
@@ -467,6 +485,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         monthlyFee = 0;
         isPaid = true; // Mark as paid since it's free
         expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+      }
+      // Regular users must have a paid payment intent
+      else if (paymentIntentId) {
+        // Verify payment was successful
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        
+        if (paymentIntent.status !== 'succeeded') {
+          return res.status(402).json({ 
+            error: "Payment required",
+            message: "Payment has not been completed. Please complete your payment first."
+          });
+        }
+        
+        // Verify the payment matches the user
+        if (paymentIntent.metadata.userId !== userId) {
+          return res.status(403).json({ 
+            error: "Unauthorized",
+            message: "Payment verification failed"
+          });
+        }
+        
+        // Calculate monthlyFee from payment amount (convert from cents)
+        monthlyFee = paymentIntent.amount / 100;
+        isPaid = true;
+        expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
+      }
+      // No payment method provided and not super admin or promo
+      else {
+        return res.status(402).json({ 
+          error: "Payment required",
+          message: "Please complete payment to create a listing."
+        });
       }
       
       // Validate the base listing data first

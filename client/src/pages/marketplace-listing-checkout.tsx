@@ -104,28 +104,28 @@ export default function MarketplaceListingCheckout() {
         description: "No listing data found. Please try again.",
         variant: "destructive",
       });
-      navigate("/marketplace/create");
+      navigate("/create-marketplace-listing");
       return;
     }
 
     const data = JSON.parse(storedData);
     setListingData(data);
 
-    // Calculate amount based on tier or fixed fee
-    const amount = data.category === 'aircraft-sale' && data.tier
-      ? TIER_PRICING[data.tier] || 25
-      : 25;
-
-    // Create payment intent
+    // Create payment intent (server calculates amount)
     apiRequest("POST", "/api/create-listing-payment-intent", {
-      amount,
-      listingType: data.category,
+      category: data.category,
       tier: data.tier,
       listingData: data,
     })
       .then((res) => res.json())
       .then((result) => {
         setClientSecret(result.clientSecret);
+        // Update amount from server (server-side pricing)
+        if (result.amount) {
+          const updatedData = { ...data, serverAmount: result.amount, paymentIntentId: result.paymentIntentId };
+          setListingData(updatedData);
+          localStorage.setItem('pendingListingData', JSON.stringify(updatedData));
+        }
       })
       .catch((error) => {
         toast({
@@ -133,16 +133,21 @@ export default function MarketplaceListingCheckout() {
           description: error.message || "Could not initialize payment",
           variant: "destructive",
         });
-        navigate("/marketplace/create");
+        navigate("/create-marketplace-listing");
       });
   }, [navigate, toast]);
 
   const handlePaymentSuccess = async () => {
-    if (!listingData) return;
+    if (!listingData || !listingData.paymentIntentId) return;
 
     try {
-      // Create the listing after successful payment
-      await apiRequest("POST", "/api/marketplace", listingData);
+      // Create the listing with payment verification
+      const listingPayload = {
+        ...listingData,
+        paymentIntentId: listingData.paymentIntentId, // Backend will verify payment status
+      };
+      
+      await apiRequest("POST", "/api/marketplace", listingPayload);
       
       // Clear pending data
       localStorage.removeItem('pendingListingData');
@@ -175,9 +180,11 @@ export default function MarketplaceListingCheckout() {
     );
   }
 
-  const amount = listingData.category === 'aircraft-sale' && listingData.tier
-    ? TIER_PRICING[listingData.tier] || 25
-    : 25;
+  // Use server-calculated amount if available, otherwise calculate client-side as fallback
+  const amount = listingData.serverAmount || 
+    (listingData.category === 'aircraft-sale' && listingData.tier
+      ? TIER_PRICING[listingData.tier] || 25
+      : 25);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">

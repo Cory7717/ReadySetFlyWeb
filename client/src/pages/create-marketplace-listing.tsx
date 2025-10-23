@@ -220,10 +220,13 @@ export default function CreateMarketplaceListing() {
         listingType,
         details,
       });
-      return await response.json() as { description: string };
+      const result = await response.json() as { description: string };
+      console.log("AI Response received:", result);
+      return result;
     },
     onSuccess: (data) => {
-      form.setValue("description", data.description);
+      console.log("Setting description to:", data.description);
+      form.setValue("description", data.description, { shouldValidate: true, shouldDirty: true });
       toast({
         title: "Description Generated",
         description: "AI-generated description added. Feel free to customize it!",

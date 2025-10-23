@@ -9,6 +9,10 @@ export const aircraftCategories = ["Single-Engine", "Multi-Engine", "Jet", "Turb
 export const marketplaceCategories = ["aircraft-sale", "charter", "cfi", "flight-school", "mechanic", "job"] as const;
 export const rentalStatuses = ["pending", "approved", "active", "completed", "cancelled"] as const;
 export const listingTiers = ["basic", "standard", "premium"] as const;
+export const leadStatuses = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"] as const;
+export const dealStages = ["lead", "prospect", "proposal", "negotiation", "closed_won", "closed_lost"] as const;
+export const activityTypes = ["call", "email", "meeting", "note", "task"] as const;
+export const leadSources = ["website", "referral", "social_media", "advertising", "cold_outreach", "event", "other"] as const;
 
 // Session storage table (REQUIRED for Replit Auth - from blueprint:javascript_log_in_with_replit)
 export const sessions = pgTable(
@@ -296,6 +300,116 @@ export const verificationSubmissions = pgTable("verification_submissions", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// CRM Tables (Sales & Marketing)
+export const crmLeads = pgTable("crm_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Contact information
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: varchar("email").notNull(),
+  phone: text("phone"),
+  company: text("company"),
+  title: text("title"),
+  
+  // Lead details
+  status: text("status").notNull().default("new"),
+  source: text("source"),
+  value: decimal("value", { precision: 10, scale: 2 }),
+  
+  // Ownership & tracking
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  
+  // Additional context
+  notes: text("notes"),
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  
+  // Conversion tracking
+  convertedToContactId: varchar("converted_to_contact_id"),
+  convertedToDealId: varchar("converted_to_deal_id"),
+  convertedAt: timestamp("converted_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const crmContacts = pgTable("crm_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Contact information
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: varchar("email").notNull(),
+  phone: text("phone"),
+  company: text("company"),
+  title: text("title"),
+  
+  // Optional user linkage (if they registered)
+  userId: varchar("user_id").references(() => users.id),
+  
+  // Ownership & tracking
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  
+  // Context
+  notes: text("notes"),
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const crmDeals = pgTable("crm_deals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Deal information
+  name: text("name").notNull(),
+  stage: text("stage").notNull().default("lead"),
+  value: decimal("value", { precision: 10, scale: 2 }).notNull(),
+  probability: integer("probability").default(50),
+  
+  // Related entities
+  contactId: varchar("contact_id").references(() => crmContacts.id),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  
+  // Timing
+  expectedCloseDate: timestamp("expected_close_date"),
+  closedDate: timestamp("closed_date"),
+  
+  // Context
+  description: text("description"),
+  notes: text("notes"),
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const crmActivities = pgTable("crm_activities", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Activity details
+  type: text("type").notNull(),
+  subject: text("subject").notNull(),
+  description: text("description"),
+  
+  // Related entities
+  leadId: varchar("lead_id").references(() => crmLeads.id),
+  contactId: varchar("contact_id").references(() => crmContacts.id),
+  dealId: varchar("deal_id").references(() => crmDeals.id),
+  
+  // Ownership
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  
+  // Timing
+  dueDate: timestamp("due_date"),
+  completedAt: timestamp("completed_at"),
+  isCompleted: boolean("is_completed").default(false),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -348,6 +462,45 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   isRead: true,
 });
 
+export const insertCrmLeadSchema = createInsertSchema(crmLeads).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  convertedToContactId: true,
+  convertedToDealId: true,
+  convertedAt: true,
+}).extend({
+  status: z.enum(leadStatuses).default("new"),
+  source: z.enum(leadSources).optional(),
+  value: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+});
+
+export const insertCrmContactSchema = createInsertSchema(crmContacts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCrmDealSchema = createInsertSchema(crmDeals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  stage: z.enum(dealStages).default("lead"),
+  value: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  probability: z.number().min(0).max(100).default(50),
+});
+
+export const insertCrmActivitySchema = createInsertSchema(crmActivities).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  isCompleted: true,
+  completedAt: true,
+}).extend({
+  type: z.enum(activityTypes),
+});
+
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -370,8 +523,24 @@ export type Transaction = typeof transactions.$inferSelect;
 export type VerificationSubmission = typeof verificationSubmissions.$inferSelect;
 export type InsertVerificationSubmission = Omit<VerificationSubmission, 'id' | 'createdAt' | 'updatedAt'>;
 
-// Certification types
+export type CrmLead = typeof crmLeads.$inferSelect;
+export type InsertCrmLead = z.infer<typeof insertCrmLeadSchema>;
+
+export type CrmContact = typeof crmContacts.$inferSelect;
+export type InsertCrmContact = z.infer<typeof insertCrmContactSchema>;
+
+export type CrmDeal = typeof crmDeals.$inferSelect;
+export type InsertCrmDeal = z.infer<typeof insertCrmDealSchema>;
+
+export type CrmActivity = typeof crmActivities.$inferSelect;
+export type InsertCrmActivity = z.infer<typeof insertCrmActivitySchema>;
+
+// Enum types
 export type CertificationType = typeof certificationTypes[number];
 export type AircraftCategory = typeof aircraftCategories[number];
 export type MarketplaceCategory = typeof marketplaceCategories[number];
 export type RentalStatus = typeof rentalStatuses[number];
+export type LeadStatus = typeof leadStatuses[number];
+export type DealStage = typeof dealStages[number];
+export type ActivityType = typeof activityTypes[number];
+export type LeadSource = typeof leadSources[number];

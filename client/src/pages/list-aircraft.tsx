@@ -206,6 +206,9 @@ export default function ListAircraft() {
   };
 
   const onSubmit = (data: ListingFormData) => {
+    console.log("Form submitted with data:", data);
+    console.log("Form errors:", form.formState.errors);
+    
     // Note: Backend middleware enforces verification requirement
     // Frontend check removed to avoid UX issues with cached user data
     

@@ -448,12 +448,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Marketplace Listings
+  // Marketplace Listings with filtering
   app.get("/api/marketplace", async (req, res) => {
     try {
-      const listings = await storage.getAllMarketplaceListings();
+      const { city, category, minPrice, maxPrice, engineType } = req.query;
+      
+      // If no filters provided, use the old method
+      if (!city && !category && !minPrice && !maxPrice && !engineType) {
+        const listings = await storage.getAllMarketplaceListings();
+        return res.json(listings);
+      }
+
+      // Use filtered query with validation
+      const filters: any = {};
+      if (city) filters.city = city as string;
+      if (category) filters.category = category as string;
+      
+      // Validate and parse numeric price filters
+      if (minPrice) {
+        const parsed = parseFloat(minPrice as string);
+        if (!isNaN(parsed)) filters.minPrice = parsed;
+      }
+      if (maxPrice) {
+        const parsed = parseFloat(maxPrice as string);
+        if (!isNaN(parsed)) filters.maxPrice = parsed;
+      }
+      
+      if (engineType) filters.engineType = engineType as string;
+
+      const listings = await storage.getFilteredMarketplaceListings(filters);
       res.json(listings);
     } catch (error) {
+      console.error("Failed to fetch marketplace listings:", error);
       res.status(500).json({ error: "Failed to fetch marketplace listings" });
     }
   });

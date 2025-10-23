@@ -34,44 +34,27 @@ export default function Marketplace() {
   
   const [, navigate] = useLocation();
 
-  const { data: allListings = [], isLoading } = useQuery<MarketplaceListing[]>({
-    queryKey: ["/api/marketplace"],
+  // Build query params for backend filtering
+  const buildQueryParams = () => {
+    const params = new URLSearchParams();
+    if (selectedCategory) params.set('category', selectedCategory);
+    if (cityFilter) params.set('city', cityFilter);
+    if (minPrice) params.set('minPrice', minPrice);
+    if (maxPrice) params.set('maxPrice', maxPrice);
+    if (engineTypeFilter) params.set('engineType', engineTypeFilter);
+    return params.toString();
+  };
+
+  const queryString = buildQueryParams();
+
+  const { data: categoryListings = [], isLoading } = useQuery<MarketplaceListing[]>({
+    queryKey: ["/api/marketplace", selectedCategory, cityFilter, minPrice, maxPrice, engineTypeFilter],
+    queryFn: async () => {
+      const response = await fetch(`/api/marketplace?${queryString}`);
+      if (!response.ok) throw new Error('Failed to fetch listings');
+      return response.json();
+    },
   });
-
-  // Apply filters
-  let filteredListings = allListings.filter(
-    (listing) => listing.category === selectedCategory
-  );
-
-  // City filter
-  if (cityFilter) {
-    filteredListings = filteredListings.filter(
-      (listing) => 
-        listing.city?.toLowerCase().includes(cityFilter.toLowerCase()) ||
-        listing.location?.toLowerCase().includes(cityFilter.toLowerCase())
-    );
-  }
-
-  // Price range filter
-  if (minPrice || maxPrice) {
-    filteredListings = filteredListings.filter((listing) => {
-      if (!listing.price) return true;
-      const price = parseFloat(listing.price);
-      const min = minPrice ? parseFloat(minPrice) : 0;
-      const max = maxPrice ? parseFloat(maxPrice) : Infinity;
-      return price >= min && price <= max;
-    });
-  }
-
-  // Engine type filter (for aircraft categories)
-  if (engineTypeFilter && (selectedCategory === 'aircraft-sale')) {
-    filteredListings = filteredListings.filter((listing) => {
-      const details = listing.details as any;
-      return details?.engineType === engineTypeFilter;
-    });
-  }
-
-  const categoryListings = filteredListings;
 
   return (
     <div className="min-h-screen">

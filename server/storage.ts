@@ -34,7 +34,7 @@ import {
   crmActivities,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, asc, or, ilike } from "drizzle-orm";
+import { eq, and, desc, asc, or, ilike, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -59,6 +59,13 @@ export interface IStorage {
   getAllMarketplaceListings(): Promise<MarketplaceListing[]>;
   getMarketplaceListingsByCategory(category: string): Promise<MarketplaceListing[]>;
   getMarketplaceListingsByUser(userId: string): Promise<MarketplaceListing[]>;
+  getFilteredMarketplaceListings(filters: {
+    city?: string;
+    category?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    engineType?: string;
+  }): Promise<MarketplaceListing[]>;
   createMarketplaceListing(listing: InsertMarketplaceListing): Promise<MarketplaceListing>;
   updateMarketplaceListing(id: string, updates: Partial<MarketplaceListing>): Promise<MarketplaceListing | undefined>;
   deleteMarketplaceListing(id: string): Promise<boolean>;
@@ -315,6 +322,54 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(marketplaceListings)
       .where(eq(marketplaceListings.userId, userId));
+  }
+
+  async getFilteredMarketplaceListings(filters: {
+    city?: string;
+    category?: string;
+    minPrice?: number;
+    maxPrice?: number;
+    engineType?: string;
+  }): Promise<MarketplaceListing[]> {
+    const conditions: any[] = [eq(marketplaceListings.isActive, true)];
+
+    // Category filter
+    if (filters.category) {
+      conditions.push(eq(marketplaceListings.category, filters.category));
+    }
+
+    // City filter (case-insensitive partial match)
+    if (filters.city) {
+      conditions.push(ilike(marketplaceListings.city, `%${filters.city}%`));
+    }
+
+    // Price range filters (cast string price to numeric for proper comparison)
+    if (filters.minPrice !== undefined) {
+      conditions.push(sql`CAST(${marketplaceListings.price} AS NUMERIC) >= ${filters.minPrice}`);
+    }
+    if (filters.maxPrice !== undefined) {
+      conditions.push(sql`CAST(${marketplaceListings.price} AS NUMERIC) <= ${filters.maxPrice}`);
+    }
+
+    // Engine type filter (for aircraft categories, stored in details JSONB)
+    // This requires a JSON path query which is more complex with Drizzle
+    // For now, we'll fetch all and filter in memory for engineType
+    // TODO: Optimize with raw SQL or JSONB operators in future
+
+    const results = await db
+      .select()
+      .from(marketplaceListings)
+      .where(and(...conditions));
+
+    // Post-filter for engineType in details JSONB
+    if (filters.engineType) {
+      return results.filter((listing) => {
+        const details = listing.details as any;
+        return details?.engineType === filters.engineType;
+      });
+    }
+
+    return results;
   }
 
   async createMarketplaceListing(insertListing: InsertMarketplaceListing): Promise<MarketplaceListing> {

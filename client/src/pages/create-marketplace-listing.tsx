@@ -155,10 +155,33 @@ export default function CreateMarketplaceListing() {
       });
       return;
     }
-    // In production, upload to cloud storage and get URLs
-    // For now, create object URLs for preview
-    const urls = files.map(file => URL.createObjectURL(file));
+    
+    // TODO: In production, upload to cloud storage (S3, Cloudinary) and get permanent URLs
+    // For now, use placeholder images from Unsplash for demo purposes
+    const placeholderImages = [
+      'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=1200&h=800&fit=crop', // Aircraft exterior
+      'https://images.unsplash.com/photo-1583792645866-f6b9d2e755e7?w=1200&h=800&fit=crop', // Aircraft cockpit
+      'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1200&h=800&fit=crop', // Aircraft in flight
+      'https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?w=1200&h=800&fit=crop', // Aircraft side view
+      'https://images.unsplash.com/photo-1474302770737-173ee21bab63?w=1200&h=800&fit=crop', // Aircraft detail
+      'https://images.unsplash.com/photo-1542362567-b07e54a88f93?w=1200&h=800&fit=crop', // Aircraft interior
+      'https://images.unsplash.com/photo-1569629743817-70d8db6c323b?w=1200&h=800&fit=crop', // Airport
+      'https://images.unsplash.com/photo-1556388158-158ea5ccacbd?w=1200&h=800&fit=crop', // Aviation
+      'https://images.unsplash.com/photo-1473968512647-3e447244af8f?w=1200&h=800&fit=crop', // Private jet
+      'https://images.unsplash.com/photo-1583792645866-f6b9d2e755e7?w=1200&h=800&fit=crop', // Cockpit controls
+    ];
+    
+    const urls = files.map((_, index) => {
+      const placeholderIndex = (imageFiles.length + index) % placeholderImages.length;
+      return placeholderImages[placeholderIndex];
+    });
+    
     setImageFiles([...imageFiles, ...urls]);
+    
+    toast({
+      title: "Images Added",
+      description: `Added ${files.length} placeholder image(s). Cloud storage integration coming soon!`,
+    });
   };
 
   const removeImage = (index: number) => {

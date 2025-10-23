@@ -132,7 +132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Stripe payment intent endpoint for marketplace listing fees (from blueprint:javascript_stripe)
   app.post("/api/create-listing-payment-intent", isAuthenticated, async (req: any, res) => {
     try {
-      const { category, tier, listingData } = req.body;
+      const { category, tier } = req.body;
       const userId = req.user.claims.sub;
       
       if (!category) {
@@ -162,7 +162,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           category,
           tier: tier || "basic",
           purpose: "marketplace_listing_fee",
-          listingData: JSON.stringify(listingData), // Store listing data for webhook
+          // Note: listingData is NOT stored here due to Stripe's 500-char metadata limit
+          // The actual listing is created via POST /api/marketplace after payment succeeds
         },
       });
       
@@ -533,7 +534,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/marketplace", isAuthenticated, isVerified, async (req: any, res) => {
+  app.post("/api/marketplace", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { promoCode, paymentIntentId, ...listingData } = req.body;

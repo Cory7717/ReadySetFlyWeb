@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import multer from "multer";
@@ -20,8 +21,34 @@ if (!process.env.STRIPE_SECRET_KEY) {
 }
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Multer setup for file uploads (store in memory for now, can be upgraded to cloud storage)
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit
+// Multer setup for file uploads with disk storage
+const storage_config = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (file.fieldname.includes('image') || file.mimetype.startsWith('image/')) {
+      cb(null, 'uploads/marketplace/');
+    } else {
+      cb(null, 'uploads/documents/');
+    }
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = file.originalname.split('.').pop();
+    cb(null, `${file.fieldname}-${uniqueSuffix}.${ext}`);
+  }
+});
+
+const upload = multer({ 
+  storage: storage_config, 
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    // Accept images and PDFs
+    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image and PDF files are allowed'));
+    }
+  }
+});
 
 // Verification middleware - checks if user is verified
 const isVerified = async (req: any, res: any, next: any) => {
@@ -51,6 +78,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware (from blueprint:javascript_log_in_with_replit)
   await setupAuth(app);
 
+  // Serve uploaded files
+  app.use('/uploads', express.static('uploads'));
+
   // Auth routes (from blueprint:javascript_log_in_with_replit)
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
@@ -77,6 +107,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Image upload endpoint for marketplace listings
+  app.post("/api/upload-images", isAuthenticated, upload.array('images', 15), async (req: any, res) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: "No files uploaded" });
+      }
+      
+      // Return URLs for uploaded files
+      const imageUrls = files.map(file => `/uploads/marketplace/${file.filename}`);
+      
+      res.json({ imageUrls });
+    } catch (error: any) {
+      console.error("Image upload error:", error);
+      res.status(500).json({ error: error.message || "Image upload failed" });
     }
   });
 

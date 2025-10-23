@@ -25,6 +25,9 @@ const baseFormSchema = insertMarketplaceListingSchema.omit({ userId: true }).ext
   title: z.string().min(3, "Title must be at least 3 characters"),
   description: z.string().min(20, "Description must be at least 20 characters"),
   location: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  zipCode: z.string().optional(),
   contactEmail: z.string().email("Valid email required").min(1, "Contact email is required"),
   contactPhone: z.string().optional(),
   price: z.string().optional(),
@@ -39,6 +42,15 @@ const aircraftSaleSchema = z.object({
   registration: z.string().optional(),
   totalTime: z.string().optional(),
   engineTime: z.string().optional(),
+  engineType: z.enum(["Single-Engine", "Multi-Engine", "Turboprop", "Jet"]).optional(),
+  engineCount: z.string().optional(),
+  seatingCapacity: z.string().optional(),
+  avionicsPackage: z.string().optional(),
+  usefulLoad: z.string().optional(),
+  annualDueDate: z.string().optional(),
+  interiorCondition: z.enum(["excellent", "good", "fair", "needs-work"]).optional(),
+  exteriorCondition: z.enum(["excellent", "good", "fair", "needs-work"]).optional(),
+  damageHistory: z.string().optional(),
 });
 
 const jobSchema = z.object({
@@ -591,15 +603,41 @@ export default function CreateMarketplaceListing() {
                 )}
               />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
-                  name="location"
+                  name="city"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Location (Optional)</FormLabel>
+                      <FormLabel>City (Optional)</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Denver, CO" {...field} data-testid="input-location" />
+                        <Input placeholder="e.g., Denver" {...field} data-testid="input-city" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="state"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>State (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., CO" {...field} data-testid="input-state" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="zipCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>ZIP Code (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., 80202" {...field} data-testid="input-zipcode" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -865,6 +903,29 @@ export default function CreateMarketplaceListing() {
                           <FormControl>
                             <Input placeholder="e.g., 500 SMOH" {...field} data-testid="input-aircraft-engine-time" />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="details.engineType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Engine Type</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-aircraft-engine-type">
+                                <SelectValue placeholder="Select engine type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="Single-Engine">Single-Engine</SelectItem>
+                              <SelectItem value="Multi-Engine">Multi-Engine</SelectItem>
+                              <SelectItem value="Turboprop">Turboprop</SelectItem>
+                              <SelectItem value="Jet">Jet</SelectItem>
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}

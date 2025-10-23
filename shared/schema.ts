@@ -6,6 +6,7 @@ import { z } from "zod";
 // Enums
 export const certificationTypes = ["PPL", "IR", "CPL", "Multi-Engine", "ATP", "CFI", "CFII", "MEI"] as const;
 export const aircraftCategories = ["Single-Engine", "Multi-Engine", "Jet", "Turboprop", "Helicopter", "Seaplane"] as const;
+export const engineTypes = ["Single-Engine", "Multi-Engine", "Turboprop", "Jet"] as const;
 export const marketplaceCategories = ["aircraft-sale", "charter", "cfi", "flight-school", "mechanic", "job"] as const;
 export const rentalStatuses = ["pending", "approved", "active", "completed", "cancelled"] as const;
 export const listingTiers = ["basic", "standard", "premium"] as const;
@@ -114,9 +115,19 @@ export const aircraftListings = pgTable("aircraft_listings", {
   // Images
   images: text("images").array().notNull(),
   
-  // Location
-  location: text("location").notNull(),
+  // Location (structured for filtering)
+  location: text("location").notNull(), // Legacy field, keep for backward compatibility
+  city: text("city"),
+  state: text("state"),
+  zipCode: text("zip_code"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
   airportCode: text("airport_code"),
+  
+  // Aircraft Specifications (for filtering)
+  engineType: text("engine_type"), // Single-Engine, Multi-Engine, Turboprop, Jet
+  engineCount: integer("engine_count"), // Number of engines
+  seatingCapacity: integer("seating_capacity"), // Number of seats
   
   // Listing details
   description: text("description"),
@@ -162,7 +173,14 @@ export const aircraftListings = pgTable("aircraft_listings", {
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_aircraft_city").on(table.city),
+  index("idx_aircraft_is_listed").on(table.isListed),
+  index("idx_aircraft_category").on(table.category),
+  index("idx_aircraft_engine_type").on(table.engineType),
+  index("idx_aircraft_city_engine_type").on(table.city, table.engineType),
+  index("idx_aircraft_category_city").on(table.category, table.city),
+]);
 
 // Marketplace Listings
 export const marketplaceListings = pgTable("marketplace_listings", {
@@ -176,7 +194,15 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   images: text("images").array().default(sql`ARRAY[]::text[]`),
-  location: text("location"),
+  
+  // Location (structured for filtering)
+  location: text("location"), // Legacy field for display
+  city: text("city"),
+  state: text("state"),
+  zipCode: text("zip_code"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
   
@@ -196,7 +222,13 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("idx_marketplace_category").on(table.category),
+  index("idx_marketplace_city").on(table.city),
+  index("idx_marketplace_is_active").on(table.isActive),
+  index("idx_marketplace_category_city").on(table.category, table.city),
+  index("idx_marketplace_category_active").on(table.category, table.isActive),
+]);
 
 // Rentals
 export const rentals = pgTable("rentals", {
@@ -469,6 +501,11 @@ export const insertAircraftListingSchema = createInsertSchema(aircraftListings).
   hourlyRate: z.string().regex(/^\d+(\.\d{1,2})?$/),
   requiredCertifications: z.array(z.string()).min(1),
   images: z.array(z.string()).min(1).max(15),
+  engineType: z.enum(engineTypes).optional(),
+  engineCount: z.number().min(1).max(8).optional(),
+  seatingCapacity: z.number().min(1).max(20).optional(),
+  latitude: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
+  longitude: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
 });
 
 export const insertMarketplaceListingSchema = createInsertSchema(marketplaceListings).omit({
@@ -480,6 +517,8 @@ export const insertMarketplaceListingSchema = createInsertSchema(marketplaceList
   images: z.array(z.string()).max(15),
   price: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
   monthlyFee: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  latitude: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
+  longitude: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
 });
 
 export const insertRentalSchema = createInsertSchema(rentals).omit({
@@ -583,6 +622,7 @@ export type InsertPromoCodeUsage = typeof promoCodeUsages.$inferInsert;
 // Enum types
 export type CertificationType = typeof certificationTypes[number];
 export type AircraftCategory = typeof aircraftCategories[number];
+export type EngineType = typeof engineTypes[number];
 export type MarketplaceCategory = typeof marketplaceCategories[number];
 export type RentalStatus = typeof rentalStatuses[number];
 export type LeadStatus = typeof leadStatuses[number];

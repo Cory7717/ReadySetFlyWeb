@@ -2,10 +2,15 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
 import type { MarketplaceListing } from "@shared/schema";
 import { MarketplaceCard } from "@/components/marketplace-card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
+import { Search, SlidersHorizontal } from "lucide-react";
 
 const categories = [
   { id: "aircraft-sale", label: "Aircraft For Sale", fee: "$40-125/mo" },
@@ -19,15 +24,54 @@ const categories = [
 export default function Marketplace() {
   const [selectedCategory, setSelectedCategory] = useState("aircraft-sale");
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Filter states
+  const [cityFilter, setCityFilter] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [engineTypeFilter, setEngineTypeFilter] = useState("");
+  
   const [, navigate] = useLocation();
 
   const { data: allListings = [], isLoading } = useQuery<MarketplaceListing[]>({
     queryKey: ["/api/marketplace"],
   });
 
-  const categoryListings = allListings.filter(
+  // Apply filters
+  let filteredListings = allListings.filter(
     (listing) => listing.category === selectedCategory
   );
+
+  // City filter
+  if (cityFilter) {
+    filteredListings = filteredListings.filter(
+      (listing) => 
+        listing.city?.toLowerCase().includes(cityFilter.toLowerCase()) ||
+        listing.location?.toLowerCase().includes(cityFilter.toLowerCase())
+    );
+  }
+
+  // Price range filter
+  if (minPrice || maxPrice) {
+    filteredListings = filteredListings.filter((listing) => {
+      if (!listing.price) return true;
+      const price = parseFloat(listing.price);
+      const min = minPrice ? parseFloat(minPrice) : 0;
+      const max = maxPrice ? parseFloat(maxPrice) : Infinity;
+      return price >= min && price <= max;
+    });
+  }
+
+  // Engine type filter (for aircraft categories)
+  if (engineTypeFilter && (selectedCategory === 'aircraft-sale')) {
+    filteredListings = filteredListings.filter((listing) => {
+      const details = listing.details as any;
+      return details?.engineType === engineTypeFilter;
+    });
+  }
+
+  const categoryListings = filteredListings;
 
   return (
     <div className="min-h-screen">
@@ -68,7 +112,7 @@ export default function Marketplace() {
 
       {/* Listings */}
       <section className="container mx-auto px-4 py-12">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="font-display text-2xl font-bold mb-1">
               {categories.find(c => c.id === selectedCategory)?.label}
@@ -77,15 +121,112 @@ export default function Marketplace() {
               <span data-testid="text-marketplace-count">{categoryListings.length}</span> active listings
             </p>
           </div>
-          <Button 
-            variant="default" 
-            className="bg-accent text-accent-foreground hover:bg-accent" 
-            onClick={() => navigate("/create-marketplace-listing")}
-            data-testid="button-create-listing"
-          >
-            Create Listing
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowFilters(!showFilters)}
+              data-testid="button-toggle-filters"
+            >
+              <SlidersHorizontal className="w-4 h-4 mr-2" />
+              Filters
+            </Button>
+            <Button 
+              variant="default" 
+              onClick={() => navigate("/create-marketplace-listing")}
+              data-testid="button-create-listing"
+            >
+              Create Listing
+            </Button>
+          </div>
         </div>
+
+        {/* Filter Panel */}
+        {showFilters && (
+          <Card className="mb-6">
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* City Filter */}
+                <div className="space-y-2">
+                  <Label htmlFor="city-filter">City</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      id="city-filter"
+                      placeholder="Search by city..."
+                      value={cityFilter}
+                      onChange={(e) => setCityFilter(e.target.value)}
+                      className="pl-9"
+                      data-testid="input-city-filter"
+                    />
+                  </div>
+                </div>
+
+                {/* Min Price */}
+                <div className="space-y-2">
+                  <Label htmlFor="min-price">Min Price</Label>
+                  <Input
+                    id="min-price"
+                    type="number"
+                    placeholder="$0"
+                    value={minPrice}
+                    onChange={(e) => setMinPrice(e.target.value)}
+                    data-testid="input-min-price"
+                  />
+                </div>
+
+                {/* Max Price */}
+                <div className="space-y-2">
+                  <Label htmlFor="max-price">Max Price</Label>
+                  <Input
+                    id="max-price"
+                    type="number"
+                    placeholder="No max"
+                    value={maxPrice}
+                    onChange={(e) => setMaxPrice(e.target.value)}
+                    data-testid="input-max-price"
+                  />
+                </div>
+
+                {/* Engine Type (for aircraft categories) */}
+                {selectedCategory === 'aircraft-sale' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="engine-type">Engine Type</Label>
+                    <Select value={engineTypeFilter} onValueChange={setEngineTypeFilter}>
+                      <SelectTrigger id="engine-type" data-testid="select-engine-type">
+                        <SelectValue placeholder="All types" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">All types</SelectItem>
+                        <SelectItem value="Single-Engine">Single-Engine</SelectItem>
+                        <SelectItem value="Multi-Engine">Multi-Engine</SelectItem>
+                        <SelectItem value="Turboprop">Turboprop</SelectItem>
+                        <SelectItem value="Jet">Jet</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {/* Clear Filters */}
+              {(cityFilter || minPrice || maxPrice || engineTypeFilter) && (
+                <div className="mt-4 flex justify-end">
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => {
+                      setCityFilter("");
+                      setMinPrice("");
+                      setMaxPrice("");
+                      setEngineTypeFilter("");
+                    }}
+                    data-testid="button-clear-filters"
+                  >
+                    Clear all filters
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Results Grid */}
         {isLoading ? (

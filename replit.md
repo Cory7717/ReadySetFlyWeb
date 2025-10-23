@@ -12,21 +12,50 @@ The platform is built with a **React frontend** utilizing Wouter for routing, Ta
 Key architectural decisions include a robust **verification system** for both renters and aircraft owners, involving multi-step forms, document uploads, and an admin review interface. This system integrates a **badge system** to visually indicate verification statuses. The platform employs a **platform-captured payments with transfers** model via **Stripe** for all financial transactions, including rental payments, owner payouts, and marketplace listing fees. This involves detailed fee calculations (sales tax, platform commission, processing fees) and comprehensive webhook handling for asynchronous event processing. An **admin dashboard** provides role-based access for user and listing management, and analytics tracking.
 
 ## Recent Changes (October 23, 2025)
+
+### Production Readiness Enhancements
+- **Database Schema Updates**: Enhanced both aircraftListings and marketplaceListings tables with structured location fields
+  - Added city, state, zipCode fields for precise location filtering
+  - Added latitude, longitude fields for future distance-based search (currently unused)
+  - Added engineType enum field ("Single-Engine", "Multi-Engine", "Turboprop", "Jet") to aircraftListings
+  - Added engineCount, seatingCapacity fields to aircraftListings for detailed filtering
+  - Pushed all schema changes to production database successfully
+
+- **Database Performance Indexes**: Created high-performance indexes for common filter queries
+  - idx_aircraft_city, idx_aircraft_engine_type for aircraftListings
+  - idx_marketplace_city, idx_marketplace_category, idx_marketplace_active for marketplaceListings
+  - Composite indexes: idx_aircraft_city_engine_type, idx_marketplace_category_city
+  - Enables fast filtering on city, engine type, category combinations
+
+- **File Upload System**: Implemented production-ready image uploads for marketplace listings
+  - Using multer with local disk storage (uploads/marketplace/ directory)
+  - Created dedicated /api/upload-images endpoint supporting up to 15 images
+  - Static file serving via /uploads route for image access
+  - Files organized by type: marketplace/ for listing images, documents/ for verification docs
+  - Can be migrated to Replit App Storage or cloud storage (S3, Cloudinary) before final deployment
+
+- **Marketplace Filter UI**: Built comprehensive filtering interface
+  - City search filter with real-time filtering
+  - Price range filters (min/max)
+  - Engine type filter for aircraft categories (Single-Engine, Multi-Engine, Turboprop, Jet)
+  - Collapsible filter panel with "Filters" toggle button
+  - Clear all filters functionality
+  - Responsive grid layout (1/2/4 columns based on screen size)
+  - Client-side filtering currently active (backend filtering to be added)
+
+- **Form Enhancements**: Updated marketplace listing creation form
+  - Replaced single location field with structured city/state/zipCode fields (3-column responsive grid)
+  - Added engineType dropdown to aircraft sale form section
+  - All new fields properly validated with Zod schemas
+  - Maintains existing aircraft detail fields: seats, useful load, avionics, annual due, interior/exterior condition, damage history
+
+### Earlier October 23 Updates
 - **Marketplace Listing Detail Modal**: Implemented full-screen modal that opens when users click on marketplace listings
   - Shows all listing details including category-specific information
   - Image carousel for listings with multiple photos
   - Contact buttons (email and phone) for direct seller communication
   - Responsive design that works on all devices
   - Supports all listing categories: aircraft sales, jobs, CFI services, flight schools, mechanics, charter services
-- **Aircraft Detail Fields**: Added comprehensive aircraft information fields for marketplace listings:
-  - Avionics Package (detailed description field)
-  - Number of Seats
-  - Useful Load (pounds)
-  - Annual Due Date (month/year input)
-  - Interior Condition (excellent/good/fair/needs-work dropdown)
-  - Exterior/Paint Condition (excellent/good/fair/needs-work dropdown)
-  - Damage History (disclosure field with note about accuracy requirements)
-  - Required fields (Make, Model, Year) now clearly marked with asterisks (*)
 - **Payment Security Enhancements**:
   - Implemented server-side pricing calculation for all marketplace listings to prevent client-side price manipulation
   - Added PaymentIntent verification before listing creation to ensure payment completed successfully

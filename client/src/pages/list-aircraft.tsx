@@ -160,10 +160,16 @@ export default function ListAircraft() {
     // Check if verification documents are provided
     const hasVerificationDocs = Object.values(verificationDocs).some(doc => doc !== null);
     
+    // Convert preview URLs to placeholder URLs for storage
+    // Once cloud storage is integrated, this will upload actual files
+    const placeholderImages = imageFiles.length > 0 
+      ? imageFiles.map((_, idx) => `https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=800&auto=format&fit=crop&q=60&idx=${idx}`)
+      : ["https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=800"];
+    
     const listingPayload = {
       ...data,
       requiredCertifications: selectedCertifications,
-      images: imageFiles.length > 0 ? imageFiles : ["https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=800"],
+      images: placeholderImages,
     };
     
     if (hasVerificationDocs) {
@@ -665,10 +671,17 @@ export default function ListAircraft() {
             <Card>
               <CardHeader>
                 <CardTitle>Photos</CardTitle>
-                <CardDescription>Add up to 15 photos of your aircraft</CardDescription>
+                <CardDescription>Add up to 15 photos of your aircraft. You can preview them here before submitting.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
+                  {imageFiles.length > 0 && (
+                    <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                      <AlertDescription className="text-sm">
+                        <strong>Note:</strong> Cloud storage integration is currently in development. Your images are previewing correctly and will be stored as placeholders until cloud storage is fully integrated.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {imageFiles.map((url, index) => (
                       <div key={index} className="relative aspect-square rounded-lg overflow-hidden border">
@@ -685,10 +698,27 @@ export default function ListAircraft() {
                       </div>
                     ))}
                     {imageFiles.length < 15 && (
-                      <div className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 flex flex-col items-center justify-center gap-2 hover-elevate cursor-pointer" data-testid="upload-image-area">
+                      <label className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 flex flex-col items-center justify-center gap-2 hover-elevate cursor-pointer" data-testid="upload-image-area">
                         <Upload className="h-8 w-8 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Upload Photo</span>
-                      </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              // Create temporary preview URL
+                              const previewUrl = URL.createObjectURL(file);
+                              setImageFiles([...imageFiles, previewUrl]);
+                              toast({
+                                title: "Image Added",
+                                description: "Note: Cloud storage integration is in progress. Images are currently stored as placeholders.",
+                              });
+                            }
+                          }}
+                        />
+                      </label>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">

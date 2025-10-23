@@ -745,9 +745,11 @@ export default function CreateMarketplaceListing() {
                       name="details.make"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Make</FormLabel>
+                          <FormLabel className="flex items-center gap-1">
+                            Make <span className="text-destructive">*</span>
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="e.g., Cessna" {...field} data-testid="input-aircraft-make" />
+                            <Input placeholder="e.g., Cessna" {...field} data-testid="input-aircraft-make" required />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -758,9 +760,11 @@ export default function CreateMarketplaceListing() {
                       name="details.model"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Model</FormLabel>
+                          <FormLabel className="flex items-center gap-1">
+                            Model <span className="text-destructive">*</span>
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="e.g., 172 Skyhawk" {...field} data-testid="input-aircraft-model" />
+                            <Input placeholder="e.g., 172 Skyhawk" {...field} data-testid="input-aircraft-model" required />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -771,9 +775,11 @@ export default function CreateMarketplaceListing() {
                       name="details.year"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Year</FormLabel>
+                          <FormLabel className="flex items-center gap-1">
+                            Year <span className="text-destructive">*</span>
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="e.g., 2018" {...field} data-testid="input-aircraft-year" />
+                            <Input placeholder="e.g., 2018" {...field} data-testid="input-aircraft-year" required />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -817,6 +823,135 @@ export default function CreateMarketplaceListing() {
                           <FormControl>
                             <Input placeholder="e.g., 500 SMOH" {...field} data-testid="input-aircraft-engine-time" />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="details.seats"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Number of Seats</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., 4" {...field} data-testid="input-aircraft-seats" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="details.usefulLoad"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Useful Load (lbs)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., 1,200" {...field} data-testid="input-aircraft-useful-load" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="details.avionicsPackage"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Avionics Package</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., Garmin G1000, dual GNS 430" {...field} data-testid="input-aircraft-avionics" />
+                          </FormControl>
+                          <FormDescription className="text-xs">
+                            Describe GPS, radios, autopilot, and other avionics
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="details.annualDue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Annual Due Date</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., 12/2025" type="month" {...field} data-testid="input-aircraft-annual-due" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="details.interiorCondition"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Interior Condition</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-interior-condition">
+                                <SelectValue placeholder="Select condition" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="excellent">Excellent</SelectItem>
+                              <SelectItem value="good">Good</SelectItem>
+                              <SelectItem value="fair">Fair</SelectItem>
+                              <SelectItem value="needs-work">Needs Work</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="details.exteriorCondition"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Exterior/Paint Condition</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-exterior-condition">
+                                <SelectValue placeholder="Select condition" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="excellent">Excellent</SelectItem>
+                              <SelectItem value="good">Good</SelectItem>
+                              <SelectItem value="fair">Fair</SelectItem>
+                              <SelectItem value="needs-work">Needs Work</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="details.damageHistory"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Damage History</FormLabel>
+                          <FormControl>
+                            <Input placeholder="e.g., None, or describe any incidents" {...field} data-testid="input-aircraft-damage-history" />
+                          </FormControl>
+                          <FormDescription className="text-xs">
+                            Disclose any accident/incident history or major repairs
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}

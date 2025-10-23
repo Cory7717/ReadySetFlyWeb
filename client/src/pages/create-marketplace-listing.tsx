@@ -171,6 +171,7 @@ export default function CreateMarketplaceListing() {
   }, [selectedCategory, selectedTier, maxImages, imageFiles, toast]);
 
   const isVerified = user?.isVerified || false;
+  const isSuperAdmin = user?.isSuperAdmin || false;
 
   // Check promo code validity
   const checkPromoCode = async () => {
@@ -332,8 +333,14 @@ export default function CreateMarketplaceListing() {
   });
 
   const onSubmit = (data: FormData) => {
-    // Prevent submission if not verified
-    if (!isVerified) {
+    console.log("Form submitted with data:", data);
+    console.log("Form errors:", form.formState.errors);
+    console.log("User verification status:", isVerified);
+    console.log("User is super admin:", isSuperAdmin);
+    console.log("User data:", user);
+    
+    // Super admins can create listings without verification
+    if (!isVerified && !isSuperAdmin) {
       toast({
         title: "Verification Required",
         description: "Please complete account verification before creating listings.",
@@ -1241,7 +1248,7 @@ export default function CreateMarketplaceListing() {
               type="submit"
               size="lg"
               className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
-              disabled={!isVerified || createListingMutation.isPending}
+              disabled={(!isVerified && !isSuperAdmin) || createListingMutation.isPending}
               data-testid="button-submit-listing"
             >
               {createListingMutation.isPending ? "Creating..." : "Create Listing"}

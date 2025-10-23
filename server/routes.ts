@@ -310,8 +310,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/promo-codes/validate", isAuthenticated, async (req: any, res) => {
     try {
       const { code } = req.body;
-      // For now, accept "LAUNCH2024" as a valid free 7-day promo code
-      if (code && code.toUpperCase() === "LAUNCH2024") {
+      // For now, accept "LAUNCH2025" as a valid free 7-day promo code
+      if (code && code.toUpperCase() === "LAUNCH2025") {
         return res.json({ 
           valid: true, 
           description: "Free 7-day marketplace listing!",
@@ -334,8 +334,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let isPaid = false;
       let expiresAt: Date | null = null;
       
-      // Check if promo code is LAUNCH2024 for free 7-day listing
-      if (promoCode && promoCode.toUpperCase() === "LAUNCH2024") {
+      // Check if promo code is LAUNCH2025 for free 7-day listing
+      if (promoCode && promoCode.toUpperCase() === "LAUNCH2025") {
         monthlyFee = 0;
         isPaid = true; // Mark as paid since it's free
         expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now

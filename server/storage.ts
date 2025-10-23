@@ -361,10 +361,25 @@ export class DatabaseStorage implements IStorage {
   async createRental(insertRental: InsertRental): Promise<Rental> {
     const hourlyRate = parseFloat(insertRental.hourlyRate);
     const estimatedHours = parseFloat(insertRental.estimatedHours);
+    
+    // Calculate base cost
     const baseCost = hourlyRate * estimatedHours;
-    const platformFeeRenter = baseCost * 0.075;
-    const platformFeeOwner = baseCost * 0.075;
-    const totalCostRenter = baseCost + platformFeeRenter;
+    
+    // Calculate fees and taxes
+    const salesTax = baseCost * 0.0825; // 8.25% sales tax
+    const platformFeeRenter = baseCost * 0.075; // 7.5% platform fee for renter
+    const platformFeeOwner = baseCost * 0.075; // 7.5% platform fee for owner
+    
+    // Calculate subtotal before processing fee
+    const subtotal = baseCost + salesTax + platformFeeRenter;
+    
+    // Calculate processing fee (3% of subtotal)
+    const processingFee = subtotal * 0.03;
+    
+    // Calculate total cost to renter (includes all fees and taxes)
+    const totalCostRenter = subtotal + processingFee;
+    
+    // Calculate owner payout (base cost minus platform fee)
     const ownerPayout = baseCost - platformFeeOwner;
 
     const [rental] = await db
@@ -372,8 +387,10 @@ export class DatabaseStorage implements IStorage {
       .values({
         ...insertRental,
         baseCost: baseCost.toFixed(2),
+        salesTax: salesTax.toFixed(2),
         platformFeeRenter: platformFeeRenter.toFixed(2),
         platformFeeOwner: platformFeeOwner.toFixed(2),
+        processingFee: processingFee.toFixed(2),
         totalCostRenter: totalCostRenter.toFixed(2),
         ownerPayout: ownerPayout.toFixed(2),
       })

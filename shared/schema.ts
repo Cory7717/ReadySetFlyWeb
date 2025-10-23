@@ -213,8 +213,10 @@ export const rentals = pgTable("rentals", {
   // Pricing
   hourlyRate: decimal("hourly_rate", { precision: 10, scale: 2 }).notNull(),
   baseCost: decimal("base_cost", { precision: 10, scale: 2 }).notNull(),
-  platformFeeRenter: decimal("platform_fee_renter", { precision: 10, scale: 2 }).notNull(), // 7.5%
-  platformFeeOwner: decimal("platform_fee_owner", { precision: 10, scale: 2 }).notNull(), // 7.5%
+  salesTax: decimal("sales_tax", { precision: 10, scale: 2 }).notNull(), // 8.25% of baseCost
+  platformFeeRenter: decimal("platform_fee_renter", { precision: 10, scale: 2 }).notNull(), // 7.5% of baseCost
+  platformFeeOwner: decimal("platform_fee_owner", { precision: 10, scale: 2 }).notNull(), // 7.5% of baseCost
+  processingFee: decimal("processing_fee", { precision: 10, scale: 2 }).notNull(), // 3% of subtotal
   totalCostRenter: decimal("total_cost_renter", { precision: 10, scale: 2 }).notNull(),
   ownerPayout: decimal("owner_payout", { precision: 10, scale: 2 }).notNull(),
   

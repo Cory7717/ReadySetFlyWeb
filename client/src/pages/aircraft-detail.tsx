@@ -41,8 +41,11 @@ export default function AircraftDetail() {
 
   const hourlyRate = parseFloat(aircraft.hourlyRate);
   const baseCost = parseFloat(estimatedHours) * hourlyRate;
-  const platformFee = baseCost * 0.075; // 7.5%
-  const total = baseCost + platformFee;
+  const salesTax = baseCost * 0.0825; // 8.25% sales tax
+  const platformFee = baseCost * 0.075; // 7.5% platform fee
+  const subtotal = baseCost + salesTax + platformFee;
+  const processingFee = subtotal * 0.03; // 3% processing fee
+  const total = subtotal + processingFee;
 
   return (
     <div className="min-h-screen bg-background">
@@ -263,8 +266,20 @@ export default function AircraftDetail() {
                     <span data-testid="text-base-cost">${baseCost.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-muted-foreground">Sales tax (8.25%)</span>
+                    <span data-testid="text-sales-tax">${salesTax.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-muted-foreground">Platform fee (7.5%)</span>
                     <span data-testid="text-platform-fee">${platformFee.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span data-testid="text-subtotal">${subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Processing fee (3%)</span>
+                    <span data-testid="text-processing-fee">${processingFee.toFixed(2)}</span>
                   </div>
                 </div>
 

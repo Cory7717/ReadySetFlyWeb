@@ -190,7 +190,7 @@ export default function MarketplaceListingCheckout() {
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <Button
         variant="ghost"
-        onClick={() => navigate("/marketplace/create")}
+        onClick={() => navigate("/create-marketplace-listing")}
         className="mb-6"
         data-testid="button-back"
       >

@@ -14,6 +14,7 @@ Key architectural decisions include a robust **verification system** for both re
 ## External Dependencies
 - **PostgreSQL**: Primary database, hosted via Neon.
 - **Replit Auth**: OpenID Connect authentication provider (Google, GitHub, email/password).
+- **Replit AI Integrations (OpenAI)**: AI-powered description generation for all listing types using GPT-4o. Integrated via Replit AI blueprint, billed to Replit credits instead of requiring user's OpenAI API key. Supports aircraft rentals, aircraft sales, aviation jobs, CFI listings, flight schools, mechanic services, and charter services.
 - **Stripe**: Payment processing for rentals, owner payouts, and marketplace listing subscriptions. Requires `STRIPE_SECRET_KEY`, `VITE_STRIPE_PUBLIC_KEY`, and `STRIPE_WEBHOOK_SECRET`.
 - **WebSocket server**: Custom implementation for real-time messaging.
 - **Cloud Storage**: Planned integration (e.g., AWS S3, Cloudinary) for file uploads, currently using placeholder URLs.

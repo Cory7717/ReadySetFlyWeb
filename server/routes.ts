@@ -731,6 +731,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Complete rental payment - verifies payment and updates status
+  app.post("/api/rentals/:id/complete-payment", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { paymentIntentId } = req.body;
+
+      if (!paymentIntentId) {
+        return res.status(400).json({ error: "Payment intent ID required" });
+      }
+
+      const rental = await storage.getRental(req.params.id);
+      
+      if (!rental) {
+        return res.status(404).json({ error: "Rental not found" });
+      }
+
+      // Verify the rental belongs to the current user (renter)
+      if (rental.renterId !== userId) {
+        return res.status(403).json({ error: "Not authorized to complete this rental" });
+      }
+
+      // Verify rental is in approved status
+      if (rental.status !== "approved") {
+        return res.status(400).json({ error: "Rental must be in approved status" });
+      }
+
+      // Verify payment with Stripe
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      
+      if (paymentIntent.status !== "succeeded") {
+        return res.status(400).json({ error: "Payment not completed" });
+      }
+
+      // Verify the payment amount matches the rental cost
+      const expectedAmount = Math.round(parseFloat(rental.totalCostRenter) * 100);
+      if (paymentIntent.amount !== expectedAmount) {
+        return res.status(400).json({ error: "Payment amount mismatch" });
+      }
+
+      // Verify the rentalId in metadata matches
+      if (paymentIntent.metadata.rentalId !== rental.id) {
+        return res.status(400).json({ error: "Payment intent does not match this rental" });
+      }
+
+      // Update rental to mark as paid and active
+      const updatedRental = await storage.updateRental(req.params.id, {
+        isPaid: true,
+        status: "active",
+      });
+
+      res.json(updatedRental);
+    } catch (error: any) {
+      console.error("Complete payment error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete rental payment" });
+    }
+  });
+
   // Messages
   app.get("/api/rentals/:rentalId/messages", async (req, res) => {
     try {

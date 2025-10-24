@@ -42,6 +42,12 @@ export default function Dashboard() {
     enabled: !!authUser?.id,
   });
 
+  // Fetch renter's rentals
+  const { data: renterRentals = [] } = useQuery<Rental[]>({
+    queryKey: ["/api/rentals/renter", authUser?.id],
+    enabled: !!authUser?.id,
+  });
+
   // Fetch user's transactions
   const { data: transactions = [] } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions/user", authUser?.id],
@@ -51,6 +57,10 @@ export default function Dashboard() {
   // Calculate stats from actual rentals
   const completedRentals = ownerRentals.filter(r => r.status === "completed");
   const activeRentalsArray = ownerRentals.filter(r => r.status === "active");
+  const pendingRequests = ownerRentals.filter(r => r.status === "pending");
+  
+  // Renter's approved rentals awaiting payment
+  const approvedRentalsAwaitingPayment = renterRentals.filter(r => r.status === "approved" && !r.isPaid);
   
   const totalEarnings = completedRentals
     .filter(r => r.payoutCompleted)
@@ -100,6 +110,48 @@ export default function Dashboard() {
       toast({
         title: "Error",
         description: error.message || "Failed to request payout",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Approve rental request mutation
+  const approveRentalMutation = useMutation({
+    mutationFn: async (rentalId: string) => {
+      return await apiRequest("PATCH", `/api/rentals/${rentalId}`, { status: "approved" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rentals/owner", authUser?.id] });
+      toast({
+        title: "Request Approved",
+        description: "The renter has been notified and can now proceed with payment.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to approve request",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Decline rental request mutation
+  const declineRentalMutation = useMutation({
+    mutationFn: async (rentalId: string) => {
+      return await apiRequest("PATCH", `/api/rentals/${rentalId}`, { status: "cancelled" });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rentals/owner", authUser?.id] });
+      toast({
+        title: "Request Declined",
+        description: "The rental request has been cancelled.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to decline request",
         variant: "destructive",
       });
     },
@@ -203,15 +255,121 @@ export default function Dashboard() {
           </Alert>
         )}
 
+        {/* Approved Rentals Awaiting Payment Alert */}
+        {approvedRentalsAwaitingPayment.length > 0 && (
+          <Alert className="mb-6 border-accent" data-testid="alert-payment-needed">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Payment Required</AlertTitle>
+            <AlertDescription>
+              <div className="space-y-3">
+                <p>You have {approvedRentalsAwaitingPayment.length} approved rental{approvedRentalsAwaitingPayment.length > 1 ? 's' : ''} awaiting payment.</p>
+                <div className="space-y-2">
+                  {approvedRentalsAwaitingPayment.map((rental) => {
+                    const aircraft = allAircraft.find(a => a.id === rental.aircraftId);
+                    return (
+                      <div key={rental.id} className="flex items-center justify-between p-3 bg-background rounded-lg border" data-testid={`alert-payment-rental-${rental.id}`}>
+                        <div className="flex-1">
+                          <p className="font-semibold text-foreground">{aircraft?.year} {aircraft?.make} {aircraft?.model}</p>
+                          <p className="text-sm">{new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-foreground">${parseFloat(rental.totalCostRenter).toFixed(2)}</p>
+                          <Button 
+                            size="sm" 
+                            className="mt-2 bg-accent text-accent-foreground hover:bg-accent"
+                            onClick={() => {
+                              // Create payment intent and redirect to payment
+                              window.location.href = `/rental-payment/${rental.id}`;
+                            }}
+                            data-testid={`button-pay-rental-${rental.id}`}
+                          >
+                            Pay Now
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Main Tabs */}
-        <Tabs defaultValue="active" className="space-y-6">
+        <Tabs defaultValue={pendingRequests.length > 0 ? "pending" : "active"} className="space-y-6">
           <TabsList data-testid="tabs-dashboard">
+            <TabsTrigger value="pending" data-testid="tab-pending">
+              Pending Requests {pendingRequests.length > 0 && <Badge className="ml-2 bg-accent text-accent-foreground">{pendingRequests.length}</Badge>}
+            </TabsTrigger>
             <TabsTrigger value="active" data-testid="tab-active">Active Rentals</TabsTrigger>
             <TabsTrigger value="upcoming" data-testid="tab-upcoming">Upcoming</TabsTrigger>
             <TabsTrigger value="past" data-testid="tab-past">Past</TabsTrigger>
             <TabsTrigger value="listings" data-testid="tab-listings">My Listings</TabsTrigger>
             <TabsTrigger value="financials" data-testid="tab-financials">Financials</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="pending" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pending Rental Requests</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {pendingRequests.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No pending requests at this time
+                    </div>
+                  ) : (
+                    pendingRequests.map((rental) => {
+                      const aircraft = allAircraft.find(a => a.id === rental.aircraftId);
+                      return (
+                        <div key={rental.id} className="flex items-center justify-between p-4 border rounded-lg hover-elevate" data-testid={`rental-pending-${rental.id}`}>
+                          <div className="flex-1">
+                            <h4 className="font-semibold mb-1">
+                              {aircraft?.year || ''} {aircraft?.make || 'Unknown'} {aircraft?.model || ''}
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              Renter ID: {rental.renterId.substring(0, 8)} • {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
+                            </p>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {parseFloat(rental.estimatedHours)} flight hours estimated
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <p className="font-bold">${parseFloat(rental.totalCostRenter).toFixed(2)}</p>
+                              <p className="text-sm text-muted-foreground">Your payout: ${parseFloat(rental.ownerPayout).toFixed(2)}</p>
+                            </div>
+                            <Badge variant="outline" className="bg-accent/10 text-accent border-accent">Pending</Badge>
+                            <div className="flex gap-2">
+                              <Button 
+                                size="sm" 
+                                className="bg-chart-2 text-white hover:bg-chart-2"
+                                onClick={() => approveRentalMutation.mutate(rental.id)}
+                                disabled={approveRentalMutation.isPending || declineRentalMutation.isPending}
+                                data-testid={`button-approve-${rental.id}`}
+                              >
+                                Approve
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => declineRentalMutation.mutate(rental.id)}
+                                disabled={approveRentalMutation.isPending || declineRentalMutation.isPending}
+                                data-testid={`button-decline-${rental.id}`}
+                              >
+                                Decline
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="active" className="space-y-4">
             <Card>
@@ -239,7 +397,7 @@ export default function Dashboard() {
                           </div>
                           <div className="flex items-center gap-4">
                             <div className="text-right">
-                              <p className="font-bold">${parseFloat(rental.totalCost).toFixed(2)}</p>
+                              <p className="font-bold">${parseFloat(rental.totalCostRenter).toFixed(2)}</p>
                               <p className="text-sm text-muted-foreground">Your payout: ${parseFloat(rental.ownerPayout).toFixed(2)}</p>
                             </div>
                             <Badge className="bg-chart-2 text-white">Active</Badge>

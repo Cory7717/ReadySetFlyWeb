@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -67,6 +67,9 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                   <DialogTitle className="font-display text-3xl pr-8">
                     {listing.title}
                   </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    {categoryLabels[listing.category]} listing for {listing.title}
+                  </DialogDescription>
                   {listing.location && (
                     <div className="flex items-center gap-2 text-muted-foreground mt-2">
                       <MapPin className="h-4 w-4" />

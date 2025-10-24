@@ -1,7 +1,6 @@
 import { MapPin, Image as ImageIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Link } from "wouter";
 
 interface MarketplaceCardProps {
   id: string;
@@ -86,11 +85,9 @@ export function MarketplaceCard({
       )}
 
       <CardContent className="p-6">
-        <Link href={`/marketplace/${category}/${id}`} data-testid={`link-marketplace-${id}`}>
-          <h3 className="font-display text-lg font-semibold mb-2 hover:text-primary transition-colors line-clamp-2">
-            {title}
-          </h3>
-        </Link>
+        <h3 className="font-display text-lg font-semibold mb-2 hover:text-primary transition-colors line-clamp-2" data-testid={`text-title-${id}`}>
+          {title}
+        </h3>
 
         <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
           {description}

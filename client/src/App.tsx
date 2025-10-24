@@ -38,6 +38,7 @@ function Router() {
           <Route path="/aircraft/:id" component={AircraftDetail} />
           <Route path="/list-aircraft" component={ListAircraft} />
           <Route path="/create-marketplace-listing" component={CreateMarketplaceListing} />
+          <Route path="/edit-marketplace-listing/:id" component={CreateMarketplaceListing} />
           <Route path="/marketplace/listing/checkout" component={MarketplaceListingCheckout} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/verify-identity" component={VerifyIdentity} />

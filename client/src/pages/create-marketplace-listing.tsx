@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useRoute, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertCircle, ArrowLeft, DollarSign, Upload, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { insertMarketplaceListingSchema } from "@shared/schema";
 import { z } from "zod";
-import { Link } from "wouter";
+import type { MarketplaceListing } from "@shared/schema";
 
 // Base form schema
 const baseFormSchema = insertMarketplaceListingSchema.omit({ userId: true }).extend({
@@ -104,13 +104,28 @@ const categories = [
 
 export default function CreateMarketplaceListing() {
   const [, navigate] = useLocation();
-  const { toast } = useToast();
+  const { toast} = useToast();
   const { user } = useAuth();
   const [imageFiles, setImageFiles] = useState<string[]>([]);
   const [promoCode, setPromoCode] = useState("");
   const [promoCodeValid, setPromoCodeValid] = useState<boolean | null>(null);
   const [promoCodeChecking, setPromoCodeChecking] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
+
+  // Check if we're in edit mode
+  const [isEditMode, params] = useRoute("/edit-marketplace-listing/:id");
+  const listingId = isEditMode ? params?.id : null;
+
+  // Fetch existing listing if in edit mode
+  const { data: existingListing, isLoading: loadingListing } = useQuery<MarketplaceListing>({
+    queryKey: ["/api/marketplace", listingId],
+    queryFn: async () => {
+      const response = await fetch(`/api/marketplace/${listingId}`);
+      if (!response.ok) throw new Error("Failed to fetch listing");
+      return response.json();
+    },
+    enabled: !!listingId && isEditMode,
+  });
 
   const form = useForm<FormData>({
     resolver: zodResolver(baseFormSchema),
@@ -135,6 +150,33 @@ export default function CreateMarketplaceListing() {
       form.setValue("contactEmail", user.email);
     }
   }, [user?.email, form]);
+
+  // Pre-populate form with existing listing data when editing
+  useEffect(() => {
+    if (existingListing && isEditMode) {
+      form.reset({
+        category: existingListing.category,
+        title: existingListing.title,
+        description: existingListing.description,
+        location: existingListing.location || "",
+        city: existingListing.city || "",
+        state: existingListing.state || "",
+        zipCode: existingListing.zipCode || "",
+        contactEmail: existingListing.contactEmail,
+        contactPhone: existingListing.contactPhone || "",
+        price: existingListing.price || "",
+        tier: existingListing.tier || "basic",
+        details: existingListing.details || {},
+        images: existingListing.images || [],
+        isActive: existingListing.isActive,
+      });
+      
+      // Set image files from existing listing
+      if (existingListing.images) {
+        setImageFiles(existingListing.images);
+      }
+    }
+  }, [existingListing, isEditMode, form]);
 
   // Watch category to render category-specific fields
   const selectedCategory = form.watch("category");
@@ -334,15 +376,23 @@ export default function CreateMarketplaceListing() {
 
   const createListingMutation = useMutation({
     mutationFn: async (data: any) => {
+      if (isEditMode && listingId) {
+        return await apiRequest("PATCH", `/api/marketplace/${listingId}`, data);
+      }
       return await apiRequest("POST", "/api/marketplace", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
+      if (listingId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/marketplace", listingId] });
+      }
       toast({
         title: "Success",
-        description: "Your marketplace listing has been created.",
+        description: isEditMode 
+          ? "Your marketplace listing has been updated."
+          : "Your marketplace listing has been created.",
       });
-      navigate("/marketplace");
+      navigate(isEditMode ? "/my-listings" : "/marketplace");
     },
     onError: (error: any) => {
       if (isUnauthorizedError(error)) {
@@ -486,10 +536,12 @@ export default function CreateMarketplaceListing() {
 
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground mb-2" data-testid="text-page-title">
-          Create Marketplace Listing
+          {isEditMode ? "Edit Marketplace Listing" : "Create Marketplace Listing"}
         </h1>
         <p className="text-muted-foreground">
-          List your services, aircraft for sale, job openings, or other aviation-related offerings
+          {isEditMode 
+            ? "Update your listing details below" 
+            : "List your services, aircraft for sale, job openings, or other aviation-related offerings"}
         </p>
       </div>
 
@@ -1542,10 +1594,14 @@ export default function CreateMarketplaceListing() {
               type="submit"
               size="lg"
               className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
-              disabled={(!isVerified && !isSuperAdmin) || createListingMutation.isPending}
+              disabled={(!isVerified && !isSuperAdmin) || createListingMutation.isPending || (isEditMode && loadingListing)}
               data-testid="button-submit-listing"
             >
-              {createListingMutation.isPending ? "Creating..." : "Create Listing"}
+              {loadingListing
+                ? "Loading..." 
+                : createListingMutation.isPending 
+                  ? (isEditMode ? "Updating..." : "Creating...") 
+                  : (isEditMode ? "Update Listing" : "Create Listing")}
             </Button>
             <Button
               type="button"

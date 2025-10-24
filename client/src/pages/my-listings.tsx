@@ -120,7 +120,13 @@ export default function MyListings() {
                       </div>
                     )}
                     <div className="flex gap-2 mt-4">
-                      <Button variant="outline" size="sm" className="flex-1" data-testid={`button-edit-marketplace-${listing.id}`}>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1" 
+                        onClick={() => navigate(`/edit-marketplace-listing/${listing.id}`)}
+                        data-testid={`button-edit-marketplace-${listing.id}`}
+                      >
                         Edit
                       </Button>
                       <Button

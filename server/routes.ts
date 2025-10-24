@@ -617,15 +617,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/marketplace/:id", async (req, res) => {
+  app.patch("/api/marketplace/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const listing = await storage.updateMarketplaceListing(req.params.id, req.body);
+      const userId = req.user.claims.sub;
+      const listingId = req.params.id;
+      
+      // First, fetch the existing listing to verify ownership
+      const existingListing = await storage.getMarketplaceListing(listingId);
+      if (!existingListing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      
+      // Verify the user owns this listing
+      if (existingListing.userId !== userId) {
+        return res.status(403).json({ error: "Unauthorized - you can only edit your own listings" });
+      }
+      
+      // Update the listing (don't allow changing userId or payment-related fields)
+      const { userId: _, monthlyFee: __, isPaid: ___, expiresAt: ____, ...updateData } = req.body;
+      const listing = await storage.updateMarketplaceListing(listingId, updateData);
+      
       if (!listing) {
         return res.status(404).json({ error: "Listing not found" });
       }
+      
       res.json(listing);
-    } catch (error) {
-      res.status(500).json({ error: "Failed to update listing" });
+    } catch (error: any) {
+      console.error("Marketplace listing update error:", error);
+      res.status(500).json({ error: error.message || "Failed to update listing" });
     }
   });
 

@@ -238,12 +238,13 @@ export default function Dashboard() {
           <Alert className="mb-6 border-accent" data-testid="alert-bank-setup">
             <CreditCard className="h-4 w-4" />
             <AlertTitle>Bank Account Required</AlertTitle>
-            <AlertDescription className="flex items-center justify-between">
+            <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <span>Set up your bank account to receive payouts of ${pendingPayouts.toFixed(2)}</span>
               <Button 
                 onClick={() => setupBankAccountMutation.mutate()}
                 disabled={setupBankAccountMutation.isPending}
                 data-testid="button-setup-bank"
+                className="w-full sm:w-auto"
               >
                 {setupBankAccountMutation.isPending ? "Connecting..." : "Setup Bank Account"}
               </Button>
@@ -273,16 +274,16 @@ export default function Dashboard() {
                   {approvedRentalsAwaitingPayment.map((rental) => {
                     const aircraft = allAircraft.find(a => a.id === rental.aircraftId);
                     return (
-                      <div key={rental.id} className="flex items-center justify-between p-3 bg-background rounded-lg border" data-testid={`alert-payment-rental-${rental.id}`}>
+                      <div key={rental.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-background rounded-lg border" data-testid={`alert-payment-rental-${rental.id}`}>
                         <div className="flex-1">
                           <p className="font-semibold text-foreground">{aircraft?.year} {aircraft?.make} {aircraft?.model}</p>
                           <p className="text-sm">{new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}</p>
                         </div>
-                        <div className="text-right">
+                        <div className="flex flex-row items-center justify-between sm:flex-col sm:items-end gap-2">
                           <p className="font-bold text-foreground">${parseFloat(rental.totalCostRenter).toFixed(2)}</p>
                           <Button 
                             size="sm" 
-                            className="mt-2 bg-accent text-accent-foreground hover:bg-accent"
+                            className="bg-accent text-accent-foreground hover:bg-accent"
                             onClick={() => {
                               // Create payment intent and redirect to payment
                               window.location.href = `/rental-payment/${rental.id}`;
@@ -303,15 +304,16 @@ export default function Dashboard() {
 
         {/* Main Tabs */}
         <Tabs defaultValue={pendingRequests.length > 0 ? "pending" : "active"} className="space-y-6">
-          <TabsList data-testid="tabs-dashboard">
-            <TabsTrigger value="pending" data-testid="tab-pending">
-              Pending Requests {pendingRequests.length > 0 && <Badge className="ml-2 bg-accent text-accent-foreground">{pendingRequests.length}</Badge>}
+          <TabsList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 h-auto" data-testid="tabs-dashboard">
+            <TabsTrigger value="pending" data-testid="tab-pending" className="flex-col sm:flex-row gap-1">
+              <span className="text-xs sm:text-sm">Pending</span>
+              {pendingRequests.length > 0 && <Badge className="bg-accent text-accent-foreground text-xs">{pendingRequests.length}</Badge>}
             </TabsTrigger>
-            <TabsTrigger value="active" data-testid="tab-active">Active Rentals</TabsTrigger>
-            <TabsTrigger value="upcoming" data-testid="tab-upcoming">Upcoming</TabsTrigger>
-            <TabsTrigger value="past" data-testid="tab-past">Past</TabsTrigger>
-            <TabsTrigger value="listings" data-testid="tab-listings">My Listings</TabsTrigger>
-            <TabsTrigger value="financials" data-testid="tab-financials">Financials</TabsTrigger>
+            <TabsTrigger value="active" data-testid="tab-active" className="text-xs sm:text-sm">Active</TabsTrigger>
+            <TabsTrigger value="upcoming" data-testid="tab-upcoming" className="text-xs sm:text-sm">Upcoming</TabsTrigger>
+            <TabsTrigger value="past" data-testid="tab-past" className="text-xs sm:text-sm">Past</TabsTrigger>
+            <TabsTrigger value="listings" data-testid="tab-listings" className="text-xs sm:text-sm">Listings</TabsTrigger>
+            <TabsTrigger value="financials" data-testid="tab-financials" className="text-xs sm:text-sm">Financials</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pending" className="space-y-4">
@@ -330,19 +332,22 @@ export default function Dashboard() {
                       const aircraft = allAircraft.find(a => a.id === rental.aircraftId);
                       const renter = allUsers.find(u => u.id === rental.renterId);
                       return (
-                        <div key={rental.id} className="flex items-center justify-between p-4 border rounded-lg hover-elevate" data-testid={`rental-pending-${rental.id}`}>
+                        <div key={rental.id} className="flex flex-col gap-4 p-4 border rounded-lg hover-elevate" data-testid={`rental-pending-${rental.id}`}>
                           <div className="flex-1">
                             <h4 className="font-semibold mb-1">
                               {aircraft?.year || ''} {aircraft?.make || 'Unknown'} {aircraft?.model || ''}
                             </h4>
                             <div className="space-y-1">
                               <p className="text-sm text-muted-foreground">
-                                Renter: {renter?.firstName} {renter?.lastName} • {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
+                                Renter: {renter?.firstName} {renter?.lastName}
                               </p>
-                              {renter?.averageRating && renter.totalReviews > 0 && (
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
+                              </p>
+                              {renter?.averageRating && renter?.totalReviews && renter.totalReviews > 0 && (
                                 <StarRating 
                                   rating={parseFloat(renter.averageRating)} 
-                                  totalReviews={renter.totalReviews}
+                                  totalReviews={renter.totalReviews || 0}
                                   size="sm"
                                 />
                               )}
@@ -351,31 +356,34 @@ export default function Dashboard() {
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
                               <p className="font-bold">${parseFloat(rental.totalCostRenter).toFixed(2)}</p>
                               <p className="text-sm text-muted-foreground">Your payout: ${parseFloat(rental.ownerPayout).toFixed(2)}</p>
                             </div>
-                            <Badge variant="outline" className="bg-accent/10 text-accent border-accent">Pending</Badge>
-                            <div className="flex gap-2">
-                              <Button 
-                                size="sm" 
-                                className="bg-chart-2 text-white hover:bg-chart-2"
-                                onClick={() => approveRentalMutation.mutate(rental.id)}
-                                disabled={approveRentalMutation.isPending || declineRentalMutation.isPending}
-                                data-testid={`button-approve-${rental.id}`}
-                              >
-                                Approve
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => declineRentalMutation.mutate(rental.id)}
-                                disabled={approveRentalMutation.isPending || declineRentalMutation.isPending}
-                                data-testid={`button-decline-${rental.id}`}
-                              >
-                                Decline
-                              </Button>
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                              <Badge variant="outline" className="bg-accent/10 text-accent border-accent text-center">Pending</Badge>
+                              <div className="flex gap-2">
+                                <Button 
+                                  size="sm" 
+                                  className="bg-chart-2 text-white hover:bg-chart-2 flex-1 sm:flex-none"
+                                  onClick={() => approveRentalMutation.mutate(rental.id)}
+                                  disabled={approveRentalMutation.isPending || declineRentalMutation.isPending}
+                                  data-testid={`button-approve-${rental.id}`}
+                                >
+                                  Approve
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  className="flex-1 sm:flex-none"
+                                  onClick={() => declineRentalMutation.mutate(rental.id)}
+                                  disabled={approveRentalMutation.isPending || declineRentalMutation.isPending}
+                                  data-testid={`button-decline-${rental.id}`}
+                                >
+                                  Decline
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -402,22 +410,25 @@ export default function Dashboard() {
                     activeRentalsArray.map((rental) => {
                       const aircraft = allAircraft.find(a => a.id === rental.aircraftId);
                       return (
-                        <div key={rental.id} className="flex items-center justify-between p-4 border rounded-lg hover-elevate" data-testid={`rental-active-${rental.id}`}>
+                        <div key={rental.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg hover-elevate" data-testid={`rental-active-${rental.id}`}>
                           <div className="flex-1">
                             <h4 className="font-semibold mb-1">
                               {aircraft?.year || ''} {aircraft?.make || 'Unknown'} {aircraft?.model || ''}
                             </h4>
                             <p className="text-sm text-muted-foreground">
-                              Rented to: Renter #{rental.renterId.substring(0, 8)} • {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
+                              Rented to: Renter #{rental.renterId.substring(0, 8)}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
                             </p>
                           </div>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div>
                               <p className="font-bold">${parseFloat(rental.totalCostRenter).toFixed(2)}</p>
                               <p className="text-sm text-muted-foreground">Your payout: ${parseFloat(rental.ownerPayout).toFixed(2)}</p>
                             </div>
-                            <Badge className="bg-chart-2 text-white">Active</Badge>
-                            <Button size="sm" data-testid={`button-message-${rental.id}`}>Message</Button>
+                            <Badge className="bg-chart-2 text-white text-center">Active</Badge>
+                            <Button size="sm" className="w-full sm:w-auto" data-testid={`button-message-${rental.id}`}>Message</Button>
                           </div>
                         </div>
                       );
@@ -430,19 +441,19 @@ export default function Dashboard() {
 
           <TabsContent value="listings">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <CardTitle>My Listings</CardTitle>
-                <Button data-testid="button-add-listing">Add New Listing</Button>
+                <Button className="w-full sm:w-auto" data-testid="button-add-listing">Add New Listing</Button>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center justify-between p-4 border rounded-lg hover-elevate" data-testid={`listing-${i}`}>
+                    <div key={i} className="flex flex-col sm:flex-row gap-4 p-4 border rounded-lg hover-elevate" data-testid={`listing-${i}`}>
                       <div className="flex items-center gap-4 flex-1">
                         <img
                           src="https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=200"
                           alt="Aircraft"
-                          className="w-20 h-20 rounded-lg object-cover"
+                          className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
                         />
                         <div>
                           <h4 className="font-semibold mb-1">2018 Cessna 172 Skyhawk</h4>
@@ -451,27 +462,29 @@ export default function Dashboard() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
+                      <div className="flex flex-row sm:items-center gap-3 justify-between sm:justify-end">
+                        <div className="flex flex-col items-start sm:items-end">
                           <p className="font-bold">$145/hr</p>
-                          <Badge variant="outline" className="bg-chart-2/10 text-chart-2 border-chart-2">
+                          <Badge variant="outline" className="bg-chart-2/10 text-chart-2 border-chart-2 mt-1">
                             Listed
                           </Badge>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          data-testid={`button-toggle-listing-${i}`}
-                        >
-                          Unlist
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          data-testid={`button-edit-listing-${i}`}
-                        >
-                          Edit
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            data-testid={`button-toggle-listing-${i}`}
+                          >
+                            Unlist
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            data-testid={`button-edit-listing-${i}`}
+                          >
+                            Edit
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -482,11 +495,11 @@ export default function Dashboard() {
 
           <TabsContent value="financials">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <CardTitle>Financial Transactions</CardTitle>
                 <Button 
                   variant="default" 
-                  className="bg-accent text-accent-foreground hover:bg-accent" 
+                  className="bg-accent text-accent-foreground hover:bg-accent w-full sm:w-auto" 
                   onClick={() => requestPayoutMutation.mutate()}
                   disabled={!user?.bankAccountConnected || pendingPayouts === 0 || requestPayoutMutation.isPending}
                   data-testid="button-request-payout"
@@ -494,7 +507,7 @@ export default function Dashboard() {
                   {requestPayoutMutation.isPending ? "Processing..." : `Request Payout ($${pendingPayouts.toFixed(2)})`}
                 </Button>
               </CardHeader>
-              <CardContent>
+              <CardContent className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>

@@ -260,35 +260,37 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="analytics" data-testid="tab-analytics">
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Analytics
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-6 h-auto">
+          <TabsTrigger value="analytics" data-testid="tab-analytics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span>Analytics</span>
           </TabsTrigger>
-          <TabsTrigger value="crm" data-testid="tab-crm">
-            <Briefcase className="h-4 w-4 mr-2" />
-            CRM
+          <TabsTrigger value="crm" data-testid="tab-crm" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <Briefcase className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span>CRM</span>
           </TabsTrigger>
-          <TabsTrigger value="users" data-testid="tab-users">
-            <Users className="h-4 w-4 mr-2" />
-            Users
+          <TabsTrigger value="users" data-testid="tab-users" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <Users className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span>Users</span>
           </TabsTrigger>
-          <TabsTrigger value="verifications" data-testid="tab-verifications">
-            <Shield className="h-4 w-4 mr-2" />
-            Verifications
-            {verificationSubmissions.length > 0 && (
-              <Badge variant="destructive" className="ml-2">
-                {verificationSubmissions.length}
-              </Badge>
-            )}
+          <TabsTrigger value="verifications" data-testid="tab-verifications" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <Shield className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="flex items-center gap-1">
+              Verify
+              {verificationSubmissions.length > 0 && (
+                <Badge variant="destructive" className="text-xs px-1">
+                  {verificationSubmissions.length}
+                </Badge>
+              )}
+            </span>
           </TabsTrigger>
-          <TabsTrigger value="aircraft" data-testid="tab-aircraft">
-            <Plane className="h-4 w-4 mr-2" />
-            Aircraft
+          <TabsTrigger value="aircraft" data-testid="tab-aircraft" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <Plane className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span>Aircraft</span>
           </TabsTrigger>
-          <TabsTrigger value="marketplace" data-testid="tab-marketplace">
-            <List className="h-4 w-4 mr-2" />
-            Marketplace
+          <TabsTrigger value="marketplace" data-testid="tab-marketplace" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <List className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span>Market</span>
           </TabsTrigger>
         </TabsList>
 

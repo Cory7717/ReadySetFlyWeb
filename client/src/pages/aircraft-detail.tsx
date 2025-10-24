@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useRoute } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import type { AircraftListing } from "@shared/schema";
 import { MapPin, Gauge, Shield, Calendar, Heart, Share2, Star } from "lucide-react";
 import { RentalMessaging } from "@/components/rental-messaging";
@@ -11,10 +11,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function AircraftDetail() {
   const [, params] = useRoute("/aircraft/:id");
   const [estimatedHours, setEstimatedHours] = useState("6");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
   
   // Mock active rental for demo - in real app would fetch from /api/rentals
   const [mockActiveRental] = useState({
@@ -27,6 +34,97 @@ export default function AircraftDetail() {
     queryKey: ["/api/aircraft", params?.id],
     enabled: !!params?.id,
   });
+
+  // Rental request mutation
+  const createRentalMutation = useMutation({
+    mutationFn: async (rentalData: any) => {
+      return await apiRequest("POST", "/api/rentals", rentalData);
+    },
+    onSuccess: () => {
+      toast({
+        title: "Booking request sent!",
+        description: "The owner will review your request. You'll be notified once they respond.",
+      });
+      // Reset form
+      setStartDate("");
+      setEndDate("");
+      setEstimatedHours("6");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Booking request failed",
+        description: error.message || "Please try again later.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleRequestBooking = () => {
+    if (!isAuthenticated || !user) {
+      toast({
+        title: "Authentication required",
+        description: "Please log in to request a booking.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!startDate || !endDate) {
+      toast({
+        title: "Missing information",
+        description: "Please select start and end dates.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (new Date(endDate) < new Date(startDate)) {
+      toast({
+        title: "Invalid dates",
+        description: "End date must be on or after start date.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!estimatedHours || parseFloat(estimatedHours) <= 0) {
+      toast({
+        title: "Invalid flight hours",
+        description: "Please enter estimated flight hours.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Calculate all pricing fields
+    const hourlyRate = parseFloat(aircraft!.hourlyRate);
+    const hours = parseFloat(estimatedHours);
+    const baseCost = hours * hourlyRate;
+    const salesTax = baseCost * 0.0825; // 8.25%
+    const platformFeeRenter = baseCost * 0.075; // 7.5% renter fee
+    const platformFeeOwner = baseCost * 0.075; // 7.5% owner fee
+    const subtotal = baseCost + salesTax + platformFeeRenter;
+    const processingFee = subtotal * 0.03; // 3%
+    const totalCostRenter = subtotal + processingFee;
+    const ownerPayout = baseCost - platformFeeOwner;
+
+    createRentalMutation.mutate({
+      aircraftId: aircraft!.id,
+      renterId: user.id,
+      ownerId: aircraft!.ownerId,
+      startDate: new Date(startDate).toISOString(),
+      endDate: new Date(endDate).toISOString(),
+      estimatedHours: estimatedHours,
+      hourlyRate: aircraft!.hourlyRate,
+      baseCost: baseCost.toFixed(2),
+      salesTax: salesTax.toFixed(2),
+      platformFeeRenter: platformFeeRenter.toFixed(2),
+      platformFeeOwner: platformFeeOwner.toFixed(2),
+      processingFee: processingFee.toFixed(2),
+      totalCostRenter: totalCostRenter.toFixed(2),
+      ownerPayout: ownerPayout.toFixed(2),
+    });
+  };
 
   if (isLoading || !aircraft) {
     return (
@@ -148,7 +246,7 @@ export default function AircraftDetail() {
                   {aircraft.requiredCertifications.map((cert) => (
                     <Badge key={cert} className="bg-primary text-primary-foreground px-4 py-2">{cert}</Badge>
                   ))}
-                  {aircraft.minFlightHours > 0 && (
+                  {aircraft.minFlightHours && aircraft.minFlightHours > 0 && (
                     <Badge variant="outline" className="px-4 py-2">
                       Minimum {aircraft.minFlightHours} flight hours
                     </Badge>
@@ -224,6 +322,8 @@ export default function AircraftDetail() {
                     <Input
                       id="start-date"
                       type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
                       className="pl-10"
                       data-testid="input-start-date"
                     />
@@ -237,6 +337,9 @@ export default function AircraftDetail() {
                     <Input
                       id="end-date"
                       type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      min={startDate || undefined}
                       className="pl-10"
                       data-testid="input-end-date"
                     />
@@ -290,8 +393,14 @@ export default function AircraftDetail() {
                   <span data-testid="text-total-cost">${total.toFixed(2)}</span>
                 </div>
 
-                <Button className="w-full bg-accent text-accent-foreground hover:bg-accent" size="lg" data-testid="button-request-booking">
-                  Request to Book
+                <Button 
+                  className="w-full bg-accent text-accent-foreground hover:bg-accent" 
+                  size="lg" 
+                  onClick={handleRequestBooking}
+                  disabled={createRentalMutation.isPending || !isAuthenticated}
+                  data-testid="button-request-booking"
+                >
+                  {createRentalMutation.isPending ? "Sending request..." : "Request to Book"}
                 </Button>
 
                 <p className="text-xs text-muted-foreground text-center">

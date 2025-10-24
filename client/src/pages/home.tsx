@@ -107,8 +107,8 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex flex-wrap gap-2 flex-1">
                 {quickFilters.map((filter) => (
                   <Badge
                     key={filter.value}
@@ -120,7 +120,7 @@ export default function Home() {
                   </Badge>
                 ))}
               </div>
-              <Button className="bg-accent text-accent-foreground hover:bg-accent rounded-full" size="lg" data-testid="button-search">
+              <Button className="bg-accent text-accent-foreground hover:bg-accent rounded-full w-full sm:w-auto" size="lg" data-testid="button-search">
                 <Search className="h-5 w-5 mr-2" />
                 Find Aircraft
               </Button>
@@ -131,18 +131,19 @@ export default function Home() {
 
       {/* Filters & Results */}
       <section className="container mx-auto px-4 py-12">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="font-display text-3xl font-bold mb-2" data-testid="text-results-title">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+          <div className="flex-1">
+            <h2 className="font-display text-2xl sm:text-3xl font-bold mb-2" data-testid="text-results-title">
               Available Aircraft
             </h2>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               <span data-testid="text-results-count">{aircraft.length}</span> aircraft match your search
             </p>
           </div>
           <Button
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}
+            className="w-full sm:w-auto"
             data-testid="button-toggle-filters"
           >
             {showFilters ? "Hide" : "Show"} Filters

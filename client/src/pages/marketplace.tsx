@@ -60,12 +60,12 @@ export default function Marketplace() {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <section className="bg-muted py-12">
+      <section className="bg-muted py-8 sm:py-12">
         <div className="container mx-auto px-4">
-          <h1 className="font-display text-4xl font-bold mb-4" data-testid="text-marketplace-title">
+          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-3 sm:mb-4" data-testid="text-marketplace-title">
             Aviation Marketplace
           </h1>
-          <p className="text-lg text-muted-foreground max-w-3xl">
+          <p className="text-base sm:text-lg text-muted-foreground max-w-3xl">
             Connect with the aviation community. Buy, sell, and find professional services.
           </p>
         </div>
@@ -96,12 +96,12 @@ export default function Marketplace() {
 
       {/* Listings */}
       <section className="container mx-auto px-4 py-12">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="font-display text-2xl font-bold mb-1">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div className="flex-1">
+            <h2 className="font-display text-xl sm:text-2xl font-bold mb-1">
               {categories.find(c => c.id === selectedCategory)?.label}
             </h2>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               <span data-testid="text-marketplace-count">{categoryListings.length}</span> active listings
             </p>
           </div>
@@ -109,6 +109,7 @@ export default function Marketplace() {
             <Button 
               variant="outline" 
               onClick={() => setShowFilters(!showFilters)}
+              className="flex-1 sm:flex-initial"
               data-testid="button-toggle-filters"
             >
               <SlidersHorizontal className="w-4 h-4 mr-2" />
@@ -117,6 +118,7 @@ export default function Marketplace() {
             <Button 
               variant="default" 
               onClick={() => navigate("/create-marketplace-listing")}
+              className="flex-1 sm:flex-initial"
               data-testid="button-create-listing"
             >
               Create Listing

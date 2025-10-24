@@ -38,28 +38,28 @@ export default function MyListings() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="font-display text-4xl font-bold mb-2" data-testid="text-my-listings-title">
+        <h1 className="font-display text-3xl sm:text-4xl font-bold mb-2" data-testid="text-my-listings-title">
           My Listings
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm sm:text-base text-muted-foreground">
           Manage your aircraft rentals and marketplace listings
         </p>
       </div>
 
       <Tabs defaultValue="marketplace" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="marketplace" data-testid="tab-marketplace-listings">
-            Marketplace Listings ({marketplaceListings.length})
+        <TabsList className="grid w-full grid-cols-2 h-auto">
+          <TabsTrigger value="marketplace" className="text-xs sm:text-sm" data-testid="tab-marketplace-listings">
+            Marketplace ({marketplaceListings.length})
           </TabsTrigger>
-          <TabsTrigger value="aircraft" data-testid="tab-aircraft-listings">
-            Aircraft Rentals ({aircraftListings.length})
+          <TabsTrigger value="aircraft" className="text-xs sm:text-sm" data-testid="tab-aircraft-listings">
+            Rentals ({aircraftListings.length})
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="marketplace" className="space-y-4">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">Marketplace Listings</h2>
-            <Button onClick={() => navigate("/create-marketplace-listing")} data-testid="button-create-marketplace">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
+            <h2 className="text-xl sm:text-2xl font-bold">Marketplace Listings</h2>
+            <Button onClick={() => navigate("/create-marketplace-listing")} className="w-full sm:w-auto" data-testid="button-create-marketplace">
               Create New Listing
             </Button>
           </div>
@@ -146,9 +146,9 @@ export default function MyListings() {
         </TabsContent>
 
         <TabsContent value="aircraft" className="space-y-4">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">Aircraft Rental Listings</h2>
-            <Button onClick={() => navigate("/list-aircraft")} data-testid="button-list-aircraft">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
+            <h2 className="text-xl sm:text-2xl font-bold">Aircraft Rental Listings</h2>
+            <Button onClick={() => navigate("/list-aircraft")} className="w-full sm:w-auto" data-testid="button-list-aircraft">
               List New Aircraft
             </Button>
           </div>
@@ -177,8 +177,8 @@ export default function MyListings() {
                   <CardHeader>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
-                        <Badge variant={aircraft.status === "available" ? "default" : "secondary"} className="mb-2">
-                          {aircraft.status === "available" ? "Available" : "Unavailable"}
+                        <Badge variant={aircraft.isListed ? "default" : "secondary"} className="mb-2">
+                          {aircraft.isListed ? "Listed" : "Unlisted"}
                         </Badge>
                         <CardTitle className="text-lg">
                           {aircraft.year} {aircraft.make} {aircraft.model}

@@ -194,19 +194,19 @@ export default function Profile() {
               </Avatar>
 
               <div className="flex-1">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h1 className="font-display text-3xl font-bold mb-1" data-testid="text-profile-name">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+                  <div className="flex-1">
+                    <h1 className="font-display text-2xl sm:text-3xl font-bold mb-1" data-testid="text-profile-name">
                       {user.firstName} {user.lastName}
                     </h1>
-                    <p className="text-muted-foreground mb-3">{user.email}</p>
+                    <p className="text-sm sm:text-base text-muted-foreground mb-3">{user.email}</p>
                     
                     {/* Verification Badges */}
                     <div className="flex gap-2 flex-wrap items-center">
                       <VerificationBadges user={user} type="renter" size="md" />
                       {!user.identityVerified && (
                         <Link href="/verify-identity">
-                          <Button variant="outline" size="sm" data-testid="button-start-verification">
+                          <Button variant="outline" size="sm" className="w-full sm:w-auto" data-testid="button-start-verification">
                             <Shield className="h-4 w-4 mr-2" />
                             Start Verification
                           </Button>
@@ -216,7 +216,7 @@ export default function Profile() {
                   </div>
                   <Dialog open={isEditing} onOpenChange={setIsEditing}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" data-testid="button-edit-profile">
+                      <Button variant="outline" className="w-full sm:w-auto" data-testid="button-edit-profile">
                         <Edit className="h-4 w-4 mr-2" />
                         Edit Profile
                       </Button>
@@ -536,11 +536,11 @@ export default function Profile() {
 
         {/* Tabs */}
         <Tabs defaultValue="certifications" className="space-y-6">
-          <TabsList data-testid="tabs-profile">
-            <TabsTrigger value="certifications" data-testid="tab-certifications">Certifications</TabsTrigger>
-            <TabsTrigger value="aircraft" data-testid="tab-aircraft-types">Aircraft Types</TabsTrigger>
-            <TabsTrigger value="history" data-testid="tab-rental-history">Rental History</TabsTrigger>
-            <TabsTrigger value="reviews" data-testid="tab-reviews">Reviews</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto" data-testid="tabs-profile">
+            <TabsTrigger value="certifications" className="text-xs sm:text-sm" data-testid="tab-certifications">Certifications</TabsTrigger>
+            <TabsTrigger value="aircraft" className="text-xs sm:text-sm" data-testid="tab-aircraft-types">Aircraft</TabsTrigger>
+            <TabsTrigger value="history" className="text-xs sm:text-sm" data-testid="tab-rental-history">History</TabsTrigger>
+            <TabsTrigger value="reviews" className="text-xs sm:text-sm" data-testid="tab-reviews">Reviews</TabsTrigger>
           </TabsList>
 
           <TabsContent value="certifications">

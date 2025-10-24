@@ -54,7 +54,7 @@ export default function AdminDashboard() {
 
   // User search query
   const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
-    queryKey: ["/api/admin/users", userSearch],
+    queryKey: [`/api/admin/users?q=${userSearch}`],
     enabled: userSearch.length > 0,
   });
 

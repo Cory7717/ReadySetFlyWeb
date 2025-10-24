@@ -534,6 +534,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Auto-deactivate expired listings (called periodically or on-demand)
+  app.post("/api/marketplace/check-expirations", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const result = await storage.deactivateExpiredListings();
+      res.json({ 
+        deactivatedCount: result.deactivatedCount,
+        message: `Deactivated ${result.deactivatedCount} expired listings`
+      });
+    } catch (error: any) {
+      console.error("Failed to check expirations:", error);
+      res.status(500).json({ error: "Failed to check expirations" });
+    }
+  });
+
+  // Reactivate a listing (renew for another 30 days with payment)
+  app.post("/api/marketplace/:id/reactivate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { paymentIntentId } = req.body;
+      
+      const listing = await storage.getMarketplaceListing(req.params.id);
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      
+      if (listing.userId !== userId) {
+        return res.status(403).json({ error: "Not authorized to reactivate this listing" });
+      }
+      
+      // Payment verification is REQUIRED for reactivation
+      if (!paymentIntentId) {
+        return res.status(402).json({ 
+          error: "Payment required",
+          message: "Payment is required to reactivate this listing."
+        });
+      }
+      
+      // Verify payment was successful
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      
+      if (paymentIntent.status !== 'succeeded') {
+        return res.status(402).json({ 
+          error: "Payment required",
+          message: "Payment has not been completed."
+        });
+      }
+      
+      if (paymentIntent.metadata.userId !== userId) {
+        return res.status(403).json({ 
+          error: "Unauthorized",
+          message: "Payment verification failed"
+        });
+      }
+      
+      // Calculate monthlyFee from payment amount (convert from cents)
+      const monthlyFee = paymentIntent.amount / 100;
+      
+      // Reactivate listing for another 30 days
+      const newExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const updated = await storage.updateMarketplaceListing(req.params.id, {
+        isActive: true,
+        expiresAt: newExpiresAt,
+        isPaid: true,
+        monthlyFee: monthlyFee.toString(),
+        updatedAt: new Date(),
+      });
+      
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Failed to reactivate listing:", error);
+      res.status(500).json({ error: "Failed to reactivate listing" });
+    }
+  });
+
   app.post("/api/marketplace", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

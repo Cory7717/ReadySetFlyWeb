@@ -13,6 +13,20 @@ Key architectural decisions include a robust **verification system** for both re
 
 ## Recent Changes (October 24, 2025)
 
+### Marketplace Listing Expiration System
+- **Expiration Logic**: All marketplace listings now have automatic expiration dates
+  - Paid listings: 30 days from creation
+  - Promo code listings (LAUNCH2025): 7 days from creation
+  - Super Admin test listings: No expiration
+- **Grace Period**: 3-day grace period after expiration before auto-deactivation
+  - Listings remain active for 3 days after `expiresAt` date
+  - After grace period ends, listings are automatically marked as `isActive = false`
+- **API Routes**:
+  - POST `/api/marketplace/check-expirations` - Admin endpoint to trigger expiration check and auto-deactivate expired listings
+  - POST `/api/marketplace/:id/reactivate` - User endpoint to reactivate expired listing with payment verification
+- **Storage Method**: `deactivateExpiredListings()` finds all active listings where `expiresAt + 3 days < now` and deactivates them
+- **Reactivation**: Users can reactivate expired listings with one click, extending for another 30 days with payment
+
 ### Rating and Review System Implementation
 - **Database Schema**: Added `reviews` table with rating fields (overall, communication, cleanliness, accuracy), reviewer/reviewee relationship, and rental linkage
 - **User Rating Fields**: Added `averageRating` and `totalReviews` to users table for quick rating lookup

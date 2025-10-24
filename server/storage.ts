@@ -72,6 +72,7 @@ export interface IStorage {
   createMarketplaceListing(listing: InsertMarketplaceListing): Promise<MarketplaceListing>;
   updateMarketplaceListing(id: string, updates: Partial<MarketplaceListing>): Promise<MarketplaceListing | undefined>;
   deleteMarketplaceListing(id: string): Promise<boolean>;
+  deactivateExpiredListings(): Promise<{ deactivatedCount: number }>;
 
   // Rentals
   getRental(id: string): Promise<Rental | undefined>;
@@ -404,6 +405,29 @@ export class DatabaseStorage implements IStorage {
       .where(eq(marketplaceListings.id, id))
       .returning();
     return result.length > 0;
+  }
+
+  async deactivateExpiredListings(): Promise<{ deactivatedCount: number }> {
+    // Calculate grace period end: 3 days after expiration
+    const gracePeriodEnd = new Date(Date.now() - (3 * 24 * 60 * 60 * 1000));
+    
+    // Find and deactivate listings where expiresAt + 3 days < now
+    // Only deactivate if expiresAt is not null and isActive is true
+    const result = await db
+      .update(marketplaceListings)
+      .set({ 
+        isActive: false,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(marketplaceListings.isActive, true),
+          sql`${marketplaceListings.expiresAt} < ${gracePeriodEnd}`
+        )
+      )
+      .returning();
+    
+    return { deactivatedCount: result.length };
   }
 
   // Rentals

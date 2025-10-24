@@ -4,8 +4,12 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import type { User } from "@shared/schema";
-import { Shield, Award, Plane, Clock, CheckCircle2, Edit } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import type { User, CertificationType } from "@shared/schema";
+import { certificationTypes } from "@shared/schema";
+import { Shield, Award, Plane, Clock, CheckCircle2, Edit, Upload, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,8 +25,29 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+
+const profileUpdateSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  phone: z.string().optional(),
+  totalFlightHours: z.coerce.number().min(0).optional(),
+  certifications: z.array(z.string()),
+  pilotLicense: z.any().optional(),
+  insurance: z.any().optional(),
+});
+
+type ProfileUpdateForm = z.infer<typeof profileUpdateSchema>;
 
 const certifications = [
   { name: "PPL", date: "Jun 2015", verified: true },
@@ -37,6 +62,7 @@ const aircraftTypes = [
 
 export default function Profile() {
   const [isEditing, setIsEditing] = useState(false);
+  const [uploadingDocs, setUploadingDocs] = useState(false);
   const { toast } = useToast();
   const { user: authUser } = useAuth();
   
@@ -46,9 +72,65 @@ export default function Profile() {
     enabled: !!authUser?.id,
   });
 
+  const form = useForm<ProfileUpdateForm>({
+    resolver: zodResolver(profileUpdateSchema),
+    defaultValues: {
+      firstName: user?.firstName || "",
+      lastName: user?.lastName || "",
+      phone: user?.phone || "",
+      totalFlightHours: user?.totalFlightHours || 0,
+      certifications: user?.certifications || [],
+    },
+  });
+
+  // Update form when user data loads
+  if (user && !form.formState.isDirty) {
+    form.reset({
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      phone: user.phone || "",
+      totalFlightHours: user.totalFlightHours || 0,
+      certifications: user.certifications || [],
+    });
+  }
+
   // Update user mutation
   const updateUserMutation = useMutation({
-    mutationFn: async (updates: Partial<User>) => {
+    mutationFn: async (data: { updates: Partial<User>; files?: { license?: File; insurance?: File } }) => {
+      let updates = { ...data.updates };
+
+      // Upload documents if provided
+      if (data.files?.license || data.files?.insurance) {
+        setUploadingDocs(true);
+        const formData = new FormData();
+        if (data.files.license) formData.append('images', data.files.license);
+        if (data.files.insurance) formData.append('images', data.files.insurance);
+
+        try {
+          const uploadRes = await fetch('/api/upload-images', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+          });
+
+          if (!uploadRes.ok) throw new Error('Failed to upload documents');
+          
+          const uploadData = await uploadRes.json();
+          const urls = uploadData.imageUrls || [];
+
+          let urlIndex = 0;
+          if (data.files.license && urls[urlIndex]) {
+            updates.pilotLicenseUrl = urls[urlIndex];
+            urlIndex++;
+          }
+          if (data.files.insurance && urls[urlIndex]) {
+            updates.insuranceUrl = urls[urlIndex];
+          }
+        } finally {
+          setUploadingDocs(false);
+        }
+      }
+
       return await apiRequest("PATCH", `/api/users/${authUser?.id}`, updates);
     },
     onSuccess: () => {
@@ -59,6 +141,7 @@ export default function Profile() {
         description: "Your profile has been successfully updated.",
       });
       setIsEditing(false);
+      form.reset();
     },
     onError: (error: any) => {
       toast({
@@ -69,13 +152,20 @@ export default function Profile() {
     },
   });
 
-  const handleSave = () => {
-    // In real app, would gather form data
-    updateUserMutation.mutate({
-      name: "John Smith",
-      phone: "+1 (555) 123-4567",
-      totalFlightHours: 2500,
-    });
+  const onSubmit = (data: ProfileUpdateForm) => {
+    const updates: Partial<User> = {
+      firstName: data.firstName,
+      lastName: data.lastName,
+      phone: data.phone,
+      totalFlightHours: data.totalFlightHours,
+      certifications: data.certifications,
+    };
+
+    const files: { license?: File; insurance?: File } = {};
+    if (data.pilotLicense?.[0]) files.license = data.pilotLicense[0];
+    if (data.insurance?.[0]) files.insurance = data.insurance[0];
+
+    updateUserMutation.mutate({ updates, files });
   };
 
   if (isLoading || !user) {
@@ -98,7 +188,9 @@ export default function Profile() {
             <div className="flex flex-col md:flex-row gap-6 items-start">
               <Avatar className="h-24 w-24" data-testid="avatar-profile">
                 <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200" />
-                <AvatarFallback>JS</AvatarFallback>
+                <AvatarFallback>
+                  {user.firstName?.[0]}{user.lastName?.[0]}
+                </AvatarFallback>
               </Avatar>
 
               <div className="flex-1">
@@ -129,35 +221,240 @@ export default function Profile() {
                         Edit Profile
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Edit Profile</DialogTitle>
                         <DialogDescription>
-                          Update your profile information
+                          Update your profile information, certifications, and documents
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="name">Name</Label>
-                          <Input id="name" defaultValue="John Smith" data-testid="input-edit-name" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="phone">Phone</Label>
-                          <Input id="phone" defaultValue="+1 (555) 123-4567" data-testid="input-edit-phone" />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="hours">Total Flight Hours</Label>
-                          <Input id="hours" type="number" defaultValue="2500" data-testid="input-edit-hours" />
-                        </div>
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={() => setIsEditing(false)}>
-                          Cancel
-                        </Button>
-                        <Button onClick={handleSave} disabled={updateUserMutation.isPending} data-testid="button-save-profile">
-                          {updateUserMutation.isPending ? "Saving..." : "Save Changes"}
-                        </Button>
-                      </div>
+                      <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name="firstName"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>First Name</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} data-testid="input-edit-firstname" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="lastName"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Last Name</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} data-testid="input-edit-lastname" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+
+                          <FormField
+                            control={form.control}
+                            name="phone"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Phone Number</FormLabel>
+                                <FormControl>
+                                  <Input {...field} placeholder="+1 (555) 123-4567" data-testid="input-edit-phone" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="totalFlightHours"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Total Flight Hours</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    {...field}
+                                    onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                                    data-testid="input-edit-hours"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="certifications"
+                            render={() => (
+                              <FormItem>
+                                <div className="mb-4">
+                                  <FormLabel>Pilot Certifications</FormLabel>
+                                  <FormDescription>
+                                    Select all certifications you hold
+                                  </FormDescription>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                  {certificationTypes.map((cert) => (
+                                    <FormField
+                                      key={cert}
+                                      control={form.control}
+                                      name="certifications"
+                                      render={({ field }) => {
+                                        return (
+                                          <FormItem
+                                            key={cert}
+                                            className="flex flex-row items-start space-x-3 space-y-0"
+                                          >
+                                            <FormControl>
+                                              <Checkbox
+                                                checked={field.value?.includes(cert)}
+                                                onCheckedChange={(checked) => {
+                                                  return checked
+                                                    ? field.onChange([...field.value, cert])
+                                                    : field.onChange(
+                                                        field.value?.filter(
+                                                          (value) => value !== cert
+                                                        )
+                                                      )
+                                                }}
+                                                data-testid={`checkbox-cert-${cert}`}
+                                              />
+                                            </FormControl>
+                                            <FormLabel className="font-normal cursor-pointer">
+                                              {cert}
+                                            </FormLabel>
+                                          </FormItem>
+                                        )
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <div className="space-y-4 border-t pt-4">
+                            <h3 className="font-semibold">Document Uploads</h3>
+                            
+                            <FormField
+                              control={form.control}
+                              name="pilotLicense"
+                              render={({ field: { onChange, value, ...field } }) => (
+                                <FormItem>
+                                  <FormLabel>Pilot License</FormLabel>
+                                  <FormControl>
+                                    <div className="space-y-2">
+                                      <Input
+                                        type="file"
+                                        accept="image/*,.pdf"
+                                        onChange={(e) => onChange(e.target.files)}
+                                        {...field}
+                                        data-testid="input-pilot-license"
+                                      />
+                                      {user.pilotLicenseUrl && (
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                          <FileText className="h-4 w-4" />
+                                          <a
+                                            href={user.pilotLicenseUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="hover:underline"
+                                          >
+                                            Current license on file
+                                          </a>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </FormControl>
+                                  <FormDescription>
+                                    Upload a copy of your pilot license (image or PDF)
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name="insurance"
+                              render={({ field: { onChange, value, ...field } }) => (
+                                <FormItem>
+                                  <FormLabel>Insurance Certificate</FormLabel>
+                                  <FormControl>
+                                    <div className="space-y-2">
+                                      <Input
+                                        type="file"
+                                        accept="image/*,.pdf"
+                                        onChange={(e) => onChange(e.target.files)}
+                                        {...field}
+                                        data-testid="input-insurance"
+                                      />
+                                      {user.insuranceUrl && (
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                          <FileText className="h-4 w-4" />
+                                          <a
+                                            href={user.insuranceUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="hover:underline"
+                                          >
+                                            Current insurance on file
+                                          </a>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </FormControl>
+                                  <FormDescription>
+                                    Upload a copy of your insurance certificate (image or PDF)
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+
+                          <div className="flex justify-end gap-2 pt-4">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setIsEditing(false);
+                                form.reset();
+                              }}
+                              disabled={updateUserMutation.isPending || uploadingDocs}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="submit"
+                              disabled={updateUserMutation.isPending || uploadingDocs}
+                              data-testid="button-save-profile"
+                            >
+                              {uploadingDocs ? (
+                                <>
+                                  <Upload className="h-4 w-4 mr-2 animate-spin" />
+                                  Uploading...
+                                </>
+                              ) : updateUserMutation.isPending ? (
+                                "Saving..."
+                              ) : (
+                                "Save Changes"
+                              )}
+                            </Button>
+                          </div>
+                        </form>
+                      </Form>
                     </DialogContent>
                   </Dialog>
                 </div>
@@ -168,14 +465,18 @@ export default function Profile() {
                       <Clock className="h-4 w-4" />
                       Total Hours
                     </div>
-                    <p className="text-2xl font-bold" data-testid="text-total-hours">2,500</p>
+                    <p className="text-2xl font-bold" data-testid="text-total-hours">
+                      {user.totalFlightHours?.toLocaleString() || 0}
+                    </p>
                   </div>
                   <div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                       <Award className="h-4 w-4" />
                       Certifications
                     </div>
-                    <p className="text-2xl font-bold" data-testid="text-cert-count">4</p>
+                    <p className="text-2xl font-bold" data-testid="text-cert-count">
+                      {user.certifications?.length || 0}
+                    </p>
                   </div>
                   <div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
@@ -189,26 +490,44 @@ export default function Profile() {
                       <Shield className="h-4 w-4" />
                       Verification
                     </div>
-                    <Badge className="bg-chart-2 text-white">
+                    <Badge className={user.identityVerified ? "bg-chart-2 text-white" : ""}>
                       <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Verified
+                      {user.identityVerified ? "Verified" : "Unverified"}
                     </Badge>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="bg-background">
-                    <CheckCircle2 className="h-3 w-3 mr-1 text-chart-2" />
-                    ID Verified
-                  </Badge>
-                  <Badge variant="outline" className="bg-background">
-                    <CheckCircle2 className="h-3 w-3 mr-1 text-chart-2" />
-                    License Verified
-                  </Badge>
-                  <Badge variant="outline" className="bg-background">
-                    <CheckCircle2 className="h-3 w-3 mr-1 text-chart-2" />
-                    Background Check
-                  </Badge>
+                  {user.identityVerified && (
+                    <Badge variant="outline" className="bg-background">
+                      <CheckCircle2 className="h-3 w-3 mr-1 text-chart-2" />
+                      ID Verified
+                    </Badge>
+                  )}
+                  {user.licenseVerified && (
+                    <Badge variant="outline" className="bg-background">
+                      <CheckCircle2 className="h-3 w-3 mr-1 text-chart-2" />
+                      License Verified
+                    </Badge>
+                  )}
+                  {user.backgroundCheckCompleted && (
+                    <Badge variant="outline" className="bg-background">
+                      <CheckCircle2 className="h-3 w-3 mr-1 text-chart-2" />
+                      Background Check
+                    </Badge>
+                  )}
+                  {user.pilotLicenseUrl && (
+                    <Badge variant="outline" className="bg-background">
+                      <FileText className="h-3 w-3 mr-1 text-primary" />
+                      License on File
+                    </Badge>
+                  )}
+                  {user.insuranceUrl && (
+                    <Badge variant="outline" className="bg-background">
+                      <FileText className="h-3 w-3 mr-1 text-primary" />
+                      Insurance on File
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>
@@ -230,31 +549,31 @@ export default function Profile() {
                 <CardTitle>Pilot Certifications</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {certifications.map((cert) => (
-                    <div
-                      key={cert.name}
-                      className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
-                      data-testid={`cert-${cert.name}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Award className="h-6 w-6 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold">{cert.name}</h3>
-                          <p className="text-sm text-muted-foreground">Issued {cert.date}</p>
+                {user.certifications && user.certifications.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {user.certifications.map((cert) => (
+                      <div
+                        key={cert}
+                        className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
+                        data-testid={`cert-${cert}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Award className="h-6 w-6 text-primary" />
+                          </div>
+                          <div>
+                            <h3 className="font-semibold">{cert}</h3>
+                            <p className="text-sm text-muted-foreground">Pilot Certification</p>
+                          </div>
                         </div>
                       </div>
-                      {cert.verified && (
-                        <Badge className="bg-chart-2 text-white">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Verified
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    No certifications added yet. Click "Edit Profile" to add certifications.
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

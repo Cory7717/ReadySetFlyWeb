@@ -43,6 +43,10 @@ export const users = pgTable("users", {
   totalFlightHours: integer("total_flight_hours").default(0),
   aircraftTypesFlown: text("aircraft_types_flown").array().default(sql`ARRAY[]::text[]`),
   
+  // Document uploads (for quick profile access)
+  pilotLicenseUrl: text("pilot_license_url"),
+  insuranceUrl: text("insurance_url"),
+  
   // Basic Verification (legacy - keep for backward compatibility)
   isVerified: boolean("is_verified").default(false),
   licenseVerified: boolean("license_verified").default(false),

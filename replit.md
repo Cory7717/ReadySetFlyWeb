@@ -13,6 +13,27 @@ Key architectural decisions include a robust **verification system** for both re
 
 ## Recent Changes (October 24, 2025)
 
+### Enhanced Profile Editing System
+- **Database Schema**: Added `pilotLicenseUrl` and `insuranceUrl` fields to users table for document storage
+- **Profile Edit Dialog**: Completely redesigned with react-hook-form for proper form handling
+- **New Fields**:
+  - First Name and Last Name (editable)
+  - Phone Number
+  - Total Flight Hours
+  - Certifications (multi-select checkboxes for all certification types: PPL, IR, CPL, Multi-Engine, ATP, CFI, CFII, MEI)
+  - Pilot License Upload (image or PDF)
+  - Insurance Certificate Upload (image or PDF)
+- **Document Management**: 
+  - Shows current documents if already uploaded (with links to view)
+  - Integrates with existing `/api/upload-images` endpoint
+  - Supports multiple file types (images and PDFs)
+- **UI/UX Features**:
+  - Loading states for uploads and form submissions
+  - Form validation with Zod
+  - Displays uploaded documents as badges in profile header
+  - Responsive multi-column layout for certifications
+  - Shows certification count and document status in profile overview
+
 ### Marketplace Listing Expiration System
 - **Expiration Logic**: All marketplace listings now have automatic expiration dates
   - Paid listings: 30 days from creation

@@ -6,7 +6,7 @@ import multer from "multer";
 import OpenAI from "openai";
 import Stripe from "stripe";
 import { storage } from "./storage";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 
 // Initialize OpenAI client with Replit AI Integrations
@@ -835,6 +835,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(message);
     } catch (error) {
       res.status(500).json({ error: "Failed to mark message as read" });
+    }
+  });
+
+  // Reviews
+  app.get("/api/reviews/user/:userId", async (req, res) => {
+    try {
+      const reviews = await storage.getReviewsByUser(req.params.userId);
+      res.json(reviews);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch reviews" });
+    }
+  });
+
+  app.get("/api/reviews/rental/:rentalId", async (req, res) => {
+    try {
+      const reviews = await storage.getReviewsByRental(req.params.rentalId);
+      res.json(reviews);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch reviews" });
+    }
+  });
+
+  app.get("/api/rentals/:rentalId/can-review", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const rental = await storage.getRental(req.params.rentalId);
+      
+      if (!rental) {
+        return res.status(404).json({ error: "Rental not found" });
+      }
+
+      // Only completed rentals can be reviewed
+      if (rental.status !== "completed") {
+        return res.json({ canReview: false, reason: "Rental must be completed" });
+      }
+
+      // Check if user is either the renter or owner
+      const isParticipant = rental.renterId === userId || rental.ownerId === userId;
+      if (!isParticipant) {
+        return res.json({ canReview: false, reason: "Not a participant in this rental" });
+      }
+
+      // Check if user has already reviewed
+      const hasReviewed = await storage.hasUserReviewedRental(req.params.rentalId, userId);
+      if (hasReviewed) {
+        return res.json({ canReview: false, reason: "Already reviewed" });
+      }
+
+      // Determine who should be reviewed (the other party)
+      const revieweeId = rental.renterId === userId ? rental.ownerId : rental.renterId;
+      
+      res.json({ 
+        canReview: true, 
+        revieweeId,
+        rental 
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check review eligibility" });
+    }
+  });
+
+  app.post("/api/reviews", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Verify rental exists and is completed
+      const rental = await storage.getRental(req.body.rentalId);
+      if (!rental) {
+        return res.status(404).json({ error: "Rental not found" });
+      }
+      if (rental.status !== "completed") {
+        return res.status(400).json({ error: "Can only review completed rentals" });
+      }
+
+      // Verify user is participant
+      const isParticipant = rental.renterId === userId || rental.ownerId === userId;
+      if (!isParticipant) {
+        return res.status(403).json({ error: "Not authorized to review this rental" });
+      }
+
+      // Verify user hasn't already reviewed
+      const hasReviewed = await storage.hasUserReviewedRental(req.body.rentalId, userId);
+      if (hasReviewed) {
+        return res.status(400).json({ error: "Already reviewed this rental" });
+      }
+
+      // SERVER-SIDE DETERMINATION: reviewee is always the other party in the rental
+      // This prevents client-side spoofing of revieweeId
+      const revieweeId = rental.renterId === userId ? rental.ownerId : rental.renterId;
+
+      // Validate and create review (exclude revieweeId from client input)
+      const { revieweeId: clientRevieweeId, ...reviewData } = req.body;
+      const validatedData = insertReviewSchema.parse({
+        ...reviewData,
+        reviewerId: userId,
+        revieweeId, // Server-calculated, not from client
+      });
+      
+      const review = await storage.createReview(validatedData);
+      res.status(201).json(review);
+    } catch (error: any) {
+      console.error("Review creation error:", error);
+      res.status(400).json({ error: error.message || "Invalid review data" });
     }
   });
 

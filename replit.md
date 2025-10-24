@@ -11,6 +11,22 @@ The platform is built with a **React frontend** utilizing Wouter for routing, Ta
 
 Key architectural decisions include a robust **verification system** for both renters and aircraft owners, involving multi-step forms, document uploads, and an admin review interface. This system integrates a **badge system** to visually indicate verification statuses. The platform employs a **platform-captured payments with transfers** model via **Stripe** for all financial transactions, including rental payments, owner payouts, and marketplace listing fees. This involves detailed fee calculations (sales tax, platform commission, processing fees) and comprehensive webhook handling for asynchronous event processing. An **admin dashboard** provides role-based access for user and listing management, and analytics tracking.
 
+## Recent Changes (October 24, 2025)
+
+### Rating and Review System Implementation
+- **Database Schema**: Added `reviews` table with rating fields (overall, communication, cleanliness, accuracy), reviewer/reviewee relationship, and rental linkage
+- **User Rating Fields**: Added `averageRating` and `totalReviews` to users table for quick rating lookup
+- **Storage Methods**: Implemented review CRUD operations with automatic average rating calculation on review creation
+- **API Routes**: 
+  - GET `/api/reviews/user/:userId` - Fetch all reviews for a user
+  - GET `/api/reviews/rental/:rentalId` - Get reviews for a specific rental
+  - GET `/api/rentals/:rentalId/can-review` - Check if current user can review
+  - POST `/api/reviews` - Submit new review (requires completed rental, prevents duplicate reviews)
+- **UI Components**:
+  - `ReviewDialog`: Full-featured review submission with 5-star rating system, optional detailed ratings, and comment field
+  - `StarRating`: Reusable star display component with half-star support and review counts
+- **Review Rules**: Users can only review completed rentals once, reviewing the opposite party (renter reviews owner, owner reviews renter)
+
 ## Recent Changes (October 23, 2025)
 
 ### Production Readiness Enhancements

@@ -81,6 +81,10 @@ export const users = pgTable("users", {
   bankAccountConnected: boolean("bank_account_connected").default(false),
   stripeAccountId: text("stripe_account_id"),
   
+  // Rating information
+  averageRating: decimal("average_rating", { precision: 3, scale: 2 }), // 0.00-5.00
+  totalReviews: integer("total_reviews").default(0),
+  
   // Timestamps (from blueprint)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -275,6 +279,28 @@ export const messages = pgTable("messages", {
   isRead: boolean("is_read").default(false),
   
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Reviews (post-rental ratings and feedback)
+export const reviews = pgTable("reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  rentalId: varchar("rental_id").notNull().references(() => rentals.id),
+  reviewerId: varchar("reviewer_id").notNull().references(() => users.id), // Who wrote the review
+  revieweeId: varchar("reviewee_id").notNull().references(() => users.id), // Who is being reviewed
+  
+  // Rating (1-5 stars)
+  rating: integer("rating").notNull(), // 1-5
+  
+  // Optional comment
+  comment: text("comment"),
+  
+  // Review categories (optional detailed ratings)
+  communicationRating: integer("communication_rating"), // 1-5
+  cleanlinessRating: integer("cleanliness_rating"), // 1-5 (for aircraft condition)
+  accuracyRating: integer("accuracy_rating"), // 1-5 (listing accuracy)
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Transactions (financial tracking)
@@ -540,6 +566,18 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
   isRead: true,
 });
 
+export const insertReviewSchema = createInsertSchema(reviews).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  rating: z.number().min(1).max(5),
+  communicationRating: z.number().min(1).max(5).optional(),
+  cleanlinessRating: z.number().min(1).max(5).optional(),
+  accuracyRating: z.number().min(1).max(5).optional(),
+  comment: z.string().max(1000).optional(),
+});
+
 export const insertCrmLeadSchema = createInsertSchema(crmLeads).omit({
   id: true,
   createdAt: true,
@@ -595,6 +633,9 @@ export type InsertRental = z.infer<typeof insertRentalSchema>;
 
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+export type Review = typeof reviews.$inferSelect;
+export type InsertReview = z.infer<typeof insertReviewSchema>;
 
 export type Transaction = typeof transactions.$inferSelect;
 

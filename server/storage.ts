@@ -10,6 +10,8 @@ import {
   type InsertRental,
   type Message,
   type InsertMessage,
+  type Review,
+  type InsertReview,
   type Transaction,
   type VerificationSubmission,
   type InsertVerificationSubmission,
@@ -26,6 +28,7 @@ import {
   marketplaceListings,
   rentals,
   messages,
+  reviews,
   transactions,
   verificationSubmissions,
   crmLeads,
@@ -83,6 +86,12 @@ export interface IStorage {
   getMessagesByRental(rentalId: string): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
   markMessageAsRead(id: string): Promise<Message | undefined>;
+
+  // Reviews
+  getReviewsByUser(userId: string): Promise<Review[]>; // Get all reviews for a user (as reviewee)
+  getReviewsByRental(rentalId: string): Promise<Review[]>; // Get reviews for a specific rental
+  createReview(review: InsertReview): Promise<Review>;
+  hasUserReviewedRental(rentalId: string, reviewerId: string): Promise<boolean>;
 
   // Transactions
   getTransactionsByUser(userId: string): Promise<Transaction[]>;
@@ -505,6 +514,54 @@ export class DatabaseStorage implements IStorage {
       .where(eq(messages.id, id))
       .returning();
     return message;
+  }
+
+  // Reviews
+  async getReviewsByUser(userId: string): Promise<Review[]> {
+    return await db
+      .select()
+      .from(reviews)
+      .where(eq(reviews.revieweeId, userId))
+      .orderBy(desc(reviews.createdAt));
+  }
+
+  async getReviewsByRental(rentalId: string): Promise<Review[]> {
+    return await db
+      .select()
+      .from(reviews)
+      .where(eq(reviews.rentalId, rentalId))
+      .orderBy(desc(reviews.createdAt));
+  }
+
+  async createReview(insertReview: InsertReview): Promise<Review> {
+    const [review] = await db
+      .insert(reviews)
+      .values(insertReview)
+      .returning();
+    
+    // Update user's average rating
+    const userReviews = await this.getReviewsByUser(insertReview.revieweeId);
+    const totalRating = userReviews.reduce((sum, r) => sum + r.rating, 0);
+    const averageRating = (totalRating / userReviews.length).toFixed(2);
+    
+    await this.updateUser(insertReview.revieweeId, {
+      averageRating,
+      totalReviews: userReviews.length,
+    });
+    
+    return review;
+  }
+
+  async hasUserReviewedRental(rentalId: string, reviewerId: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(reviews)
+      .where(and(
+        eq(reviews.rentalId, rentalId),
+        eq(reviews.reviewerId, reviewerId)
+      ))
+      .limit(1);
+    return result.length > 0;
   }
 
   // Transactions

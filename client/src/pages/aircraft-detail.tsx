@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useRoute } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import type { AircraftListing } from "@shared/schema";
+import type { AircraftListing, User } from "@shared/schema";
 import { MapPin, Gauge, Shield, Calendar, Heart, Share2, Star } from "lucide-react";
 import { RentalMessaging } from "@/components/rental-messaging";
+import { StarRating } from "@/components/star-rating";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,12 @@ export default function AircraftDetail() {
   const { data: aircraft, isLoading } = useQuery<AircraftListing>({
     queryKey: ["/api/aircraft", params?.id],
     enabled: !!params?.id,
+  });
+
+  // Fetch owner's user data to show rating
+  const { data: owner } = useQuery<User>({
+    queryKey: ["/api/users", aircraft?.ownerId],
+    enabled: !!aircraft?.ownerId,
   });
 
   // Rental request mutation
@@ -282,15 +289,30 @@ export default function AircraftDetail() {
               <CardContent>
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16">
-                    <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100" />
-                    <AvatarFallback>JS</AvatarFallback>
+                    <AvatarImage src={owner?.profileImageUrl} />
+                    <AvatarFallback>
+                      {owner?.firstName?.[0]}{owner?.lastName?.[0]}
+                    </AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
-                    <h3 className="font-semibold mb-1">John Smith</h3>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>Response time: 12h</span>
-                      <span>Acceptance rate: 95%</span>
-                      <Badge className="bg-chart-2 text-white">Verified</Badge>
+                    <h3 className="font-semibold mb-1" data-testid="text-owner-name">
+                      {owner?.firstName} {owner?.lastName}
+                    </h3>
+                    <div className="flex flex-col gap-2">
+                      {owner?.averageRating && owner.totalReviews > 0 && (
+                        <StarRating 
+                          rating={parseFloat(owner.averageRating)} 
+                          totalReviews={owner.totalReviews}
+                          size="sm"
+                        />
+                      )}
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <span>Response time: {aircraft.responseTime}h</span>
+                        <span>Acceptance rate: {aircraft.acceptanceRate}%</span>
+                        {owner?.isVerified && (
+                          <Badge className="bg-chart-2 text-white">Verified</Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <Button variant="outline" data-testid="button-message-owner">Message Owner</Button>

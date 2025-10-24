@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { StarRating } from "@/components/star-rating";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -52,6 +53,11 @@ export default function Dashboard() {
   const { data: transactions = [] } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions/user", authUser?.id],
     enabled: !!authUser?.id,
+  });
+
+  // Fetch all users to display renter information in pending requests
+  const { data: allUsers = [] } = useQuery<User[]>({
+    queryKey: ["/api/users"],
   });
 
   // Calculate stats from actual rentals
@@ -322,18 +328,28 @@ export default function Dashboard() {
                   ) : (
                     pendingRequests.map((rental) => {
                       const aircraft = allAircraft.find(a => a.id === rental.aircraftId);
+                      const renter = allUsers.find(u => u.id === rental.renterId);
                       return (
                         <div key={rental.id} className="flex items-center justify-between p-4 border rounded-lg hover-elevate" data-testid={`rental-pending-${rental.id}`}>
                           <div className="flex-1">
                             <h4 className="font-semibold mb-1">
                               {aircraft?.year || ''} {aircraft?.make || 'Unknown'} {aircraft?.model || ''}
                             </h4>
-                            <p className="text-sm text-muted-foreground">
-                              Renter ID: {rental.renterId.substring(0, 8)} • {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
-                            </p>
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {parseFloat(rental.estimatedHours)} flight hours estimated
-                            </p>
+                            <div className="space-y-1">
+                              <p className="text-sm text-muted-foreground">
+                                Renter: {renter?.firstName} {renter?.lastName} • {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
+                              </p>
+                              {renter?.averageRating && renter.totalReviews > 0 && (
+                                <StarRating 
+                                  rating={parseFloat(renter.averageRating)} 
+                                  totalReviews={renter.totalReviews}
+                                  size="sm"
+                                />
+                              )}
+                              <p className="text-sm text-muted-foreground">
+                                {parseFloat(rental.estimatedHours)} flight hours estimated
+                              </p>
+                            </div>
                           </div>
                           <div className="flex items-center gap-4">
                             <div className="text-right">

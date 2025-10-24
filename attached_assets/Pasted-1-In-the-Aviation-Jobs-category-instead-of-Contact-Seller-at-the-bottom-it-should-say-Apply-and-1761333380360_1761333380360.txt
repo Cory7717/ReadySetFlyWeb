@@ -1,0 +1,19 @@
+1.	In the Aviation Jobs category, instead of “Contact Seller” at the bottom, it should say Apply and the button should open an email with the Position as the Subject already loaded.  
+2.	The top of each category is the same whether its for CFI, Aircraft for Sale, etc.  The bottom of each category selected is specific to the category.  The fields at the top of each one are specific to Aircraft for Sale in all categories.  Lets look into that.  
+3.	The AI Assist is currently pulling from the Title field which can make it a bit confusing.  Lets change where the Generate with AI draws the prompt from.  Add a field just below Title that prompts users to input what they want AI to generate.  
+4.	The My Listings link returns 404 Page not found
+5.	Lets add a star rating and review for owners and renters that can be completed after each rental transaction.  
+6.	Send rental request doesn’t seem to be working.  Also, we need to add a total calculated price for the rental request based on the number of Estimated Flight Hours times the hourly rental amount.  Plus 8.25% sales tax and 3% CC processing fee.  The amount for the renter should also add an additional 7.5% booking fee.  The owner will get the total amount minus a 7.5% commission.  The booking fees, commission, sales tax and CC processing fees all go to Ready Set Fly while the remainder will go to the owner.  
+7.	Also, once the owner approves the rental request, the renter then gets the message that links them to the payment screen to finalize the payment transaction.  See #6 for the payment breakdown.  
+8.	The Rental Request should also include the Star Rating and reviews for the Owner Information.  
+9.	The owner should also see the Renters star rating and reviews when they receive the rental request.
+
+10.	Review the Admin dashboard to make sure the Search Users field is linked to the database so admin users can easily find app users for easier technical support. 
+
+11.	Add in that listings that are reaching their paid end date to have a 3 day grace to extend another payment.  If payment is not received it will automatically deactivate and be removed from the listings.    However, it will still be available in their profile.  Once it’s deactivated, they can simply 1 button click to pay and restore the listing.  
+
+12.	Double check that owners and users who create listings in the marketplace can easily edit the listing as well.  
+
+13.	All phone number and Price amounts in the marketplace listings should be auto formatted to professional format.  I.e., if a user puts in a price of 500000, it should automatically be formatted to $500,000.  If a user inputs their phone number as 5124121762, it should automatically be formatted to (512) 412-1762
+
+14.	The Edit Profile inside of the users profile page only has Name, Phone Number, and Flight Hours.  It should be expanded to allow users to upload their pilots license via a picture, their insurance to ensure they have the proper insurance, update their certifications and anything else you think is needed in there. 

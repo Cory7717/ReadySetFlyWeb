@@ -11,6 +11,7 @@ import { MarketplaceCard } from "@/components/marketplace-card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
 import { Search, SlidersHorizontal } from "lucide-react";
+import { formatPrice } from "@/lib/formatters";
 
 const categories = [
   { id: "aircraft-sale", label: "Aircraft For Sale", fee: "$40-125/mo" },
@@ -231,7 +232,7 @@ export default function Marketplace() {
                   category={listing.category}
                   title={listing.title}
                   description={listing.description}
-                  price={listing.price ? `$${parseFloat(listing.price).toLocaleString()}` : ""}
+                  price={formatPrice(listing.price)}
                   location={listing.location || "N/A"}
                   image={listing.images?.[0]}
                   images={listing.images?.length || 0}

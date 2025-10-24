@@ -110,6 +110,7 @@ export default function CreateMarketplaceListing() {
   const [promoCode, setPromoCode] = useState("");
   const [promoCodeValid, setPromoCodeValid] = useState<boolean | null>(null);
   const [promoCodeChecking, setPromoCodeChecking] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
 
   const form = useForm<FormData>({
     resolver: zodResolver(baseFormSchema),
@@ -296,10 +297,13 @@ export default function CreateMarketplaceListing() {
       return;
     }
 
-    if (!values.title) {
+    // Use AI prompt if provided, otherwise fall back to title
+    const promptText = aiPrompt.trim() || values.title;
+    
+    if (!promptText) {
       toast({
-        title: "Title Required",
-        description: "Please enter a title first.",
+        title: "Prompt Required",
+        description: "Please enter either a title or an AI prompt.",
         variant: "destructive",
       });
       return;
@@ -320,7 +324,7 @@ export default function CreateMarketplaceListing() {
     generateDescriptionMutation.mutate({
       listingType,
       details: {
-        title: values.title,
+        title: promptText,
         price: values.price,
         location: values.location,
         ...values.details,
@@ -550,16 +554,45 @@ export default function CreateMarketplaceListing() {
               <FormField
                 control={form.control}
                 name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Title</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., 2018 Cessna 172 for Sale" {...field} data-testid="input-title" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  const placeholders: Record<string, string> = {
+                    "aircraft-sale": "e.g., 2018 Cessna 172 Skyhawk - Low Time",
+                    "job": "e.g., Commercial Pilot - Regional Airline",
+                    "cfi": "e.g., Experienced CFI - Instrument & Multi-Engine",
+                    "flight-school": "e.g., ABC Flight Academy - Professional Pilot Training",
+                    "mechanic": "e.g., Certified A&P Mechanic - Aircraft Maintenance",
+                    "charter": "e.g., Luxury Charter Services - Citation Jet",
+                  };
+                  return (
+                    <FormItem>
+                      <FormLabel>Title</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={placeholders[selectedCategory] || "Enter a descriptive title"}
+                          {...field}
+                          data-testid="input-title"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
+
+              {/* AI Prompt Field */}
+              <div className="space-y-2">
+                <Label htmlFor="ai-prompt">AI Prompt (Optional)</Label>
+                <Input
+                  id="ai-prompt"
+                  placeholder="e.g., Describe a well-maintained Cessna 172 with recent avionics upgrade"
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  data-testid="input-ai-prompt"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Provide specific details for AI to generate a description, or leave blank to use the title
+                </p>
+              </div>
 
               <FormField
                 control={form.control}
@@ -643,13 +676,16 @@ export default function CreateMarketplaceListing() {
                     </FormItem>
                   )}
                 />
+              </div>
 
+              {/* Price field - only for aircraft sales */}
+              {selectedCategory === "aircraft-sale" && (
                 <FormField
                   control={form.control}
                   name="price"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Price (Optional)</FormLabel>
+                      <FormLabel>Asking Price (Optional)</FormLabel>
                       <FormControl>
                         <div className="relative">
                           <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -667,7 +703,7 @@ export default function CreateMarketplaceListing() {
                     </FormItem>
                   )}
                 />
-              </div>
+              )}
             </CardContent>
           </Card>
 

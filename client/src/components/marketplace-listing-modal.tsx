@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { MarketplaceListing } from "@shared/schema";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
+import { formatPrice, formatPhoneNumber } from "@/lib/formatters";
 
 interface MarketplaceListingModalProps {
   listingId: string;
@@ -406,7 +407,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                     <div>
                       <p className="text-sm text-muted-foreground">Phone</p>
                       <a href={`tel:${listing.contactPhone}`} className="font-medium hover:text-primary">
-                        {listing.contactPhone}
+                        {formatPhoneNumber(listing.contactPhone)}
                       </a>
                     </div>
                   </div>
@@ -419,11 +420,19 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
               {listing.contactEmail && (
                 <Button
                   className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
-                  onClick={() => window.location.href = `mailto:${listing.contactEmail}`}
-                  data-testid="button-contact-seller"
+                  onClick={() => {
+                    const subject = listing.category === "job" 
+                      ? `Application: ${listing.title}`
+                      : undefined;
+                    const mailtoLink = subject 
+                      ? `mailto:${listing.contactEmail}?subject=${encodeURIComponent(subject)}`
+                      : `mailto:${listing.contactEmail}`;
+                    window.location.href = mailtoLink;
+                  }}
+                  data-testid={listing.category === "job" ? "button-apply" : "button-contact-seller"}
                 >
                   <Mail className="h-4 w-4 mr-2" />
-                  Contact Seller
+                  {listing.category === "job" ? "Apply" : "Contact Seller"}
                 </Button>
               )}
               {listing.contactPhone && (

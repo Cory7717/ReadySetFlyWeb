@@ -39,7 +39,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
     mutationFn: async (data: typeof formData) => {
       if (!aircraft) return;
       
-      return await apiRequest("/api/rentals", "POST", {
+      return await apiRequest("POST", "/api/rentals", {
         aircraftId: aircraft.id,
         ownerId: aircraft.ownerId,
         ...data,
@@ -64,6 +64,36 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
       });
     },
   });
+
+  const deleteAircraftMutation = useMutation({
+    mutationFn: async (aircraftId: string) => {
+      return await apiRequest("DELETE", `/api/aircraft/${aircraftId}`, {});
+    },
+    onSuccess: () => {
+      toast({
+        title: "Aircraft Deleted",
+        description: "The aircraft listing has been permanently deleted.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/aircraft"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      onOpenChange(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteAircraft = () => {
+    if (!aircraft) return;
+    if (!confirm(`Are you sure you want to permanently delete this aircraft listing (${aircraft.year} ${aircraft.make} ${aircraft.model})? This action cannot be undone.`)) {
+      return;
+    }
+    deleteAircraftMutation.mutate(aircraft.id);
+  };
 
   if (!aircraft && !isLoading) return null;
 
@@ -285,6 +315,21 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
               <div>
                 <h3 className="font-display text-xl font-semibold mb-3">Description</h3>
                 <p className="text-muted-foreground whitespace-pre-wrap">{aircraft.description}</p>
+              </div>
+            )}
+
+            {/* Admin Actions */}
+            {user?.isAdmin && (
+              <div className="border-t pt-4 mt-6">
+                <h3 className="font-display text-lg font-semibold mb-3 text-destructive">Admin Actions</h3>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteAircraft}
+                  disabled={deleteAircraftMutation.isPending}
+                  data-testid="button-delete-aircraft"
+                >
+                  {deleteAircraftMutation.isPending ? "Deleting..." : "Delete Aircraft Listing"}
+                </Button>
               </div>
             )}
 

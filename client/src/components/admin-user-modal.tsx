@@ -13,6 +13,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User, AircraftListing, MarketplaceListing } from "@shared/schema";
 import { formatPhoneNumber } from "@/lib/formatters";
+import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
+import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
 
 interface AdminUserModalProps {
   userId: string | null;
@@ -22,6 +24,8 @@ interface AdminUserModalProps {
 
 export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalProps) {
   const [activeTab, setActiveTab] = useState("profile");
+  const [selectedAircraftId, setSelectedAircraftId] = useState<string | null>(null);
+  const [selectedMarketplaceId, setSelectedMarketplaceId] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Fetch user details
@@ -367,7 +371,12 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                 ) : (
                   <div className="space-y-3">
                     {aircraftListings.map((aircraft) => (
-                      <Card key={aircraft.id} data-testid={`card-user-aircraft-${aircraft.id}`}>
+                      <Card 
+                        key={aircraft.id} 
+                        className="hover-elevate cursor-pointer transition-all"
+                        onClick={() => setSelectedAircraftId(aircraft.id)}
+                        data-testid={`card-user-aircraft-${aircraft.id}`}
+                      >
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1">
@@ -422,7 +431,12 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                 ) : (
                   <div className="space-y-3">
                     {marketplaceListings.map((listing) => (
-                      <Card key={listing.id} data-testid={`card-user-marketplace-${listing.id}`}>
+                      <Card 
+                        key={listing.id} 
+                        className="hover-elevate cursor-pointer transition-all"
+                        onClick={() => setSelectedMarketplaceId(listing.id)}
+                        data-testid={`card-user-marketplace-${listing.id}`}
+                      >
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1">
@@ -588,6 +602,24 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
           </>
         ) : null}
       </DialogContent>
+
+      {/* Aircraft Detail Modal */}
+      {selectedAircraftId && (
+        <AircraftDetailModal
+          aircraftId={selectedAircraftId}
+          open={!!selectedAircraftId}
+          onOpenChange={(open) => !open && setSelectedAircraftId(null)}
+        />
+      )}
+
+      {/* Marketplace Listing Modal */}
+      {selectedMarketplaceId && (
+        <MarketplaceListingModal
+          listingId={selectedMarketplaceId}
+          open={!!selectedMarketplaceId}
+          onOpenChange={(open) => !open && setSelectedMarketplaceId(null)}
+        />
+      )}
     </Dialog>
   );
 }

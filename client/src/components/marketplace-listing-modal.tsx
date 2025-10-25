@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,9 @@ import { Separator } from "@/components/ui/separator";
 import type { MarketplaceListing } from "@shared/schema";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { formatPrice, formatPhoneNumber } from "@/lib/formatters";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface MarketplaceListingModalProps {
   listingId: string;
@@ -33,10 +36,43 @@ const categoryLabels: Record<string, string> = {
 };
 
 export function MarketplaceListingModal({ listingId, open, onOpenChange }: MarketplaceListingModalProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+
   const { data: listing, isLoading } = useQuery<MarketplaceListing>({
     queryKey: ["/api/marketplace", listingId],
     enabled: open && !!listingId,
   });
+
+  const deleteListingMutation = useMutation({
+    mutationFn: async (listingId: string) => {
+      return await apiRequest("DELETE", `/api/marketplace/${listingId}`, {});
+    },
+    onSuccess: () => {
+      toast({
+        title: "Listing Deleted",
+        description: "The marketplace listing has been permanently deleted.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      onOpenChange(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteListing = () => {
+    if (!listing) return;
+    if (!confirm(`Are you sure you want to permanently delete this ${categoryLabels[listing.category]} listing (${listing.title})? This action cannot be undone.`)) {
+      return;
+    }
+    deleteListingMutation.mutate(listing.id);
+  };
 
   if (!listing && !isLoading) return null;
 
@@ -449,6 +485,22 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                 </Button>
               )}
             </div>
+
+            {/* Admin Actions */}
+            {user?.isAdmin && (
+              <div className="border-t pt-4 mt-6">
+                <h3 className="font-display text-lg font-semibold mb-3 text-destructive">Admin Actions</h3>
+                <Button
+                  variant="destructive"
+                  onClick={handleDeleteListing}
+                  disabled={deleteListingMutation.isPending}
+                  data-testid="button-delete-listing"
+                >
+                  {deleteListingMutation.isPending ? "Deleting..." : "Delete Marketplace Listing"}
+                </Button>
+              </div>
+            )}
+
           </>
         ) : null}
       </DialogContent>

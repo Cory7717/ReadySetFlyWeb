@@ -84,9 +84,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes (from blueprint:javascript_log_in_with_replit)
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      console.log("[AUTH /api/auth/user] Looking up user with ID:", userId);
-      let user = await storage.getUser(userId);
+      const sessionUserId = req.user.claims.sub;
+      console.log("[AUTH /api/auth/user] Looking up user with session ID:", sessionUserId);
+      let user = await storage.getUser(sessionUserId);
       
       if (!user) {
         console.log("[AUTH /api/auth/user] User not found by ID, trying email lookup");
@@ -109,10 +109,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email?.endsWith('@readysetfly.us') || 
         email === 'coryarmer@gmail.com';
       
-      // Update super admin status if needed
+      // Update super admin status if needed - use the FOUND user's ID, not the session ID
       if (shouldBeSuperAdmin && !user.isSuperAdmin) {
-        await storage.updateUser(userId, { isSuperAdmin: true, isAdmin: true, isVerified: true });
-        user = await storage.getUser(userId); // Refetch updated user
+        console.log("[AUTH /api/auth/user] Granting super admin to user:", user.id);
+        await storage.updateUser(user.id, { isSuperAdmin: true, isAdmin: true, isVerified: true });
+        user = await storage.getUser(user.id); // Refetch updated user
       }
       
       res.json(user);

@@ -518,13 +518,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/marketplace/:id", async (req, res) => {
+  app.get("/api/marketplace/:id", async (req: any, res) => {
     try {
       const listing = await storage.getMarketplaceListing(req.params.id);
       if (!listing) {
         return res.status(404).json({ error: "Listing not found" });
       }
-      res.json(listing);
+      
+      // Check if current user has flagged this listing
+      let userHasFlagged = false;
+      if (req.user?.claims?.sub) {
+        const userId = req.user.claims.sub;
+        userHasFlagged = await storage.checkIfUserFlaggedListing(req.params.id, userId);
+      }
+      
+      res.json({ ...listing, userHasFlagged });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch listing" });
     }

@@ -55,7 +55,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
     enabled: open && !!listingId,
   });
 
-  // Populate admin fields when listing data loads
+  // Populate admin fields and flag status when listing data loads
   useEffect(() => {
     if (listing) {
       setAdminNotes(listing.adminNotes || "");
@@ -66,6 +66,8 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
       } else {
         setExpiresAt("");
       }
+      // Hydrate flag status from server
+      setUserHasFlagged((listing as any).userHasFlagged || false);
     }
   }, [listing?.id, listing?.adminNotes, listing?.expiresAt]);
 
@@ -180,6 +182,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
   const Icon = listing ? categoryIcons[listing.category] : Plane;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="modal-marketplace-listing">
         {isLoading ? (
@@ -747,5 +750,6 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    </>
   );
 }

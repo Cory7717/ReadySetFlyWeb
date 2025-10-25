@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2, Star, Edit, Flag } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -46,6 +47,8 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
   const { toast } = useToast();
   const [adminNotes, setAdminNotes] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
+  const [flagConfirmOpen, setFlagConfirmOpen] = useState(false);
+  const [userHasFlagged, setUserHasFlagged] = useState(false);
 
   const { data: listing, isLoading } = useQuery<MarketplaceListing>({
     queryKey: ["/api/marketplace", listingId],
@@ -95,13 +98,19 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
       });
     },
     onSuccess: (data: any) => {
+      setUserHasFlagged(true);
+      setFlagConfirmOpen(false);
       toast({
         title: "Listing Flagged",
-        description: `This listing has been flagged for admin review (${data.flagCount} total flags).`,
+        description: `This listing has been flagged for admin review (${data.flagCount} total flags). Thank you for helping keep our marketplace safe.`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace", listingId] });
     },
     onError: (error: any) => {
+      setFlagConfirmOpen(false);
+      if (error.message && error.message.includes("already flagged")) {
+        setUserHasFlagged(true);
+      }
       toast({
         title: "Flag Failed",
         description: error.message || "You may have already flagged this listing.",
@@ -579,16 +588,23 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
               
               {/* Flag button for non-admin users */}
               {user && !user.isAdmin && (
-                <Button
-                  variant="outline"
-                  onClick={() => flagListingMutation.mutate(listing.id)}
-                  disabled={flagListingMutation.isPending}
-                  data-testid="button-flag-listing"
-                  className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
-                >
-                  <Flag className="h-4 w-4 mr-2" />
-                  {flagListingMutation.isPending ? "Flagging..." : "Flag as Spam"}
-                </Button>
+                userHasFlagged ? (
+                  <Badge variant="outline" className="text-muted-foreground" data-testid="badge-already-flagged">
+                    <Flag className="h-3 w-3 mr-1" />
+                    Already Flagged
+                  </Badge>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => setFlagConfirmOpen(true)}
+                    disabled={flagListingMutation.isPending}
+                    data-testid="button-flag-listing"
+                    className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                  >
+                    <Flag className="h-4 w-4 mr-2" />
+                    Flag as Spam
+                  </Button>
+                )
               )}
             </div>
 
@@ -705,5 +721,31 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
         ) : null}
       </DialogContent>
     </Dialog>
+
+    {/* Flag Confirmation Dialog */}
+    <AlertDialog open={flagConfirmOpen} onOpenChange={setFlagConfirmOpen}>
+      <AlertDialogContent data-testid="dialog-flag-confirm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Flag this listing as spam or fraud?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This action will notify administrators to review this listing. False reports may result in account restrictions. Are you sure this listing violates our community guidelines?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="button-cancel-flag">Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (listing) {
+                flagListingMutation.mutate(listing.id);
+              }
+            }}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            data-testid="button-confirm-flag"
+          >
+            {flagListingMutation.isPending ? "Flagging..." : "Flag Listing"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { X, MapPin, Gauge, Shield, Calendar, DollarSign, Plane } from "lucide-react";
+import { X, MapPin, Gauge, Shield, Calendar, DollarSign, Plane, Star, Edit } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { AircraftListing } from "@shared/schema";
 import { VerificationBadges } from "./verification-badges";
+import { Link } from "wouter";
 
 interface AircraftDetailModalProps {
   aircraftId: string;
@@ -23,6 +25,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
   const { user } = useAuth();
   const { toast } = useToast();
   const [showRequestForm, setShowRequestForm] = useState(false);
+  const [adminNotes, setAdminNotes] = useState("");
   const [formData, setFormData] = useState({
     startDate: "",
     endDate: "",
@@ -34,6 +37,15 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
     queryKey: ["/api/aircraft", aircraftId],
     enabled: open,
   });
+
+  // Populate admin notes when aircraft data loads
+  useEffect(() => {
+    if (aircraft?.adminNotes) {
+      setAdminNotes(aircraft.adminNotes);
+    } else if (aircraft) {
+      setAdminNotes("");
+    }
+  }, [aircraft?.id, aircraft?.adminNotes]);
 
   const requestRentalMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -87,12 +99,48 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
     },
   });
 
+  const updateAircraftAdminMutation = useMutation({
+    mutationFn: async (updates: any) => {
+      return await apiRequest("PATCH", `/api/admin/aircraft/${aircraftId}`, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/aircraft", aircraftId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/aircraft"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Aircraft Updated",
+        description: "Aircraft listing has been updated successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDeleteAircraft = () => {
     if (!aircraft) return;
     if (!confirm(`Are you sure you want to permanently delete this aircraft listing (${aircraft.year} ${aircraft.make} ${aircraft.model})? This action cannot be undone.`)) {
       return;
     }
     deleteAircraftMutation.mutate(aircraft.id);
+  };
+
+  const handleToggleActive = () => {
+    if (!aircraft) return;
+    updateAircraftAdminMutation.mutate({ isListed: !aircraft.isListed });
+  };
+
+  const handleToggleFeatured = () => {
+    if (!aircraft) return;
+    updateAircraftAdminMutation.mutate({ isFeatured: !aircraft.isFeatured });
+  };
+
+  const handleSaveNotes = () => {
+    updateAircraftAdminMutation.mutate({ adminNotes });
   };
 
   if (!aircraft && !isLoading) return null;
@@ -320,16 +368,85 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
 
             {/* Admin Actions */}
             {user?.isAdmin && (
-              <div className="border-t pt-4 mt-6">
-                <h3 className="font-display text-lg font-semibold mb-3 text-destructive">Admin Actions</h3>
-                <Button
-                  variant="destructive"
-                  onClick={handleDeleteAircraft}
-                  disabled={deleteAircraftMutation.isPending}
-                  data-testid="button-delete-aircraft"
-                >
-                  {deleteAircraftMutation.isPending ? "Deleting..." : "Delete Aircraft Listing"}
-                </Button>
+              <div className="border-t pt-6 mt-6 space-y-6">
+                <h3 className="font-display text-lg font-semibold">Admin Actions</h3>
+                
+                {/* Quick Actions */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* Toggle Active */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="space-y-1">
+                      <Label className="font-semibold">Listing Status</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {aircraft.isListed ? "Active - visible to renters" : "Inactive - hidden from search"}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={aircraft.isListed || false}
+                      onCheckedChange={handleToggleActive}
+                      disabled={updateAircraftAdminMutation.isPending}
+                      data-testid="switch-aircraft-active"
+                    />
+                  </div>
+
+                  {/* Toggle Featured */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="space-y-1">
+                      <Label className="font-semibold">Featured/Boosted</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {aircraft.isFeatured ? "Featured - shown at top" : "Normal priority"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {aircraft.isFeatured && <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />}
+                      <Switch
+                        checked={aircraft.isFeatured || false}
+                        onCheckedChange={handleToggleFeatured}
+                        disabled={updateAircraftAdminMutation.isPending}
+                        data-testid="switch-aircraft-featured"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Admin Notes */}
+                <div className="space-y-3">
+                  <Label className="font-semibold">Admin Notes (Internal Only)</Label>
+                  <Textarea
+                    placeholder="Add internal notes about this listing, fraud investigations, user support tickets, etc."
+                    value={adminNotes}
+                    onChange={(e) => setAdminNotes(e.target.value)}
+                    rows={4}
+                    data-testid="textarea-admin-notes"
+                  />
+                  <Button
+                    onClick={handleSaveNotes}
+                    disabled={updateAircraftAdminMutation.isPending}
+                    data-testid="button-save-notes"
+                    size="sm"
+                  >
+                    Save Notes
+                  </Button>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 flex-wrap">
+                  <Link href={`/dashboard/aircraft/${aircraft.id}/edit`}>
+                    <Button variant="outline" data-testid="button-edit-aircraft">
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Listing
+                    </Button>
+                  </Link>
+                  
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteAircraft}
+                    disabled={deleteAircraftMutation.isPending}
+                    data-testid="button-delete-aircraft"
+                  >
+                    {deleteAircraftMutation.isPending ? "Deleting..." : "Delete Listing"}
+                  </Button>
+                </div>
               </div>
             )}
 

@@ -1303,6 +1303,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update aircraft listing (admin actions)
+  app.patch("/api/admin/aircraft/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { isListed, isFeatured, adminNotes } = req.body;
+      const updates: any = {};
+      
+      if (typeof isListed === 'boolean') updates.isListed = isListed;
+      if (typeof isFeatured === 'boolean') updates.isFeatured = isFeatured;
+      if (adminNotes !== undefined) updates.adminNotes = adminNotes;
+      
+      const aircraft = await storage.updateAircraftListing(req.params.id, updates);
+      if (!aircraft) {
+        return res.status(404).json({ error: "Aircraft listing not found" });
+      }
+      res.json(aircraft);
+    } catch (error) {
+      console.error("Error updating aircraft listing:", error);
+      res.status(500).json({ error: "Failed to update aircraft listing" });
+    }
+  });
+
+  // Update marketplace listing (admin actions)
+  app.patch("/api/admin/marketplace/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { isActive, isFeatured, adminNotes, expiresAt } = req.body;
+      const updates: any = {};
+      
+      if (typeof isActive === 'boolean') updates.isActive = isActive;
+      if (typeof isFeatured === 'boolean') updates.isFeatured = isFeatured;
+      if (adminNotes !== undefined) updates.adminNotes = adminNotes;
+      if (expiresAt !== undefined) updates.expiresAt = expiresAt ? new Date(expiresAt) : null;
+      
+      const listing = await storage.updateMarketplaceListing(req.params.id, updates);
+      if (!listing) {
+        return res.status(404).json({ error: "Marketplace listing not found" });
+      }
+      res.json(listing);
+    } catch (error) {
+      console.error("Error updating marketplace listing:", error);
+      res.status(500).json({ error: "Failed to update marketplace listing" });
+    }
+  });
+
   // Admin Analytics
   app.get("/api/admin/analytics", isAuthenticated, isAdmin, async (req, res) => {
     try {

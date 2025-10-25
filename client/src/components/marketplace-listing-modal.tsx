@@ -1,15 +1,21 @@
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2 } from "lucide-react";
+import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2, Star, Edit } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import type { MarketplaceListing } from "@shared/schema";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { formatPrice, formatPhoneNumber } from "@/lib/formatters";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Link } from "wouter";
 
 interface MarketplaceListingModalProps {
   listingId: string;
@@ -38,11 +44,27 @@ const categoryLabels: Record<string, string> = {
 export function MarketplaceListingModal({ listingId, open, onOpenChange }: MarketplaceListingModalProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [adminNotes, setAdminNotes] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
 
   const { data: listing, isLoading } = useQuery<MarketplaceListing>({
     queryKey: ["/api/marketplace", listingId],
     enabled: open && !!listingId,
   });
+
+  // Populate admin fields when listing data loads
+  useEffect(() => {
+    if (listing) {
+      setAdminNotes(listing.adminNotes || "");
+      if (listing.expiresAt) {
+        // Convert to YYYY-MM-DD format for input
+        const date = new Date(listing.expiresAt);
+        setExpiresAt(date.toISOString().split('T')[0]);
+      } else {
+        setExpiresAt("");
+      }
+    }
+  }, [listing?.id, listing?.adminNotes, listing?.expiresAt]);
 
   const deleteListingMutation = useMutation({
     mutationFn: async (listingId: string) => {
@@ -66,12 +88,60 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
     },
   });
 
+  const updateListingAdminMutation = useMutation({
+    mutationFn: async (updates: any) => {
+      return await apiRequest("PATCH", `/api/admin/marketplace/${listingId}`, updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace", listingId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Listing Updated",
+        description: "Marketplace listing has been updated successfully.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Update Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDeleteListing = () => {
     if (!listing) return;
     if (!confirm(`Are you sure you want to permanently delete this ${categoryLabels[listing.category]} listing (${listing.title})? This action cannot be undone.`)) {
       return;
     }
     deleteListingMutation.mutate(listing.id);
+  };
+
+  const handleToggleActive = () => {
+    if (!listing) return;
+    updateListingAdminMutation.mutate({ isActive: !listing.isActive });
+  };
+
+  const handleToggleFeatured = () => {
+    if (!listing) return;
+    updateListingAdminMutation.mutate({ isFeatured: !listing.isFeatured });
+  };
+
+  const handleSaveNotes = () => {
+    updateListingAdminMutation.mutate({ adminNotes });
+  };
+
+  const handleUpdateExpiration = () => {
+    if (!expiresAt) {
+      toast({
+        title: "Invalid Date",
+        description: "Please select a valid expiration date.",
+        variant: "destructive",
+      });
+      return;
+    }
+    updateListingAdminMutation.mutate({ expiresAt });
   };
 
   if (!listing && !isLoading) return null;
@@ -488,16 +558,110 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
 
             {/* Admin Actions */}
             {user?.isAdmin && (
-              <div className="border-t pt-4 mt-6">
-                <h3 className="font-display text-lg font-semibold mb-3 text-destructive">Admin Actions</h3>
-                <Button
-                  variant="destructive"
-                  onClick={handleDeleteListing}
-                  disabled={deleteListingMutation.isPending}
-                  data-testid="button-delete-listing"
-                >
-                  {deleteListingMutation.isPending ? "Deleting..." : "Delete Marketplace Listing"}
-                </Button>
+              <div className="border-t pt-6 mt-6 space-y-6">
+                <h3 className="font-display text-lg font-semibold">Admin Actions</h3>
+                
+                {/* Quick Actions */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* Toggle Active */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="space-y-1">
+                      <Label className="font-semibold">Listing Status</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {listing.isActive ? "Active - visible in search" : "Inactive - hidden from search"}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={listing.isActive || false}
+                      onCheckedChange={handleToggleActive}
+                      disabled={updateListingAdminMutation.isPending}
+                      data-testid="switch-listing-active"
+                    />
+                  </div>
+
+                  {/* Toggle Featured */}
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="space-y-1">
+                      <Label className="font-semibold">Featured/Boosted</Label>
+                      <p className="text-sm text-muted-foreground">
+                        {listing.isFeatured ? "Featured - shown at top" : "Normal priority"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {listing.isFeatured && <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />}
+                      <Switch
+                        checked={listing.isFeatured || false}
+                        onCheckedChange={handleToggleFeatured}
+                        disabled={updateListingAdminMutation.isPending}
+                        data-testid="switch-listing-featured"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Expiration Date */}
+                <div className="space-y-3">
+                  <Label className="font-semibold">Extend Expiration Date</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Current expiration: {listing.expiresAt ? new Date(listing.expiresAt).toLocaleDateString() : "No expiration"}
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="date"
+                      value={expiresAt}
+                      onChange={(e) => setExpiresAt(e.target.value)}
+                      data-testid="input-expiration-date"
+                      className="flex-1"
+                    />
+                    <Button
+                      onClick={handleUpdateExpiration}
+                      disabled={updateListingAdminMutation.isPending}
+                      data-testid="button-update-expiration"
+                      size="sm"
+                    >
+                      Update
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Admin Notes */}
+                <div className="space-y-3">
+                  <Label className="font-semibold">Admin Notes (Internal Only)</Label>
+                  <Textarea
+                    placeholder="Add internal notes about this listing, fraud investigations, user support tickets, etc."
+                    value={adminNotes}
+                    onChange={(e) => setAdminNotes(e.target.value)}
+                    rows={4}
+                    data-testid="textarea-admin-notes"
+                  />
+                  <Button
+                    onClick={handleSaveNotes}
+                    disabled={updateListingAdminMutation.isPending}
+                    data-testid="button-save-notes"
+                    size="sm"
+                  >
+                    Save Notes
+                  </Button>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 flex-wrap">
+                  <Link href={`/dashboard/marketplace/${listing.id}/edit`}>
+                    <Button variant="outline" data-testid="button-edit-listing">
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Listing
+                    </Button>
+                  </Link>
+                  
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteListing}
+                    disabled={deleteListingMutation.isPending}
+                    data-testid="button-delete-listing"
+                  >
+                    {deleteListingMutation.isPending ? "Deleting..." : "Delete Listing"}
+                  </Button>
+                </div>
               </div>
             )}
 

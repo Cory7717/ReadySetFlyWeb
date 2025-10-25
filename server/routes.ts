@@ -1202,6 +1202,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get specific user details (admin)
+  app.get("/api/admin/users/:userId", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  // Get user's aircraft listings (admin)
+  app.get("/api/admin/users/:userId/aircraft", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const listings = await storage.getAircraftListingsByOwner(req.params.userId);
+      res.json(listings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user's aircraft listings" });
+    }
+  });
+
+  // Get user's marketplace listings (admin)
+  app.get("/api/admin/users/:userId/marketplace", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const listings = await storage.getMarketplaceListingsByUser(req.params.userId);
+      res.json(listings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user's marketplace listings" });
+    }
+  });
+
+  // Reset user password (admin)
+  app.post("/api/admin/users/:userId/reset-password", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // In a real implementation, this would send a password reset email
+      // For now, we'll just return success
+      // TODO: Integrate with email service to send password reset link
+      
+      res.json({ 
+        success: true, 
+        message: "Password reset email would be sent to user",
+        email: user.email 
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to initiate password reset" });
+    }
+  });
+
+  // Update user (admin) - for verification toggles and admin status
+  app.patch("/api/admin/users/:userId", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const user = await storage.updateUser(req.params.userId, req.body);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
   app.get("/api/admin/aircraft", isAuthenticated, isAdmin, async (req, res) => {
     try {
       // Note: getAllAircraftListings already has reasonable limits in storage layer

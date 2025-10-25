@@ -199,11 +199,12 @@ export class DatabaseStorage implements IStorage {
     }
     
     if (existingUser) {
-      // Update existing user with new data (including potentially new ID if email matched)
+      // Update existing user with new data (excluding ID to avoid primary key conflicts)
+      const { id, ...updateData } = userData;
       const [user] = await db
         .update(users)
         .set({
-          ...userData,
+          ...updateData,
           updatedAt: new Date(),
         })
         .where(eq(users.id, existingUser.id))

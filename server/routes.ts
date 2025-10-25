@@ -85,10 +85,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      console.log("[AUTH /api/auth/user] Looking up user with ID:", userId);
       let user = await storage.getUser(userId);
       
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        console.log("[AUTH /api/auth/user] User not found by ID, trying email lookup");
+        // Try to find by email as fallback (for testing scenarios where sub may change)
+        const email = req.user.claims.email;
+        if (email) {
+          user = await storage.getUserByEmail(email);
+          console.log("[AUTH /api/auth/user] Email lookup result:", user ? `Found user ${user.id}` : "Not found");
+        }
+        
+        if (!user) {
+          console.log("[AUTH /api/auth/user] User not found by ID or email");
+          return res.status(404).json({ message: "User not found" });
+        }
       }
       
       // Grant Super Admin access to @readysetfly.us emails and coryarmer@gmail.com

@@ -178,9 +178,17 @@ export const isAdmin: RequestHandler = async (req, res, next) => {
   }
 
   // Get user from database to check admin status
-  const dbUser = await storage.getUser(user.claims.sub);
+  let dbUser = await storage.getUser(user.claims.sub);
+  
+  // Fallback to email lookup (for testing scenarios where sub may change)
+  if (!dbUser && user.claims.email) {
+    console.log("[isAdmin] User not found by sub, trying email lookup:", user.claims.email);
+    dbUser = await storage.getUserByEmail(user.claims.email);
+    console.log("[isAdmin] Email lookup result:", dbUser ? `Found user ${dbUser.id}, isAdmin: ${dbUser.isAdmin}` : "Not found");
+  }
   
   if (!dbUser || !dbUser.isAdmin) {
+    console.log("[isAdmin] Access denied. dbUser:", dbUser ? `exists (isAdmin: ${dbUser.isAdmin})` : "not found");
     return res.status(403).json({ message: "Forbidden - Admin access required" });
   }
 

@@ -141,6 +141,10 @@ export const aircraftListings = pgTable("aircraft_listings", {
   description: text("description"),
   isListed: boolean("is_listed").default(true),
   
+  // Admin management
+  adminNotes: text("admin_notes"),
+  isFeatured: boolean("is_featured").default(false),
+  
   // Owner metrics
   responseTime: integer("response_time_hours").default(24),
   acceptanceRate: integer("acceptance_rate").default(100),
@@ -223,6 +227,10 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   // Listing management
   isActive: boolean("is_active").default(true),
   expiresAt: timestamp("expires_at"),
+  
+  // Admin management
+  adminNotes: text("admin_notes"),
+  isFeatured: boolean("is_featured").default(false),
   
   // Payment
   isPaid: boolean("is_paid").default(false),

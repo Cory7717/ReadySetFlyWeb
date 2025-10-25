@@ -26,6 +26,7 @@ import {
   users,
   aircraftListings,
   marketplaceListings,
+  marketplaceFlags,
   rentals,
   messages,
   reviews,
@@ -73,6 +74,11 @@ export interface IStorage {
   updateMarketplaceListing(id: string, updates: Partial<MarketplaceListing>): Promise<MarketplaceListing | undefined>;
   deleteMarketplaceListing(id: string): Promise<boolean>;
   deactivateExpiredListings(): Promise<{ deactivatedCount: number }>;
+  
+  // Marketplace Flags
+  flagMarketplaceListing(listingId: string, userId: string, reason?: string): Promise<{ success: boolean; flagCount: number }>;
+  checkIfUserFlaggedListing(listingId: string, userId: string): Promise<boolean>;
+  getFlaggedMarketplaceListings(): Promise<MarketplaceListing[]>; // Get listings with 5+ flags
 
   // Rentals
   getRental(id: string): Promise<Rental | undefined>;
@@ -429,6 +435,69 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return { deactivatedCount: result.length };
+  }
+
+  // Marketplace Flags
+  async flagMarketplaceListing(listingId: string, userId: string, reason?: string): Promise<{ success: boolean; flagCount: number }> {
+    // Check if user already flagged this listing
+    const existingFlag = await db
+      .select()
+      .from(marketplaceFlags)
+      .where(
+        and(
+          eq(marketplaceFlags.listingId, listingId),
+          eq(marketplaceFlags.userId, userId)
+        )
+      )
+      .limit(1);
+
+    if (existingFlag.length > 0) {
+      // User already flagged this listing
+      const listing = await this.getMarketplaceListing(listingId);
+      return { success: false, flagCount: listing?.flagCount || 0 };
+    }
+
+    // Create the flag
+    await db.insert(marketplaceFlags).values({
+      listingId,
+      userId,
+      reason: reason || null,
+    });
+
+    // Increment the flag count
+    const [updatedListing] = await db
+      .update(marketplaceListings)
+      .set({
+        flagCount: sql`${marketplaceListings.flagCount} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(marketplaceListings.id, listingId))
+      .returning();
+
+    return { success: true, flagCount: updatedListing?.flagCount || 0 };
+  }
+
+  async checkIfUserFlaggedListing(listingId: string, userId: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(marketplaceFlags)
+      .where(
+        and(
+          eq(marketplaceFlags.listingId, listingId),
+          eq(marketplaceFlags.userId, userId)
+        )
+      )
+      .limit(1);
+    return result.length > 0;
+  }
+
+  async getFlaggedMarketplaceListings(): Promise<MarketplaceListing[]> {
+    // Get all listings with 5 or more flags
+    return await db
+      .select()
+      .from(marketplaceListings)
+      .where(gte(marketplaceListings.flagCount, 5))
+      .orderBy(desc(marketplaceListings.flagCount));
   }
 
   // Rentals

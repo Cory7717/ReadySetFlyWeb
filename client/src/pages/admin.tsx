@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2 } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,11 @@ export default function AdminDashboard() {
   const { data: marketplaceListings = [], isLoading: marketplaceLoading } = useQuery<MarketplaceListing[]>({
     queryKey: ["/api/admin/marketplace"],
     enabled: activeTab === "marketplace",
+  });
+
+  // Flagged marketplace listings query (5+ flags)
+  const { data: flaggedListings = [] } = useQuery<MarketplaceListing[]>({
+    queryKey: ["/api/marketplace/flagged"],
   });
 
   // Pending verification submissions query (always fetch for badge count)
@@ -293,7 +298,14 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="marketplace" data-testid="tab-marketplace" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
             <List className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span>Market</span>
+            <span className="flex items-center gap-1">
+              Market
+              {flaggedListings.length > 0 && (
+                <Badge variant="destructive" className="text-xs px-1">
+                  {flaggedListings.length}
+                </Badge>
+              )}
+            </span>
           </TabsTrigger>
         </TabsList>
 
@@ -806,6 +818,67 @@ export default function AdminDashboard() {
 
         {/* Marketplace Listings Tab */}
         <TabsContent value="marketplace" className="space-y-4">
+          {/* Flagged Listings Section */}
+          {flaggedListings.length > 0 && (
+            <Card className="border-destructive">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  Flagged Listings ({flaggedListings.length})
+                </CardTitle>
+                <CardDescription>Listings with 5+ fraud/spam reports - review and remove if necessary</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {flaggedListings.map((listing) => (
+                    <div key={listing.id} className="p-4 bg-destructive/10 rounded-lg border border-destructive/20" data-testid={`flagged-listing-${listing.id}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold">{listing.title}</h4>
+                            <Badge variant="destructive" className="text-xs">
+                              {listing.flagCount} flags
+                            </Badge>
+                            {!listing.isActive && (
+                              <Badge variant="outline" className="text-xs">Inactive</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mb-1">
+                            Category: {listing.category} • Location: {listing.location || listing.city}
+                          </p>
+                          <p className="text-sm line-clamp-2">{listing.description}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedMarketplace(listing);
+                            }}
+                            data-testid={`button-review-flagged-${listing.id}`}
+                          >
+                            Review
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              setDeleteTarget({ type: 'marketplace', id: listing.id });
+                              setDeleteDialogOpen(true);
+                            }}
+                            data-testid={`button-remove-flagged-${listing.id}`}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>All Marketplace Listings</CardTitle>

@@ -749,6 +749,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Flag marketplace listing as spam/fraud
+  app.post("/api/marketplace/:id/flag", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const listingId = req.params.id;
+      const { reason } = req.body;
+
+      // Check if listing exists
+      const listing = await storage.getMarketplaceListing(listingId);
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+
+      // Attempt to flag the listing
+      const result = await storage.flagMarketplaceListing(listingId, userId, reason);
+
+      if (!result.success) {
+        return res.status(400).json({ error: "You have already flagged this listing", flagCount: result.flagCount });
+      }
+
+      res.json({ 
+        message: "Listing flagged successfully",
+        flagCount: result.flagCount,
+      });
+    } catch (error: any) {
+      console.error("Error flagging marketplace listing:", error);
+      res.status(500).json({ error: "Failed to flag listing" });
+    }
+  });
+
+  // Get flagged marketplace listings (admin only)
+  app.get("/api/marketplace/flagged", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const flaggedListings = await storage.getFlaggedMarketplaceListings();
+      res.json(flaggedListings);
+    } catch (error) {
+      console.error("Error fetching flagged listings:", error);
+      res.status(500).json({ error: "Failed to fetch flagged listings" });
+    }
+  });
+
   // Rentals
   app.get("/api/rentals", async (req, res) => {
     try {

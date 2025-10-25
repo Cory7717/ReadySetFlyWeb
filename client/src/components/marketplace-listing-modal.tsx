@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2, Star, Edit } from "lucide-react";
+import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2, Star, Edit, Flag } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -83,6 +83,28 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
       toast({
         title: "Delete Failed",
         description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const flagListingMutation = useMutation({
+    mutationFn: async (listingId: string) => {
+      return await apiRequest("POST", `/api/marketplace/${listingId}/flag`, {
+        reason: "Suspected fraud or spam",
+      });
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Listing Flagged",
+        description: `This listing has been flagged for admin review (${data.flagCount} total flags).`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace", listingId] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Flag Failed",
+        description: error.message || "You may have already flagged this listing.",
         variant: "destructive",
       });
     },
@@ -552,6 +574,20 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                 >
                   <Phone className="h-4 w-4 mr-2" />
                   Call
+                </Button>
+              )}
+              
+              {/* Flag button for non-admin users */}
+              {user && !user.isAdmin && (
+                <Button
+                  variant="outline"
+                  onClick={() => flagListingMutation.mutate(listing.id)}
+                  disabled={flagListingMutation.isPending}
+                  data-testid="button-flag-listing"
+                  className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                >
+                  <Flag className="h-4 w-4 mr-2" />
+                  {flagListingMutation.isPending ? "Flagging..." : "Flag as Spam"}
                 </Button>
               )}
             </div>

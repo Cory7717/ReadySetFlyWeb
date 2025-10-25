@@ -232,6 +232,9 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   adminNotes: text("admin_notes"),
   isFeatured: boolean("is_featured").default(false),
   
+  // Fraud detection
+  flagCount: integer("flag_count").default(0).notNull(),
+  
   // Payment
   isPaid: boolean("is_paid").default(false),
   monthlyFee: decimal("monthly_fee", { precision: 10, scale: 2 }),
@@ -244,6 +247,21 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   index("idx_marketplace_is_active").on(table.isActive),
   index("idx_marketplace_category_city").on(table.category, table.city),
   index("idx_marketplace_category_active").on(table.category, table.isActive),
+  index("idx_marketplace_flag_count").on(table.flagCount),
+]);
+
+// Marketplace Flags (fraud reporting)
+export const marketplaceFlags = pgTable("marketplace_flags", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  listingId: varchar("listing_id").notNull().references(() => marketplaceListings.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  reason: text("reason"), // Optional reason for flagging
+  
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  // Unique constraint: one flag per user per listing
+  index("idx_marketplace_flags_unique").on(table.listingId, table.userId),
 ]);
 
 // Rentals
@@ -550,6 +568,7 @@ export const insertMarketplaceListingSchema = createInsertSchema(marketplaceList
   id: true,
   createdAt: true,
   updatedAt: true,
+  flagCount: true, // Managed by the system
 }).extend({
   category: z.enum(marketplaceCategories),
   images: z.array(z.string()).max(15),
@@ -557,6 +576,11 @@ export const insertMarketplaceListingSchema = createInsertSchema(marketplaceList
   monthlyFee: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
   latitude: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
   longitude: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
+});
+
+export const insertMarketplaceFlagSchema = createInsertSchema(marketplaceFlags).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertRentalSchema = createInsertSchema(rentals).omit({

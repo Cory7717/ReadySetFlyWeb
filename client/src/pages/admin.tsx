@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { insertCrmLeadSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead } from "@shared/schema";
+import { AdminUserModal } from "@/components/admin-user-modal";
 
 export default function AdminDashboard() {
   const [userSearch, setUserSearch] = useState("");
@@ -24,6 +25,8 @@ export default function AdminDashboard() {
   const [selectedSubmission, setSelectedSubmission] = useState<VerificationSubmission | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [rejectionNotes, setRejectionNotes] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userModalOpen, setUserModalOpen] = useState(false);
   
   // CRM state
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
@@ -657,7 +660,15 @@ export default function AdminDashboard() {
               {!usersLoading && users.length > 0 && (
                 <div className="space-y-3">
                   {users.map((user) => (
-                    <Card key={user.id} data-testid={`card-user-${user.id}`}>
+                    <Card 
+                      key={user.id} 
+                      data-testid={`card-user-${user.id}`}
+                      className="hover-elevate cursor-pointer transition-all"
+                      onClick={() => {
+                        setSelectedUserId(user.id);
+                        setUserModalOpen(true);
+                      }}
+                    >
                       <CardContent className="p-4">
                         <div className="flex items-center gap-4">
                           <Avatar>
@@ -1464,6 +1475,16 @@ export default function AdminDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Admin User Management Modal */}
+      <AdminUserModal
+        userId={selectedUserId}
+        open={userModalOpen}
+        onOpenChange={(open) => {
+          setUserModalOpen(open);
+          if (!open) setSelectedUserId(null);
+        }}
+      />
     </div>
   );
 }

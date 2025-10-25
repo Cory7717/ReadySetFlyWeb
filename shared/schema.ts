@@ -567,7 +567,18 @@ export const insertRentalSchema = createInsertSchema(rentals).omit({
   status: true,
   isPaid: true,
   payoutCompleted: true,
+  // Omit calculated cost fields - these are computed server-side
+  baseCost: true,
+  salesTax: true,
+  platformFeeRenter: true,
+  platformFeeOwner: true,
+  processingFee: true,
+  totalCostRenter: true,
+  ownerPayout: true,
 }).extend({
+  // Accept date strings and coerce to Date objects
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
   estimatedHours: z.string().regex(/^\d+(\.\d{1,2})?$/),
   hourlyRate: z.string().regex(/^\d+(\.\d{1,2})?$/),
 });

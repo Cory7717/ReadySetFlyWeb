@@ -65,7 +65,8 @@ export default function Dashboard() {
   const activeRentalsArray = ownerRentals.filter(r => r.status === "active");
   const pendingRequests = ownerRentals.filter(r => r.status === "pending");
   
-  // Renter's approved rentals awaiting payment
+  // Renter's rental requests
+  const myPendingRequests = renterRentals.filter(r => r.status === "pending");
   const approvedRentalsAwaitingPayment = renterRentals.filter(r => r.status === "approved" && !r.isPaid);
   
   const totalEarnings = completedRentals
@@ -385,6 +386,62 @@ export default function Dashboard() {
                                 </Button>
                               </div>
                             </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Renter's outgoing rental requests */}
+            <Card>
+              <CardHeader>
+                <CardTitle>My Rental Requests</CardTitle>
+                <p className="text-sm text-muted-foreground">Requests you've sent to aircraft owners</p>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {myPendingRequests.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No pending rental requests
+                    </div>
+                  ) : (
+                    myPendingRequests.map((rental) => {
+                      const aircraft = allAircraft.find(a => a.id === rental.aircraftId);
+                      const owner = allUsers.find(u => u.id === rental.ownerId);
+                      return (
+                        <div key={rental.id} className="flex flex-col gap-4 p-4 border rounded-lg hover-elevate" data-testid={`my-rental-request-${rental.id}`}>
+                          <div className="flex-1">
+                            <h4 className="font-semibold mb-1">
+                              {aircraft?.year || ''} {aircraft?.make || 'Unknown'} {aircraft?.model || ''}
+                            </h4>
+                            <div className="space-y-1">
+                              <p className="text-sm text-muted-foreground">
+                                Owner: {owner?.firstName} {owner?.lastName}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
+                              </p>
+                              {owner?.averageRating && owner?.totalReviews && owner.totalReviews > 0 && (
+                                <StarRating 
+                                  rating={parseFloat(owner.averageRating)} 
+                                  totalReviews={owner.totalReviews || 0}
+                                  size="sm"
+                                />
+                              )}
+                              <p className="text-sm text-muted-foreground">
+                                {parseFloat(rental.estimatedHours)} flight hours estimated
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <p className="font-bold">${parseFloat(rental.totalCostRenter).toFixed(2)}</p>
+                              <p className="text-sm text-muted-foreground">Total cost</p>
+                            </div>
+                            <Badge variant="outline" className="bg-accent/10 text-accent border-accent text-center">Pending Review</Badge>
                           </div>
                         </div>
                       );

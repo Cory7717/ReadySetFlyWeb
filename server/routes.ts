@@ -6,7 +6,7 @@ import multer from "multer";
 import OpenAI from "openai";
 import Stripe from "stripe";
 import { storage } from "./storage";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertExpenseSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 
 // Initialize OpenAI client with Replit AI Integrations
@@ -1591,6 +1591,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete activity" });
+    }
+  });
+
+  // Expenses (Admin only - for analytics tracking)
+  app.get("/api/admin/expenses", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const expenses = await storage.getAllExpenses();
+      res.json(expenses);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch expenses" });
+    }
+  });
+
+  app.post("/api/admin/expenses", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const result = insertExpenseSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const expense = await storage.createExpense(result.data);
+      res.status(201).json(expense);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create expense" });
+    }
+  });
+
+  app.patch("/api/admin/expenses/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const expense = await storage.updateExpense(req.params.id, req.body);
+      if (!expense) {
+        return res.status(404).json({ error: "Expense not found" });
+      }
+      res.json(expense);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update expense" });
+    }
+  });
+
+  app.delete("/api/admin/expenses/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteExpense(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Expense not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete expense" });
     }
   });
 

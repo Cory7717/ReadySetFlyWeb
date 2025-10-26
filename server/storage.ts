@@ -124,6 +124,18 @@ export interface IStorage {
     revenueWeek: string;
     revenueMonth: string;
     revenueYear: string;
+    expensesToday: string;
+    expensesWeek: string;
+    expensesMonth: string;
+    expensesYear: string;
+    profitToday: string;
+    profitWeek: string;
+    profitMonth: string;
+    profitYear: string;
+    profitMarginToday: string;
+    profitMarginWeek: string;
+    profitMarginMonth: string;
+    profitMarginYear: string;
     totalRentals: number;
     activeRentals: number;
   }>;
@@ -738,6 +750,18 @@ export class DatabaseStorage implements IStorage {
     revenueWeek: string;
     revenueMonth: string;
     revenueYear: string;
+    expensesToday: string;
+    expensesWeek: string;
+    expensesMonth: string;
+    expensesYear: string;
+    profitToday: string;
+    profitWeek: string;
+    profitMonth: string;
+    profitYear: string;
+    profitMarginToday: string;
+    profitMarginWeek: string;
+    profitMarginMonth: string;
+    profitMarginYear: string;
     totalRentals: number;
     activeRentals: number;
   }> {
@@ -773,6 +797,43 @@ export class DatabaseStorage implements IStorage {
     const revenueMonth = calculateRevenue(platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= firstOfMonth));
     const revenueYear = calculateRevenue(platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= firstOfYear));
 
+    // Get all expenses
+    const allExpenses = await db.select().from(expenses);
+    
+    // Calculate expenses by time period
+    const calculateExpenses = (exps: typeof allExpenses) => {
+      return exps
+        .reduce((sum, e) => sum + parseFloat(e.amount || "0"), 0)
+        .toFixed(2);
+    };
+
+    const expensesToday = calculateExpenses(allExpenses.filter(e => e.expenseDate && e.expenseDate >= today));
+    const expensesWeek = calculateExpenses(allExpenses.filter(e => e.expenseDate && e.expenseDate >= weekAgo));
+    const expensesMonth = calculateExpenses(allExpenses.filter(e => e.expenseDate && e.expenseDate >= firstOfMonth));
+    const expensesYear = calculateExpenses(allExpenses.filter(e => e.expenseDate && e.expenseDate >= firstOfYear));
+
+    // Calculate profit (revenue - expenses)
+    const calculateProfit = (rev: string, exp: string) => {
+      return (parseFloat(rev) - parseFloat(exp)).toFixed(2);
+    };
+
+    const profitToday = calculateProfit(revenueToday, expensesToday);
+    const profitWeek = calculateProfit(revenueWeek, expensesWeek);
+    const profitMonth = calculateProfit(revenueMonth, expensesMonth);
+    const profitYear = calculateProfit(revenueYear, expensesYear);
+
+    // Calculate profit margin percentage (profit / revenue * 100)
+    const calculateProfitMargin = (profit: string, revenue: string) => {
+      const rev = parseFloat(revenue);
+      if (rev === 0) return "0.00";
+      return ((parseFloat(profit) / rev) * 100).toFixed(2);
+    };
+
+    const profitMarginToday = calculateProfitMargin(profitToday, revenueToday);
+    const profitMarginWeek = calculateProfitMargin(profitWeek, revenueWeek);
+    const profitMarginMonth = calculateProfitMargin(profitMonth, revenueMonth);
+    const profitMarginYear = calculateProfitMargin(profitYear, revenueYear);
+
     // Get rental stats
     const allRentals = await db.select().from(rentals);
     const totalRentals = allRentals.length;
@@ -787,6 +848,18 @@ export class DatabaseStorage implements IStorage {
       revenueWeek,
       revenueMonth,
       revenueYear,
+      expensesToday,
+      expensesWeek,
+      expensesMonth,
+      expensesYear,
+      profitToday,
+      profitWeek,
+      profitMonth,
+      profitYear,
+      profitMarginToday,
+      profitMarginWeek,
+      profitMarginMonth,
+      profitMarginYear,
       totalRentals,
       activeRentals,
     };

@@ -93,6 +93,18 @@ export default function AdminDashboard() {
     revenueWeek: string;
     revenueMonth: string;
     revenueYear: string;
+    expensesToday: string;
+    expensesWeek: string;
+    expensesMonth: string;
+    expensesYear: string;
+    profitToday: string;
+    profitWeek: string;
+    profitMonth: string;
+    profitYear: string;
+    profitMarginToday: string;
+    profitMarginWeek: string;
+    profitMarginMonth: string;
+    profitMarginYear: string;
     totalRentals: number;
     activeRentals: number;
   }>({
@@ -361,6 +373,116 @@ export default function AdminDashboard() {
                 <div className="text-2xl font-bold">${analytics?.revenueYear || "0.00"}</div>
                 <p className="text-xs text-muted-foreground">
                   {analytics?.transactionsYear || 0} transactions
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Expense Cards */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Expenses Today</CardTitle>
+                <TrendingUp className="h-4 w-4 text-destructive" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-destructive">${analytics?.expensesToday || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  Server & database costs
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Expenses This Week</CardTitle>
+                <TrendingUp className="h-4 w-4 text-destructive" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-destructive">${analytics?.expensesWeek || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  Platform operating costs
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Expenses This Month</CardTitle>
+                <TrendingUp className="h-4 w-4 text-destructive" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-destructive">${analytics?.expensesMonth || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  Monthly operational costs
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Expenses This Year</CardTitle>
+                <TrendingUp className="h-4 w-4 text-destructive" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-destructive">${analytics?.expensesYear || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  Annual operational costs
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Profit Cards */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Profit Today</CardTitle>
+                <DollarSign className="h-4 w-4 text-chart-2" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-chart-2">${analytics?.profitToday || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  Margin: {analytics?.profitMarginToday || "0.00"}%
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Profit This Week</CardTitle>
+                <DollarSign className="h-4 w-4 text-chart-2" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-chart-2">${analytics?.profitWeek || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  Margin: {analytics?.profitMarginWeek || "0.00"}%
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Profit This Month</CardTitle>
+                <DollarSign className="h-4 w-4 text-chart-2" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-chart-2">${analytics?.profitMonth || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  Margin: {analytics?.profitMarginMonth || "0.00"}%
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Profit This Year</CardTitle>
+                <DollarSign className="h-4 w-4 text-chart-2" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-chart-2">${analytics?.profitYear || "0.00"}</div>
+                <p className="text-xs text-muted-foreground">
+                  Margin: {analytics?.profitMarginYear || "0.00"}%
                 </p>
               </CardContent>
             </Card>

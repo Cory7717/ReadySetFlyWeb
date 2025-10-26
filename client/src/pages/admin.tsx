@@ -63,7 +63,7 @@ export default function AdminDashboard() {
     defaultValues: {
       category: "server",
       amount: "",
-      date: new Date().toISOString().split('T')[0],
+      expenseDate: new Date(),
       description: "",
     },
   });
@@ -326,7 +326,7 @@ export default function AdminDashboard() {
     expenseForm.reset({
       category: expense.category as any,
       amount: expense.amount,
-      date: expense.date,
+      expenseDate: expense.expenseDate ? new Date(expense.expenseDate) : new Date(),
       description: expense.description || "",
     });
     setExpenseDialogOpen(true);
@@ -1640,14 +1640,15 @@ export default function AdminDashboard() {
 
               <FormField
                 control={expenseForm.control}
-                name="date"
+                name="expenseDate"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Date</FormLabel>
                     <FormControl>
                       <Input 
-                        {...field} 
                         type="date"
+                        value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : ''}
+                        onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : new Date())}
                         data-testid="input-expense-date" 
                       />
                     </FormControl>

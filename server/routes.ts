@@ -1619,7 +1619,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/admin/expenses/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const expense = await storage.updateExpense(req.params.id, req.body);
+      // Validate partial update data
+      const result = insertExpenseSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const expense = await storage.updateExpense(req.params.id, result.data);
       if (!expense) {
         return res.status(404).json({ error: "Expense not found" });
       }

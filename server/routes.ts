@@ -42,11 +42,20 @@ const upload = multer({
   storage: storage_config, 
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
-    // Accept images and PDFs
-    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+    // Accept images, PDFs, and Word documents
+    const allowedTypes = [
+      'image/',
+      'application/pdf',
+      'application/msword', // .doc
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
+    ];
+    
+    const isAllowed = allowedTypes.some(type => file.mimetype.startsWith(type) || file.mimetype === type);
+    
+    if (isAllowed) {
       cb(null, true);
     } else {
-      cb(new Error('Only image and PDF files are allowed'));
+      cb(new Error('Only image, PDF, and Word document files are allowed'));
     }
   }
 });

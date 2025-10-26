@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { insertCrmLeadSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead } from "@shared/schema";
+import { insertCrmLeadSchema, insertExpenseSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense } from "@shared/schema";
 import { AdminUserModal } from "@/components/admin-user-modal";
 
 export default function AdminDashboard() {
@@ -31,6 +31,10 @@ export default function AdminDashboard() {
   // CRM state
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<CrmLead | null>(null);
+  
+  // Expense management state
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   
   // Listing management state
   const [selectedAircraft, setSelectedAircraft] = useState<AircraftListing | null>(null);
@@ -50,6 +54,17 @@ export default function AdminDashboard() {
       status: "new",
       source: undefined,
       notes: "",
+    },
+  });
+
+  // Expense form with Zod validation
+  const expenseForm = useForm<InsertExpense>({
+    resolver: zodResolver(insertExpenseSchema),
+    defaultValues: {
+      category: "server",
+      amount: "",
+      date: new Date().toISOString().split('T')[0],
+      description: "",
     },
   });
   
@@ -116,6 +131,12 @@ export default function AdminDashboard() {
   const { data: leads = [], isLoading: leadsLoading } = useQuery<CrmLead[]>({
     queryKey: ["/api/crm/leads"],
     enabled: activeTab === "crm",
+  });
+
+  // Expenses query
+  const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
+    queryKey: ["/api/admin/expenses"],
+    enabled: activeTab === "analytics",
   });
 
   // Approve submission mutation
@@ -189,6 +210,46 @@ export default function AdminDashboard() {
     },
   });
 
+  // Expense mutations
+  const createExpenseMutation = useMutation({
+    mutationFn: async (data: InsertExpense) => {
+      return await apiRequest("POST", "/api/admin/expenses", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/analytics"] });
+      toast({ title: "Expense added successfully" });
+      setExpenseDialogOpen(false);
+      expenseForm.reset();
+      setEditingExpense(null);
+    },
+  });
+
+  const updateExpenseMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Expense> }) => {
+      return await apiRequest("PATCH", `/api/admin/expenses/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/analytics"] });
+      toast({ title: "Expense updated successfully" });
+      setExpenseDialogOpen(false);
+      expenseForm.reset();
+      setEditingExpense(null);
+    },
+  });
+
+  const deleteExpenseMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/admin/expenses/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/analytics"] });
+      toast({ title: "Expense deleted successfully" });
+    },
+  });
+
   // Aircraft listing mutations
   const toggleAircraftMutation = useMutation({
     mutationFn: async ({ id, isListed }: { id: string; isListed: boolean }) => {
@@ -258,6 +319,25 @@ export default function AdminDashboard() {
       notes: lead.notes || "",
     });
     setLeadDialogOpen(true);
+  };
+
+  const handleEditExpense = (expense: Expense) => {
+    setEditingExpense(expense);
+    expenseForm.reset({
+      category: expense.category as any,
+      amount: expense.amount,
+      date: expense.date,
+      description: expense.description || "",
+    });
+    setExpenseDialogOpen(true);
+  };
+
+  const handleSubmitExpense = (data: InsertExpense) => {
+    if (editingExpense) {
+      updateExpenseMutation.mutate({ id: editingExpense.id, data });
+    } else {
+      createExpenseMutation.mutate(data);
+    }
   };
 
   const handleSubmitLead = (data: InsertCrmLead) => {
@@ -529,6 +609,100 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Expense Management */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle>Expense Tracking</CardTitle>
+                <CardDescription>Track server, database, and operational costs</CardDescription>
+              </div>
+              <Button 
+                onClick={() => { 
+                  expenseForm.reset(); 
+                  setEditingExpense(null); 
+                  setExpenseDialogOpen(true); 
+                }} 
+                data-testid="button-add-expense"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Expense
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {expensesLoading && (
+                <div className="text-center py-8 text-muted-foreground">
+                  Loading expenses...
+                </div>
+              )}
+
+              {!expensesLoading && expenses.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No expenses tracked yet. Add your first expense to start tracking costs.
+                </div>
+              )}
+
+              {!expensesLoading && expenses.length > 0 && (
+                <div className="border rounded-md">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left p-3 text-sm font-medium">Date</th>
+                        <th className="text-left p-3 text-sm font-medium">Category</th>
+                        <th className="text-left p-3 text-sm font-medium">Description</th>
+                        <th className="text-right p-3 text-sm font-medium">Amount</th>
+                        <th className="text-right p-3 text-sm font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {expenses.map((expense) => (
+                        <tr key={expense.id} className="border-b last:border-0" data-testid={`expense-row-${expense.id}`}>
+                          <td className="p-3 text-sm" data-testid={`text-date-${expense.id}`}>
+                            {new Date(expense.date).toLocaleDateString()}
+                          </td>
+                          <td className="p-3">
+                            <Badge variant="outline" className="capitalize" data-testid={`badge-category-${expense.id}`}>
+                              {expense.category}
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-sm text-muted-foreground" data-testid={`text-description-${expense.id}`}>
+                            {expense.description || "—"}
+                          </td>
+                          <td className="p-3 text-sm text-right font-medium text-destructive" data-testid={`text-amount-${expense.id}`}>
+                            ${expense.amount}
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleEditExpense(expense)}
+                                data-testid={`button-edit-expense-${expense.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => {
+                                  if (confirm("Are you sure you want to delete this expense?")) {
+                                    deleteExpenseMutation.mutate(expense.id);
+                                  }
+                                }}
+                                data-testid={`button-delete-expense-${expense.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {analyticsLoading && (
             <div className="flex items-center justify-center py-12">
@@ -1402,6 +1576,124 @@ export default function AdminDashboard() {
                   data-testid="button-submit-lead"
                 >
                   {createLeadMutation.isPending || updateLeadMutation.isPending ? "Saving..." : editingLead ? "Update Lead" : "Create Lead"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Expense Dialog */}
+      <Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
+        <DialogContent className="max-w-md" data-testid="dialog-expense-form">
+          <DialogHeader>
+            <DialogTitle>{editingExpense ? "Edit Expense" : "Add New Expense"}</DialogTitle>
+            <DialogDescription>
+              {editingExpense ? "Update expense information" : "Track a new expense"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form {...expenseForm}>
+            <form onSubmit={expenseForm.handleSubmit(handleSubmitExpense)} className="space-y-4">
+              <FormField
+                control={expenseForm.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-expense-category">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="server">Server</SelectItem>
+                        <SelectItem value="database">Database</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={expenseForm.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount ($)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        {...field} 
+                        type="number" 
+                        step="0.01" 
+                        placeholder="0.00"
+                        data-testid="input-expense-amount" 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={expenseForm.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date</FormLabel>
+                    <FormControl>
+                      <Input 
+                        {...field} 
+                        type="date"
+                        data-testid="input-expense-date" 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={expenseForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="textarea-expense-description"
+                        placeholder="Add details about this expense..."
+                        rows={3}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setExpenseDialogOpen(false);
+                    expenseForm.reset();
+                    setEditingExpense(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createExpenseMutation.isPending || updateExpenseMutation.isPending}
+                  data-testid="button-submit-expense"
+                >
+                  {createExpenseMutation.isPending || updateExpenseMutation.isPending ? "Saving..." : editingExpense ? "Update Expense" : "Add Expense"}
                 </Button>
               </DialogFooter>
             </form>

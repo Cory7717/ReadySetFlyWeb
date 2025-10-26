@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -75,24 +75,26 @@ export default function Profile() {
   const form = useForm<ProfileUpdateForm>({
     resolver: zodResolver(profileUpdateSchema),
     defaultValues: {
-      firstName: user?.firstName || "",
-      lastName: user?.lastName || "",
-      phone: user?.phone || "",
-      totalFlightHours: user?.totalFlightHours || 0,
-      certifications: user?.certifications || [],
+      firstName: "",
+      lastName: "",
+      phone: "",
+      totalFlightHours: 0,
+      certifications: [],
     },
   });
 
-  // Update form when user data loads
-  if (user && !form.formState.isDirty) {
-    form.reset({
-      firstName: user.firstName || "",
-      lastName: user.lastName || "",
-      phone: user.phone || "",
-      totalFlightHours: user.totalFlightHours || 0,
-      certifications: user.certifications || [],
-    });
-  }
+  // Update form when user data loads (useEffect to prevent infinite loop)
+  useEffect(() => {
+    if (user) {
+      form.reset({
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        phone: user.phone || "",
+        totalFlightHours: user.totalFlightHours || 0,
+        certifications: user.certifications || [],
+      });
+    }
+  }, [user, form]);
 
   // Update user mutation
   const updateUserMutation = useMutation({

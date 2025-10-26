@@ -12,6 +12,7 @@ import Marketplace from "@/pages/marketplace";
 import Dashboard from "@/pages/dashboard";
 import Profile from "@/pages/profile";
 import MyListings from "@/pages/my-listings";
+import Messages from "@/pages/messages";
 import AircraftDetail from "@/pages/aircraft-detail";
 import ListAircraft from "@/pages/list-aircraft";
 import CreateMarketplaceListing from "@/pages/create-marketplace-listing";
@@ -38,6 +39,7 @@ function Router() {
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/profile" component={Profile} />
           <Route path="/my-listings" component={MyListings} />
+          <Route path="/messages" component={Messages} />
           <Route path="/list-aircraft" component={ListAircraft} />
           <Route path="/create-marketplace-listing" component={CreateMarketplaceListing} />
           <Route path="/edit-marketplace-listing/:id" component={CreateMarketplaceListing} />

@@ -658,7 +658,7 @@ export default function AdminDashboard() {
                       {expenses.map((expense) => (
                         <tr key={expense.id} className="border-b last:border-0" data-testid={`expense-row-${expense.id}`}>
                           <td className="p-3 text-sm" data-testid={`text-date-${expense.id}`}>
-                            {new Date(expense.date).toLocaleDateString()}
+                            {expense.expenseDate ? new Date(expense.expenseDate).toLocaleDateString() : '—'}
                           </td>
                           <td className="p-3">
                             <Badge variant="outline" className="capitalize" data-testid={`badge-category-${expense.id}`}>

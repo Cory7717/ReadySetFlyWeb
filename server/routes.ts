@@ -6,8 +6,9 @@ import multer from "multer";
 import OpenAI from "openai";
 import Stripe from "stripe";
 import { storage } from "./storage";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertExpenseSchema } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertExpenseSchema, insertJobApplicationSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
+import { getUncachableResendClient } from "./resendClient";
 
 // Initialize OpenAI client with Replit AI Integrations
 const openai = new OpenAI({
@@ -1761,6 +1762,197 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           console.error('Failed to clean up temp file:', cleanupError);
         }
       }
+    }
+  });
+
+  // Job Applications
+  app.post("/api/job-applications", upload.single('resume'), async (req: any, res) => {
+    try {
+      const { listingId, firstName, lastName, email, phone, coverLetter } = req.body;
+      
+      if (!req.file) {
+        return res.status(400).json({ error: "Resume file is required" });
+      }
+      
+      // Get the listing to retrieve job poster's email
+      const listing = await storage.getMarketplaceListing(listingId);
+      if (!listing || listing.category !== 'Aviation Jobs') {
+        return res.status(404).json({ error: "Job listing not found" });
+      }
+      
+      // Get authenticated user if logged in
+      const applicantId = req.user ? req.user.claims.sub : null;
+      
+      // Validate application data
+      const applicationData = insertJobApplicationSchema.parse({
+        listingId,
+        applicantId,
+        firstName,
+        lastName,
+        email,
+        phone: phone || undefined,
+        coverLetter: coverLetter || undefined,
+        resumeUrl: `/uploads/documents/${req.file.filename}`,
+      });
+      
+      // Create the application
+      const application = await storage.createJobApplication(applicationData);
+      
+      // Send email notification to job poster using Resend
+      try {
+        const { client, fromEmail } = await getUncachableResendClient();
+        
+        const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1a1a1a; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(135deg, #0066cc 0%, #004a99 100%); color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0;">
+    <h1 style="margin: 0; font-size: 24px; font-weight: 600;">New Job Application Received</h1>
+  </div>
+  
+  <div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+    <p style="font-size: 16px; margin: 0 0 20px 0;">
+      You've received a new application for your job listing:
+    </p>
+    
+    <div style="background: #f9fafb; padding: 20px; border-radius: 6px; margin: 20px 0;">
+      <h2 style="margin: 0 0 15px 0; font-size: 18px; color: #0066cc;">${listing.title}</h2>
+      <p style="margin: 0; color: #6b7280; font-size: 14px;">${listing.location || 'Location not specified'}</p>
+    </div>
+    
+    <div style="margin: 25px 0;">
+      <h3 style="font-size: 16px; font-weight: 600; margin: 0 0 15px 0; color: #374151;">Applicant Information</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Name:</td>
+          <td style="padding: 8px 0; font-weight: 500; font-size: 14px;">${firstName} ${lastName}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Email:</td>
+          <td style="padding: 8px 0; font-weight: 500; font-size: 14px;">${email}</td>
+        </tr>
+        ${phone ? `
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Phone:</td>
+          <td style="padding: 8px 0; font-weight: 500; font-size: 14px;">${phone}</td>
+        </tr>
+        ` : ''}
+      </table>
+    </div>
+    
+    ${coverLetter ? `
+    <div style="margin: 25px 0;">
+      <h3 style="font-size: 16px; font-weight: 600; margin: 0 0 10px 0; color: #374151;">Cover Letter</h3>
+      <div style="background: #f9fafb; padding: 15px; border-radius: 6px; border-left: 3px solid #0066cc;">
+        <p style="margin: 0; font-size: 14px; white-space: pre-wrap;">${coverLetter}</p>
+      </div>
+    </div>
+    ` : ''}
+    
+    <div style="margin: 30px 0; padding: 20px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;">
+      <p style="margin: 0; font-size: 14px; color: #92400e;">
+        <strong>Note:</strong> The applicant's resume has been uploaded to your Ready Set Fly dashboard. Log in to view the full application and resume.
+      </p>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}/marketplace/${listingId}` : 'https://readysetfly.com'}" 
+         style="display: inline-block; background: #0066cc; color: white; text-decoration: none; padding: 12px 30px; border-radius: 6px; font-weight: 500; font-size: 16px;">
+        View Application
+      </a>
+    </div>
+    
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center;">
+      <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 13px;">
+        Ready Set Fly - Aviation Marketplace & Rental Platform
+      </p>
+      <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+        This is an automated notification. Please do not reply to this email.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+        `;
+        
+        await client.emails.send({
+          from: fromEmail,
+          to: listing.contactEmail || email,
+          subject: `New Application for ${listing.title}`,
+          html: emailHtml,
+        });
+      } catch (emailError) {
+        console.error('Failed to send email notification:', emailError);
+        // Don't fail the entire request if email fails
+      }
+      
+      res.json(application);
+    } catch (error: any) {
+      console.error('Job application error:', error);
+      res.status(500).json({ error: error.message || "Failed to submit application" });
+    }
+  });
+
+  // Get applications for a specific listing (job poster only)
+  app.get("/api/job-applications/listing/:listingId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Verify user owns the listing
+      const listing = await storage.getMarketplaceListing(req.params.listingId);
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      
+      if (listing.userId !== userId) {
+        return res.status(403).json({ error: "Not authorized to view applications for this listing" });
+      }
+      
+      const applications = await storage.getJobApplicationsByListing(req.params.listingId);
+      res.json(applications);
+    } catch (error) {
+      console.error('Failed to fetch job applications:', error);
+      res.status(500).json({ error: "Failed to fetch applications" });
+    }
+  });
+
+  // Get applications by applicant (user's own applications)
+  app.get("/api/job-applications/applicant", isAuthenticated, async (req: any, res) => {
+    try {
+      const applicantId = req.user.claims.sub;
+      const applications = await storage.getJobApplicationsByApplicant(applicantId);
+      res.json(applications);
+    } catch (error) {
+      console.error('Failed to fetch user applications:', error);
+      res.status(500).json({ error: "Failed to fetch applications" });
+    }
+  });
+
+  // Update application status (job poster only)
+  app.patch("/api/job-applications/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const application = await storage.getJobApplication(req.params.id);
+      
+      if (!application) {
+        return res.status(404).json({ error: "Application not found" });
+      }
+      
+      // Verify user owns the listing
+      const listing = await storage.getMarketplaceListing(application.listingId);
+      if (!listing || listing.userId !== userId) {
+        return res.status(403).json({ error: "Not authorized to update this application" });
+      }
+      
+      const updated = await storage.updateJobApplication(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error('Failed to update application:', error);
+      res.status(500).json({ error: "Failed to update application" });
     }
   });
 

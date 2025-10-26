@@ -144,6 +144,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Document upload endpoint for invoices and other documents
+  app.post("/api/upload-documents", isAuthenticated, upload.array('documents', 5), async (req: any, res) => {
+    try {
+      const files = req.files as Express.Multer.File[];
+      
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: "No files uploaded" });
+      }
+      
+      // Return URLs for uploaded documents (saved in uploads/documents/)
+      const documentUrls = files.map(file => `/uploads/documents/${file.filename}`);
+      
+      res.json({ documentUrls });
+    } catch (error: any) {
+      console.error("Document upload error:", error);
+      res.status(500).json({ error: error.message || "Document upload failed" });
+    }
+  });
+
   // Stripe payment intent endpoint for marketplace listing fees (from blueprint:javascript_stripe)
   app.post("/api/create-listing-payment-intent", isAuthenticated, async (req: any, res) => {
     try {
@@ -1648,21 +1667,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Extract invoice data using OpenAI Vision API
   app.post("/api/admin/extract-invoice-data", isAuthenticated, isAdmin, upload.single('invoice'), async (req, res) => {
+    const fs = await import('fs/promises');
+    let filePath: string | null = null;
+    let shouldCleanup = false;
+    
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No invoice file provided" });
       }
 
+      filePath = req.file.path;
+      shouldCleanup = true; // File was uploaded, ensure cleanup
+
+      // Validate file type
+      const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'application/pdf'];
+      if (!allowedMimeTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({ error: "Invalid file type. Please upload an image or PDF." });
+      }
+
       // Read file and convert to base64
-      const fs = await import('fs/promises');
-      const fileBuffer = await fs.readFile(req.file.path);
+      const fileBuffer = await fs.readFile(filePath);
       const base64Image = fileBuffer.toString('base64');
       const mimeType = req.file.mimetype;
-
-      // Use OpenAI Vision API to extract invoice data
-      const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-      });
 
       const prompt = `You are an invoice data extraction assistant. Analyze this invoice image and extract the following information in JSON format:
 {
@@ -1691,12 +1717,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           },
         ],
         max_tokens: 500,
+        temperature: 0.1, // Lower temperature for more consistent extraction
       });
 
       const responseText = completion.choices[0]?.message?.content || "{}";
       
       // Parse JSON from response (handle potential markdown code blocks)
-      let extractedData;
+      let extractedData: any = {};
       try {
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         extractedData = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
@@ -1705,13 +1732,35 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         extractedData = {};
       }
 
-      // Clean up uploaded file
-      await fs.unlink(req.file.path);
+      // Validate extracted data structure
+      const validatedData: any = {};
+      if (extractedData.amount && typeof extractedData.amount === 'string') {
+        validatedData.amount = extractedData.amount;
+      }
+      if (extractedData.date && typeof extractedData.date === 'string') {
+        validatedData.date = extractedData.date;
+      }
+      if (extractedData.description && typeof extractedData.description === 'string') {
+        validatedData.description = extractedData.description;
+      }
+      if (extractedData.category && ['server', 'database', 'other'].includes(extractedData.category)) {
+        validatedData.category = extractedData.category;
+      }
 
-      res.json(extractedData);
-    } catch (error) {
+      res.json(validatedData);
+    } catch (error: any) {
       console.error('Invoice extraction error:', error);
-      res.status(500).json({ error: "Failed to extract invoice data" });
+      const errorMessage = error.message || "Failed to extract invoice data";
+      res.status(500).json({ error: errorMessage });
+    } finally {
+      // Always clean up the uploaded file
+      if (filePath && shouldCleanup) {
+        try {
+          await fs.unlink(filePath);
+        } catch (cleanupError) {
+          console.error('Failed to clean up temp file:', cleanupError);
+        }
+      }
     }
   });
 

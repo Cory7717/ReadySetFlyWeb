@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -345,20 +345,34 @@ export default function AdminDashboard() {
     if (invoiceFile && !editingExpense) {
       try {
         const formData = new FormData();
-        formData.append('images', invoiceFile);
+        formData.append('documents', invoiceFile);
         
-        const response = await fetch('/api/upload-images', {
+        const response = await fetch('/api/upload-documents', {
           method: 'POST',
           body: formData,
           credentials: 'include',
         });
         
-        if (response.ok) {
-          const uploadData = await response.json();
-          finalData.invoiceUrl = uploadData.imageUrls?.[0] || "";
+        if (!response.ok) {
+          const errorData = await response.json();
+          toast({ 
+            title: "Invoice upload failed", 
+            description: errorData.error || "Please try again",
+            variant: "destructive" 
+          });
+          return;
         }
+        
+        const uploadData = await response.json();
+        finalData.invoiceUrl = uploadData.documentUrls?.[0] || "";
       } catch (error) {
         console.error('Invoice upload failed:', error);
+        toast({ 
+          title: "Invoice upload failed", 
+          description: "Please try again",
+          variant: "destructive" 
+        });
+        return;
       }
     }
     
@@ -386,19 +400,58 @@ export default function AdminDashboard() {
         credentials: 'include',
       });
       
-      if (!response.ok) throw new Error('Failed to extract data');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to extract data');
+      }
       
       const extracted = await response.json();
       
-      // Auto-populate form fields
-      if (extracted.amount) expenseForm.setValue('amount', extracted.amount);
-      if (extracted.date) expenseForm.setValue('expenseDate', new Date(extracted.date));
-      if (extracted.description) expenseForm.setValue('description', extracted.description);
-      if (extracted.category) expenseForm.setValue('category', extracted.category);
+      // Validate and auto-populate form fields
+      let fieldsUpdated = 0;
+      if (extracted.amount && typeof extracted.amount === 'string') {
+        expenseForm.setValue('amount', extracted.amount);
+        fieldsUpdated++;
+      }
+      if (extracted.date && typeof extracted.date === 'string') {
+        try {
+          const parsedDate = new Date(extracted.date);
+          if (!isNaN(parsedDate.getTime())) {
+            expenseForm.setValue('expenseDate', parsedDate);
+            fieldsUpdated++;
+          }
+        } catch (e) {
+          console.warn('Invalid date from OCR:', extracted.date);
+        }
+      }
+      if (extracted.description && typeof extracted.description === 'string') {
+        expenseForm.setValue('description', extracted.description);
+        fieldsUpdated++;
+      }
+      if (extracted.category && ['server', 'database', 'other'].includes(extracted.category)) {
+        expenseForm.setValue('category', extracted.category as any);
+        fieldsUpdated++;
+      }
       
-      toast({ title: "Invoice data extracted successfully!" });
+      if (fieldsUpdated > 0) {
+        toast({ 
+          title: "Invoice data extracted!", 
+          description: `${fieldsUpdated} field(s) auto-filled. Please review before saving.`
+        });
+      } else {
+        toast({ 
+          title: "Could not extract data", 
+          description: "Please enter the information manually.",
+          variant: "destructive" 
+        });
+      }
     } catch (error) {
-      toast({ title: "Failed to extract invoice data", variant: "destructive" });
+      console.error('OCR extraction error:', error);
+      toast({ 
+        title: "Failed to extract invoice data", 
+        description: error instanceof Error ? error.message : "Please try again",
+        variant: "destructive" 
+      });
     } finally {
       setExtractingData(false);
     }

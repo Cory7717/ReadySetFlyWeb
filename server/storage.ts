@@ -23,6 +23,8 @@ import {
   type InsertCrmDeal,
   type CrmActivity,
   type InsertCrmActivity,
+  type Expense,
+  type InsertExpense,
   users,
   aircraftListings,
   marketplaceListings,
@@ -36,6 +38,7 @@ import {
   crmContacts,
   crmDeals,
   crmActivities,
+  expenses,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql } from "drizzle-orm";
@@ -152,6 +155,13 @@ export interface IStorage {
   createActivity(activity: InsertCrmActivity): Promise<CrmActivity>;
   updateActivity(id: string, updates: Partial<CrmActivity>): Promise<CrmActivity | undefined>;
   deleteActivity(id: string): Promise<boolean>;
+  
+  // Expenses (for admin analytics)
+  getAllExpenses(): Promise<Expense[]>;
+  getExpense(id: string): Promise<Expense | undefined>;
+  createExpense(expense: InsertExpense): Promise<Expense>;
+  updateExpense(id: string, updates: Partial<Expense>): Promise<Expense | undefined>;
+  deleteExpense(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -879,6 +889,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteActivity(id: string): Promise<boolean> {
     const result = await db.delete(crmActivities).where(eq(crmActivities.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Expenses
+  async getAllExpenses(): Promise<Expense[]> {
+    return await db.select().from(expenses).orderBy(desc(expenses.expenseDate));
+  }
+
+  async getExpense(id: string): Promise<Expense | undefined> {
+    const [expense] = await db.select().from(expenses).where(eq(expenses.id, id));
+    return expense;
+  }
+
+  async createExpense(insertExpense: InsertExpense): Promise<Expense> {
+    const [expense] = await db.insert(expenses).values(insertExpense).returning();
+    return expense;
+  }
+
+  async updateExpense(id: string, updates: Partial<Expense>): Promise<Expense | undefined> {
+    const [expense] = await db.update(expenses).set({ ...updates, updatedAt: new Date() }).where(eq(expenses.id, id)).returning();
+    return expense;
+  }
+
+  async deleteExpense(id: string): Promise<boolean> {
+    const result = await db.delete(expenses).where(eq(expenses.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
   }
 }

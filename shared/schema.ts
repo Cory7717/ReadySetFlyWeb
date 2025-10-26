@@ -691,6 +691,7 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
   category: z.enum(expenseCategories),
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
   expenseDate: z.coerce.date().optional(),
+  invoiceUrl: z.string().optional(),
 });
 
 // Select types

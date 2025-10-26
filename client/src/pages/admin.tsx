@@ -65,8 +65,12 @@ export default function AdminDashboard() {
       amount: "",
       expenseDate: new Date(),
       description: "",
+      invoiceUrl: "",
     },
   });
+  
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [extractingData, setExtractingData] = useState(false);
   
   const { toast } = useToast();
 
@@ -328,15 +332,75 @@ export default function AdminDashboard() {
       amount: expense.amount,
       expenseDate: expense.expenseDate ? new Date(expense.expenseDate) : new Date(),
       description: expense.description || "",
+      invoiceUrl: expense.invoiceUrl || "",
     });
+    setInvoiceFile(null);
     setExpenseDialogOpen(true);
   };
 
-  const handleSubmitExpense = (data: InsertExpense) => {
+  const handleSubmitExpense = async (data: InsertExpense) => {
+    let finalData = { ...data };
+    
+    // Upload invoice file if provided
+    if (invoiceFile && !editingExpense) {
+      try {
+        const formData = new FormData();
+        formData.append('images', invoiceFile);
+        
+        const response = await fetch('/api/upload-images', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+        });
+        
+        if (response.ok) {
+          const uploadData = await response.json();
+          finalData.invoiceUrl = uploadData.imageUrls?.[0] || "";
+        }
+      } catch (error) {
+        console.error('Invoice upload failed:', error);
+      }
+    }
+    
     if (editingExpense) {
-      updateExpenseMutation.mutate({ id: editingExpense.id, data });
+      updateExpenseMutation.mutate({ id: editingExpense.id, data: finalData });
     } else {
-      createExpenseMutation.mutate(data);
+      createExpenseMutation.mutate(finalData);
+    }
+  };
+  
+  const handleExtractInvoiceData = async () => {
+    if (!invoiceFile) {
+      toast({ title: "No invoice selected", variant: "destructive" });
+      return;
+    }
+    
+    setExtractingData(true);
+    try {
+      const formData = new FormData();
+      formData.append('invoice', invoiceFile);
+      
+      const response = await fetch('/api/admin/extract-invoice-data', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      
+      if (!response.ok) throw new Error('Failed to extract data');
+      
+      const extracted = await response.json();
+      
+      // Auto-populate form fields
+      if (extracted.amount) expenseForm.setValue('amount', extracted.amount);
+      if (extracted.date) expenseForm.setValue('expenseDate', new Date(extracted.date));
+      if (extracted.description) expenseForm.setValue('description', extracted.description);
+      if (extracted.category) expenseForm.setValue('category', extracted.category);
+      
+      toast({ title: "Invoice data extracted successfully!" });
+    } catch (error) {
+      toast({ title: "Failed to extract invoice data", variant: "destructive" });
+    } finally {
+      setExtractingData(false);
     }
   };
 
@@ -650,6 +714,7 @@ export default function AdminDashboard() {
                         <th className="text-left p-3 text-sm font-medium">Date</th>
                         <th className="text-left p-3 text-sm font-medium">Category</th>
                         <th className="text-left p-3 text-sm font-medium">Description</th>
+                        <th className="text-left p-3 text-sm font-medium">Invoice</th>
                         <th className="text-right p-3 text-sm font-medium">Amount</th>
                         <th className="text-right p-3 text-sm font-medium">Actions</th>
                       </tr>
@@ -667,6 +732,22 @@ export default function AdminDashboard() {
                           </td>
                           <td className="p-3 text-sm text-muted-foreground" data-testid={`text-description-${expense.id}`}>
                             {expense.description || "—"}
+                          </td>
+                          <td className="p-3 text-sm">
+                            {expense.invoiceUrl ? (
+                              <a 
+                                href={expense.invoiceUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline flex items-center gap-1"
+                                data-testid={`link-invoice-${expense.id}`}
+                              >
+                                <FileText className="h-4 w-4" />
+                                View
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </td>
                           <td className="p-3 text-sm text-right font-medium text-destructive" data-testid={`text-amount-${expense.id}`}>
                             ${expense.amount}
@@ -1656,6 +1737,39 @@ export default function AdminDashboard() {
                   </FormItem>
                 )}
               />
+
+              {/* Invoice Upload */}
+              <FormItem>
+                <FormLabel>Invoice (Optional)</FormLabel>
+                <div className="space-y-2">
+                  <Input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setInvoiceFile(file);
+                    }}
+                    data-testid="input-invoice-file"
+                  />
+                  {invoiceFile && (
+                    <div className="flex items-center justify-between p-2 bg-muted rounded">
+                      <span className="text-sm truncate">{invoiceFile.name}</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleExtractInvoiceData}
+                        disabled={extractingData}
+                        data-testid="button-extract-invoice-data"
+                      >
+                        {extractingData ? "Extracting..." : "Auto-fill from invoice"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <FormDescription>
+                  Upload an invoice image or PDF. We'll automatically extract the amount, date, and description.
+                </FormDescription>
+              </FormItem>
 
               <FormField
                 control={expenseForm.control}

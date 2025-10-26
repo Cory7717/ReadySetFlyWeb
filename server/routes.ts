@@ -1646,6 +1646,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Extract invoice data using OpenAI Vision API
+  app.post("/api/admin/extract-invoice-data", isAuthenticated, isAdmin, upload.single('invoice'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No invoice file provided" });
+      }
+
+      // Read file and convert to base64
+      const fs = await import('fs/promises');
+      const fileBuffer = await fs.readFile(req.file.path);
+      const base64Image = fileBuffer.toString('base64');
+      const mimeType = req.file.mimetype;
+
+      // Use OpenAI Vision API to extract invoice data
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+
+      const prompt = `You are an invoice data extraction assistant. Analyze this invoice image and extract the following information in JSON format:
+{
+  "amount": "the total amount (just the number with decimal, no currency symbol)",
+  "date": "the invoice date in YYYY-MM-DD format",
+  "description": "a brief description of what the invoice is for (company name + service/product)",
+  "category": "best matching category: 'server', 'database', or 'other'"
+}
+
+If you cannot find certain fields, omit them from the response. Be accurate and only return the JSON object, nothing else.`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${mimeType};base64,${base64Image}`,
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 500,
+      });
+
+      const responseText = completion.choices[0]?.message?.content || "{}";
+      
+      // Parse JSON from response (handle potential markdown code blocks)
+      let extractedData;
+      try {
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        extractedData = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+      } catch (parseError) {
+        console.error('Failed to parse AI response:', responseText);
+        extractedData = {};
+      }
+
+      // Clean up uploaded file
+      await fs.unlink(req.file.path);
+
+      res.json(extractedData);
+    } catch (error) {
+      console.error('Invoice extraction error:', error);
+      res.status(500).json({ error: "Failed to extract invoice data" });
+    }
+  });
+
   // Users/Profile
   app.get("/api/users/:id", async (req, res) => {
     try {

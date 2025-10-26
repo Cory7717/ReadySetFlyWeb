@@ -399,6 +399,9 @@ export const expenses = pgTable("expenses", {
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
   description: text("description"),
   
+  // Invoice document upload (optional)
+  invoiceUrl: text("invoice_url"),
+  
   // Date when expense was incurred (for time-based analytics)
   expenseDate: timestamp("expense_date").notNull().defaultNow(),
   

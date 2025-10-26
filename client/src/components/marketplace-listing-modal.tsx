@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
+import { JobApplicationModal } from "./job-application-modal";
 
 interface MarketplaceListingModalProps {
   listingId: string;
@@ -50,6 +51,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
   const [flagConfirmOpen, setFlagConfirmOpen] = useState(false);
   const [userHasFlagged, setUserHasFlagged] = useState(false);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
+  const [jobApplicationOpen, setJobApplicationOpen] = useState(false);
 
   const { data: listing, isLoading } = useQuery<MarketplaceListing>({
     queryKey: ["/api/marketplace", listingId],
@@ -561,43 +563,53 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
 
             {/* Action Buttons */}
             <div className="flex gap-3 pt-4">
-              {listing.contactEmail && (
+              {listing.category === "Aviation Jobs" ? (
                 <Button
-                  className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
-                  onClick={() => {
-                    if (!user) {
-                      setLoginPromptOpen(true);
-                      return;
-                    }
-                    const subject = listing.category === "job" 
-                      ? `Application: ${listing.title}`
-                      : undefined;
-                    const mailtoLink = subject 
-                      ? `mailto:${listing.contactEmail}?subject=${encodeURIComponent(subject)}`
-                      : `mailto:${listing.contactEmail}`;
-                    window.location.href = mailtoLink;
-                  }}
-                  data-testid={listing.category === "job" ? "button-apply" : "button-contact-seller"}
+                  className="flex-1"
+                  onClick={() => setJobApplicationOpen(true)}
+                  data-testid="button-apply-now"
+                  size="lg"
                 >
-                  <Mail className="h-4 w-4 mr-2" />
-                  {listing.category === "job" ? "Apply" : "Contact Seller"}
+                  <Briefcase className="h-4 w-4 mr-2" />
+                  Apply Now
                 </Button>
-              )}
-              {listing.contactPhone && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (!user) {
-                      setLoginPromptOpen(true);
-                      return;
-                    }
-                    window.location.href = `tel:${listing.contactPhone}`;
-                  }}
-                  data-testid="button-call-seller"
-                >
-                  <Phone className="h-4 w-4 mr-2" />
-                  Call
-                </Button>
+              ) : (
+                <>
+                  {listing.contactEmail && (
+                    <Button
+                      className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
+                      onClick={() => {
+                        if (!user) {
+                          setLoginPromptOpen(true);
+                          return;
+                        }
+                        const subject = `Inquiry about ${listing.title}`;
+                        const mailtoLink = `mailto:${listing.contactEmail}?subject=${encodeURIComponent(subject)}`;
+                        window.location.href = mailtoLink;
+                      }}
+                      data-testid="button-contact-seller"
+                    >
+                      <Mail className="h-4 w-4 mr-2" />
+                      Contact Seller
+                    </Button>
+                  )}
+                  {listing.contactPhone && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (!user) {
+                          setLoginPromptOpen(true);
+                          return;
+                        }
+                        window.location.href = `tel:${listing.contactPhone}`;
+                      }}
+                      data-testid="button-call-seller"
+                    >
+                      <Phone className="h-4 w-4 mr-2" />
+                      Call
+                    </Button>
+                  )}
+                </>
               )}
               
               {/* Flag button - show for all logged-in non-admin users */}
@@ -782,6 +794,15 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    {/* Job Application Modal */}
+    {listing && listing.category === "Aviation Jobs" && (
+      <JobApplicationModal
+        listing={listing}
+        open={jobApplicationOpen}
+        onOpenChange={setJobApplicationOpen}
+      />
+    )}
     </>
   );
 }

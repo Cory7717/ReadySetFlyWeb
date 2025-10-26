@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { X, MapPin, Gauge, Shield, Calendar, DollarSign, Plane, Star, Edit } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
   const { toast } = useToast();
   const [showRequestForm, setShowRequestForm] = useState(false);
   const [adminNotes, setAdminNotes] = useState("");
+  const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const [formData, setFormData] = useState({
     startDate: "",
     endDate: "",
@@ -146,6 +148,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
   if (!aircraft && !isLoading) return null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="modal-aircraft-detail">
         {isLoading ? (
@@ -193,8 +196,17 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                 <Button
                   size="lg"
                   className="bg-accent text-accent-foreground hover:bg-accent"
-                  onClick={() => setShowRequestForm(true)}
-                  disabled={!user || user.id === aircraft.ownerId}
+                  onClick={() => {
+                    if (!user) {
+                      setLoginPromptOpen(true);
+                      return;
+                    }
+                    if (user.id === aircraft.ownerId) {
+                      return; // Owner can't rent their own aircraft
+                    }
+                    setShowRequestForm(true);
+                  }}
+                  disabled={user?.id === aircraft.ownerId}
                   data-testid="button-request-rental"
                 >
                   <Calendar className="h-5 w-5 mr-2" />
@@ -454,5 +466,27 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
         ) : null}
       </DialogContent>
     </Dialog>
+
+    {/* Login Prompt Dialog */}
+    <AlertDialog open={loginPromptOpen} onOpenChange={setLoginPromptOpen}>
+      <AlertDialogContent data-testid="dialog-login-prompt">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Sign in to continue</AlertDialogTitle>
+          <AlertDialogDescription>
+            You need to create an account or sign in to request aircraft rentals and interact with owners.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => window.location.href = '/api/login'}
+            data-testid="button-go-login"
+          >
+            Sign In / Create Account
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

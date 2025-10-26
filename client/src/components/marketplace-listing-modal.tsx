@@ -49,6 +49,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
   const [expiresAt, setExpiresAt] = useState("");
   const [flagConfirmOpen, setFlagConfirmOpen] = useState(false);
   const [userHasFlagged, setUserHasFlagged] = useState(false);
+  const [loginPromptOpen, setLoginPromptOpen] = useState(false);
 
   const { data: listing, isLoading } = useQuery<MarketplaceListing>({
     queryKey: ["/api/marketplace", listingId],
@@ -564,6 +565,10 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                 <Button
                   className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
                   onClick={() => {
+                    if (!user) {
+                      setLoginPromptOpen(true);
+                      return;
+                    }
                     const subject = listing.category === "job" 
                       ? `Application: ${listing.title}`
                       : undefined;
@@ -581,7 +586,13 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
               {listing.contactPhone && (
                 <Button
                   variant="outline"
-                  onClick={() => window.location.href = `tel:${listing.contactPhone}`}
+                  onClick={() => {
+                    if (!user) {
+                      setLoginPromptOpen(true);
+                      return;
+                    }
+                    window.location.href = `tel:${listing.contactPhone}`;
+                  }}
                   data-testid="button-call-seller"
                 >
                   <Phone className="h-4 w-4 mr-2" />
@@ -589,7 +600,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                 </Button>
               )}
               
-              {/* Flag button for non-admin users */}
+              {/* Flag button - show for all logged-in non-admin users */}
               {user && !user.isAdmin && (
                 userHasFlagged ? (
                   <Badge variant="outline" className="text-muted-foreground" data-testid="badge-already-flagged">
@@ -746,6 +757,27 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
             data-testid="button-confirm-flag"
           >
             {flagListingMutation.isPending ? "Flagging..." : "Flag Listing"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Login Prompt Dialog */}
+    <AlertDialog open={loginPromptOpen} onOpenChange={setLoginPromptOpen}>
+      <AlertDialogContent data-testid="dialog-login-prompt">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Sign in to continue</AlertDialogTitle>
+          <AlertDialogDescription>
+            You need to create an account or sign in to contact sellers, apply for jobs, and interact with listings.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => window.location.href = '/api/login'}
+            data-testid="button-go-login"
+          >
+            Sign In / Create Account
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

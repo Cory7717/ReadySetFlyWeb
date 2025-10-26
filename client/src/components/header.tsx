@@ -61,81 +61,98 @@ export function Header() {
 
           {/* Right side actions */}
           <div className="flex items-center gap-2">
-            <Link href="/list-aircraft" data-testid="link-list-aircraft">
-              <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent" data-testid="button-list-aircraft">
-                List Your Aircraft
-              </Button>
-            </Link>
+            {user && (
+              <Link href="/list-aircraft" data-testid="link-list-aircraft">
+                <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent" data-testid="button-list-aircraft">
+                  List Your Aircraft
+                </Button>
+              </Link>
+            )}
 
-            <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications" aria-label="Notifications">
-              <Bell className="h-5 w-5" />
-              <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
-                3
-              </Badge>
-            </Button>
+            {user && (
+              <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications" aria-label="Notifications">
+                <Bell className="h-5 w-5" />
+                <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                  3
+                </Badge>
+              </Button>
+            )}
 
             <ThemeToggle />
 
-            {/* Super Admin Badge */}
-            {user?.isSuperAdmin && (
-              <Badge variant="default" className="bg-primary text-primary-foreground" data-testid="badge-super-admin">
-                Super Admin
-              </Badge>
-            )}
+            {/* Show sign in button for anonymous users */}
+            {!user ? (
+              <Button 
+                variant="default" 
+                onClick={() => window.location.href = '/api/login'}
+                data-testid="button-login"
+              >
+                Sign In
+              </Button>
+            ) : (
+              <>
+                {/* Super Admin Badge */}
+                {user.isSuperAdmin && (
+                  <Badge variant="default" className="bg-primary text-primary-foreground" data-testid="badge-super-admin">
+                    Super Admin
+                  </Badge>
+                )}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-profile-menu" aria-label="User menu">
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={user?.profileImageUrl || undefined} alt={displayName} />
-                    <AvatarFallback>{initials}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>
-                  <div className="flex flex-col space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium leading-none">{displayName}</p>
-                      {user?.isSuperAdmin && (
-                        <Badge variant="default" className="text-xs h-5 bg-primary text-primary-foreground">
-                          Super Admin
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard" data-testid="link-dashboard">Dashboard</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/profile" data-testid="link-profile">Profile</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/my-listings" data-testid="link-my-listings">My Listings</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/messages" data-testid="link-messages">Messages</Link>
-                </DropdownMenuItem>
-                {user?.isAdmin && (
-                  <>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-profile-menu" aria-label="User menu">
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={user?.profileImageUrl || undefined} alt={displayName} />
+                        <AvatarFallback>{initials}</AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>
+                      <div className="flex flex-col space-y-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium leading-none">{displayName}</p>
+                          {user?.isSuperAdmin && (
+                            <Badge variant="default" className="text-xs h-5 bg-primary text-primary-foreground">
+                              Super Admin
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+                      </div>
+                    </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link href="/admin" data-testid="link-admin" className="text-primary font-medium">
-                        🛡️ Admin Dashboard
-                      </Link>
+                      <Link href="/dashboard" data-testid="link-dashboard">Dashboard</Link>
                     </DropdownMenuItem>
-                  </>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => window.location.href = '/api/logout'} data-testid="button-logout">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Log out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    <DropdownMenuItem asChild>
+                      <Link href="/profile" data-testid="link-profile">Profile</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/my-listings" data-testid="link-my-listings">My Listings</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/messages" data-testid="link-messages">Messages</Link>
+                    </DropdownMenuItem>
+                    {user?.isAdmin && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin" data-testid="link-admin" className="text-primary font-medium">
+                            🛡️ Admin Dashboard
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => window.location.href = '/api/logout'} data-testid="button-logout">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Log out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
           </div>
         </div>
       </div>

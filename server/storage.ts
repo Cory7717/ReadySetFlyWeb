@@ -25,6 +25,8 @@ import {
   type InsertCrmActivity,
   type Expense,
   type InsertExpense,
+  type JobApplication,
+  type InsertJobApplication,
   users,
   aircraftListings,
   marketplaceListings,
@@ -39,6 +41,7 @@ import {
   crmDeals,
   crmActivities,
   expenses,
+  jobApplications,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql } from "drizzle-orm";
@@ -173,6 +176,13 @@ export interface IStorage {
   getExpense(id: string): Promise<Expense | undefined>;
   createExpense(expense: InsertExpense): Promise<Expense>;
   updateExpense(id: string, updates: Partial<Expense>): Promise<Expense | undefined>;
+  
+  // Job Applications
+  createJobApplication(application: InsertJobApplication): Promise<JobApplication>;
+  getJobApplicationsByListing(listingId: string): Promise<JobApplication[]>;
+  getJobApplicationsByApplicant(applicantId: string): Promise<JobApplication[]>;
+  getJobApplication(id: string): Promise<JobApplication | undefined>;
+  updateJobApplication(id: string, updates: Partial<JobApplication>): Promise<JobApplication | undefined>;
   deleteExpense(id: string): Promise<boolean>;
 }
 
@@ -988,6 +998,30 @@ export class DatabaseStorage implements IStorage {
   async deleteExpense(id: string): Promise<boolean> {
     const result = await db.delete(expenses).where(eq(expenses.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Job Applications
+  async createJobApplication(insertApplication: InsertJobApplication): Promise<JobApplication> {
+    const [application] = await db.insert(jobApplications).values(insertApplication).returning();
+    return application;
+  }
+
+  async getJobApplicationsByListing(listingId: string): Promise<JobApplication[]> {
+    return await db.select().from(jobApplications).where(eq(jobApplications.listingId, listingId)).orderBy(desc(jobApplications.createdAt));
+  }
+
+  async getJobApplicationsByApplicant(applicantId: string): Promise<JobApplication[]> {
+    return await db.select().from(jobApplications).where(eq(jobApplications.applicantId, applicantId)).orderBy(desc(jobApplications.createdAt));
+  }
+
+  async getJobApplication(id: string): Promise<JobApplication | undefined> {
+    const [application] = await db.select().from(jobApplications).where(eq(jobApplications.id, id));
+    return application;
+  }
+
+  async updateJobApplication(id: string, updates: Partial<JobApplication>): Promise<JobApplication | undefined> {
+    const [application] = await db.update(jobApplications).set({ ...updates, updatedAt: new Date() }).where(eq(jobApplications.id, id)).returning();
+    return application;
   }
 }
 

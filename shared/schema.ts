@@ -265,6 +265,36 @@ export const marketplaceFlags = pgTable("marketplace_flags", {
   index("idx_marketplace_flags_unique").on(table.listingId, table.userId),
 ]);
 
+// Job Applications (for marketplace job listings)
+export const jobApplications = pgTable("job_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  listingId: varchar("listing_id").notNull().references(() => marketplaceListings.id, { onDelete: "cascade" }),
+  applicantId: varchar("applicant_id").references(() => users.id), // null if not logged in
+  
+  // Applicant details
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  
+  // Application content
+  coverLetter: text("cover_letter"),
+  resumeUrl: text("resume_url").notNull(),
+  
+  // Application status
+  status: text("status").default("new").notNull(), // new, reviewed, shortlisted, rejected, contacted
+  
+  // Employer notes
+  employerNotes: text("employer_notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_job_applications_listing").on(table.listingId),
+  index("idx_job_applications_applicant").on(table.applicantId),
+  index("idx_job_applications_status").on(table.status),
+]);
+
 // Rentals
 export const rentals = pgTable("rentals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -694,6 +724,21 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
   invoiceUrl: z.string().optional(),
 });
 
+export const insertJobApplicationSchema = createInsertSchema(jobApplications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+  employerNotes: true,
+}).extend({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().email("Valid email is required"),
+  phone: z.string().optional(),
+  coverLetter: z.string().optional(),
+  resumeUrl: z.string().min(1, "Resume is required"),
+});
+
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -739,6 +784,9 @@ export type InsertPromoCodeUsage = typeof promoCodeUsages.$inferInsert;
 
 export type Expense = typeof expenses.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+
+export type JobApplication = typeof jobApplications.$inferSelect;
+export type InsertJobApplication = z.infer<typeof insertJobApplicationSchema>;
 
 // Enum types
 export type CertificationType = typeof certificationTypes[number];

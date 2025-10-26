@@ -14,6 +14,7 @@ export const leadStatuses = ["new", "contacted", "qualified", "proposal", "negot
 export const dealStages = ["lead", "prospect", "proposal", "negotiation", "closed_won", "closed_lost"] as const;
 export const activityTypes = ["call", "email", "meeting", "note", "task"] as const;
 export const leadSources = ["website", "referral", "social_media", "advertising", "cold_outreach", "event", "other"] as const;
+export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
 
 // Session storage table (REQUIRED for Replit Auth - from blueprint:javascript_log_in_with_replit)
 export const sessions = pgTable(
@@ -390,6 +391,21 @@ export const promoCodeUsages = pgTable("promo_code_usages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Expenses (for admin analytics tracking)
+export const expenses = pgTable("expenses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  category: text("category").notNull(), // server, database, storage, api, other
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  description: text("description"),
+  
+  // Date when expense was incurred (for time-based analytics)
+  expenseDate: timestamp("expense_date").notNull().defaultNow(),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Verification Submissions (admin review queue)
 export const verificationSubmissions = pgTable("verification_submissions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -664,6 +680,16 @@ export const insertCrmActivitySchema = createInsertSchema(crmActivities).omit({
   type: z.enum(activityTypes),
 });
 
+export const insertExpenseSchema = createInsertSchema(expenses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  category: z.enum(expenseCategories),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  expenseDate: z.coerce.date().optional(),
+});
+
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -707,6 +733,9 @@ export type InsertPromoCode = typeof promoCodes.$inferInsert;
 export type PromoCodeUsage = typeof promoCodeUsages.$inferSelect;
 export type InsertPromoCodeUsage = typeof promoCodeUsages.$inferInsert;
 
+export type Expense = typeof expenses.$inferSelect;
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+
 // Enum types
 export type CertificationType = typeof certificationTypes[number];
 export type AircraftCategory = typeof aircraftCategories[number];
@@ -717,3 +746,4 @@ export type LeadStatus = typeof leadStatuses[number];
 export type DealStage = typeof dealStages[number];
 export type ActivityType = typeof activityTypes[number];
 export type LeadSource = typeof leadSources[number];
+export type ExpenseCategory = typeof expenseCategories[number];

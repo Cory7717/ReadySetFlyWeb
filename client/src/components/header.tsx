@@ -36,7 +36,7 @@ export function Header() {
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 hover-elevate active-elevate-2 rounded-md px-2 py-1" data-testid="link-home">
-            <img src={logoImage} alt="Ready Set Fly" className="h-8 w-8" />
+            <img src={logoImage} alt="Ready Set Fly" className="h-[2.6rem] w-[2.6rem]" />
             <span className="font-display text-xl font-bold">Ready Set Fly</span>
           </Link>
 

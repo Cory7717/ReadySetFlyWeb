@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -158,14 +159,14 @@ export default function CreateMarketplaceListing() {
         category: existingListing.category,
         title: existingListing.title,
         description: existingListing.description,
-        location: existingListing.location || "",
-        city: existingListing.city || "",
-        state: existingListing.state || "",
-        zipCode: existingListing.zipCode || "",
+        location: existingListing.location || undefined,
+        city: existingListing.city || undefined,
+        state: existingListing.state || undefined,
+        zipCode: existingListing.zipCode || undefined,
         contactEmail: existingListing.contactEmail,
-        contactPhone: existingListing.contactPhone || "",
-        price: existingListing.price || "",
-        tier: existingListing.tier || "basic",
+        contactPhone: existingListing.contactPhone || undefined,
+        price: existingListing.price || undefined,
+        tier: (existingListing.tier as "basic" | "standard" | "premium") || "basic",
         details: existingListing.details || {},
         images: existingListing.images || [],
         isActive: existingListing.isActive,

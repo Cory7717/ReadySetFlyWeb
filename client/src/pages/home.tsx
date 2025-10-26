@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { AircraftCard } from "@/components/aircraft-card";
 import { AircraftFilters } from "@/components/aircraft-filters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
+import wingtipImage from "@assets/wingtip_featured_1761494838973.jpg";
 
 const quickFilters = [
   { label: "IFR Equipped", value: "ifr" },
@@ -35,7 +36,7 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative h-[600px] bg-gradient-to-r from-primary/20 to-secondary/20 flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-transparent z-10" />
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=1600')] bg-cover bg-center" />
+        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${wingtipImage})` }} />
         
         <div className="relative z-20 w-full max-w-5xl mx-auto px-4">
           <div className="text-center mb-8">

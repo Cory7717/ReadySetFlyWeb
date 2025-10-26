@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Plane, User, Bell, LogOut } from "lucide-react";
+import { User, Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "./theme-toggle";
@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
 
 export function Header() {
   const [location] = useLocation();
@@ -35,7 +36,7 @@ export function Header() {
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 hover-elevate active-elevate-2 rounded-md px-2 py-1" data-testid="link-home">
-            <Plane className="h-6 w-6 text-primary" />
+            <img src={logoImage} alt="Ready Set Fly" className="h-8 w-8" />
             <span className="font-display text-xl font-bold">Ready Set Fly</span>
           </Link>
 

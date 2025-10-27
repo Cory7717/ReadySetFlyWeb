@@ -43,6 +43,7 @@ const profileUpdateSchema = z.object({
   phone: z.string().optional(),
   totalFlightHours: z.coerce.number().min(0).optional(),
   certifications: z.array(z.string()),
+  profilePicture: z.any().optional(),
   pilotLicense: z.any().optional(),
   insurance: z.any().optional(),
 });
@@ -98,13 +99,14 @@ export default function Profile() {
 
   // Update user mutation
   const updateUserMutation = useMutation({
-    mutationFn: async (data: { updates: Partial<User>; files?: { license?: File; insurance?: File } }) => {
+    mutationFn: async (data: { updates: Partial<User>; files?: { profilePicture?: File; license?: File; insurance?: File } }) => {
       let updates = { ...data.updates };
 
       // Upload documents if provided
-      if (data.files?.license || data.files?.insurance) {
+      if (data.files?.profilePicture || data.files?.license || data.files?.insurance) {
         setUploadingDocs(true);
         const formData = new FormData();
+        if (data.files.profilePicture) formData.append('images', data.files.profilePicture);
         if (data.files.license) formData.append('images', data.files.license);
         if (data.files.insurance) formData.append('images', data.files.insurance);
 
@@ -121,6 +123,10 @@ export default function Profile() {
           const urls = uploadData.imageUrls || [];
 
           let urlIndex = 0;
+          if (data.files.profilePicture && urls[urlIndex]) {
+            updates.profileImageUrl = urls[urlIndex];
+            urlIndex++;
+          }
           if (data.files.license && urls[urlIndex]) {
             updates.pilotLicenseUrl = urls[urlIndex];
             urlIndex++;
@@ -163,7 +169,8 @@ export default function Profile() {
       certifications: data.certifications,
     };
 
-    const files: { license?: File; insurance?: File } = {};
+    const files: { profilePicture?: File; license?: File; insurance?: File } = {};
+    if (data.profilePicture?.[0]) files.profilePicture = data.profilePicture[0];
     if (data.pilotLicense?.[0]) files.license = data.pilotLicense[0];
     if (data.insurance?.[0]) files.insurance = data.insurance[0];
 
@@ -189,7 +196,7 @@ export default function Profile() {
           <CardContent className="pt-6">
             <div className="flex flex-col md:flex-row gap-6 items-start">
               <Avatar className="h-24 w-24" data-testid="avatar-profile">
-                <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200" />
+                <AvatarImage src={user.profileImageUrl || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200"} />
                 <AvatarFallback>
                   {user.firstName?.[0]}{user.lastName?.[0]}
                 </AvatarFallback>
@@ -232,6 +239,42 @@ export default function Profile() {
                       </DialogHeader>
                       <Form {...form}>
                         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
+                          {/* Profile Picture Upload */}
+                          <FormField
+                            control={form.control}
+                            name="profilePicture"
+                            render={({ field: { onChange, value, ...field } }) => (
+                              <FormItem>
+                                <FormLabel>Profile Picture</FormLabel>
+                                <FormControl>
+                                  <div className="flex items-center gap-4">
+                                    <Avatar className="h-20 w-20">
+                                      <AvatarImage src={user.profileImageUrl || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200"} />
+                                      <AvatarFallback>
+                                        {user.firstName?.[0]}{user.lastName?.[0]}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <div className="flex-1">
+                                      <Input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => onChange(e.target.files)}
+                                        {...field}
+                                        data-testid="input-profile-picture"
+                                      />
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Upload a new profile picture (JPG, PNG, or GIF)
+                                      </p>
+                                    </div>
+                                  </div>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <Separator />
+
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <FormField
                               control={form.control}

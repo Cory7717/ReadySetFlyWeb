@@ -90,6 +90,12 @@ export const users = pgTable("users", {
   averageRating: decimal("average_rating", { precision: 3, scale: 2 }), // 0.00-5.00
   totalReviews: integer("total_reviews").default(0),
   
+  // Account suspension (for expired documents)
+  isSuspended: boolean("is_suspended").default(false),
+  suspensionReason: text("suspension_reason"),
+  suspendedAt: timestamp("suspended_at"),
+  suspendedBy: varchar("suspended_by").references(() => users.id), // admin who suspended
+  
   // Timestamps (from blueprint)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -502,6 +508,16 @@ export const verificationSubmissions = pgTable("verification_submissions", {
   // Audit trail
   sources: text("sources").array().default(sql`ARRAY[]::text[]`), // e.g., ["FAA Aircraft Registry", "FAA Airmen Database"]
   fileHashes: text("file_hashes").array().default(sql`ARRAY[]::text[]`), // SHA-256 hashes of uploaded files
+  
+  // Document expiration tracking
+  pilotLicenseExpiresAt: timestamp("pilot_license_expires_at"),
+  medicalCertExpiresAt: timestamp("medical_cert_expires_at"),
+  insuranceExpiresAt: timestamp("insurance_expires_at"),
+  governmentIdExpiresAt: timestamp("government_id_expires_at"),
+  
+  // Expiration notifications
+  expirationNotificationSent: boolean("expiration_notification_sent").default(false),
+  lastNotificationSentAt: timestamp("last_notification_sent_at"),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

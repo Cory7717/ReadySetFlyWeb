@@ -21,7 +21,7 @@ const TIER_PRICING: Record<string, number> = {
 
 interface CheckoutFormProps {
   listingData: any;
-  onSuccess: () => void;
+  onSuccess: (transactionId: string) => void;
 }
 
 const CheckoutForm = ({ listingData, onSuccess }: CheckoutFormProps) => {
@@ -121,11 +121,12 @@ const CheckoutForm = ({ listingData, onSuccess }: CheckoutFormProps) => {
         description: "Your listing is being created!",
       });
       
-      // Update listing data with transaction ID
+      // Update listing data with transaction ID in localStorage
       const updatedData = { ...listingData, transactionId: result.transactionId };
       localStorage.setItem('pendingListingData', JSON.stringify(updatedData));
       
-      onSuccess();
+      // Pass transaction ID to parent component
+      onSuccess(result.transactionId);
     } catch (error: any) {
       toast({
         title: "Payment Failed",
@@ -175,14 +176,14 @@ export default function MarketplaceListingCheckout() {
     setListingData(data);
   }, [navigate, toast]);
 
-  const handlePaymentSuccess = async () => {
-    if (!listingData || !listingData.transactionId) return;
+  const handlePaymentSuccess = async (transactionId: string) => {
+    if (!listingData || !transactionId) return;
 
     try {
       // Create the listing with payment verification
       const listingPayload = {
         ...listingData,
-        paymentIntentId: listingData.transactionId, // Backend will verify transaction status
+        paymentIntentId: transactionId, // Backend will verify transaction status
       };
       
       await apiRequest("POST", "/api/marketplace", listingPayload);

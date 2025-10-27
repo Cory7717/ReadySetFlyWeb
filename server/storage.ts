@@ -57,6 +57,27 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>; // REQUIRED for Replit Auth
   searchUsers(query: string): Promise<User[]>; // Admin search by name
+  
+  // User Metrics (Admin Analytics)
+  getUserMetrics(): Promise<{
+    totalUsers: number;
+    verifiedUsers: number;
+    newUsersToday: number;
+    newUsersThisWeek: number;
+    newUsersThisMonth: number;
+    activeListingOwners: number;
+    activeRenters: number;
+    verificationRate: number;
+  }>;
+  getGeographicDistribution(): Promise<{
+    byState: Array<{ state: string; count: number }>;
+    byCity: Array<{ city: string; state: string; count: number }>;
+  }>;
+  getUserRetentionMetrics(): Promise<{
+    returningUsers: number;
+    oneTimeUsers: number;
+    retentionRate: number;
+  }>;
 
   // Aircraft Listings
   getAircraftListing(id: string): Promise<AircraftListing | undefined>;
@@ -296,6 +317,202 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .limit(50);
+  }
+
+  // User Metrics (Admin Analytics)
+  async getUserMetrics(): Promise<{
+    totalUsers: number;
+    verifiedUsers: number;
+    newUsersToday: number;
+    newUsersThisWeek: number;
+    newUsersThisMonth: number;
+    activeListingOwners: number;
+    activeRenters: number;
+    verificationRate: number;
+  }> {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Total users count
+    const totalUsersResult = await db.select({ count: sql<number>`count(*)::int` }).from(users);
+    const totalUsers = totalUsersResult[0]?.count || 0;
+
+    // Verified users count
+    const verifiedUsersResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(users)
+      .where(eq(users.isVerified, true));
+    const verifiedUsers = verifiedUsersResult[0]?.count || 0;
+
+    // New users today
+    const newUsersTodayResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(users)
+      .where(gte(users.createdAt, todayStart));
+    const newUsersToday = newUsersTodayResult[0]?.count || 0;
+
+    // New users this week
+    const newUsersThisWeekResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(users)
+      .where(gte(users.createdAt, weekAgo));
+    const newUsersThisWeek = newUsersThisWeekResult[0]?.count || 0;
+
+    // New users this month
+    const newUsersThisMonthResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(users)
+      .where(gte(users.createdAt, monthAgo));
+    const newUsersThisMonth = newUsersThisMonthResult[0]?.count || 0;
+
+    // Active listing owners (users with at least one aircraft or marketplace listing)
+    const activeListingOwnersResult = await db
+      .select({ count: sql<number>`count(DISTINCT u.id)::int` })
+      .from(users.as('u'))
+      .leftJoin(aircraftListings.as('a'), eq(sql`u.id`, aircraftListings.ownerId))
+      .leftJoin(marketplaceListings.as('m'), eq(sql`u.id`, marketplaceListings.userId))
+      .where(
+        or(
+          eq(aircraftListings.isListed, true),
+          eq(marketplaceListings.isActive, true)
+        )
+      );
+    const activeListingOwners = activeListingOwnersResult[0]?.count || 0;
+
+    // Active renters (users who have completed at least one rental)
+    const activeRentersResult = await db
+      .select({ count: sql<number>`count(DISTINCT ${rentals.renterId})::int` })
+      .from(rentals)
+      .where(eq(rentals.status, 'completed'));
+    const activeRenters = activeRentersResult[0]?.count || 0;
+
+    // Verification rate
+    const verificationRate = totalUsers > 0 ? (verifiedUsers / totalUsers) * 100 : 0;
+
+    return {
+      totalUsers,
+      verifiedUsers,
+      newUsersToday,
+      newUsersThisWeek,
+      newUsersThisMonth,
+      activeListingOwners,
+      activeRenters,
+      verificationRate,
+    };
+  }
+
+  async getGeographicDistribution(): Promise<{
+    byState: Array<{ state: string; count: number }>;
+    byCity: Array<{ city: string; state: string; count: number }>;
+  }> {
+    // Get state distribution from listings (aircraft + marketplace)
+    const stateDistribution = await db
+      .select({
+        state: aircraftListings.state,
+        count: sql<number>`count(DISTINCT ${aircraftListings.ownerId})::int`,
+      })
+      .from(aircraftListings)
+      .where(and(
+        eq(aircraftListings.isListed, true),
+        sql`${aircraftListings.state} IS NOT NULL AND ${aircraftListings.state} != ''`
+      ))
+      .groupBy(aircraftListings.state)
+      .orderBy(desc(sql`count(DISTINCT ${aircraftListings.ownerId})`));
+
+    const marketplaceStateDistribution = await db
+      .select({
+        state: marketplaceListings.state,
+        count: sql<number>`count(DISTINCT ${marketplaceListings.userId})::int`,
+      })
+      .from(marketplaceListings)
+      .where(and(
+        eq(marketplaceListings.isActive, true),
+        sql`${marketplaceListings.state} IS NOT NULL AND ${marketplaceListings.state} != ''`
+      ))
+      .groupBy(marketplaceListings.state)
+      .orderBy(desc(sql`count(DISTINCT ${marketplaceListings.userId})`));
+
+    // Merge and aggregate state counts
+    const stateMap = new Map<string, number>();
+    [...stateDistribution, ...marketplaceStateDistribution].forEach(({ state, count }) => {
+      if (state) {
+        stateMap.set(state, (stateMap.get(state) || 0) + count);
+      }
+    });
+    const byState = Array.from(stateMap.entries())
+      .map(([state, count]) => ({ state, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10); // Top 10 states
+
+    // Get city distribution
+    const cityDistribution = await db
+      .select({
+        city: aircraftListings.city,
+        state: aircraftListings.state,
+        count: sql<number>`count(DISTINCT ${aircraftListings.ownerId})::int`,
+      })
+      .from(aircraftListings)
+      .where(and(
+        eq(aircraftListings.isListed, true),
+        sql`${aircraftListings.city} IS NOT NULL AND ${aircraftListings.city} != ''`
+      ))
+      .groupBy(aircraftListings.city, aircraftListings.state)
+      .orderBy(desc(sql`count(DISTINCT ${aircraftListings.ownerId})`))
+      .limit(10); // Top 10 cities
+
+    const byCity = cityDistribution.map(({ city, state, count }) => ({
+      city: city || '',
+      state: state || '',
+      count,
+    }));
+
+    return { byState, byCity };
+  }
+
+  async getUserRetentionMetrics(): Promise<{
+    returningUsers: number;
+    oneTimeUsers: number;
+    retentionRate: number;
+  }> {
+    // Returning users: users with more than one completed rental
+    const returningUsersResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(
+        db
+          .select({ renterId: rentals.renterId })
+          .from(rentals)
+          .where(eq(rentals.status, 'completed'))
+          .groupBy(rentals.renterId)
+          .having(sql`count(*) > 1`)
+          .as('returning_renters')
+      );
+    const returningUsers = returningUsersResult[0]?.count || 0;
+
+    // One-time users: users with exactly one completed rental
+    const oneTimeUsersResult = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(
+        db
+          .select({ renterId: rentals.renterId })
+          .from(rentals)
+          .where(eq(rentals.status, 'completed'))
+          .groupBy(rentals.renterId)
+          .having(sql`count(*) = 1`)
+          .as('one_time_renters')
+      );
+    const oneTimeUsers = oneTimeUsersResult[0]?.count || 0;
+
+    // Retention rate
+    const totalRenters = returningUsers + oneTimeUsers;
+    const retentionRate = totalRenters > 0 ? (returningUsers / totalRenters) * 100 : 0;
+
+    return {
+      returningUsers,
+      oneTimeUsers,
+      retentionRate,
+    };
   }
 
   // Aircraft Listings

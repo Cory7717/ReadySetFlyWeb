@@ -368,18 +368,24 @@ export class DatabaseStorage implements IStorage {
     const newUsersThisMonth = newUsersThisMonthResult[0]?.count || 0;
 
     // Active listing owners (users with at least one aircraft or marketplace listing)
-    const activeListingOwnersResult = await db
-      .select({ count: sql<number>`count(DISTINCT u.id)::int` })
-      .from(users.as('u'))
-      .leftJoin(aircraftListings.as('a'), eq(sql`u.id`, aircraftListings.ownerId))
-      .leftJoin(marketplaceListings.as('m'), eq(sql`u.id`, marketplaceListings.userId))
-      .where(
-        or(
-          eq(aircraftListings.isListed, true),
-          eq(marketplaceListings.isActive, true)
-        )
-      );
-    const activeListingOwners = activeListingOwnersResult[0]?.count || 0;
+    // Count unique aircraft owners
+    const aircraftOwnersResult = await db
+      .selectDistinct({ ownerId: aircraftListings.ownerId })
+      .from(aircraftListings)
+      .where(eq(aircraftListings.isListed, true));
+    
+    // Count unique marketplace listing owners
+    const marketplaceOwnersResult = await db
+      .selectDistinct({ userId: marketplaceListings.userId })
+      .from(marketplaceListings)
+      .where(eq(marketplaceListings.isActive, true));
+    
+    // Combine and count unique user IDs
+    const uniqueOwners = new Set([
+      ...aircraftOwnersResult.map(r => r.ownerId),
+      ...marketplaceOwnersResult.map(r => r.userId)
+    ]);
+    const activeListingOwners = uniqueOwners.size;
 
     // Active renters (users who have completed at least one rental)
     const activeRentersResult = await db

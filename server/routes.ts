@@ -1835,7 +1835,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   });
 
   // Grant promotional free time to marketplace listing (admin only)
-  app.post("/api/admin/marketplace/:id/grant-promo", isAuthenticated, isAdmin, async (req, res) => {
+  app.post("/api/admin/marketplace/:id/grant-promo", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { durationDays } = req.body;
       
@@ -1846,7 +1846,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const listing = await storage.grantMarketplacePromoFreeTime(
         req.params.id, 
         durationDays, 
-        req.user!.id
+        req.user.id
       );
       
       if (!listing) {

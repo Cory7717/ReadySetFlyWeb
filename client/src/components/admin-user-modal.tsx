@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { X, Mail, Phone, MapPin, Calendar, Shield, CheckCircle, XCircle, Plane, List, DollarSign, Award, AlertCircle, Key, Ban, UserCheck } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User, AircraftListing, MarketplaceListing } from "@shared/schema";
@@ -26,6 +28,9 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
   const [activeTab, setActiveTab] = useState("profile");
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | null>(null);
   const [selectedMarketplaceId, setSelectedMarketplaceId] = useState<string | null>(null);
+  const [promoDialogOpen, setPromoDialogOpen] = useState(false);
+  const [selectedPromoListingId, setSelectedPromoListingId] = useState<string | null>(null);
+  const [promoDuration, setPromoDuration] = useState("7");
   const { toast } = useToast();
 
   // Fetch user details
@@ -92,6 +97,31 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
       toast({
         title: "Admin Status Updated",
         description: "User admin privileges have been updated.",
+      });
+    },
+  });
+
+  // Grant promotional free time mutation
+  const grantPromoMutation = useMutation({
+    mutationFn: async ({ listingId, durationDays }: { listingId: string; durationDays: number }) => {
+      return await apiRequest("POST", `/api/admin/marketplace/${listingId}/grant-promo`, { durationDays });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", userId, "marketplace"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/marketplace"] });
+      toast({
+        title: "Promotional Free Time Granted",
+        description: "The listing has been granted free promotional time.",
+      });
+      setPromoDialogOpen(false);
+      setSelectedPromoListingId(null);
+      setPromoDuration("7");
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to grant promotional free time. Please try again.",
+        variant: "destructive",
       });
     },
   });
@@ -447,6 +477,11 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                                 <Badge variant="outline" className="capitalize">
                                   {listing.category}
                                 </Badge>
+                                {listing.promoFreeUntil && new Date(listing.promoFreeUntil) > new Date() && (
+                                  <Badge variant="default" className="bg-green-600">
+                                    Free Until {new Date(listing.promoFreeUntil).toLocaleDateString()}
+                                  </Badge>
+                                )}
                               </div>
                               <div className="font-semibold text-lg">
                                 {listing.title}
@@ -468,6 +503,19 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                                   </div>
                                 )}
                               </div>
+                            </div>
+                            <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedPromoListingId(listing.id);
+                                  setPromoDialogOpen(true);
+                                }}
+                                data-testid={`button-grant-promo-${listing.id}`}
+                              >
+                                Grant Promo
+                              </Button>
                             </div>
                           </div>
                         </CardContent>
@@ -620,6 +668,67 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
           onOpenChange={(open) => !open && setSelectedMarketplaceId(null)}
         />
       )}
+
+      {/* Grant Promotional Free Time Dialog */}
+      <Dialog open={promoDialogOpen} onOpenChange={setPromoDialogOpen}>
+        <DialogContent data-testid="dialog-grant-promo">
+          <DialogHeader>
+            <DialogTitle>Grant Promotional Free Time</DialogTitle>
+            <DialogDescription>
+              Grant this user free listing time as a customer service gesture. The listing will be active for the selected duration without charging the user.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="promo-duration">Duration</Label>
+              <Select value={promoDuration} onValueChange={setPromoDuration}>
+                <SelectTrigger id="promo-duration" data-testid="select-promo-duration">
+                  <SelectValue placeholder="Select duration" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">7 Days</SelectItem>
+                  <SelectItem value="14">14 Days (2 weeks)</SelectItem>
+                  <SelectItem value="21">21 Days (3 weeks)</SelectItem>
+                  <SelectItem value="30">30 Days (1 month)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                This will extend the listing's active period by {promoDuration} days without any charge to the user. This action will be tracked for audit purposes.
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPromoDialogOpen(false);
+                setSelectedPromoListingId(null);
+                setPromoDuration("7");
+              }}
+              data-testid="button-cancel-promo"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedPromoListingId) {
+                  grantPromoMutation.mutate({ 
+                    listingId: selectedPromoListingId, 
+                    durationDays: parseInt(promoDuration) 
+                  });
+                }
+              }}
+              disabled={grantPromoMutation.isPending}
+              data-testid="button-confirm-promo"
+            >
+              {grantPromoMutation.isPending ? "Granting..." : "Grant Free Time"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

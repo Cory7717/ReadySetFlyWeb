@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import multer from "multer";
 import OpenAI from "openai";
-import Stripe from "stripe";
+import braintree from "braintree";
 import { storage } from "./storage";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
@@ -16,11 +16,16 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-// Initialize Stripe client (from blueprint:javascript_stripe)
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+// Initialize Braintree gateway
+if (!process.env.BRAINTREE_MERCHANT_ID || !process.env.BRAINTREE_PUBLIC_KEY || !process.env.BRAINTREE_PRIVATE_KEY) {
+  throw new Error('Missing required Braintree secrets: BRAINTREE_MERCHANT_ID, BRAINTREE_PUBLIC_KEY, BRAINTREE_PRIVATE_KEY');
 }
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const gateway = new braintree.BraintreeGateway({
+  environment: braintree.Environment.Sandbox, // Change to Production when going live
+  merchantId: process.env.BRAINTREE_MERCHANT_ID,
+  publicKey: process.env.BRAINTREE_PUBLIC_KEY,
+  privateKey: process.env.BRAINTREE_PRIVATE_KEY
+});
 
 // Multer setup for file uploads with disk storage
 const storage_config = multer.diskStorage({
@@ -173,14 +178,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Stripe payment intent endpoint for marketplace listing fees (from blueprint:javascript_stripe)
-  app.post("/api/create-listing-payment-intent", isAuthenticated, async (req: any, res) => {
+  // Braintree client token generation (used by frontend to initialize payment UI)
+  app.get("/api/braintree/client-token", isAuthenticated, async (req: any, res) => {
     try {
-      const { category, tier } = req.body;
+      const response = await gateway.clientToken.generate({});
+      res.json({ clientToken: response.clientToken });
+    } catch (error: any) {
+      console.error("Braintree client token error:", error);
+      res.status(500).json({ error: error.message || "Failed to generate client token" });
+    }
+  });
+
+  // Braintree checkout for marketplace listing fees
+  app.post("/api/braintree/checkout-listing", isAuthenticated, async (req: any, res) => {
+    try {
+      const { paymentMethodNonce, category, tier } = req.body;
       const userId = req.user.claims.sub;
       
-      if (!category) {
-        return res.status(400).json({ error: "Missing category" });
+      if (!paymentMethodNonce || !category) {
+        return res.status(400).json({ error: "Missing required fields" });
       }
       
       // Server-side pricing calculation - NEVER trust client
@@ -198,44 +214,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount = 25; // Fixed fee for other marketplace categories
       }
       
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount * 100), // Convert to cents
-        currency: "usd",
-        metadata: {
-          userId,
-          category,
-          tier: tier || "basic",
-          purpose: "marketplace_listing_fee",
-          // Note: listingData is NOT stored here due to Stripe's 500-char metadata limit
-          // The actual listing is created via POST /api/marketplace after payment succeeds
+      const result = await gateway.transaction.sale({
+        amount: amount.toFixed(2),
+        paymentMethodNonce,
+        options: {
+          submitForSettlement: true
         },
+        customFields: {
+          user_id: userId,
+          category: category,
+          tier: tier || "basic",
+          purpose: "marketplace_listing_fee"
+        }
       });
       
-      res.json({ 
-        clientSecret: paymentIntent.client_secret,
-        paymentIntentId: paymentIntent.id,
-        amount,
-      });
+      if (result.success) {
+        res.json({ 
+          success: true,
+          transactionId: result.transaction.id,
+          amount
+        });
+      } else {
+        console.error("Braintree transaction failed:", result.message);
+        res.status(400).json({ 
+          success: false, 
+          error: result.message || "Transaction failed" 
+        });
+      }
     } catch (error: any) {
-      console.error("Stripe payment intent error:", error);
-      res.status(500).json({ error: error.message || "Payment intent failed" });
+      console.error("Braintree checkout error:", error);
+      res.status(500).json({ error: error.message || "Payment processing failed" });
     }
   });
   
-  // Stripe payment intent endpoint for rental payments (requires STRIPE_SECRET_KEY)
-  app.post("/api/create-payment-intent", async (req, res) => {
+  // Braintree checkout for rental payments
+  app.post("/api/braintree/checkout-rental", async (req, res) => {
     try {
-      const { amount, rentalId } = req.body;
+      const { paymentMethodNonce, amount, rentalId } = req.body;
       
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount * 100),
-        currency: "usd",
-        metadata: { rentalId },
+      if (!paymentMethodNonce || !amount || !rentalId) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      const result = await gateway.transaction.sale({
+        amount: parseFloat(amount).toFixed(2),
+        paymentMethodNonce,
+        options: {
+          submitForSettlement: true
+        },
+        customFields: {
+          rental_id: rentalId
+        }
       });
       
-      res.json({ clientSecret: paymentIntent.client_secret });
+      if (result.success) {
+        res.json({ 
+          success: true,
+          transactionId: result.transaction.id
+        });
+      } else {
+        console.error("Braintree rental payment failed:", result.message);
+        res.status(400).json({ 
+          success: false, 
+          error: result.message || "Payment failed" 
+        });
+      }
     } catch (error: any) {
-      res.status(500).json({ error: error.message || "Payment intent failed" });
+      console.error("Braintree rental checkout error:", error);
+      res.status(500).json({ error: error.message || "Payment processing failed" });
     }
   });
 

@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert } from "@shared/schema";
@@ -320,6 +321,26 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-alerts"] });
       toast({ title: "Promotional alert updated" });
+    },
+  });
+
+  const createPromoAlertMutation = useMutation({
+    mutationFn: async (data: InsertPromoAlert) => {
+      return await apiRequest("POST", `/api/promo-alerts`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-alerts"] });
+      promoForm.reset();
+      setPromoDialogOpen(false);
+      setEditingPromo(null);
+      toast({ title: "Promotional alert created successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to create promotional alert",
+        variant: "destructive" 
+      });
     },
   });
 
@@ -1427,10 +1448,25 @@ export default function AdminDashboard() {
         <TabsContent value="promo" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Promotional Alerts</CardTitle>
-              <CardDescription>
-                Manage promotional banners and announcements that appear on the marketplace
-              </CardDescription>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <CardTitle>Promotional Alerts</CardTitle>
+                  <CardDescription>
+                    Manage promotional banners and announcements that appear on the marketplace
+                  </CardDescription>
+                </div>
+                <Button 
+                  onClick={() => {
+                    setEditingPromo(null);
+                    promoForm.reset();
+                    setPromoDialogOpen(true);
+                  }}
+                  data-testid="button-add-promo"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Promo
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {promoAlertsLoading ? (
@@ -2243,6 +2279,160 @@ export default function AdminDashboard() {
               {deleteAircraftMutation.isPending || deleteMarketplaceMutation.isPending ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create/Edit Promo Alert Dialog */}
+      <Dialog open={promoDialogOpen} onOpenChange={setPromoDialogOpen}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-create-promo">
+          <DialogHeader>
+            <DialogTitle>{editingPromo ? "Edit" : "Create"} Promotional Alert</DialogTitle>
+            <DialogDescription>
+              {editingPromo ? "Update" : "Create a new"} promotional banner or announcement for the marketplace
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...promoForm}>
+            <form onSubmit={promoForm.handleSubmit((data) => createPromoAlertMutation.mutate(data))} className="space-y-4">
+              <FormField
+                control={promoForm.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Title</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Limited Time Offer!" {...field} data-testid="input-promo-title" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={promoForm.control}
+                name="message"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Message</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Get your first listing free for 7 days!" 
+                        {...field} 
+                        data-testid="textarea-promo-message"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={promoForm.control}
+                name="promoCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Promo Code (Optional)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="LAUNCH2025" 
+                        {...field} 
+                        value={field.value || ""}
+                        data-testid="input-promo-code" 
+                      />
+                    </FormControl>
+                    <FormDescription>Leave blank if no code needed</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={promoForm.control}
+                  name="showOnMainPage"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox 
+                          checked={field.value} 
+                          onCheckedChange={field.onChange}
+                          data-testid="checkbox-show-main"
+                        />
+                      </FormControl>
+                      <FormLabel className="cursor-pointer">Show on Main Page</FormLabel>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={promoForm.control}
+                  name="showOnCategoryPages"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox 
+                          checked={field.value} 
+                          onCheckedChange={field.onChange}
+                          data-testid="checkbox-show-category"
+                        />
+                      </FormControl>
+                      <FormLabel className="cursor-pointer">Show on Category Pages</FormLabel>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={promoForm.control}
+                name="targetCategories"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Target Categories</FormLabel>
+                    <div className="grid grid-cols-2 gap-3">
+                      {["sale", "charter", "cfi", "flight-school", "mechanic", "job"].map((category) => (
+                        <div key={category} className="flex items-center gap-2">
+                          <Checkbox
+                            checked={field.value?.includes(category)}
+                            onCheckedChange={(checked) => {
+                              const current = field.value || [];
+                              if (checked) {
+                                field.onChange([...current, category]);
+                              } else {
+                                field.onChange(current.filter((c: string) => c !== category));
+                              }
+                            }}
+                            data-testid={`checkbox-category-${category}`}
+                          />
+                          <Label className="cursor-pointer capitalize">
+                            {category === "cfi" ? "CFI" : category.replace("-", " ")}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                    <FormDescription>Leave all unchecked to show on all categories</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setPromoDialogOpen(false);
+                    setEditingPromo(null);
+                    promoForm.reset();
+                  }}
+                  data-testid="button-cancel-create-promo"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={createPromoAlertMutation.isPending}
+                  data-testid="button-submit-promo"
+                >
+                  {createPromoAlertMutation.isPending ? "Creating..." : editingPromo ? "Update" : "Create"} Alert
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
 

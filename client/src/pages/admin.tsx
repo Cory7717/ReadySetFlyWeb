@@ -313,6 +313,16 @@ export default function AdminDashboard() {
     },
   });
 
+  const togglePromoAlertMutation = useMutation({
+    mutationFn: async ({ id, isEnabled }: { id: string; isEnabled: boolean }) => {
+      return await apiRequest("PATCH", `/api/promo-alerts/${id}`, { isEnabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-alerts"] });
+      toast({ title: "Promotional alert updated" });
+    },
+  });
+
   const deleteMarketplaceMutation = useMutation({
     mutationFn: async (id: string) => {
       return await apiRequest("DELETE", `/api/marketplace/${id}`, {});
@@ -1454,9 +1464,20 @@ export default function AdminDashboard() {
                                   </div>
                                 )}
                               </div>
-                              <Badge variant={alert.isEnabled ? "default" : "secondary"}>
-                                {alert.isEnabled ? "Active" : "Inactive"}
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge variant={alert.isEnabled ? "default" : "secondary"}>
+                                  {alert.isEnabled ? "Active" : "Inactive"}
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => togglePromoAlertMutation.mutate({ id: alert.id, isEnabled: !alert.isEnabled })}
+                                  disabled={togglePromoAlertMutation.isPending}
+                                  data-testid={`button-toggle-promo-${alert.id}`}
+                                >
+                                  {alert.isEnabled ? "Disable" : "Enable"}
+                                </Button>
+                              </div>
                             </div>
                             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                               {alert.showOnMainPage && <Badge variant="outline">Main Page</Badge>}

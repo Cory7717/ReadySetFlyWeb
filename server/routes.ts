@@ -1480,6 +1480,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // User Metrics (Admin only)
+  app.get("/api/admin/user-metrics", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const [userMetrics, geographic, retention] = await Promise.all([
+        storage.getUserMetrics(),
+        storage.getGeographicDistribution(),
+        storage.getUserRetentionMetrics()
+      ]);
+      
+      res.json({
+        ...userMetrics,
+        geographic,
+        retention
+      });
+    } catch (error) {
+      console.error("Error fetching user metrics:", error);
+      res.status(500).json({ error: "Failed to fetch user metrics" });
+    }
+  });
+
   // Stale & Orphaned Listings Management (Admin only)
   app.get("/api/admin/stale-listings", isAuthenticated, isAdmin, async (req, res) => {
     try {

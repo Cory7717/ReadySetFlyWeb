@@ -796,7 +796,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
     </AlertDialog>
 
     {/* Job Application Modal */}
-    {listing && listing.category === "Aviation Jobs" && (
+    {listing && listing.category === "job" && (
       <JobApplicationModal
         listing={listing}
         open={jobApplicationOpen}

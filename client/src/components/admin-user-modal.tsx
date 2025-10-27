@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { X, Mail, Phone, MapPin, Calendar, Shield, CheckCircle, XCircle, Plane, List, DollarSign, Award, AlertCircle, Key, Ban, UserCheck } from "lucide-react";
+import { X, Mail, Phone, MapPin, Calendar, Shield, CheckCircle, XCircle, Plane, List, DollarSign, Award, AlertCircle, Key, Ban, UserCheck, FileText, Download, Eye } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { User, AircraftListing, MarketplaceListing } from "@shared/schema";
+import type { User, AircraftListing, MarketplaceListing, VerificationSubmission } from "@shared/schema";
 import { formatPhoneNumber } from "@/lib/formatters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
 import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
@@ -48,6 +48,12 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
   // Fetch user's marketplace listings
   const { data: marketplaceListings = [], isLoading: marketplaceLoading } = useQuery<MarketplaceListing[]>({
     queryKey: ["/api/admin/users", userId, "marketplace"],
+    enabled: open && !!userId,
+  });
+
+  // Fetch user's verification submissions
+  const { data: verifications = [], isLoading: verificationsLoading } = useQuery<VerificationSubmission[]>({
+    queryKey: ["/api/admin/users", userId, "verifications"],
     enabled: open && !!userId,
   });
 
@@ -142,6 +148,37 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
     if (!userId || !user) return;
     if (!confirm(`Are you sure you want to ${user.isAdmin ? "remove" : "grant"} admin privileges for this user?`)) return;
     toggleAdminMutation.mutate({ userId, isAdmin: !user.isAdmin });
+  };
+
+  // Helper function to determine if a document has expired
+  const getExpirationStatus = (expiresAt: string | null | undefined) => {
+    if (!expiresAt) return { status: 'no-date', label: 'No expiration date', variant: 'secondary' as const };
+    
+    const expDate = new Date(expiresAt);
+    const now = new Date();
+    const daysUntilExpiration = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysUntilExpiration < 0) {
+      return { status: 'expired', label: `Expired ${Math.abs(daysUntilExpiration)} days ago`, variant: 'destructive' as const };
+    } else if (daysUntilExpiration <= 7) {
+      return { status: 'critical', label: `Expires in ${daysUntilExpiration} days`, variant: 'destructive' as const };
+    } else if (daysUntilExpiration <= 30) {
+      return { status: 'warning', label: `Expires in ${daysUntilExpiration} days`, variant: 'outline' as const };
+    } else {
+      return { status: 'valid', label: `Valid for ${daysUntilExpiration} days`, variant: 'default' as const };
+    }
+  };
+
+  // Helper function to format document type names
+  const formatDocType = (type: string) => {
+    const typeMap: Record<string, string> = {
+      'renter_identity': 'Identity Verification',
+      'renter_payment': 'Payment Verification',
+      'renter_pilot': 'Pilot License',
+      'owner_aircraft': 'Aircraft Ownership',
+      'owner_maintenance': 'Maintenance Records'
+    };
+    return typeMap[type] || type;
   };
 
   return (
@@ -383,6 +420,125 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                           {user.averageRating || "N/A"} ({user.totalReviews || 0} reviews)
                         </div>
                       </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Uploaded Documents */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        Uploaded Documents
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {verificationsLoading ? (
+                        <div className="text-center py-4 text-muted-foreground text-sm">
+                          Loading documents...
+                        </div>
+                      ) : verifications.length === 0 ? (
+                        <div className="text-center py-4 text-muted-foreground text-sm">
+                          No verification documents uploaded
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {verifications.map((verification) => (
+                            <div key={verification.id} className="border rounded-lg p-4 space-y-3">
+                              <div className="flex items-start justify-between gap-4">
+                                <div>
+                                  <div className="font-medium">{formatDocType(verification.type)}</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    Submitted {verification.createdAt ? new Date(verification.createdAt).toLocaleDateString() : 'N/A'}
+                                  </div>
+                                </div>
+                                <Badge variant={verification.status === 'approved' ? 'default' : verification.status === 'rejected' ? 'destructive' : 'secondary'}>
+                                  {verification.status}
+                                </Badge>
+                              </div>
+
+                              {/* Expiration Dates */}
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                {verification.pilotLicenseExpiresAt && (
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-muted-foreground">Pilot License</span>
+                                    <Badge variant={getExpirationStatus(verification.pilotLicenseExpiresAt.toString()).variant} className="w-fit">
+                                      {getExpirationStatus(verification.pilotLicenseExpiresAt.toString()).label}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      Expires: {new Date(verification.pilotLicenseExpiresAt).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                )}
+                                {verification.medicalCertExpiresAt && (
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-muted-foreground">Medical Certificate</span>
+                                    <Badge variant={getExpirationStatus(verification.medicalCertExpiresAt.toString()).variant} className="w-fit">
+                                      {getExpirationStatus(verification.medicalCertExpiresAt.toString()).label}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      Expires: {new Date(verification.medicalCertExpiresAt).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                )}
+                                {verification.insuranceExpiresAt && (
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-muted-foreground">Insurance</span>
+                                    <Badge variant={getExpirationStatus(verification.insuranceExpiresAt.toString()).variant} className="w-fit">
+                                      {getExpirationStatus(verification.insuranceExpiresAt.toString()).label}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      Expires: {new Date(verification.insuranceExpiresAt).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                )}
+                                {verification.governmentIdExpiresAt && (
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-muted-foreground">Government ID</span>
+                                    <Badge variant={getExpirationStatus(verification.governmentIdExpiresAt.toString()).variant} className="w-fit">
+                                      {getExpirationStatus(verification.governmentIdExpiresAt.toString()).label}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      Expires: {new Date(verification.governmentIdExpiresAt).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Uploaded Files */}
+                              {verification.documentUrls && verification.documentUrls.length > 0 && (
+                                <div className="space-y-2">
+                                  <div className="text-sm font-medium">Documents:</div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {verification.documentUrls.map((url, idx) => (
+                                      <Button
+                                        key={idx}
+                                        size="sm"
+                                        variant="outline"
+                                        asChild
+                                        data-testid={`button-view-document-${idx}`}
+                                      >
+                                        <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+                                          <Eye className="h-3 w-3" />
+                                          <span>View Document {idx + 1}</span>
+                                          <Download className="h-3 w-3" />
+                                        </a>
+                                      </Button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Review Notes */}
+                              {verification.reviewNotes && (
+                                <div className="mt-3 p-3 bg-muted rounded-md">
+                                  <div className="text-sm font-medium mb-1">Admin Notes:</div>
+                                  <div className="text-sm text-muted-foreground">{verification.reviewNotes}</div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>

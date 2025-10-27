@@ -446,6 +446,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             faaRegistryData: null,
             sources: [],
             fileHashes: [],
+            pilotLicenseExpiresAt: null,
+            medicalCertExpiresAt: null,
+            insuranceExpiresAt: null,
+            governmentIdExpiresAt: null,
+            documentExpirationNotified: false,
+            reminderSentAt: null,
           });
         }
         
@@ -1206,6 +1212,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           faaRegistryData: null,
           sources: [],
           fileHashes: [],
+          pilotLicenseExpiresAt: null,
+          medicalCertExpiresAt: null,
+          insuranceExpiresAt: null,
+          governmentIdExpiresAt: null,
+          documentExpirationNotified: false,
+          reminderSentAt: null,
         });
         
         res.json(submission);
@@ -1340,6 +1352,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(listings);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch user's marketplace listings" });
+    }
+  });
+
+  // Get user's verification submissions (admin)
+  app.get("/api/admin/users/:userId/verifications", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const verifications = await storage.getVerificationSubmissionsByUser(req.params.userId);
+      res.json(verifications);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch user's verification submissions" });
     }
   });
 

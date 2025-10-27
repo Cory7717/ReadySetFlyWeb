@@ -1594,6 +1594,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Marketplace listing not found" });
       }
 
+      // Debug logging
+      console.log("[REFRESH DEBUG] listing.userId:", listing.userId, "type:", typeof listing.userId);
+      console.log("[REFRESH DEBUG] req.user?.id:", req.user?.id, "type:", typeof req.user?.id);
+      console.log("[REFRESH DEBUG] req.user?.isAdmin:", req.user?.isAdmin);
+      console.log("[REFRESH DEBUG] Match:", listing.userId === req.user?.id);
+
       // Verify ownership
       if (listing.userId !== req.user?.id && !req.user?.isAdmin) {
         return res.status(403).json({ error: "Not authorized to refresh this listing" });

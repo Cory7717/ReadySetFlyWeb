@@ -1,83 +1,144 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { loadStripe } from "@stripe/stripe-js";
-import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import type { Rental, AircraftListing } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Plane, Calendar, Clock } from "lucide-react";
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY!);
+declare global {
+  interface Window {
+    braintree: any;
+  }
+}
 
 function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraft: AircraftListing; onSuccess: () => void }) {
-  const stripe = useStripe();
-  const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [dropinInstance, setDropinInstance] = useState<any>(null);
+  const dropinContainerRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const loadBraintreeAndInitialize = async () => {
+      // Load Braintree scripts if not already loaded
+      if (!window.braintree) {
+        const clientScript = document.createElement('script');
+        clientScript.src = 'https://js.braintreegateway.com/web/3.101.0/js/client.min.js';
+        document.head.appendChild(clientScript);
+
+        const dropinScript = document.createElement('script');
+        dropinScript.src = 'https://js.braintreegateway.com/web/dropin/1.43.0/js/dropin.min.js';
+        document.head.appendChild(dropinScript);
+
+        await new Promise((resolve) => {
+          dropinScript.onload = resolve;
+        });
+      }
+
+      // Fetch client token from backend
+      const response = await fetch('/api/braintree/client-token', {
+        credentials: 'include',
+      });
+      const { clientToken } = await response.json();
+
+      // Create Drop-in UI
+      window.braintree.dropin.create({
+        authorization: clientToken,
+        container: dropinContainerRef.current,
+        card: {
+          cardholderName: {
+            required: true
+          }
+        }
+      }, (createErr: any, instance: any) => {
+        if (createErr) {
+          console.error('Braintree Drop-in error:', createErr);
+          toast({
+            title: "Error",
+            description: "Failed to initialize payment form",
+            variant: "destructive",
+          });
+          return;
+        }
+        setDropinInstance(instance);
+      });
+    };
+
+    loadBraintreeAndInitialize();
+
+    return () => {
+      if (dropinInstance) {
+        dropinInstance.teardown();
+      }
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!stripe || !elements) {
+    if (!dropinInstance) {
       return;
     }
 
     setIsProcessing(true);
 
-    const { error, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/dashboard`,
-      },
-      redirect: "if_required",
-    });
+    try {
+      // Request payment nonce from Drop-in UI
+      const { nonce } = await dropinInstance.requestPaymentMethod();
 
-    if (error) {
+      // Send nonce to backend for processing
+      const response = await fetch('/api/braintree/checkout-rental', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          paymentMethodNonce: nonce,
+          amount: parseFloat(rental.totalCostRenter),
+          rentalId: rental.id
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Payment failed');
+      }
+
+      // Verify payment and activate rental
+      const completeResponse = await fetch(`/api/rentals/${rental.id}/complete-payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ transactionId: result.transactionId }),
+      });
+
+      if (!completeResponse.ok) {
+        throw new Error("Failed to complete rental");
+      }
+
+      toast({
+        title: "Payment successful!",
+        description: "Your rental is now active. Safe flying!",
+      });
+      
+      onSuccess();
+    } catch (err: any) {
       toast({
         title: "Payment failed",
-        description: error.message || "Please try again",
+        description: err.message || "Please try again",
         variant: "destructive",
       });
       setIsProcessing(false);
-    } else if (paymentIntent && paymentIntent.status === "succeeded") {
-      // Call secure backend endpoint to verify payment and update rental
-      try {
-        const response = await fetch(`/api/rentals/${rental.id}/complete-payment`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ paymentIntentId: paymentIntent.id }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to complete rental");
-        }
-
-        toast({
-          title: "Payment successful!",
-          description: "Your rental is now active. Safe flying!",
-        });
-        
-        onSuccess();
-      } catch (err) {
-        toast({
-          title: "Error",
-          description: "Payment processed but rental activation failed. Please contact support.",
-          variant: "destructive",
-        });
-        setIsProcessing(false);
-      }
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <PaymentElement />
+      <div ref={dropinContainerRef} className="min-h-[300px]"></div>
       <Button
         type="submit"
-        disabled={!stripe || isProcessing}
+        disabled={!dropinInstance || isProcessing}
         className="w-full bg-accent text-accent-foreground hover:bg-accent"
         size="lg"
         data-testid="button-submit-payment"
@@ -91,7 +152,6 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
 export default function RentalPayment() {
   const [, params] = useRoute("/rental-payment/:id");
   const [, setLocation] = useLocation();
-  const [clientSecret, setClientSecret] = useState("");
   const { toast } = useToast();
 
   const { data: rental } = useQuery<Rental>({
@@ -114,30 +174,6 @@ export default function RentalPayment() {
     enabled: !!rental?.aircraftId,
   });
 
-  useEffect(() => {
-    if (rental && !clientSecret) {
-      // Create payment intent
-      fetch("/api/create-payment-intent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          amount: parseFloat(rental.totalCostRenter), // Server will convert to cents
-          rentalId: rental.id,
-        }),
-      })
-        .then((res) => res.json())
-        .then((data) => setClientSecret(data.clientSecret))
-        .catch((error) => {
-          toast({
-            title: "Error",
-            description: "Failed to initialize payment",
-            variant: "destructive",
-          });
-        });
-    }
-  }, [rental, clientSecret, toast]);
-
   if (!rental || !aircraft) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -148,11 +184,6 @@ export default function RentalPayment() {
       </div>
     );
   }
-
-  const options = {
-    clientSecret,
-    appearance: { theme: "stripe" as const },
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -217,22 +248,18 @@ export default function RentalPayment() {
             </Card>
 
             {/* Payment Form */}
-            {clientSecret && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Payment Information</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Elements stripe={stripePromise} options={options}>
-                    <CheckoutForm
-                      rental={rental}
-                      aircraft={aircraft}
-                      onSuccess={() => setLocation("/dashboard")}
-                    />
-                  </Elements>
-                </CardContent>
-              </Card>
-            )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CheckoutForm
+                  rental={rental}
+                  aircraft={aircraft}
+                  onSuccess={() => setLocation("/dashboard")}
+                />
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

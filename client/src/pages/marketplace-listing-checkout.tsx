@@ -1,18 +1,16 @@
-import { useStripe, Elements, PaymentElement, useElements } from '@stripe/react-stripe-js';
-import { loadStripe } from '@stripe/stripe-js';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useLocation, useRoute, useRouter } from 'wouter';
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { ArrowLeft, CheckCircle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
-// Initialize Stripe (from blueprint:javascript_stripe)
-if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-  throw new Error('Missing required Stripe key: VITE_STRIPE_PUBLIC_KEY');
+declare global {
+  interface Window {
+    braintree: any;
+  }
 }
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 // Tier pricing (matching replit.md specs)
 const TIER_PRICING: Record<string, number> = {
@@ -22,64 +20,130 @@ const TIER_PRICING: Record<string, number> = {
 };
 
 interface CheckoutFormProps {
+  listingData: any;
   onSuccess: () => void;
 }
 
-const CheckoutForm = ({ onSuccess }: CheckoutFormProps) => {
-  const stripe = useStripe();
-  const elements = useElements();
+const CheckoutForm = ({ listingData, onSuccess }: CheckoutFormProps) => {
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [dropinInstance, setDropinInstance] = useState<any>(null);
+  const dropinContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const loadBraintreeAndInitialize = async () => {
+      // Load Braintree scripts if not already loaded
+      if (!window.braintree) {
+        const clientScript = document.createElement('script');
+        clientScript.src = 'https://js.braintreegateway.com/web/3.101.0/js/client.min.js';
+        document.head.appendChild(clientScript);
+
+        const dropinScript = document.createElement('script');
+        dropinScript.src = 'https://js.braintreegateway.com/web/dropin/1.43.0/js/dropin.min.js';
+        document.head.appendChild(dropinScript);
+
+        await new Promise((resolve) => {
+          dropinScript.onload = resolve;
+        });
+      }
+
+      // Fetch client token from backend
+      const response = await fetch('/api/braintree/client-token', {
+        credentials: 'include',
+      });
+      const { clientToken } = await response.json();
+
+      // Create Drop-in UI
+      window.braintree.dropin.create({
+        authorization: clientToken,
+        container: dropinContainerRef.current,
+        card: {
+          cardholderName: {
+            required: true
+          }
+        }
+      }, (createErr: any, instance: any) => {
+        if (createErr) {
+          console.error('Braintree Drop-in error:', createErr);
+          toast({
+            title: "Error",
+            description: "Failed to initialize payment form",
+            variant: "destructive",
+          });
+          return;
+        }
+        setDropinInstance(instance);
+      });
+    };
+
+    loadBraintreeAndInitialize();
+
+    return () => {
+      if (dropinInstance) {
+        dropinInstance.teardown();
+      }
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!stripe || !elements) {
+    if (!dropinInstance) {
       return;
     }
 
     setIsProcessing(true);
 
     try {
-      const { error } = await stripe.confirmPayment({
-        elements,
-        confirmParams: {
-          return_url: `${window.location.origin}/marketplace`,
-        },
+      // Request payment nonce from Drop-in UI
+      const { nonce } = await dropinInstance.requestPaymentMethod();
+
+      // Send nonce to backend for processing
+      const response = await fetch('/api/braintree/checkout-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          paymentMethodNonce: nonce,
+          category: listingData.category,
+          tier: listingData.tier
+        })
       });
 
-      if (error) {
-        toast({
-          title: "Payment Failed",
-          description: error.message,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Payment Successful",
-          description: "Your listing is being created!",
-        });
-        onSuccess();
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Payment failed');
       }
+
+      toast({
+        title: "Payment Successful",
+        description: "Your listing is being created!",
+      });
+      
+      // Update listing data with transaction ID
+      const updatedData = { ...listingData, transactionId: result.transactionId };
+      localStorage.setItem('pendingListingData', JSON.stringify(updatedData));
+      
+      onSuccess();
     } catch (error: any) {
       toast({
-        title: "Payment Error",
+        title: "Payment Failed",
         description: error.message || "An unexpected error occurred",
         variant: "destructive",
       });
-    } finally {
       setIsProcessing(false);
     }
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <PaymentElement />
+      <div ref={dropinContainerRef} className="min-h-[300px]"></div>
       <Button
         type="submit"
         size="lg"
         className="w-full bg-accent text-accent-foreground hover:bg-accent"
-        disabled={!stripe || isProcessing}
+        disabled={!dropinInstance || isProcessing}
         data-testid="button-confirm-payment"
       >
         {isProcessing ? "Processing..." : "Confirm Payment"}
@@ -91,7 +155,6 @@ const CheckoutForm = ({ onSuccess }: CheckoutFormProps) => {
 export default function MarketplaceListingCheckout() {
   const [, navigate] = useLocation();
   const [, params] = useRoute("/marketplace/listing/checkout");
-  const [clientSecret, setClientSecret] = useState("");
   const [listingData, setListingData] = useState<any>(null);
   const { toast } = useToast();
 
@@ -110,41 +173,16 @@ export default function MarketplaceListingCheckout() {
 
     const data = JSON.parse(storedData);
     setListingData(data);
-
-    // Create payment intent (server calculates amount)
-    apiRequest("POST", "/api/create-listing-payment-intent", {
-      category: data.category,
-      tier: data.tier,
-      listingData: data,
-    })
-      .then((res) => res.json())
-      .then((result) => {
-        setClientSecret(result.clientSecret);
-        // Update amount from server (server-side pricing)
-        if (result.amount) {
-          const updatedData = { ...data, serverAmount: result.amount, paymentIntentId: result.paymentIntentId };
-          setListingData(updatedData);
-          localStorage.setItem('pendingListingData', JSON.stringify(updatedData));
-        }
-      })
-      .catch((error) => {
-        toast({
-          title: "Payment Setup Failed",
-          description: error.message || "Could not initialize payment",
-          variant: "destructive",
-        });
-        navigate("/create-marketplace-listing");
-      });
   }, [navigate, toast]);
 
   const handlePaymentSuccess = async () => {
-    if (!listingData || !listingData.paymentIntentId) return;
+    if (!listingData || !listingData.transactionId) return;
 
     try {
       // Create the listing with payment verification
       const listingPayload = {
         ...listingData,
-        paymentIntentId: listingData.paymentIntentId, // Backend will verify payment status
+        paymentIntentId: listingData.transactionId, // Backend will verify transaction status
       };
       
       await apiRequest("POST", "/api/marketplace", listingPayload);
@@ -170,7 +208,7 @@ export default function MarketplaceListingCheckout() {
     }
   };
 
-  if (!clientSecret || !listingData) {
+  if (!listingData) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <div className="flex items-center justify-center min-h-[400px]">
@@ -180,11 +218,10 @@ export default function MarketplaceListingCheckout() {
     );
   }
 
-  // Use server-calculated amount if available, otherwise calculate client-side as fallback
-  const amount = listingData.serverAmount || 
-    (listingData.category === 'aircraft-sale' && listingData.tier
-      ? TIER_PRICING[listingData.tier] || 25
-      : 25);
+  // Calculate amount based on category and tier
+  const amount = listingData.category === 'aircraft-sale' && listingData.tier
+    ? TIER_PRICING[listingData.tier] || 25
+    : 25;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -204,7 +241,7 @@ export default function MarketplaceListingCheckout() {
             Complete Your Payment
           </CardTitle>
           <CardDescription>
-            Secure payment powered by Stripe
+            Secure payment powered by PayPal Braintree
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -228,12 +265,10 @@ export default function MarketplaceListingCheckout() {
           </div>
 
           {/* Payment Form */}
-          <Elements stripe={stripePromise} options={{ clientSecret }}>
-            <CheckoutForm onSuccess={handlePaymentSuccess} />
-          </Elements>
+          <CheckoutForm listingData={listingData} onSuccess={handlePaymentSuccess} />
 
           <p className="text-xs text-muted-foreground text-center">
-            Your payment information is securely processed by Stripe. We never store your card details.
+            Your payment information is securely processed by PayPal Braintree. We never store your card details.
           </p>
         </CardContent>
       </Card>

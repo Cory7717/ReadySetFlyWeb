@@ -663,7 +663,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/marketplace/:id/reactivate", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { paymentIntentId } = req.body;
+      const { transactionId } = req.body;
       
       const listing = await storage.getMarketplaceListing(req.params.id);
       if (!listing) {
@@ -675,32 +675,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Payment verification is REQUIRED for reactivation
-      if (!paymentIntentId) {
+      if (!transactionId) {
         return res.status(402).json({ 
           error: "Payment required",
           message: "Payment is required to reactivate this listing."
         });
       }
       
-      // Verify payment was successful
-      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      // Verify payment was successful with Braintree
+      const transaction = await gateway.transaction.find(transactionId);
       
-      if (paymentIntent.status !== 'succeeded') {
+      if (transaction.status !== 'settled' && transaction.status !== 'submitted_for_settlement') {
         return res.status(402).json({ 
           error: "Payment required",
           message: "Payment has not been completed."
         });
       }
       
-      if (paymentIntent.metadata.userId !== userId) {
+      if (transaction.customFields?.user_id !== userId) {
         return res.status(403).json({ 
           error: "Unauthorized",
           message: "Payment verification failed"
         });
       }
       
-      // Calculate monthlyFee from payment amount (convert from cents)
-      const monthlyFee = paymentIntent.amount / 100;
+      // Calculate monthlyFee from payment amount
+      const monthlyFee = parseFloat(transaction.amount);
       
       // Reactivate listing for another 30 days
       const newExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -747,12 +747,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isPaid = true; // Mark as paid since it's free
         expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
       }
-      // Regular users must have a paid payment intent
+      // Regular users must have a paid transaction
       else if (paymentIntentId) {
-        // Verify payment was successful
-        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        // Verify payment was successful with Braintree
+        const transaction = await gateway.transaction.find(paymentIntentId);
         
-        if (paymentIntent.status !== 'succeeded') {
+        if (transaction.status !== 'settled' && transaction.status !== 'submitted_for_settlement') {
           return res.status(402).json({ 
             error: "Payment required",
             message: "Payment has not been completed. Please complete your payment first."
@@ -760,15 +760,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Verify the payment matches the user
-        if (paymentIntent.metadata.userId !== userId) {
+        if (transaction.customFields?.user_id !== userId) {
           return res.status(403).json({ 
             error: "Unauthorized",
             message: "Payment verification failed"
           });
         }
         
-        // Calculate monthlyFee from payment amount (convert from cents)
-        monthlyFee = paymentIntent.amount / 100;
+        // Calculate monthlyFee from payment amount
+        monthlyFee = parseFloat(transaction.amount);
         isPaid = true;
         expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
       }
@@ -976,10 +976,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/rentals/:id/complete-payment", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { paymentIntentId } = req.body;
+      const { transactionId } = req.body;
 
-      if (!paymentIntentId) {
-        return res.status(400).json({ error: "Payment intent ID required" });
+      if (!transactionId) {
+        return res.status(400).json({ error: "Transaction ID required" });
       }
 
       const rental = await storage.getRental(req.params.id);
@@ -998,22 +998,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Rental must be in approved status" });
       }
 
-      // Verify payment with Stripe
-      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      // Verify payment with Braintree
+      const transaction = await gateway.transaction.find(transactionId);
       
-      if (paymentIntent.status !== "succeeded") {
+      if (transaction.status !== 'settled' && transaction.status !== 'submitted_for_settlement') {
         return res.status(400).json({ error: "Payment not completed" });
       }
 
       // Verify the payment amount matches the rental cost
-      const expectedAmount = Math.round(parseFloat(rental.totalCostRenter) * 100);
-      if (paymentIntent.amount !== expectedAmount) {
+      const expectedAmount = parseFloat(rental.totalCostRenter).toFixed(2);
+      if (transaction.amount !== expectedAmount) {
         return res.status(400).json({ error: "Payment amount mismatch" });
       }
 
-      // Verify the rentalId in metadata matches
-      if (paymentIntent.metadata.rentalId !== rental.id) {
-        return res.status(400).json({ error: "Payment intent does not match this rental" });
+      // Verify the rentalId in custom fields matches
+      if (transaction.customFields?.rental_id !== rental.id) {
+        return res.status(400).json({ error: "Transaction does not match this rental" });
       }
 
       // Update rental to mark as paid and active

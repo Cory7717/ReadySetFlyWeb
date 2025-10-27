@@ -1,36 +1,71 @@
 # Integration Roadmap
 
-## Stripe Payment Integration (Blueprint: blueprint:javascript_stripe)
+## PayPal Braintree Payment Integration
 
 ### Required Secrets
-- `VITE_STRIPE_PUBLIC_KEY` - Frontend publishable key (starts with `pk_`)
-- `STRIPE_SECRET_KEY` - Backend secret key (starts with `sk_`)
+- `BRAINTREE_MERCHANT_ID` - Your unique merchant identifier
+- `BRAINTREE_PUBLIC_KEY` - Public key for client-side payment form initialization
+- `BRAINTREE_PRIVATE_KEY` - Private key for secure server-side transaction processing
 
 ### Integration Points
 
-1. **Rental Transactions** (`client/src/pages/aircraft-detail.tsx`)
-   - Add Stripe checkout flow when user clicks "Request to Book"
-   - Create payment intent for rental amount + 7.5% platform fee
-   - On successful payment, create rental record via `/api/rentals`
+1. **Rental Transactions** (`client/src/pages/rental-payment.tsx`)
+   - ✅ COMPLETED: Braintree Drop-in UI for rental payments
+   - ✅ COMPLETED: Transaction processing with automatic settlement
+   - ✅ COMPLETED: Payment verification and rental activation
 
-2. **Marketplace Listing Fees** (`client/src/pages/list-aircraft.tsx`, marketplace listing forms)
-   - Monthly subscription for aircraft listings
-   - One-time fees for marketplace categories ($25-$250/month based on tier)
-   - Use `/api/create-subscription` endpoint from Stripe blueprint
+2. **Marketplace Listing Fees** (`client/src/pages/marketplace-listing-checkout.tsx`)
+   - ✅ COMPLETED: Braintree checkout flow for marketplace listing fees
+   - ✅ COMPLETED: One-time fees for marketplace categories ($25-$250/month based on tier)
+   - ✅ COMPLETED: Server-side pricing validation
 
 3. **Owner Payouts** (`client/src/pages/dashboard.tsx`)
-   - Implement Stripe Connect for owner payouts
-   - Transfer funds after rental completion (minus 7.5% platform fee)
-   - Show pending/completed deposits in dashboard
+   - ⏳ TODO: Implement Braintree Sub-Merchant accounts for owner payouts
+   - ⏳ TODO: Transfer funds after rental completion (minus platform fees)
+   - ⏳ TODO: Show pending/completed deposits in dashboard
 
 ### Implementation Steps
-1. Install Stripe package: Already installed (`stripe` in package.json)
-2. Ask user for API keys using `ask_secrets` tool
-3. Create `/api/create-payment-intent` route (see blueprint:javascript_stripe)
-4. Add Stripe Elements to checkout flow
-5. Handle payment confirmations and create rental records
+1. ✅ Install Braintree package: `braintree` installed
+2. ✅ Configure Braintree credentials via Replit Secrets
+3. ✅ Create backend endpoints:
+   - GET `/api/braintree/client-token` - Generate client token for frontend
+   - POST `/api/braintree/checkout-listing` - Process marketplace listing payments
+   - POST `/api/braintree/checkout-rental` - Process rental payments
+4. ✅ Implement Braintree Drop-in UI in frontend payment forms
+5. ✅ Handle payment confirmations and create rental/listing records
+6. ✅ Update payment verification endpoints to use Braintree transactions
 
-## WebSocket Messaging Integration (Blueprint: blueprint:javascript_websocket)
+### API Endpoints
+
+#### Backend (Braintree Gateway)
+```typescript
+// Initialize Braintree gateway
+const gateway = new braintree.BraintreeGateway({
+  environment: braintree.Environment.Sandbox, // or Production
+  merchantId: process.env.BRAINTREE_MERCHANT_ID,
+  publicKey: process.env.BRAINTREE_PUBLIC_KEY,
+  privateKey: process.env.BRAINTREE_PRIVATE_KEY
+});
+```
+
+#### Client Token Generation
+```typescript
+GET /api/braintree/client-token
+Response: { clientToken: "..." }
+```
+
+#### Transaction Processing
+```typescript
+POST /api/braintree/checkout-listing
+Body: { paymentMethodNonce, category, tier }
+Response: { success: true, transactionId: "...", amount: 25 }
+
+POST /api/braintree/checkout-rental
+Body: { paymentMethodNonce, amount, rentalId }
+Response: { success: true, transactionId: "..." }
+```
+
+## WebSocket Messaging Integration
 
 ### Integration Points
 
@@ -81,15 +116,17 @@
 - Active rental validation for messaging (backend)
 - Frontend connected to backend (home, marketplace, aircraft-detail, list-aircraft)
 - Mock data seeded (6 aircraft, 3 marketplace listings, 3 users)
+- **PayPal Braintree payment integration** for rental and marketplace listing payments
+- Braintree Drop-in UI for seamless payment collection
+- Server-side transaction verification and validation
 
 ### 🚧 In Progress
 - Dashboard page needs backend connection
 - Profile page needs backend connection
-- Stripe payment flow (scaffolding documented above)
-- WebSocket messaging (scaffolding documented above)
+- Braintree Sub-Merchant accounts for owner payouts
 
 ### 📝 Future Enhancements
-- Full Stripe Connect implementation for owner payouts
+- Full Braintree Sub-Merchant implementation for owner payouts
 - Real-time messaging with WebSocket
 - Email notifications for rental confirmations
 - Calendar view for rental scheduling

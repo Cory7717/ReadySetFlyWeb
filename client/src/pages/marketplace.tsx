@@ -32,11 +32,15 @@ export default function Marketplace() {
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [previousCategory, setPreviousCategory] = useState("aircraft-sale");
   
-  // Filter states
+  // Generic filter states
   const [cityFilter, setCityFilter] = useState("");
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
-  const [engineTypeFilter, setEngineTypeFilter] = useState("");
+  
+  // Category-specific filter states
+  const [engineTypeFilter, setEngineTypeFilter] = useState("all"); // Aircraft Sale
+  const [keywordFilter, setKeywordFilter] = useState(""); // Jobs
+  const [radiusFilter, setRadiusFilter] = useState("100"); // Jobs - default 100 miles
   
   const [, navigate] = useLocation();
 
@@ -48,13 +52,15 @@ export default function Marketplace() {
     if (minPrice) params.set('minPrice', minPrice);
     if (maxPrice) params.set('maxPrice', maxPrice);
     if (engineTypeFilter) params.set('engineType', engineTypeFilter);
+    if (keywordFilter) params.set('keyword', keywordFilter);
+    if (radiusFilter) params.set('radius', radiusFilter);
     return params.toString();
   };
 
   const queryString = buildQueryParams();
 
   const { data: categoryListings = [], isLoading } = useQuery<MarketplaceListing[]>({
-    queryKey: ["/api/marketplace", selectedCategory, cityFilter, minPrice, maxPrice, engineTypeFilter],
+    queryKey: ["/api/marketplace", selectedCategory, cityFilter, minPrice, maxPrice, engineTypeFilter, keywordFilter, radiusFilter],
     queryFn: async () => {
       const response = await fetch(`/api/marketplace?${queryString}`);
       if (!response.ok) throw new Error('Failed to fetch listings');
@@ -211,70 +217,176 @@ export default function Marketplace() {
           <Card className="mb-6">
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* City Filter */}
-                <div className="space-y-2">
-                  <Label htmlFor="city-filter">City</Label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                      id="city-filter"
-                      placeholder="Search by city..."
-                      value={cityFilter}
-                      onChange={(e) => setCityFilter(e.target.value)}
-                      className="pl-9"
-                      data-testid="input-city-filter"
-                    />
-                  </div>
-                </div>
+                {/* Aviation Jobs Filters */}
+                {selectedCategory === 'job' && (
+                  <>
+                    {/* Keyword Search */}
+                    <div className="space-y-2">
+                      <Label htmlFor="keyword-filter">Keyword Search</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          id="keyword-filter"
+                          placeholder="e.g. pilot, mechanic, CFI..."
+                          value={keywordFilter}
+                          onChange={(e) => setKeywordFilter(e.target.value)}
+                          className="pl-9"
+                          data-testid="input-keyword-filter"
+                        />
+                      </div>
+                    </div>
 
-                {/* Min Price */}
-                <div className="space-y-2">
-                  <Label htmlFor="min-price">Min Price</Label>
-                  <Input
-                    id="min-price"
-                    type="number"
-                    placeholder="$0"
-                    value={minPrice}
-                    onChange={(e) => setMinPrice(e.target.value)}
-                    data-testid="input-min-price"
-                  />
-                </div>
+                    {/* City Filter */}
+                    <div className="space-y-2">
+                      <Label htmlFor="city-filter">City</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          id="city-filter"
+                          placeholder="Search by city..."
+                          value={cityFilter}
+                          onChange={(e) => setCityFilter(e.target.value)}
+                          className="pl-9"
+                          data-testid="input-city-filter"
+                        />
+                      </div>
+                    </div>
 
-                {/* Max Price */}
-                <div className="space-y-2">
-                  <Label htmlFor="max-price">Max Price</Label>
-                  <Input
-                    id="max-price"
-                    type="number"
-                    placeholder="No max"
-                    value={maxPrice}
-                    onChange={(e) => setMaxPrice(e.target.value)}
-                    data-testid="input-max-price"
-                  />
-                </div>
+                    {/* Radius Filter */}
+                    <div className="space-y-2">
+                      <Label htmlFor="radius-filter">Distance (miles)</Label>
+                      <Select value={radiusFilter} onValueChange={setRadiusFilter}>
+                        <SelectTrigger id="radius-filter" data-testid="select-radius-filter">
+                          <SelectValue placeholder="Select radius" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">Within 10 miles</SelectItem>
+                          <SelectItem value="25">Within 25 miles</SelectItem>
+                          <SelectItem value="50">Within 50 miles</SelectItem>
+                          <SelectItem value="100">Within 100 miles</SelectItem>
+                          <SelectItem value="250">Within 250 miles</SelectItem>
+                          <SelectItem value="500">Within 500 miles</SelectItem>
+                          <SelectItem value="999999">Any distance</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
 
-                {/* Engine Type (for aircraft categories) */}
+                {/* Aircraft Sale Filters */}
                 {selectedCategory === 'aircraft-sale' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="engine-type">Engine Type</Label>
-                    <Select value={engineTypeFilter} onValueChange={setEngineTypeFilter}>
-                      <SelectTrigger id="engine-type" data-testid="select-engine-type">
-                        <SelectValue placeholder="All types" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">All types</SelectItem>
-                        <SelectItem value="Single-Engine">Single-Engine</SelectItem>
-                        <SelectItem value="Multi-Engine">Multi-Engine</SelectItem>
-                        <SelectItem value="Turboprop">Turboprop</SelectItem>
-                        <SelectItem value="Jet">Jet</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <>
+                    {/* City Filter */}
+                    <div className="space-y-2">
+                      <Label htmlFor="city-filter">City</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          id="city-filter"
+                          placeholder="Search by city..."
+                          value={cityFilter}
+                          onChange={(e) => setCityFilter(e.target.value)}
+                          className="pl-9"
+                          data-testid="input-city-filter"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Min Price */}
+                    <div className="space-y-2">
+                      <Label htmlFor="min-price">Min Price</Label>
+                      <Input
+                        id="min-price"
+                        type="number"
+                        placeholder="$0"
+                        value={minPrice}
+                        onChange={(e) => setMinPrice(e.target.value)}
+                        data-testid="input-min-price"
+                      />
+                    </div>
+
+                    {/* Max Price */}
+                    <div className="space-y-2">
+                      <Label htmlFor="max-price">Max Price</Label>
+                      <Input
+                        id="max-price"
+                        type="number"
+                        placeholder="No max"
+                        value={maxPrice}
+                        onChange={(e) => setMaxPrice(e.target.value)}
+                        data-testid="input-max-price"
+                      />
+                    </div>
+
+                    {/* Engine Type */}
+                    <div className="space-y-2">
+                      <Label htmlFor="engine-type">Engine Type</Label>
+                      <Select value={engineTypeFilter} onValueChange={setEngineTypeFilter}>
+                        <SelectTrigger id="engine-type" data-testid="select-engine-type">
+                          <SelectValue placeholder="All types" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All types</SelectItem>
+                          <SelectItem value="Single-Engine">Single-Engine</SelectItem>
+                          <SelectItem value="Multi-Engine">Multi-Engine</SelectItem>
+                          <SelectItem value="Turboprop">Turboprop</SelectItem>
+                          <SelectItem value="Jet">Jet</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
+
+                {/* Default Filters for Other Categories */}
+                {!['job', 'aircraft-sale'].includes(selectedCategory) && (
+                  <>
+                    {/* City Filter */}
+                    <div className="space-y-2">
+                      <Label htmlFor="city-filter">City</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          id="city-filter"
+                          placeholder="Search by city..."
+                          value={cityFilter}
+                          onChange={(e) => setCityFilter(e.target.value)}
+                          className="pl-9"
+                          data-testid="input-city-filter"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Min Price */}
+                    <div className="space-y-2">
+                      <Label htmlFor="min-price">Min Price</Label>
+                      <Input
+                        id="min-price"
+                        type="number"
+                        placeholder="$0"
+                        value={minPrice}
+                        onChange={(e) => setMinPrice(e.target.value)}
+                        data-testid="input-min-price"
+                      />
+                    </div>
+
+                    {/* Max Price */}
+                    <div className="space-y-2">
+                      <Label htmlFor="max-price">Max Price</Label>
+                      <Input
+                        id="max-price"
+                        type="number"
+                        placeholder="No max"
+                        value={maxPrice}
+                        onChange={(e) => setMaxPrice(e.target.value)}
+                        data-testid="input-max-price"
+                      />
+                    </div>
+                  </>
                 )}
               </div>
 
               {/* Clear Filters */}
-              {(cityFilter || minPrice || maxPrice || engineTypeFilter) && (
+              {(cityFilter || minPrice || maxPrice || engineTypeFilter || keywordFilter || radiusFilter) && (
                 <div className="mt-4 flex justify-end">
                   <Button 
                     variant="ghost" 
@@ -282,7 +394,9 @@ export default function Marketplace() {
                       setCityFilter("");
                       setMinPrice("");
                       setMaxPrice("");
-                      setEngineTypeFilter("");
+                      setEngineTypeFilter("all");
+                      setKeywordFilter("");
+                      setRadiusFilter("100");
                     }}
                     data-testid="button-clear-filters"
                   >

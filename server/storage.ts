@@ -78,6 +78,8 @@ export interface IStorage {
     minPrice?: number;
     maxPrice?: number;
     engineType?: string;
+    keyword?: string;
+    radius?: number;
   }): Promise<MarketplaceListing[]>;
   createMarketplaceListing(listing: InsertMarketplaceListing): Promise<MarketplaceListing>;
   updateMarketplaceListing(id: string, updates: Partial<MarketplaceListing>): Promise<MarketplaceListing | undefined>;
@@ -393,6 +395,8 @@ export class DatabaseStorage implements IStorage {
     minPrice?: number;
     maxPrice?: number;
     engineType?: string;
+    keyword?: string;
+    radius?: number;
   }): Promise<MarketplaceListing[]> {
     const conditions: any[] = [eq(marketplaceListings.isActive, true)];
 
@@ -406,6 +410,16 @@ export class DatabaseStorage implements IStorage {
       conditions.push(ilike(marketplaceListings.city, `%${filters.city}%`));
     }
 
+    // Keyword search (search in title and description)
+    if (filters.keyword) {
+      conditions.push(
+        or(
+          ilike(marketplaceListings.title, `%${filters.keyword}%`),
+          ilike(marketplaceListings.description, `%${filters.keyword}%`)
+        )
+      );
+    }
+
     // Price range filters (cast string price to numeric for proper comparison)
     if (filters.minPrice !== undefined) {
       conditions.push(sql`CAST(${marketplaceListings.price} AS NUMERIC) >= ${filters.minPrice}`);
@@ -413,6 +427,11 @@ export class DatabaseStorage implements IStorage {
     if (filters.maxPrice !== undefined) {
       conditions.push(sql`CAST(${marketplaceListings.price} AS NUMERIC) <= ${filters.maxPrice}`);
     }
+
+    // Note: Radius filtering requires geocoding service to convert city to coordinates
+    // and calculate distances. This is a placeholder for future implementation.
+    // For now, the radius parameter is accepted but not actively filtered.
+    // TODO: Implement proper distance-based filtering with geocoding service
 
     // Engine type filter (for aircraft categories, stored in details JSONB)
     // This requires a JSON path query which is more complex with Drizzle
@@ -425,7 +444,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions));
 
     // Post-filter for engineType in details JSONB
-    if (filters.engineType) {
+    if (filters.engineType && filters.engineType !== 'all') {
       return results.filter((listing) => {
         const details = listing.details as any;
         return details?.engineType === filters.engineType;

@@ -450,8 +450,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             medicalCertExpiresAt: null,
             insuranceExpiresAt: null,
             governmentIdExpiresAt: null,
-            documentExpirationNotified: false,
-            reminderSentAt: null,
+            expirationNotificationSent: false,
+            lastNotificationSentAt: null,
           });
         }
         
@@ -502,10 +502,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Marketplace Listings with filtering
   app.get("/api/marketplace", async (req, res) => {
     try {
-      const { city, category, minPrice, maxPrice, engineType } = req.query;
+      const { city, category, minPrice, maxPrice, engineType, keyword, radius } = req.query;
       
       // If no filters provided, use the old method
-      if (!city && !category && !minPrice && !maxPrice && !engineType) {
+      if (!city && !category && !minPrice && !maxPrice && !engineType && !keyword && !radius) {
         const listings = await storage.getAllMarketplaceListings();
         return res.json(listings);
       }
@@ -526,6 +526,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       if (engineType) filters.engineType = engineType as string;
+      if (keyword) filters.keyword = keyword as string;
+      
+      // Validate and parse radius filter
+      if (radius) {
+        const parsed = parseFloat(radius as string);
+        if (!isNaN(parsed)) filters.radius = parsed;
+      }
 
       const listings = await storage.getFilteredMarketplaceListings(filters);
       res.json(listings);
@@ -1216,8 +1223,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           medicalCertExpiresAt: null,
           insuranceExpiresAt: null,
           governmentIdExpiresAt: null,
-          documentExpirationNotified: false,
-          reminderSentAt: null,
+          expirationNotificationSent: false,
+          lastNotificationSentAt: null,
         });
         
         res.json(submission);

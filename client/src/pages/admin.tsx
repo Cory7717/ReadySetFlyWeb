@@ -145,7 +145,11 @@ export default function AdminDashboard() {
     profitMarginMonth: string;
     profitMarginYear: string;
     totalRentals: number;
+    pendingRentals: number;
+    approvedRentals: number;
     activeRentals: number;
+    completedRentals: number;
+    cancelledRentals: number;
     newRentalsToday: number;
     newRentalsWeek: number;
     activeRentalsToday: number;
@@ -838,23 +842,36 @@ export default function AdminDashboard() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader>
-                <CardTitle>Total Rental Overview</CardTitle>
-                <CardDescription>Overall rental statistics</CardDescription>
+                <CardTitle>Rental Pipeline Overview</CardTitle>
+                <CardDescription>Rentals by status</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-chart-1" />
-                    <span className="text-sm font-medium">Total Active Rentals</span>
-                  </div>
-                  <Badge className="bg-chart-1" data-testid="badge-total-active-rentals">{analytics?.activeRentals || 0}</Badge>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Pending</span>
+                  <Badge variant="outline" data-testid="badge-pending-rentals">{analytics?.pendingRentals || 0}</Badge>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Approved</span>
+                  <Badge variant="outline" data-testid="badge-approved-rentals">{analytics?.approvedRentals || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Active</span>
+                  <Badge variant="outline" data-testid="badge-active-rentals">{analytics?.activeRentals || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Completed</span>
+                  <Badge variant="outline" data-testid="badge-completed-rentals">{analytics?.completedRentals || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Cancelled</span>
+                  <Badge variant="outline" data-testid="badge-cancelled-rentals">{analytics?.cancelledRentals || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t">
                   <div className="flex items-center gap-2">
-                    <Plane className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-sm font-medium">All-Time Rentals</span>
+                    <Plane className="h-5 w-5 text-chart-1" />
+                    <span className="text-sm font-medium">Grand Total</span>
                   </div>
-                  <Badge variant="outline" data-testid="badge-total-rentals">{analytics?.totalRentals || 0}</Badge>
+                  <Badge className="bg-chart-1" data-testid="badge-total-rentals">{analytics?.totalRentals || 0}</Badge>
                 </div>
               </CardContent>
             </Card>

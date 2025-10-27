@@ -806,7 +806,11 @@ export class DatabaseStorage implements IStorage {
     profitMarginMonth: string;
     profitMarginYear: string;
     totalRentals: number;
+    pendingRentals: number;
+    approvedRentals: number;
     activeRentals: number;
+    completedRentals: number;
+    cancelledRentals: number;
     newRentalsToday: number;
     newRentalsWeek: number;
     activeRentalsToday: number;
@@ -891,10 +895,14 @@ export class DatabaseStorage implements IStorage {
     const profitMarginMonth = calculateProfitMargin(profitMonth, revenueMonth);
     const profitMarginYear = calculateProfitMargin(profitYear, revenueYear);
 
-    // Get rental stats
+    // Get rental stats by status
     const allRentals = await db.select().from(rentals);
     const totalRentals = allRentals.length;
+    const pendingRentals = allRentals.filter(r => r.status === 'pending').length;
+    const approvedRentals = allRentals.filter(r => r.status === 'approved').length;
     const activeRentals = allRentals.filter(r => r.status === 'active').length;
+    const completedRentals = allRentals.filter(r => r.status === 'completed').length;
+    const cancelledRentals = allRentals.filter(r => r.status === 'cancelled').length;
 
     // New rentals (created today/this week)
     const newRentalsToday = allRentals.filter(r => r.createdAt && r.createdAt >= today).length;
@@ -964,7 +972,11 @@ export class DatabaseStorage implements IStorage {
       profitMarginMonth,
       profitMarginYear,
       totalRentals,
+      pendingRentals,
+      approvedRentals,
       activeRentals,
+      completedRentals,
+      cancelledRentals,
       newRentalsToday,
       newRentalsWeek,
       activeRentalsToday,

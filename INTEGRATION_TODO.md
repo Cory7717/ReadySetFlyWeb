@@ -2,6 +2,29 @@
 
 ## PayPal Braintree Payment Integration
 
+### Marketplace Setup Requirements
+
+**IMPORTANT:** Braintree Marketplace functionality requires special approval from Braintree.
+
+#### Setup Process:
+1. **Contact Braintree Sales**
+   - Call: 855-787-6121
+   - Or submit ticket via Braintree Control Panel
+   - Request: Enable "Braintree Marketplace" for your merchant account
+
+2. **Requirements:**
+   - Master merchant account must be US-based
+   - All sub-merchants (aircraft owners) must be US-based
+   - USD transactions only
+   - Platform is jointly liable for all sub-merchant fees, chargebacks, refunds
+
+3. **Key Resources:**
+   - [Braintree Marketplace Overview](https://developer.paypal.com/braintree/docs/guides/braintree-marketplace)
+   - [Sub-Merchant Onboarding](https://developer.paypal.com/braintree/docs/guides/braintree-marketplace/onboarding)
+   - [Funding & Disbursements](https://articles.braintreepayments.com/guides/braintree-marketplace/funding)
+
+## PayPal Braintree Payment Integration
+
 ### Required Secrets
 - `BRAINTREE_MERCHANT_ID` - Your unique merchant identifier
 - `BRAINTREE_PUBLIC_KEY` - Public key for client-side payment form initialization
@@ -19,10 +42,12 @@
    - ✅ COMPLETED: One-time fees for marketplace categories ($25-$250/month based on tier)
    - ✅ COMPLETED: Server-side pricing validation
 
-3. **Owner Payouts** (`client/src/pages/dashboard.tsx`)
-   - ⏳ TODO: Implement Braintree Sub-Merchant accounts for owner payouts
-   - ⏳ TODO: Transfer funds after rental completion (minus platform fees)
-   - ⏳ TODO: Show pending/completed deposits in dashboard
+3. **Owner Payouts** (`client/src/pages/owner-payout-setup.tsx`)
+   - ✅ COMPLETED: Informational payout setup page with Braintree Marketplace documentation
+   - ✅ COMPLETED: Dashboard integration with "Setup Payouts" button
+   - ⏳ TODO: Contact Braintree Sales to enable Marketplace functionality
+   - ⏳ TODO: Implement Braintree Sub-Merchant account creation API
+   - ⏳ TODO: Automatic payout transfers after rental completion (minus platform fees)
 
 ### Implementation Steps
 1. ✅ Install Braintree package: `braintree` installed
@@ -34,6 +59,10 @@
 4. ✅ Implement Braintree Drop-in UI in frontend payment forms
 5. ✅ Handle payment confirmations and create rental/listing records
 6. ✅ Update payment verification endpoints to use Braintree transactions
+7. ✅ Create owner payout setup page with instructional information
+8. ⏳ TODO: Get Braintree Marketplace approval from Braintree Sales
+9. ⏳ TODO: Implement sub-merchant account creation API (`MerchantAccount::create`)
+10. ⏳ TODO: Add webhooks for sub-merchant account approval and disbursement failures
 
 ### API Endpoints
 

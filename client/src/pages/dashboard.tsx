@@ -1,5 +1,6 @@
 import { DollarSign, TrendingUp, Plane, Calendar, CreditCard, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import type { AircraftListing, Transaction, Rental, User } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,6 +21,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Dashboard() {
+  const [, navigate] = useLocation();
   const { user: authUser } = useAuth();
   const { toast } = useToast();
 
@@ -80,25 +82,10 @@ export default function Dashboard() {
   const activeListings = userAircraft.filter(a => a.isListed).length;
   const activeRentals = activeRentalsArray.length;
 
-  // Bank account setup mutation
-  const setupBankAccountMutation = useMutation({
-    mutationFn: async () => {
-      // This will redirect to Stripe Connect onboarding
-      return await apiRequest("POST", "/api/stripe/connect/create-account", {});
-    },
-    onSuccess: (data: any) => {
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to setup bank account",
-        variant: "destructive",
-      });
-    },
-  });
+  // Navigate to payout setup page
+  const handleSetupPayouts = () => {
+    navigate("/owner-payout-setup");
+  };
 
   // Request payout mutation
   const requestPayoutMutation = useMutation({
@@ -242,12 +229,11 @@ export default function Dashboard() {
             <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <span>Set up your bank account to receive payouts of ${pendingPayouts.toFixed(2)}</span>
               <Button 
-                onClick={() => setupBankAccountMutation.mutate()}
-                disabled={setupBankAccountMutation.isPending}
+                onClick={handleSetupPayouts}
                 data-testid="button-setup-bank"
                 className="w-full sm:w-auto"
               >
-                {setupBankAccountMutation.isPending ? "Connecting..." : "Setup Bank Account"}
+                Setup Payouts
               </Button>
             </AlertDescription>
           </Alert>

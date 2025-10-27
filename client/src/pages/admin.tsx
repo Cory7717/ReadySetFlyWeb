@@ -207,6 +207,30 @@ export default function AdminDashboard() {
     enabled: activeTab === "stale",
   });
 
+  // User metrics query
+  const { data: userMetrics, isLoading: userMetricsLoading } = useQuery<{
+    totalUsers: number;
+    verifiedUsers: number;
+    newUsersToday: number;
+    newUsersThisWeek: number;
+    newUsersThisMonth: number;
+    activeListingOwners: number;
+    activeRenters: number;
+    verificationRate: number;
+    geographic: {
+      byState: Array<{ state: string; count: number }>;
+      byCity: Array<{ city: string; state: string; count: number }>;
+    };
+    retention: {
+      returningUsers: number;
+      oneTimeUsers: number;
+      retentionRate: number;
+    };
+  }>({
+    queryKey: ["/api/admin/user-metrics"],
+    enabled: activeTab === "analytics",
+  });
+
   // Approve submission mutation
   const approveMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -987,6 +1011,184 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+
+          {/* User Metrics Section */}
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold mb-4">User Growth & Engagement</h3>
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold" data-testid="text-total-users">{userMetrics?.totalUsers || 0}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Registered accounts
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Verified Users</CardTitle>
+                    <CheckCircle className="h-4 w-4 text-chart-2" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-chart-2" data-testid="text-verified-users">{userMetrics?.verifiedUsers || 0}</div>
+                    <p className="text-xs text-muted-foreground">
+                      {userMetrics?.verificationRate?.toFixed(1) || "0.0"}% verified
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Active Owners</CardTitle>
+                    <Plane className="h-4 w-4 text-chart-1" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-chart-1" data-testid="text-active-owners">{userMetrics?.activeListingOwners || 0}</div>
+                    <p className="text-xs text-muted-foreground">
+                      With active listings
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Active Renters</CardTitle>
+                    <Activity className="h-4 w-4 text-chart-3" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-chart-3" data-testid="text-active-renters">{userMetrics?.activeRenters || 0}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Completed rentals
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-semibold mb-4">New User Registrations</h3>
+              <div className="grid gap-6 md:grid-cols-3">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Today</CardTitle>
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold" data-testid="text-new-users-today">{userMetrics?.newUsersToday || 0}</div>
+                    <p className="text-xs text-muted-foreground">
+                      New signups today
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">This Week</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold" data-testid="text-new-users-week">{userMetrics?.newUsersThisWeek || 0}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Last 7 days
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">This Month</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold" data-testid="text-new-users-month">{userMetrics?.newUsersThisMonth || 0}</div>
+                    <p className="text-xs text-muted-foreground">
+                      Last 30 days
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Geographic Distribution */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Geographic Distribution</CardTitle>
+                  <CardDescription>Users by location (top 10 states)</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {userMetricsLoading && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Loading geographic data...
+                    </div>
+                  )}
+                  {!userMetricsLoading && (!userMetrics?.geographic?.byState || userMetrics.geographic.byState.length === 0) && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No geographic data available yet
+                    </div>
+                  )}
+                  {!userMetricsLoading && userMetrics?.geographic?.byState && userMetrics.geographic.byState.length > 0 && (
+                    <div className="space-y-3">
+                      {userMetrics.geographic.byState.map(({ state, count }, index) => (
+                        <div key={state} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="w-8 text-center">{index + 1}</Badge>
+                            <span className="text-sm font-medium">{state}</span>
+                          </div>
+                          <Badge data-testid={`badge-state-${state}`}>{count} users</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* User Retention */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>User Retention</CardTitle>
+                  <CardDescription>Returning vs. one-time users</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {userMetricsLoading && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      Loading retention data...
+                    </div>
+                  )}
+                  {!userMetricsLoading && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Activity className="h-5 w-5 text-chart-2" />
+                          <span className="text-sm font-medium">Returning Users</span>
+                        </div>
+                        <Badge className="bg-chart-2" data-testid="badge-returning-users">{userMetrics?.retention?.returningUsers || 0}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-5 w-5 text-muted-foreground" />
+                          <span className="text-sm font-medium">One-Time Users</span>
+                        </div>
+                        <Badge variant="outline" data-testid="badge-onetime-users">{userMetrics?.retention?.oneTimeUsers || 0}</Badge>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <span className="text-sm font-medium">Retention Rate</span>
+                        <Badge className="bg-chart-1" data-testid="badge-retention-rate">
+                          {userMetrics?.retention?.retentionRate?.toFixed(1) || "0.0"}%
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
           {/* Expense Management */}

@@ -1834,6 +1834,32 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  // Grant promotional free time to marketplace listing (admin only)
+  app.post("/api/admin/marketplace/:id/grant-promo", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { durationDays } = req.body;
+      
+      if (!durationDays || durationDays < 1 || durationDays > 31) {
+        return res.status(400).json({ error: "Duration must be between 1 and 31 days" });
+      }
+      
+      const listing = await storage.grantMarketplacePromoFreeTime(
+        req.params.id, 
+        durationDays, 
+        req.user!.id
+      );
+      
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      
+      res.json(listing);
+    } catch (error: any) {
+      console.error('Failed to grant promo free time:', error);
+      res.status(500).json({ error: error.message || "Failed to grant promotional free time" });
+    }
+  });
+
   // Job Applications
   app.post("/api/job-applications", upload.single('resume'), async (req: any, res) => {
     try {

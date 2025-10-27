@@ -195,6 +195,9 @@ export interface IStorage {
   createPromoAlert(alert: InsertPromoAlert): Promise<PromoAlert>;
   updatePromoAlert(id: string, updates: Partial<PromoAlert>): Promise<PromoAlert | undefined>;
   deletePromoAlert(id: string): Promise<boolean>;
+  
+  // Marketplace Listing Promotional Free Time
+  grantMarketplacePromoFreeTime(listingId: string, durationDays: number, adminId: string): Promise<MarketplaceListing | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1062,6 +1065,21 @@ export class DatabaseStorage implements IStorage {
   async deletePromoAlert(id: string): Promise<boolean> {
     const result = await db.delete(promoAlerts).where(eq(promoAlerts.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Marketplace Listing Promotional Free Time
+  async grantMarketplacePromoFreeTime(listingId: string, durationDays: number, adminId: string): Promise<MarketplaceListing | undefined> {
+    const promoFreeUntil = new Date();
+    promoFreeUntil.setDate(promoFreeUntil.getDate() + durationDays);
+    
+    const [listing] = await db.update(marketplaceListings).set({
+      promoFreeUntil,
+      promoGrantedBy: adminId,
+      promoGrantedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(marketplaceListings.id, listingId)).returning();
+    
+    return listing;
   }
 }
 

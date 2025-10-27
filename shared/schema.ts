@@ -240,6 +240,11 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   isPaid: boolean("is_paid").default(false),
   monthlyFee: decimal("monthly_fee", { precision: 10, scale: 2 }),
   
+  // Promotional free period (admin customer service gesture)
+  promoFreeUntil: timestamp("promo_free_until"),
+  promoGrantedBy: varchar("promo_granted_by").references(() => users.id),
+  promoGrantedAt: timestamp("promo_granted_at"),
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

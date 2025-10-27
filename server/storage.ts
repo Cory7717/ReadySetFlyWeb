@@ -91,6 +91,15 @@ export interface IStorage {
   checkIfUserFlaggedListing(listingId: string, userId: string): Promise<boolean>;
   getFlaggedMarketplaceListings(): Promise<MarketplaceListing[]>; // Get listings with 5+ flags
 
+  // Stale & Orphaned Listings Management
+  getStaleAircraftListings(daysStale?: number): Promise<any[]>;
+  getStaleMarketplaceListings(daysStale?: number): Promise<any[]>;
+  getOrphanedAircraftListings(): Promise<AircraftListing[]>;
+  getOrphanedMarketplaceListings(): Promise<MarketplaceListing[]>;
+  refreshAircraftListing(id: string): Promise<AircraftListing | undefined>;
+  refreshMarketplaceListing(id: string): Promise<MarketplaceListing | undefined>;
+  getUsersWithActiveListings(): Promise<{ user: User; aircraftCount: number; marketplaceCount: number }[]>;
+
   // Rentals
   getRental(id: string): Promise<Rental | undefined>;
   getAllRentals(): Promise<Rental[]>;
@@ -563,6 +572,154 @@ export class DatabaseStorage implements IStorage {
       .from(marketplaceListings)
       .where(gte(marketplaceListings.flagCount, 5))
       .orderBy(desc(marketplaceListings.flagCount));
+  }
+
+  // Stale & Orphaned Listings Management
+  async getStaleAircraftListings(daysStale: number = 60): Promise<any[]> {
+    const staleDate = new Date(Date.now() - (daysStale * 24 * 60 * 60 * 1000));
+    
+    const results = await db
+      .select()
+      .from(aircraftListings)
+      .leftJoin(users, eq(aircraftListings.ownerId, users.id))
+      .where(
+        and(
+          eq(aircraftListings.isListed, true),
+          lte(aircraftListings.lastRefreshedAt, staleDate)
+        )
+      )
+      .orderBy(asc(aircraftListings.lastRefreshedAt));
+    
+    return results.map(row => ({
+      ...row.aircraft_listings,
+      owner: row.users!
+    }));
+  }
+
+  async getStaleMarketplaceListings(daysStale: number = 60): Promise<any[]> {
+    const staleDate = new Date(Date.now() - (daysStale * 24 * 60 * 60 * 1000));
+    
+    const results = await db
+      .select()
+      .from(marketplaceListings)
+      .leftJoin(users, eq(marketplaceListings.userId, users.id))
+      .where(
+        and(
+          eq(marketplaceListings.isActive, true),
+          lte(marketplaceListings.lastRefreshedAt, staleDate)
+        )
+      )
+      .orderBy(asc(marketplaceListings.lastRefreshedAt));
+    
+    return results.map(row => ({
+      ...row.marketplace_listings,
+      user: row.users!
+    }));
+  }
+
+  async getOrphanedAircraftListings(): Promise<AircraftListing[]> {
+    // Find aircraft listings where the owner doesn't exist or is suspended
+    const results = await db
+      .select({
+        listing: aircraftListings,
+        owner: users
+      })
+      .from(aircraftListings)
+      .leftJoin(users, eq(aircraftListings.ownerId, users.id))
+      .where(eq(aircraftListings.isListed, true));
+    
+    // Filter orphaned listings (no owner or suspended owner)
+    return results
+      .filter(row => !row.owner || row.owner.isSuspended)
+      .map(row => row.listing);
+  }
+
+  async getOrphanedMarketplaceListings(): Promise<MarketplaceListing[]> {
+    // Find marketplace listings where the user doesn't exist or is suspended
+    const results = await db
+      .select({
+        listing: marketplaceListings,
+        user: users
+      })
+      .from(marketplaceListings)
+      .leftJoin(users, eq(marketplaceListings.userId, users.id))
+      .where(eq(marketplaceListings.isActive, true));
+    
+    // Filter orphaned listings (no user or suspended user)
+    return results
+      .filter(row => !row.user || row.user.isSuspended)
+      .map(row => row.listing);
+  }
+
+  async refreshAircraftListing(id: string): Promise<AircraftListing | undefined> {
+    const [listing] = await db
+      .update(aircraftListings)
+      .set({ 
+        lastRefreshedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(aircraftListings.id, id))
+      .returning();
+    return listing;
+  }
+
+  async refreshMarketplaceListing(id: string): Promise<MarketplaceListing | undefined> {
+    const [listing] = await db
+      .update(marketplaceListings)
+      .set({ 
+        lastRefreshedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(marketplaceListings.id, id))
+      .returning();
+    return listing;
+  }
+
+  async getUsersWithActiveListings(): Promise<{ user: User; aircraftCount: number; marketplaceCount: number }[]> {
+    // Get all users who have active aircraft or marketplace listings
+    const aircraftOwners = await db
+      .select({
+        userId: aircraftListings.ownerId,
+        count: sql<number>`count(*)::int`
+      })
+      .from(aircraftListings)
+      .where(eq(aircraftListings.isListed, true))
+      .groupBy(aircraftListings.ownerId);
+
+    const marketplaceOwners = await db
+      .select({
+        userId: marketplaceListings.userId,
+        count: sql<number>`count(*)::int`
+      })
+      .from(marketplaceListings)
+      .where(eq(marketplaceListings.isActive, true))
+      .groupBy(marketplaceListings.userId);
+
+    // Combine and get unique user IDs
+    const userIdsArray = [
+      ...aircraftOwners.map(o => o.userId),
+      ...marketplaceOwners.map(o => o.userId)
+    ];
+    const uniqueUserIds = Array.from(new Set(userIdsArray));
+
+    // Fetch user details and build result
+    const results: { user: User; aircraftCount: number; marketplaceCount: number }[] = [];
+    
+    for (const userId of uniqueUserIds) {
+      const user = await this.getUser(userId);
+      if (user && !user.isSuspended) {
+        const aircraftCount = aircraftOwners.find(o => o.userId === userId)?.count || 0;
+        const marketplaceCount = marketplaceOwners.find(o => o.userId === userId)?.count || 0;
+        
+        results.push({
+          user,
+          aircraftCount,
+          marketplaceCount
+        });
+      }
+    }
+
+    return results;
   }
 
   // Rentals

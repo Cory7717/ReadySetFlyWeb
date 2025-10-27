@@ -190,6 +190,9 @@ export const aircraftListings = pgTable("aircraft_listings", {
   maintenanceVerified: boolean("maintenance_verified").default(false),
   maintenanceVerifiedAt: timestamp("maintenance_verified_at"),
   
+  // Stale listing tracking
+  lastRefreshedAt: timestamp("last_refreshed_at").defaultNow(),
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -250,6 +253,9 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   promoFreeUntil: timestamp("promo_free_until"),
   promoGrantedBy: varchar("promo_granted_by").references(() => users.id),
   promoGrantedAt: timestamp("promo_granted_at"),
+  
+  // Stale listing tracking
+  lastRefreshedAt: timestamp("last_refreshed_at").defaultNow(),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

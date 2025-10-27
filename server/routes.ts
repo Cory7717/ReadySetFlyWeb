@@ -1480,6 +1480,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Stale & Orphaned Listings Management (Admin only)
+  app.get("/api/admin/stale-listings", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const daysStale = parseInt(req.query.days as string) || 60;
+      const [staleAircraft, staleMarketplace] = await Promise.all([
+        storage.getStaleAircraftListings(daysStale),
+        storage.getStaleMarketplaceListings(daysStale)
+      ]);
+      
+      res.json({
+        aircraft: staleAircraft,
+        marketplace: staleMarketplace,
+        totalCount: staleAircraft.length + staleMarketplace.length
+      });
+    } catch (error) {
+      console.error("Error fetching stale listings:", error);
+      res.status(500).json({ error: "Failed to fetch stale listings" });
+    }
+  });
+
+  app.get("/api/admin/orphaned-listings", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const [orphanedAircraft, orphanedMarketplace] = await Promise.all([
+        storage.getOrphanedAircraftListings(),
+        storage.getOrphanedMarketplaceListings()
+      ]);
+      
+      res.json({
+        aircraft: orphanedAircraft,
+        marketplace: orphanedMarketplace,
+        totalCount: orphanedAircraft.length + orphanedMarketplace.length
+      });
+    } catch (error) {
+      console.error("Error fetching orphaned listings:", error);
+      res.status(500).json({ error: "Failed to fetch orphaned listings" });
+    }
+  });
+
+  app.post("/api/admin/send-listing-reminders", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { getUncachableResendClient } = await import('./resendClient');
+      const { getListingReminderEmailHtml, getListingReminderEmailText } = await import('./email-templates');
+      
+      const usersWithListings = await storage.getUsersWithActiveListings();
+      const { client, fromEmail } = await getUncachableResendClient();
+      
+      let successCount = 0;
+      let failureCount = 0;
+      const errors: string[] = [];
+
+      for (const { user, aircraftCount, marketplaceCount } of usersWithListings) {
+        if (!user.email) {
+          failureCount++;
+          errors.push(`User ${user.id} has no email`);
+          continue;
+        }
+
+        try {
+          await client.emails.send({
+            from: fromEmail,
+            to: user.email,
+            subject: `📋 Monthly Listing Review - ${aircraftCount + marketplaceCount} Active Listing${aircraftCount + marketplaceCount === 1 ? '' : 's'}`,
+            html: getListingReminderEmailHtml(user.firstName || 'Pilot', aircraftCount, marketplaceCount),
+            text: getListingReminderEmailText(user.firstName || 'Pilot', aircraftCount, marketplaceCount),
+          });
+          successCount++;
+        } catch (emailError: any) {
+          failureCount++;
+          errors.push(`Failed to send to ${user.email}: ${emailError.message}`);
+          console.error(`Error sending email to ${user.email}:`, emailError);
+        }
+      }
+
+      res.json({
+        success: true,
+        totalUsers: usersWithListings.length,
+        emailsSent: successCount,
+        emailsFailed: failureCount,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } catch (error: any) {
+      console.error("Error sending listing reminders:", error);
+      res.status(500).json({ error: error.message || "Failed to send listing reminders" });
+    }
+  });
+
+  // Refresh Listings (User endpoints)
+  app.patch("/api/aircraft/:id/refresh", isAuthenticated, async (req, res) => {
+    try {
+      const aircraft = await storage.getAircraftListing(req.params.id);
+      if (!aircraft) {
+        return res.status(404).json({ error: "Aircraft listing not found" });
+      }
+
+      // Verify ownership
+      if (aircraft.ownerId !== req.user?.id && !req.user?.isAdmin) {
+        return res.status(403).json({ error: "Not authorized to refresh this listing" });
+      }
+
+      const updated = await storage.refreshAircraftListing(req.params.id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error refreshing aircraft listing:", error);
+      res.status(500).json({ error: "Failed to refresh aircraft listing" });
+    }
+  });
+
+  app.patch("/api/marketplace/:id/refresh", isAuthenticated, async (req, res) => {
+    try {
+      const listing = await storage.getMarketplaceListing(req.params.id);
+      if (!listing) {
+        return res.status(404).json({ error: "Marketplace listing not found" });
+      }
+
+      // Verify ownership
+      if (listing.userId !== req.user?.id && !req.user?.isAdmin) {
+        return res.status(403).json({ error: "Not authorized to refresh this listing" });
+      }
+
+      const updated = await storage.refreshMarketplaceListing(req.params.id);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error refreshing marketplace listing:", error);
+      res.status(500).json({ error: "Failed to refresh marketplace listing" });
+    }
+  });
+
   // CRM - Leads (Admin only)
   app.get("/api/crm/leads", isAuthenticated, isAdmin, async (req, res) => {
     try {

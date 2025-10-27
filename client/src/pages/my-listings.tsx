@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,12 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import type { MarketplaceListing, AircraftListing } from "@shared/schema";
-import { Plane, DollarSign, MapPin, Calendar } from "lucide-react";
+import { Plane, DollarSign, MapPin, Calendar, RefreshCw } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function MyListings() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
+  const { toast } = useToast();
 
   const { data: marketplaceListings = [], isLoading: loadingMarketplace } = useQuery<MarketplaceListing[]>({
     queryKey: ["/api/marketplace/user", user?.id],
@@ -21,6 +24,48 @@ export default function MyListings() {
   const { data: aircraftListings = [], isLoading: loadingAircraft } = useQuery<AircraftListing[]>({
     queryKey: ["/api/aircraft/owner", user?.id],
     enabled: !!user?.id,
+  });
+
+  // Refresh aircraft listing mutation
+  const refreshAircraftMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("PATCH", `/api/aircraft/${id}/refresh`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/aircraft/owner", user?.id] });
+      toast({ 
+        title: "Listing refreshed",
+        description: "Your aircraft listing has been marked as recently reviewed."
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to refresh",
+        description: "Please try again later.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Refresh marketplace listing mutation
+  const refreshMarketplaceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("PATCH", `/api/marketplace/${id}/refresh`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/marketplace/user", user?.id] });
+      toast({ 
+        title: "Listing refreshed",
+        description: "Your marketplace listing has been marked as recently reviewed."
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to refresh",
+        description: "Please try again later.",
+        variant: "destructive",
+      });
+    },
   });
 
   const getCategoryLabel = (category: string) => {
@@ -137,6 +182,15 @@ export default function MyListings() {
                       >
                         {listing.isActive ? "Deactivate" : "Activate"}
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => refreshMarketplaceMutation.mutate(listing.id)}
+                        disabled={refreshMarketplaceMutation.isPending}
+                        data-testid={`button-refresh-marketplace-${listing.id}`}
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -219,6 +273,15 @@ export default function MyListings() {
                         data-testid={`button-edit-aircraft-${aircraft.id}`}
                       >
                         Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => refreshAircraftMutation.mutate(aircraft.id)}
+                        disabled={refreshAircraftMutation.isPending}
+                        data-testid={`button-refresh-aircraft-${aircraft.id}`}
+                      >
+                        <RefreshCw className="h-4 w-4" />
                       </Button>
                     </div>
                   </CardContent>

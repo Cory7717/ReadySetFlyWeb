@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -185,6 +185,26 @@ export default function AdminDashboard() {
   const { data: promoAlerts = [], isLoading: promoAlertsLoading } = useQuery<PromoAlert[]>({
     queryKey: ["/api/admin/promo-alerts"],
     enabled: activeTab === "promo",
+  });
+
+  // Stale listings query
+  const { data: staleListings, isLoading: staleLoading } = useQuery<{
+    aircraft: AircraftListing[];
+    marketplace: MarketplaceListing[];
+    totalCount: number;
+  }>({
+    queryKey: ["/api/admin/stale-listings"],
+    enabled: activeTab === "stale",
+  });
+
+  // Orphaned listings query
+  const { data: orphanedListings, isLoading: orphanedLoading } = useQuery<{
+    aircraft: AircraftListing[];
+    marketplace: MarketplaceListing[];
+    totalCount: number;
+  }>({
+    queryKey: ["/api/admin/orphaned-listings"],
+    enabled: activeTab === "stale",
   });
 
   // Approve submission mutation
@@ -384,6 +404,48 @@ export default function AdminDashboard() {
     }
   };
 
+  // Send listing reminders mutation
+  const sendRemindersMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("POST", "/api/admin/send-listing-reminders", {});
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Email reminders sent",
+        description: `Successfully sent ${data.emailsSent} emails to users with active listings.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Failed to send reminders",
+        description: "Please try again later.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Refresh aircraft listing mutation
+  const refreshAircraftMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("PATCH", `/api/aircraft/${id}/refresh`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stale-listings"] });
+      toast({ title: "Aircraft listing refreshed" });
+    },
+  });
+
+  // Refresh marketplace listing mutation
+  const refreshMarketplaceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("PATCH", `/api/marketplace/${id}/refresh`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stale-listings"] });
+      toast({ title: "Marketplace listing refreshed" });
+    },
+  });
+
   const handleEditLead = (lead: CrmLead) => {
     setEditingLead(lead);
     leadForm.reset({
@@ -551,7 +613,7 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-7 h-auto">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-8 h-auto">
           <TabsTrigger value="analytics" data-testid="tab-analytics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
             <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
             <span>Analytics</span>
@@ -589,6 +651,10 @@ export default function AdminDashboard() {
                 </Badge>
               )}
             </span>
+          </TabsTrigger>
+          <TabsTrigger value="stale" data-testid="tab-stale" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <Clock className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span>Stale</span>
           </TabsTrigger>
           <TabsTrigger value="promo" data-testid="tab-promo" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
             <Gift className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
@@ -1578,6 +1644,275 @@ export default function AdminDashboard() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Stale & Orphaned Listings Tab */}
+        <TabsContent value="stale" className="space-y-6">
+          <div className="space-y-6">
+            {/* Send Email Reminders Section */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <CardTitle>Monthly Email Reminders</CardTitle>
+                    <CardDescription>
+                      Send email reminders to all users with active listings to review and refresh their listings
+                    </CardDescription>
+                  </div>
+                  <Button 
+                    onClick={() => sendRemindersMutation.mutate()}
+                    disabled={sendRemindersMutation.isPending}
+                    data-testid="button-send-reminders"
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    {sendRemindersMutation.isPending ? "Sending..." : "Send Reminders Now"}
+                  </Button>
+                </div>
+              </CardHeader>
+            </Card>
+
+            {/* Stale Listings Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Stale Listings (60+ Days Without Refresh)</CardTitle>
+                <CardDescription>
+                  These listings haven't been refreshed by their owners in over 60 days
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {staleLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
+                    ))}
+                  </div>
+                ) : !staleListings || (staleListings.aircraft.length === 0 && staleListings.marketplace.length === 0) ? (
+                  <div className="text-center py-12">
+                    <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                    <p className="text-muted-foreground">No stale listings found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {staleListings.aircraft.length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="font-semibold flex items-center gap-2">
+                          <Plane className="h-4 w-4" />
+                          Aircraft Listings ({staleListings.aircraft.length})
+                        </h3>
+                        <div className="space-y-3">
+                          {staleListings.aircraft.map((aircraft) => (
+                            <Card key={aircraft.id} className="hover-elevate">
+                              <CardContent className="pt-6">
+                                <div className="flex items-start gap-4">
+                                  <div className="p-3 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                                    <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                                  </div>
+                                  <div className="flex-1 space-y-2">
+                                    <div className="flex items-start justify-between gap-4">
+                                      <div className="flex-1">
+                                        <h3 className="font-semibold text-base">
+                                          {aircraft.make} {aircraft.model} - {aircraft.tailNumber}
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground">{aircraft.location}</p>
+                                        {aircraft.lastRefreshedAt && (
+                                          <p className="text-xs text-muted-foreground mt-1">
+                                            Last refreshed: {new Date(aircraft.lastRefreshedAt).toLocaleDateString()}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant={aircraft.isActive ? "default" : "secondary"}>
+                                          {aircraft.isActive ? "Active" : "Inactive"}
+                                        </Badge>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => refreshAircraftMutation.mutate(aircraft.id)}
+                                          disabled={refreshAircraftMutation.isPending}
+                                          data-testid={`button-refresh-aircraft-${aircraft.id}`}
+                                        >
+                                          <RefreshCw className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {staleListings.marketplace.length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="font-semibold flex items-center gap-2">
+                          <List className="h-4 w-4" />
+                          Marketplace Listings ({staleListings.marketplace.length})
+                        </h3>
+                        <div className="space-y-3">
+                          {staleListings.marketplace.map((listing) => (
+                            <Card key={listing.id} className="hover-elevate">
+                              <CardContent className="pt-6">
+                                <div className="flex items-start gap-4">
+                                  <div className="p-3 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                                    <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                                  </div>
+                                  <div className="flex-1 space-y-2">
+                                    <div className="flex items-start justify-between gap-4">
+                                      <div className="flex-1">
+                                        <h3 className="font-semibold text-base">{listing.title}</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                          {listing.category.replace('-', ' ')} - {listing.city}
+                                        </p>
+                                        {listing.lastRefreshedAt && (
+                                          <p className="text-xs text-muted-foreground mt-1">
+                                            Last refreshed: {new Date(listing.lastRefreshedAt).toLocaleDateString()}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Badge variant={listing.isActive ? "default" : "secondary"}>
+                                          {listing.isActive ? "Active" : "Inactive"}
+                                        </Badge>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => refreshMarketplaceMutation.mutate(listing.id)}
+                                          disabled={refreshMarketplaceMutation.isPending}
+                                          data-testid={`button-refresh-marketplace-${listing.id}`}
+                                        >
+                                          <RefreshCw className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Orphaned Listings Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Orphaned Listings</CardTitle>
+                <CardDescription>
+                  Listings where the owner account no longer exists or is suspended
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {orphanedLoading ? (
+                  <div className="space-y-4">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
+                    ))}
+                  </div>
+                ) : !orphanedListings || (orphanedListings.aircraft.length === 0 && orphanedListings.marketplace.length === 0) ? (
+                  <div className="text-center py-12">
+                    <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                    <p className="text-muted-foreground">No orphaned listings found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {orphanedListings.aircraft.length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="font-semibold flex items-center gap-2">
+                          <Plane className="h-4 w-4" />
+                          Aircraft Listings ({orphanedListings.aircraft.length})
+                        </h3>
+                        <div className="space-y-3">
+                          {orphanedListings.aircraft.map((aircraft) => (
+                            <Card key={aircraft.id} className="hover-elevate">
+                              <CardContent className="pt-6">
+                                <div className="flex items-start gap-4">
+                                  <div className="p-3 rounded-lg bg-red-100 dark:bg-red-900/30">
+                                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                                  </div>
+                                  <div className="flex-1 space-y-2">
+                                    <div className="flex items-start justify-between gap-4">
+                                      <div className="flex-1">
+                                        <h3 className="font-semibold text-base">
+                                          {aircraft.make} {aircraft.model} - {aircraft.tailNumber}
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground">{aircraft.location}</p>
+                                        <Badge variant="destructive" className="mt-2">Orphaned</Badge>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setDeleteTarget({ type: 'aircraft', id: aircraft.id });
+                                          setDeleteDialogOpen(true);
+                                        }}
+                                        data-testid={`button-delete-orphaned-aircraft-${aircraft.id}`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {orphanedListings.marketplace.length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="font-semibold flex items-center gap-2">
+                          <List className="h-4 w-4" />
+                          Marketplace Listings ({orphanedListings.marketplace.length})
+                        </h3>
+                        <div className="space-y-3">
+                          {orphanedListings.marketplace.map((listing) => (
+                            <Card key={listing.id} className="hover-elevate">
+                              <CardContent className="pt-6">
+                                <div className="flex items-start gap-4">
+                                  <div className="p-3 rounded-lg bg-red-100 dark:bg-red-900/30">
+                                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                                  </div>
+                                  <div className="flex-1 space-y-2">
+                                    <div className="flex items-start justify-between gap-4">
+                                      <div className="flex-1">
+                                        <h3 className="font-semibold text-base">{listing.title}</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                          {listing.category.replace('-', ' ')} - {listing.city}
+                                        </p>
+                                        <Badge variant="destructive" className="mt-2">Orphaned</Badge>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setDeleteTarget({ type: 'marketplace', id: listing.id });
+                                          setDeleteDialogOpen(true);
+                                        }}
+                                        data-testid={`button-delete-orphaned-marketplace-${listing.id}`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Promo Alerts Tab */}

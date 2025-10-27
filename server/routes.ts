@@ -1567,15 +1567,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Refresh Listings (User endpoints)
-  app.patch("/api/aircraft/:id/refresh", isAuthenticated, async (req, res) => {
+  app.patch("/api/aircraft/:id/refresh", isAuthenticated, async (req: any, res) => {
     try {
       const aircraft = await storage.getAircraftListing(req.params.id);
       if (!aircraft) {
         return res.status(404).json({ error: "Aircraft listing not found" });
       }
 
+      // Get user from session
+      const sessionUserId = req.user.claims.sub;
+      const user = await storage.getUser(sessionUserId);
+      
+      if (!user) {
+        return res.status(401).json({ error: "User not found" });
+      }
+
       // Verify ownership
-      if (aircraft.ownerId !== req.user?.id && !req.user?.isAdmin) {
+      if (aircraft.ownerId !== user.id && !user.isAdmin) {
         return res.status(403).json({ error: "Not authorized to refresh this listing" });
       }
 
@@ -1587,21 +1595,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/marketplace/:id/refresh", isAuthenticated, async (req, res) => {
+  app.patch("/api/marketplace/:id/refresh", isAuthenticated, async (req: any, res) => {
     try {
       const listing = await storage.getMarketplaceListing(req.params.id);
       if (!listing) {
         return res.status(404).json({ error: "Marketplace listing not found" });
       }
 
-      // Debug logging
-      console.log("[REFRESH DEBUG] listing.userId:", listing.userId, "type:", typeof listing.userId);
-      console.log("[REFRESH DEBUG] req.user?.id:", req.user?.id, "type:", typeof req.user?.id);
-      console.log("[REFRESH DEBUG] req.user?.isAdmin:", req.user?.isAdmin);
-      console.log("[REFRESH DEBUG] Match:", listing.userId === req.user?.id);
+      // Get user from session
+      const sessionUserId = req.user.claims.sub;
+      const user = await storage.getUser(sessionUserId);
+      
+      if (!user) {
+        return res.status(401).json({ error: "User not found" });
+      }
 
       // Verify ownership
-      if (listing.userId !== req.user?.id && !req.user?.isAdmin) {
+      if (listing.userId !== user.id && !user.isAdmin) {
         return res.status(403).json({ error: "Not authorized to refresh this listing" });
       }
 

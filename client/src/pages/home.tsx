@@ -211,7 +211,7 @@ export default function Home() {
               </div>
               <h3 className="font-display text-xl font-semibold mb-2">Verified Pilots</h3>
               <p className="text-muted-foreground">
-                All pilots are verified with license checks and background screenings
+                All pilots are verified with license checks and insurance checks
               </p>
             </div>
             <div className="text-center">
@@ -220,16 +220,16 @@ export default function Home() {
               </div>
               <h3 className="font-display text-xl font-semibold mb-2">Comprehensive Insurance</h3>
               <p className="text-muted-foreground">
-                All rentals include comprehensive insurance coverage for peace of mind
+                Owenrs and renters are required to carry comprehensive insurance
               </p>
             </div>
             <div className="text-center">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <Shield className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="font-display text-xl font-semibold mb-2">24/7 Support</h3>
+              <h3 className="font-display text-xl font-semibold mb-2">Support Available</h3>
               <p className="text-muted-foreground">
-                Our aviation experts are available around the clock to assist you
+                Our support experts are avaialble to assist you from 8am - 8pm (Central Standard Time) - 7 days a week
               </p>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -6,11 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import type { MarketplaceListing } from "@shared/schema";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { MarketplaceListing, PromoAlert } from "@shared/schema";
 import { MarketplaceCard } from "@/components/marketplace-card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search, SlidersHorizontal, Gift, X } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
 
 const categories = [
@@ -26,6 +28,9 @@ export default function Marketplace() {
   const [selectedCategory, setSelectedCategory] = useState("aircraft-sale");
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [dismissedBanners, setDismissedBanners] = useState<string[]>([]);
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [previousCategory, setPreviousCategory] = useState("aircraft-sale");
   
   // Filter states
   const [cityFilter, setCityFilter] = useState("");
@@ -56,6 +61,48 @@ export default function Marketplace() {
       return response.json();
     },
   });
+
+  const { data: promoAlerts = [] } = useQuery<PromoAlert[]>({
+    queryKey: ["/api/promo-alerts"],
+  });
+
+  // Detect category changes and show promo modal
+  useEffect(() => {
+    if (previousCategory !== selectedCategory) {
+      setPreviousCategory(selectedCategory);
+      
+      // Check if user has seen promo for this category
+      const seenKey = `promo-seen-${selectedCategory}`;
+      const hasSeen = localStorage.getItem(seenKey);
+      
+      if (!hasSeen) {
+        const categoryAlert = promoAlerts.find(
+          alert => alert.showOnCategoryPages && 
+          (!alert.targetCategories || alert.targetCategories.length === 0 || alert.targetCategories.includes(selectedCategory))
+        );
+        
+        if (categoryAlert) {
+          setShowPromoModal(true);
+          localStorage.setItem(seenKey, 'true');
+        }
+      }
+    }
+  }, [selectedCategory, previousCategory, promoAlerts]);
+
+  const handleDismissBanner = (alertId: string) => {
+    setDismissedBanners(prev => [...prev, alertId]);
+  };
+
+  // Filter alerts for main page banner
+  const mainPageAlerts = promoAlerts.filter(
+    alert => alert.showOnMainPage && !dismissedBanners.includes(alert.id)
+  );
+
+  // Get current category alert for modal
+  const categoryAlert = promoAlerts.find(
+    alert => alert.showOnCategoryPages && 
+    (!alert.targetCategories || alert.targetCategories.length === 0 || alert.targetCategories.includes(selectedCategory))
+  );
 
   return (
     <div className="min-h-screen">
@@ -96,6 +143,39 @@ export default function Marketplace() {
 
       {/* Listings */}
       <section className="container mx-auto px-4 py-12">
+        {/* Promotional Alerts Banner */}
+        {mainPageAlerts.map((alert) => (
+          <Alert 
+            key={alert.id} 
+            className="mb-6 border-green-500 bg-green-50 dark:bg-green-950/20"
+            data-testid={`alert-promo-${alert.id}`}
+          >
+            <Gift className="h-5 w-5 text-green-600 dark:text-green-400" />
+            <div className="flex-1">
+              <AlertTitle className="text-green-800 dark:text-green-200 font-semibold">
+                {alert.title}
+              </AlertTitle>
+              <AlertDescription className="text-green-700 dark:text-green-300">
+                {alert.message}
+                {alert.promoCode && (
+                  <span className="inline-block ml-2 px-2 py-1 bg-green-600 text-white text-xs font-mono rounded">
+                    {alert.promoCode}
+                  </span>
+                )}
+              </AlertDescription>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => handleDismissBanner(alert.id)}
+              className="text-green-600 hover:text-green-800 dark:text-green-400"
+              data-testid={`button-dismiss-alert-${alert.id}`}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </Alert>
+        ))}
+
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex-1">
             <h2 className="font-display text-xl sm:text-2xl font-bold mb-1">
@@ -253,6 +333,42 @@ export default function Marketplace() {
           open={!!selectedListingId}
           onOpenChange={(open) => !open && setSelectedListingId(null)}
         />
+      )}
+
+      {/* Category-Specific Promo Modal */}
+      {categoryAlert && (
+        <Dialog open={showPromoModal} onOpenChange={setShowPromoModal}>
+          <DialogContent className="sm:max-w-md" data-testid="dialog-promo-modal">
+            <DialogHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-3 rounded-full bg-green-100 dark:bg-green-900/30">
+                  <Gift className="h-6 w-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="flex-1">
+                  <DialogTitle className="text-xl">{categoryAlert.title}</DialogTitle>
+                </div>
+              </div>
+              <DialogDescription className="text-base">
+                {categoryAlert.message}
+              </DialogDescription>
+            </DialogHeader>
+            
+            {categoryAlert.promoCode && (
+              <div className="mt-4 p-4 bg-muted rounded-lg border-2 border-dashed border-green-500">
+                <p className="text-sm text-muted-foreground mb-2 text-center">Your Promo Code</p>
+                <p className="text-2xl font-mono font-bold text-center text-green-600 dark:text-green-400" data-testid="text-promo-code">
+                  {categoryAlert.promoCode}
+                </p>
+              </div>
+            )}
+            
+            <div className="flex justify-end mt-4">
+              <Button onClick={() => setShowPromoModal(false)} data-testid="button-close-promo-modal">
+                Got it, thanks!
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

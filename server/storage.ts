@@ -27,6 +27,8 @@ import {
   type InsertExpense,
   type JobApplication,
   type InsertJobApplication,
+  type PromoAlert,
+  type InsertPromoAlert,
   users,
   aircraftListings,
   marketplaceListings,
@@ -42,6 +44,7 @@ import {
   crmActivities,
   expenses,
   jobApplications,
+  promoAlerts,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql } from "drizzle-orm";
@@ -184,6 +187,14 @@ export interface IStorage {
   getJobApplication(id: string): Promise<JobApplication | undefined>;
   updateJobApplication(id: string, updates: Partial<JobApplication>): Promise<JobApplication | undefined>;
   deleteExpense(id: string): Promise<boolean>;
+
+  // Promo Alerts
+  getActivePromoAlerts(): Promise<PromoAlert[]>;
+  getAllPromoAlerts(): Promise<PromoAlert[]>;
+  getPromoAlert(id: string): Promise<PromoAlert | undefined>;
+  createPromoAlert(alert: InsertPromoAlert): Promise<PromoAlert>;
+  updatePromoAlert(id: string, updates: Partial<PromoAlert>): Promise<PromoAlert | undefined>;
+  deletePromoAlert(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1022,6 +1033,35 @@ export class DatabaseStorage implements IStorage {
   async updateJobApplication(id: string, updates: Partial<JobApplication>): Promise<JobApplication | undefined> {
     const [application] = await db.update(jobApplications).set({ ...updates, updatedAt: new Date() }).where(eq(jobApplications.id, id)).returning();
     return application;
+  }
+
+  // Promo Alerts
+  async getActivePromoAlerts(): Promise<PromoAlert[]> {
+    return await db.select().from(promoAlerts).where(eq(promoAlerts.isEnabled, true)).orderBy(desc(promoAlerts.createdAt));
+  }
+
+  async getAllPromoAlerts(): Promise<PromoAlert[]> {
+    return await db.select().from(promoAlerts).orderBy(desc(promoAlerts.createdAt));
+  }
+
+  async getPromoAlert(id: string): Promise<PromoAlert | undefined> {
+    const [alert] = await db.select().from(promoAlerts).where(eq(promoAlerts.id, id));
+    return alert;
+  }
+
+  async createPromoAlert(insertAlert: InsertPromoAlert): Promise<PromoAlert> {
+    const [alert] = await db.insert(promoAlerts).values(insertAlert).returning();
+    return alert;
+  }
+
+  async updatePromoAlert(id: string, updates: Partial<PromoAlert>): Promise<PromoAlert | undefined> {
+    const [alert] = await db.update(promoAlerts).set({ ...updates, updatedAt: new Date() }).where(eq(promoAlerts.id, id)).returning();
+    return alert;
+  }
+
+  async deletePromoAlert(id: string): Promise<boolean> {
+    const result = await db.delete(promoAlerts).where(eq(promoAlerts.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 }
 

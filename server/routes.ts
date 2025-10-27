@@ -6,7 +6,7 @@ import multer from "multer";
 import OpenAI from "openai";
 import Stripe from "stripe";
 import { storage } from "./storage";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertExpenseSchema, insertJobApplicationSchema } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { getUncachableResendClient } from "./resendClient";
 
@@ -1771,6 +1771,66 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           console.error('Failed to clean up temp file:', cleanupError);
         }
       }
+    }
+  });
+
+  // Promo Alerts (Public read active, Admin read all/write)
+  app.get("/api/promo-alerts", async (req, res) => {
+    try {
+      const alerts = await storage.getActivePromoAlerts();
+      res.json(alerts);
+    } catch (error) {
+      console.error('Failed to fetch promo alerts:', error);
+      res.status(500).json({ error: "Failed to fetch promotional alerts" });
+    }
+  });
+
+  app.get("/api/admin/promo-alerts", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const alerts = await storage.getAllPromoAlerts();
+      res.json(alerts);
+    } catch (error) {
+      console.error('Failed to fetch all promo alerts:', error);
+      res.status(500).json({ error: "Failed to fetch promotional alerts" });
+    }
+  });
+
+  app.post("/api/promo-alerts", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const validatedData = insertPromoAlertSchema.parse(req.body);
+      const alert = await storage.createPromoAlert(validatedData);
+      res.json(alert);
+    } catch (error: any) {
+      console.error('Failed to create promo alert:', error);
+      res.status(400).json({ error: error.message || "Failed to create promotional alert" });
+    }
+  });
+
+  app.patch("/api/promo-alerts/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const partialSchema = insertPromoAlertSchema.partial();
+      const validatedData = partialSchema.parse(req.body);
+      const alert = await storage.updatePromoAlert(req.params.id, validatedData);
+      if (!alert) {
+        return res.status(404).json({ error: "Promotional alert not found" });
+      }
+      res.json(alert);
+    } catch (error: any) {
+      console.error('Failed to update promo alert:', error);
+      res.status(400).json({ error: error.message || "Failed to update promotional alert" });
+    }
+  });
+
+  app.delete("/api/promo-alerts/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const deleted = await storage.deletePromoAlert(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Promotional alert not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Failed to delete promo alert:', error);
+      res.status(500).json({ error: "Failed to delete promotional alert" });
     }
   });
 

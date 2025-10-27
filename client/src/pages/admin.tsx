@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { insertCrmLeadSchema, insertExpenseSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense } from "@shared/schema";
+import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert } from "@shared/schema";
 import { AdminUserModal } from "@/components/admin-user-modal";
 
 export default function AdminDashboard() {
@@ -41,6 +41,10 @@ export default function AdminDashboard() {
   const [selectedMarketplace, setSelectedMarketplace] = useState<MarketplaceListing | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'aircraft' | 'marketplace'; id: string } | null>(null);
+  
+  // Promo alerts state
+  const [promoDialogOpen, setPromoDialogOpen] = useState(false);
+  const [editingPromo, setEditingPromo] = useState<PromoAlert | null>(null);
   
   // Lead form with Zod validation
   const leadForm = useForm<InsertCrmLead>({
@@ -71,6 +75,21 @@ export default function AdminDashboard() {
   
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [extractingData, setExtractingData] = useState(false);
+  
+  // Promo alert form with Zod validation
+  const promoForm = useForm<InsertPromoAlert>({
+    resolver: zodResolver(insertPromoAlertSchema),
+    defaultValues: {
+      title: "",
+      message: "",
+      promoCode: "",
+      isEnabled: true,
+      showOnMainPage: true,
+      showOnCategoryPages: true,
+      targetCategories: [],
+      variant: "info",
+    },
+  });
   
   const { toast } = useToast();
 
@@ -141,6 +160,12 @@ export default function AdminDashboard() {
   const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
     queryKey: ["/api/admin/expenses"],
     enabled: activeTab === "analytics",
+  });
+
+  // Promo alerts query (admin endpoint fetches all, including disabled)
+  const { data: promoAlerts = [], isLoading: promoAlertsLoading } = useQuery<PromoAlert[]>({
+    queryKey: ["/api/admin/promo-alerts"],
+    enabled: activeTab === "promo",
   });
 
   // Approve submission mutation
@@ -477,7 +502,7 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-6 h-auto">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-7 h-auto">
           <TabsTrigger value="analytics" data-testid="tab-analytics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
             <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
             <span>Analytics</span>
@@ -515,6 +540,10 @@ export default function AdminDashboard() {
                 </Badge>
               )}
             </span>
+          </TabsTrigger>
+          <TabsTrigger value="promo" data-testid="tab-promo" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <Gift className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span>Promos</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1373,6 +1402,71 @@ export default function AdminDashboard() {
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Promo Alerts Tab */}
+        <TabsContent value="promo" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Promotional Alerts</CardTitle>
+              <CardDescription>
+                Manage promotional banners and announcements that appear on the marketplace
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {promoAlertsLoading ? (
+                <div className="space-y-4">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
+                  ))}
+                </div>
+              ) : promoAlerts.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">No promotional alerts configured</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {promoAlerts.map((alert) => (
+                    <Card key={alert.id} className="hover-elevate">
+                      <CardContent className="pt-6">
+                        <div className="flex items-start gap-4">
+                          <div className="p-3 rounded-lg bg-green-100 dark:bg-green-900/30">
+                            <Gift className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          </div>
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-base">{alert.title}</h3>
+                                <p className="text-sm text-muted-foreground mt-1">{alert.message}</p>
+                                {alert.promoCode && (
+                                  <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-muted rounded-md">
+                                    <span className="text-xs text-muted-foreground">Code:</span>
+                                    <span className="font-mono font-semibold text-sm">{alert.promoCode}</span>
+                                  </div>
+                                )}
+                              </div>
+                              <Badge variant={alert.isEnabled ? "default" : "secondary"}>
+                                {alert.isEnabled ? "Active" : "Inactive"}
+                              </Badge>
+                            </div>
+                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              {alert.showOnMainPage && <Badge variant="outline">Main Page</Badge>}
+                              {alert.showOnCategoryPages && <Badge variant="outline">Category Pages</Badge>}
+                              {alert.targetCategories && alert.targetCategories.length > 0 && (
+                                <Badge variant="outline">
+                                  {alert.targetCategories.length} Categories
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </CardContent>

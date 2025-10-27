@@ -297,6 +297,30 @@ export const jobApplications = pgTable("job_applications", {
   index("idx_job_applications_status").on(table.status),
 ]);
 
+// Promotional Alerts (for admin-managed marketplace announcements)
+export const promoAlerts = pgTable("promo_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Alert details
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  promoCode: text("promo_code"), // Optional promo code to display
+  
+  // Display settings
+  isEnabled: boolean("is_enabled").default(true),
+  showOnMainPage: boolean("show_on_main_page").default(true),
+  showOnCategoryPages: boolean("show_on_category_pages").default(true),
+  
+  // Target categories (empty = all categories)
+  targetCategories: text("target_categories").array().default(sql`ARRAY[]::text[]`),
+  
+  // Styling
+  variant: text("variant").default("info"), // info, success, warning, destructive
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Rentals
 export const rentals = pgTable("rentals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -741,6 +765,17 @@ export const insertJobApplicationSchema = createInsertSchema(jobApplications).om
   resumeUrl: z.string().min(1, "Resume is required"),
 });
 
+export const insertPromoAlertSchema = createInsertSchema(promoAlerts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  title: z.string().min(1, "Title is required"),
+  message: z.string().min(1, "Message is required"),
+  promoCode: z.string().optional(),
+  variant: z.enum(["info", "success", "warning", "destructive"]).default("info"),
+});
+
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -789,6 +824,9 @@ export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 
 export type JobApplication = typeof jobApplications.$inferSelect;
 export type InsertJobApplication = z.infer<typeof insertJobApplicationSchema>;
+
+export type PromoAlert = typeof promoAlerts.$inferSelect;
+export type InsertPromoAlert = z.infer<typeof insertPromoAlertSchema>;
 
 // Enum types
 export type CertificationType = typeof certificationTypes[number];

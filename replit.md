@@ -19,3 +19,24 @@ Core architectural decisions include a robust **verification system** for renter
 - **WebSocket server**: Custom implementation for real-time messaging.
 - **Cloud Storage**: Planned integration (e.g., AWS S3, Cloudinary) for file uploads.
 - **FAA Registry API**: Planned integration for automatic N-number lookups and cross-verification.
+
+## Stale Listing Management System
+Added December 2024: A comprehensive system to track and maintain listing quality through automated monitoring and email reminders.
+
+**Key Features:**
+- `lastRefreshedAt` timestamp field on both aircraft rental and marketplace listings tracks when owners last reviewed their listings
+- **Stale listings detection**: Automatically identifies listings not refreshed in 60+ days
+- **Orphaned listings detection**: Identifies listings where owner account is deleted or suspended
+- **Admin dashboard tab**: Dedicated "Stale" tab with three management sections:
+  - Monthly email reminder controls with "Send Reminders Now" button
+  - Stale listings (aircraft and marketplace) with individual refresh capabilities
+  - Orphaned listings (aircraft and marketplace) with delete actions
+- **User refresh buttons**: Icon buttons on My Listings page allow users to refresh their own listings
+- **Monthly automated emails**: Resend-powered email reminders notify users to review listings
+- **Scheduled automation**: Script (`send-monthly-listing-reminders.ts`) designed for Replit Scheduled Deployments
+
+**Implementation:**
+- Storage methods: `getStaleAircraftListings()`, `getStaleMarketplaceListings()`, `getOrphanedAircraftListings()`, `getOrphanedMarketplaceListings()`, `refreshAircraftListing()`, `refreshMarketplaceListing()`, `getUsersWithActiveListings()`
+- API endpoints: GET `/api/admin/stale-listings`, GET `/api/admin/orphaned-listings`, POST `/api/admin/send-listing-reminders`, PATCH `/api/aircraft/:id/refresh`, PATCH `/api/marketplace/:id/refresh`
+- Email templates: HTML and plain text versions showing aircraft count and marketplace count
+

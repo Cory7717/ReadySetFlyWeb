@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { AircraftListing, User } from "@shared/schema";
 import { MapPin, Gauge, Shield, Calendar, Heart, Share2, Star } from "lucide-react";
@@ -18,6 +18,7 @@ import { apiRequest } from "@/lib/queryClient";
 
 export default function AircraftDetail() {
   const [, params] = useRoute("/aircraft/:id");
+  const [, navigate] = useLocation();
   const [estimatedHours, setEstimatedHours] = useState("6");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -47,15 +48,13 @@ export default function AircraftDetail() {
     mutationFn: async (rentalData: any) => {
       return await apiRequest("POST", "/api/rentals", rentalData);
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
+      // Redirect to payment page with the rental ID
+      navigate(`/rental-payment/${data.id}`);
       toast({
-        title: "Booking request sent!",
-        description: "The owner will review your request. You'll be notified once they respond.",
+        title: "Booking request created!",
+        description: "Please complete payment to finalize your booking.",
       });
-      // Reset form
-      setStartDate("");
-      setEndDate("");
-      setEstimatedHours("6");
     },
     onError: (error: any) => {
       toast({

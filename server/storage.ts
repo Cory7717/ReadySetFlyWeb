@@ -807,6 +807,20 @@ export class DatabaseStorage implements IStorage {
     profitMarginYear: string;
     totalRentals: number;
     activeRentals: number;
+    newRentalsToday: number;
+    newRentalsWeek: number;
+    activeRentalsToday: number;
+    activeRentalsWeek: number;
+    totalActiveMarketplaceListings: number;
+    totalExpiredMarketplaceListings: number;
+    marketplaceByCategory: {
+      job: number;
+      'aircraft-sale': number;
+      cfi: number;
+      'flight-school': number;
+      mechanic: number;
+      charter: number;
+    };
   }> {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -882,6 +896,52 @@ export class DatabaseStorage implements IStorage {
     const totalRentals = allRentals.length;
     const activeRentals = allRentals.filter(r => r.status === 'active').length;
 
+    // New rentals (created today/this week)
+    const newRentalsToday = allRentals.filter(r => r.createdAt && r.createdAt >= today).length;
+    const newRentalsWeek = allRentals.filter(r => r.createdAt && r.createdAt >= weekAgo).length;
+
+    // Active rentals during period (startDate <= period end AND endDate >= period start)
+    const endOfToday = new Date(today.getTime() + 24 * 60 * 60 * 1000 - 1);
+    
+    const activeRentalsToday = allRentals.filter(r => 
+      r.status === 'active' && 
+      r.startDate && r.endDate &&
+      new Date(r.startDate) <= endOfToday && 
+      new Date(r.endDate) >= today
+    ).length;
+    
+    // For "this week", use rolling 7-day window: from weekAgo to now
+    // A rental is active this week if it overlaps with the [weekAgo, now] period
+    const activeRentalsWeek = allRentals.filter(r => 
+      r.status === 'active' && 
+      r.startDate && r.endDate &&
+      new Date(r.startDate) <= now && 
+      new Date(r.endDate) >= weekAgo
+    ).length;
+
+    // Marketplace listing stats
+    const allMarketplaceListings = await db.select().from(marketplaceListings);
+    
+    // Active listings (isActive = true AND (expiresAt is null OR expiresAt > now))
+    const activeMarketplaceListings = allMarketplaceListings.filter(l => 
+      l.isActive && (!l.expiresAt || new Date(l.expiresAt) > now)
+    );
+    
+    // Expired listings (isActive = false OR expiresAt <= now)
+    const expiredMarketplaceListings = allMarketplaceListings.filter(l => 
+      !l.isActive || (l.expiresAt && new Date(l.expiresAt) <= now)
+    );
+
+    // Active listings by category
+    const marketplaceByCategory = {
+      'job': activeMarketplaceListings.filter(l => l.category === 'job').length,
+      'aircraft-sale': activeMarketplaceListings.filter(l => l.category === 'aircraft-sale').length,
+      'cfi': activeMarketplaceListings.filter(l => l.category === 'cfi').length,
+      'flight-school': activeMarketplaceListings.filter(l => l.category === 'flight-school').length,
+      'mechanic': activeMarketplaceListings.filter(l => l.category === 'mechanic').length,
+      'charter': activeMarketplaceListings.filter(l => l.category === 'charter').length,
+    };
+
     return {
       transactionsToday,
       transactionsWeek,
@@ -905,6 +965,13 @@ export class DatabaseStorage implements IStorage {
       profitMarginYear,
       totalRentals,
       activeRentals,
+      newRentalsToday,
+      newRentalsWeek,
+      activeRentalsToday,
+      activeRentalsWeek,
+      totalActiveMarketplaceListings: activeMarketplaceListings.length,
+      totalExpiredMarketplaceListings: expiredMarketplaceListings.length,
+      marketplaceByCategory,
     };
   }
 

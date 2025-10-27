@@ -146,6 +146,20 @@ export default function AdminDashboard() {
     profitMarginYear: string;
     totalRentals: number;
     activeRentals: number;
+    newRentalsToday: number;
+    newRentalsWeek: number;
+    activeRentalsToday: number;
+    activeRentalsWeek: number;
+    totalActiveMarketplaceListings: number;
+    totalExpiredMarketplaceListings: number;
+    marketplaceByCategory: {
+      job: number;
+      'aircraft-sale': number;
+      cfi: number;
+      'flight-school': number;
+      mechanic: number;
+      charter: number;
+    };
   }>({
     queryKey: ["/api/admin/analytics"],
     enabled: activeTab === "analytics",
@@ -745,27 +759,60 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-          {/* Rental Stats */}
-          <div className="grid gap-6 md:grid-cols-2">
+          {/* Marketplace Listings Stats */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader>
-                <CardTitle>Rental Activity</CardTitle>
-                <CardDescription>Current rental statistics</CardDescription>
+                <CardTitle>Marketplace Overview</CardTitle>
+                <CardDescription>Current listing statistics</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-chart-2" />
-                    <span className="text-sm font-medium">Active Rentals</span>
+                    <List className="h-5 w-5 text-chart-2" />
+                    <span className="text-sm font-medium">Active Listings</span>
                   </div>
-                  <Badge className="bg-chart-2">{analytics?.activeRentals || 0}</Badge>
+                  <Badge className="bg-chart-2" data-testid="badge-active-marketplace">{analytics?.totalActiveMarketplaceListings || 0}</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Plane className="h-5 w-5 text-muted-foreground" />
-                    <span className="text-sm font-medium">Total Rentals</span>
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                    <span className="text-sm font-medium">Expired Listings</span>
                   </div>
-                  <Badge variant="outline">{analytics?.totalRentals || 0}</Badge>
+                  <Badge variant="destructive" data-testid="badge-expired-marketplace">{analytics?.totalExpiredMarketplaceListings || 0}</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Listings by Category</CardTitle>
+                <CardDescription>Active listings per category</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Aviation Jobs</span>
+                  <Badge variant="outline" data-testid="badge-category-job">{analytics?.marketplaceByCategory?.job || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Aircraft For Sale</span>
+                  <Badge variant="outline" data-testid="badge-category-aircraft-sale">{analytics?.marketplaceByCategory?.['aircraft-sale'] || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">CFIs</span>
+                  <Badge variant="outline" data-testid="badge-category-cfi">{analytics?.marketplaceByCategory?.cfi || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Flight Schools</span>
+                  <Badge variant="outline" data-testid="badge-category-flight-school">{analytics?.marketplaceByCategory?.['flight-school'] || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Mechanics</span>
+                  <Badge variant="outline" data-testid="badge-category-mechanic">{analytics?.marketplaceByCategory?.mechanic || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Charter Services</span>
+                  <Badge variant="outline" data-testid="badge-category-charter">{analytics?.marketplaceByCategory?.charter || 0}</Badge>
                 </div>
               </CardContent>
             </Card>
@@ -773,15 +820,64 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Commission Details</CardTitle>
-                <CardDescription>Ready Set Fly takes 15% commission</CardDescription>
+                <CardDescription>Ready Set Fly revenue model</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
                 <div className="text-sm text-muted-foreground">
-                  <p>• Renter commission: 7.5%</p>
-                  <p>• Owner commission: 7.5%</p>
-                  <p className="mt-2 font-medium text-foreground">
-                    Platform fees are automatically calculated and tracked in the transactions table.
-                  </p>
+                  <p className="font-medium text-foreground mb-2">Rental Commission:</p>
+                  <p>• Renter: 7.5%</p>
+                  <p>• Owner: 7.5%</p>
+                  <p className="font-medium text-foreground mt-3 mb-2">Marketplace Fees:</p>
+                  <p>• $25-$250/month per listing</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Rental Metrics */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Rental Activity - Today</CardTitle>
+                <CardDescription>New and active rentals today</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-chart-2" />
+                    <span className="text-sm font-medium">New Rentals</span>
+                  </div>
+                  <Badge className="bg-chart-2" data-testid="badge-new-rentals-today">{analytics?.newRentalsToday || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-chart-1" />
+                    <span className="text-sm font-medium">Active Rentals</span>
+                  </div>
+                  <Badge className="bg-chart-1" data-testid="badge-active-rentals-today">{analytics?.activeRentalsToday || 0}</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Rental Activity - This Week</CardTitle>
+                <CardDescription>New and active rentals this week</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-chart-2" />
+                    <span className="text-sm font-medium">New Rentals</span>
+                  </div>
+                  <Badge className="bg-chart-2" data-testid="badge-new-rentals-week">{analytics?.newRentalsWeek || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-chart-1" />
+                    <span className="text-sm font-medium">Active Rentals</span>
+                  </div>
+                  <Badge className="bg-chart-1" data-testid="badge-active-rentals-week">{analytics?.activeRentalsWeek || 0}</Badge>
                 </div>
               </CardContent>
             </Card>

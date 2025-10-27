@@ -563,7 +563,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
 
             {/* Action Buttons */}
             <div className="flex gap-3 pt-4">
-              {listing.category === "Aviation Jobs" ? (
+              {listing.category === "job" ? (
                 <Button
                   className="flex-1"
                   onClick={() => setJobApplicationOpen(true)}

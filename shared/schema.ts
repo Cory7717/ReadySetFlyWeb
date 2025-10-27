@@ -276,6 +276,8 @@ export const jobApplications = pgTable("job_applications", {
   lastName: text("last_name").notNull(),
   email: text("email").notNull(),
   phone: text("phone"),
+  currentJobTitle: text("current_job_title"),
+  yearsOfExperience: text("years_of_experience"),
   
   // Application content
   coverLetter: text("cover_letter"),

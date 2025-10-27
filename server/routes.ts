@@ -1777,7 +1777,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   // Job Applications
   app.post("/api/job-applications", upload.single('resume'), async (req: any, res) => {
     try {
-      const { listingId, firstName, lastName, email, phone, coverLetter } = req.body;
+      const { listingId, firstName, lastName, email, phone, currentJobTitle, yearsOfExperience, coverLetter } = req.body;
       
       if (!req.file) {
         return res.status(400).json({ error: "Resume file is required" });
@@ -1785,7 +1785,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       
       // Get the listing to retrieve job poster's email
       const listing = await storage.getMarketplaceListing(listingId);
-      if (!listing || listing.category !== 'Aviation Jobs') {
+      if (!listing || listing.category !== 'job') {
         return res.status(404).json({ error: "Job listing not found" });
       }
       
@@ -1800,6 +1800,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         lastName,
         email,
         phone: phone || undefined,
+        currentJobTitle: currentJobTitle || undefined,
+        yearsOfExperience: yearsOfExperience || undefined,
         coverLetter: coverLetter || undefined,
         resumeUrl: `/uploads/documents/${req.file.filename}`,
       });
@@ -1848,6 +1850,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         <tr>
           <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Phone:</td>
           <td style="padding: 8px 0; font-weight: 500; font-size: 14px;">${phone}</td>
+        </tr>
+        ` : ''}
+        ${currentJobTitle ? `
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Current Job Title:</td>
+          <td style="padding: 8px 0; font-weight: 500; font-size: 14px;">${currentJobTitle}</td>
+        </tr>
+        ` : ''}
+        ${yearsOfExperience ? `
+        <tr>
+          <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Years of Experience:</td>
+          <td style="padding: 8px 0; font-weight: 500; font-size: 14px;">${yearsOfExperience}</td>
         </tr>
         ` : ''}
       </table>

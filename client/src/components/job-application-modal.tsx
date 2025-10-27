@@ -17,6 +17,8 @@ const jobApplicationFormSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Valid email is required"),
   phone: z.string().optional(),
+  currentJobTitle: z.string().optional(),
+  yearsOfExperience: z.string().optional(),
   coverLetter: z.string().optional(),
   resume: z.instanceof(File, { message: "Resume is required" }),
 });
@@ -41,6 +43,8 @@ export function JobApplicationModal({ listing, open, onOpenChange }: JobApplicat
       lastName: "",
       email: "",
       phone: "",
+      currentJobTitle: "",
+      yearsOfExperience: "",
       coverLetter: "",
     },
   });
@@ -53,6 +57,8 @@ export function JobApplicationModal({ listing, open, onOpenChange }: JobApplicat
       formData.append('lastName', data.lastName);
       formData.append('email', data.email);
       if (data.phone) formData.append('phone', data.phone);
+      if (data.currentJobTitle) formData.append('currentJobTitle', data.currentJobTitle);
+      if (data.yearsOfExperience) formData.append('yearsOfExperience', data.yearsOfExperience);
       if (data.coverLetter) formData.append('coverLetter', data.coverLetter);
       formData.append('resume', data.resume);
 
@@ -220,6 +226,44 @@ export function JobApplicationModal({ listing, open, onOpenChange }: JobApplicat
                     </FormItem>
                   )}
                 />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="currentJobTitle"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Current Job Title (Optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="e.g., Aviation Mechanic"
+                            data-testid="input-current-job-title"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="yearsOfExperience"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Years of Experience (Optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="e.g., 5 years"
+                            data-testid="input-years-of-experience"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <FormField
                   control={form.control}

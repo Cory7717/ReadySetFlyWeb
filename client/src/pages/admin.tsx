@@ -835,7 +835,30 @@ export default function AdminDashboard() {
           </div>
 
           {/* Rental Metrics */}
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle>Total Rental Overview</CardTitle>
+                <CardDescription>Overall rental statistics</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-chart-1" />
+                    <span className="text-sm font-medium">Total Active Rentals</span>
+                  </div>
+                  <Badge className="bg-chart-1" data-testid="badge-total-active-rentals">{analytics?.activeRentals || 0}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Plane className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium">All-Time Rentals</span>
+                  </div>
+                  <Badge variant="outline" data-testid="badge-total-rentals">{analytics?.totalRentals || 0}</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Rental Activity - Today</CardTitle>

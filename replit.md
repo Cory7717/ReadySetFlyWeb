@@ -97,3 +97,38 @@ Added October 2025: A system to provide high-quality example listings for all ma
 - UI components: `MarketplaceCard` and `MarketplaceListingModal` display amber banner for example listings
 - Sample data: Realistic listings with professional descriptions, contact info, and pricing guidance
 
+## Mobile Responsiveness
+Added October 2025: Comprehensive mobile UI/UX improvements ensuring the platform displays correctly on all device sizes without horizontal scrolling.
+
+**Key Improvements:**
+- **Header Component** (`client/src/components/header.tsx`):
+  - Logo scales down on mobile (h-8 vs h-[2.6rem])
+  - Brand text "Ready Set Fly" hidden on screens < 400px, smaller font on mobile
+  - Navigation tabs compact on mobile (size="sm", text-xs, reduced padding)
+  - "List Your Aircraft" button hidden on mobile (visible only on sm: breakpoint and up)
+  - Notifications bell icon hidden on mobile
+  - Reduced header height on mobile (h-14 vs h-16)
+  - Reduced spacing throughout (gap-1 sm:gap-2, px-3 sm:px-4)
+
+- **Home Page Hero Section** (`client/src/pages/home.tsx`):
+  - Hero height reduced on mobile (500px vs 600px on desktop)
+  - Hero title responsive (text-3xl on mobile, text-5xl md:text-6xl on desktop)
+  - Search card padding reduced on mobile (p-4 vs p-6)
+  - Grid layout responsive: 1 column on mobile, 2 columns on sm, 4 columns on md+
+  - Form labels and inputs smaller on mobile (text-xs/text-sm)
+  - Quick filter badges smaller (text-xs on mobile)
+
+- **RequireAuth Page**: Already mobile-friendly with responsive Card component and full-width buttons
+
+**Responsive Breakpoints:**
+- `sm:` = 640px and up
+- `md:` = 768px and up
+- `lg:` = 1024px and up
+- `min-[400px]:` = Custom breakpoint for brand text
+
+**Testing:**
+- Verified on iPhone 12 viewport (390x844)
+- No horizontal scrolling required
+- All interactive elements accessible and properly sized
+- Content scales appropriately across all breakpoints
+

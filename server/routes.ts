@@ -1401,17 +1401,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Insufficient balance" });
       }
 
-      // Create withdrawal request
+      // Deduct amount from user balance atomically before processing
+      await storage.deductFromUserBalance(userId, parsedAmount);
+
+      // Create initial withdrawal request  
       const request = await storage.createWithdrawalRequest({
         userId,
         amount: amount.toString(),
         paypalEmail
       });
 
-      // Deduct amount from user balance (mark as pending withdrawal)
-      await storage.deductFromUserBalance(userId, parsedAmount);
+      // Update to processing status
+      await storage.updateWithdrawalRequest(request.id, { status: "processing" });
 
-      res.json(request);
+      // Automatically process payout via PayPal
+      try {
+        const { sendPayout } = await import("./paypal-payouts");
+        const payoutResult = await sendPayout({
+          recipientEmail: paypalEmail,
+          amount: parsedAmount,
+          senderItemId: request.id,
+          note: `Withdrawal request ${request.id}`,
+          emailSubject: "You've received a payout from Ready Set Fly",
+          emailMessage: "Your rental earnings have been sent to your PayPal account."
+        });
+
+        if (payoutResult.success) {
+          // Update withdrawal with success status and PayPal details
+          const completedRequest = await storage.updateWithdrawalRequest(request.id, {
+            status: "completed",
+            payoutBatchId: payoutResult.batchId,
+            payoutItemId: payoutResult.itemId,
+            transactionId: payoutResult.transactionId,
+            processedAt: new Date()
+          });
+
+          console.log(`[PAYOUT SUCCESS] User ${userId} withdrawal ${request.id}: $${parsedAmount} sent to ${paypalEmail}`);
+          res.json(completedRequest);
+        } else {
+          // Payout failed - refund user balance
+          await storage.addToUserBalance(userId, parsedAmount);
+          await storage.updateWithdrawalRequest(request.id, {
+            status: "failed",
+            failureReason: payoutResult.error,
+            processedAt: new Date()
+          });
+
+          console.error(`[PAYOUT FAILED] User ${userId} withdrawal ${request.id}: ${payoutResult.error}`);
+          res.status(400).json({ 
+            error: `Payout failed: ${payoutResult.error}. Your balance has been refunded.`
+          });
+        }
+      } catch (payoutError: any) {
+        // Exception during payout - refund balance and mark as failed
+        await storage.addToUserBalance(userId, parsedAmount);
+        await storage.updateWithdrawalRequest(request.id, {
+          status: "failed",
+          failureReason: payoutError.message,
+          processedAt: new Date()
+        });
+
+        console.error(`[PAYOUT ERROR] User ${userId} withdrawal ${request.id}:`, payoutError);
+        res.status(500).json({ 
+          error: `Payout processing error: ${payoutError.message}. Your balance has been refunded.`
+        });
+      }
     } catch (error: any) {
       console.error("Error creating withdrawal request:", error);
       res.status(500).json({ error: error.message || "Failed to create withdrawal request" });

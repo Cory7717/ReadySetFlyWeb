@@ -135,7 +135,7 @@ export default function Home() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div className="flex-1">
             <h2 className="font-display text-2xl sm:text-3xl font-bold mb-2" data-testid="text-results-title">
-              Available Aircraft
+              Rental Aircraft Avaiable 
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground">
               <span data-testid="text-results-count">{aircraft.length}</span> aircraft match your search

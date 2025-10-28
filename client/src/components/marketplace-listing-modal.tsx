@@ -196,7 +196,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
           <>
             {(listing as any).isExample && (
               <div className="bg-amber-500 text-white px-6 py-3 -mx-6 -mt-6 mb-4 text-center font-semibold" data-testid="banner-example-modal">
-                ✨ SAMPLE LISTING - For Reference Only
+                EXAMPLE LISTING - For Reference Only
                 <p className="text-sm font-normal mt-1 opacity-90">
                   This is an example to help you create your own quality listing
                 </p>

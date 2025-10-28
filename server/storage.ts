@@ -29,6 +29,8 @@ import {
   type InsertJobApplication,
   type PromoAlert,
   type InsertPromoAlert,
+  type WithdrawalRequest,
+  type InsertWithdrawalRequest,
   users,
   aircraftListings,
   marketplaceListings,
@@ -37,6 +39,7 @@ import {
   messages,
   reviews,
   transactions,
+  withdrawalRequests,
   verificationSubmissions,
   crmLeads,
   crmContacts,
@@ -230,6 +233,17 @@ export interface IStorage {
   
   // Marketplace Listing Promotional Free Time
   grantMarketplacePromoFreeTime(listingId: string, durationDays: number, adminId: string): Promise<MarketplaceListing | undefined>;
+  
+  // Withdrawal Requests (PayPal Payouts)
+  getUserBalance(userId: string): Promise<string>; // Returns balance as string (e.g., "125.50")
+  addToUserBalance(userId: string, amount: number): Promise<User | undefined>; // Add earnings
+  deductFromUserBalance(userId: string, amount: number): Promise<User | undefined>; // Deduct for withdrawal
+  createWithdrawalRequest(request: InsertWithdrawalRequest): Promise<WithdrawalRequest>;
+  getWithdrawalRequest(id: string): Promise<WithdrawalRequest | undefined>;
+  getWithdrawalRequestsByUser(userId: string): Promise<WithdrawalRequest[]>;
+  getPendingWithdrawalRequests(): Promise<WithdrawalRequest[]>;
+  getAllWithdrawalRequests(): Promise<WithdrawalRequest[]>;
+  updateWithdrawalRequest(id: string, updates: Partial<WithdrawalRequest>): Promise<WithdrawalRequest | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1558,6 +1572,83 @@ export class DatabaseStorage implements IStorage {
     }).where(eq(marketplaceListings.id, listingId)).returning();
     
     return listing;
+  }
+
+  // Withdrawal Requests (PayPal Payouts)
+  async getUserBalance(userId: string): Promise<string> {
+    const user = await this.getUser(userId);
+    return user?.balance || "0.00";
+  }
+
+  async addToUserBalance(userId: string, amount: number): Promise<User | undefined> {
+    const user = await this.getUser(userId);
+    if (!user) return undefined;
+
+    const currentBalance = parseFloat(user.balance || "0");
+    const newBalance = (currentBalance + amount).toFixed(2);
+
+    return await this.updateUser(userId, { balance: newBalance });
+  }
+
+  async deductFromUserBalance(userId: string, amount: number): Promise<User | undefined> {
+    const user = await this.getUser(userId);
+    if (!user) return undefined;
+
+    const currentBalance = parseFloat(user.balance || "0");
+    if (currentBalance < amount) {
+      throw new Error("Insufficient balance");
+    }
+
+    const newBalance = (currentBalance - amount).toFixed(2);
+    return await this.updateUser(userId, { balance: newBalance });
+  }
+
+  async createWithdrawalRequest(insertRequest: InsertWithdrawalRequest): Promise<WithdrawalRequest> {
+    const [request] = await db
+      .insert(withdrawalRequests)
+      .values(insertRequest)
+      .returning();
+    return request;
+  }
+
+  async getWithdrawalRequest(id: string): Promise<WithdrawalRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(withdrawalRequests)
+      .where(eq(withdrawalRequests.id, id));
+    return request;
+  }
+
+  async getWithdrawalRequestsByUser(userId: string): Promise<WithdrawalRequest[]> {
+    return await db
+      .select()
+      .from(withdrawalRequests)
+      .where(eq(withdrawalRequests.userId, userId))
+      .orderBy(desc(withdrawalRequests.createdAt));
+  }
+
+  async getPendingWithdrawalRequests(): Promise<WithdrawalRequest[]> {
+    return await db
+      .select()
+      .from(withdrawalRequests)
+      .where(eq(withdrawalRequests.status, "pending"))
+      .orderBy(desc(withdrawalRequests.createdAt));
+  }
+
+  async getAllWithdrawalRequests(): Promise<WithdrawalRequest[]> {
+    return await db
+      .select()
+      .from(withdrawalRequests)
+      .orderBy(desc(withdrawalRequests.createdAt));
+  }
+
+  async updateWithdrawalRequest(id: string, updates: Partial<WithdrawalRequest>): Promise<WithdrawalRequest | undefined> {
+    const [request] = await db
+      .update(withdrawalRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(withdrawalRequests.id, id))
+      .returning();
+    return request;
   }
 }
 

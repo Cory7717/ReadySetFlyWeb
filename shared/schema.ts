@@ -246,6 +246,7 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   // Admin management
   adminNotes: text("admin_notes"),
   isFeatured: boolean("is_featured").default(false),
+  isExample: boolean("is_example").default(false),
   
   // Fraud detection
   flagCount: integer("flag_count").default(0).notNull(),

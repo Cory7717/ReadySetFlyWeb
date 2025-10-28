@@ -1022,6 +1022,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "active",
       });
 
+      // Credit owner's balance with their payout amount
+      const ownerPayoutAmount = parseFloat(rental.ownerPayout);
+      await storage.addToUserBalance(rental.ownerId, ownerPayoutAmount);
+      console.log(`[RENTAL PAYMENT] Credited $${ownerPayoutAmount} to owner ${rental.ownerId} for rental ${rental.id}`);
+
       res.json(updatedRental);
     } catch (error: any) {
       console.error("Complete payment error:", error);

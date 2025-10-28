@@ -2481,6 +2481,29 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  // Update current user's profile (authenticated)
+  app.patch("/api/user/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { paypalEmail } = req.body;
+
+      // Only allow updating specific safe fields
+      const updateData: any = {};
+      if (paypalEmail !== undefined) {
+        updateData.paypalEmail = paypalEmail;
+      }
+
+      const user = await storage.updateUser(userId, updateData);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.json(user);
+    } catch (error) {
+      console.error("Error updating user profile:", error);
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+
   // Users/Profile
   app.get("/api/users/:id", async (req, res) => {
     try {

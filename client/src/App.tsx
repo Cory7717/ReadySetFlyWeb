@@ -21,6 +21,7 @@ import RentalPayment from "@/pages/rental-payment";
 import AdminDashboard from "@/pages/admin";
 import VerifyIdentity from "@/pages/verify-identity";
 import OwnerPayoutSetup from "@/pages/owner-payout-setup";
+import OwnerWithdrawals from "@/pages/owner-withdrawals";
 import NotFound from "@/pages/not-found";
 
 // Router component - allows anonymous browsing for rentals/marketplace
@@ -47,6 +48,7 @@ function Router() {
           <Route path="/marketplace/listing/checkout" component={MarketplaceListingCheckout} />
           <Route path="/rental-payment/:id" component={RentalPayment} />
           <Route path="/owner-payout-setup" component={OwnerPayoutSetup} />
+          <Route path="/withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/verify-identity" component={VerifyIdentity} />
         </>

@@ -15,15 +15,13 @@ interface WithdrawalRequest {
   userId: string;
   amount: string;
   paypalEmail: string;
-  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  status: "processing" | "completed" | "failed";
   requestedAt: Date;
   processedAt?: Date;
-  processedBy?: string;
   payoutBatchId?: string;
   payoutItemId?: string;
   transactionId?: string;
   failureReason?: string;
-  adminNotes?: string;
 }
 
 export default function OwnerWithdrawals() {
@@ -138,16 +136,12 @@ export default function OwnerWithdrawals() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "pending":
-        return <Badge variant="outline" className="gap-1" data-testid={`badge-status-pending`}><Clock className="w-3 h-3" />Pending</Badge>;
       case "processing":
         return <Badge variant="outline" className="gap-1" data-testid={`badge-status-processing`}><AlertCircle className="w-3 h-3" />Processing</Badge>;
       case "completed":
         return <Badge variant="outline" className="gap-1" data-testid={`badge-status-completed`}><CheckCircle className="w-3 h-3" />Completed</Badge>;
       case "failed":
         return <Badge variant="destructive" className="gap-1" data-testid={`badge-status-failed`}><XCircle className="w-3 h-3" />Failed</Badge>;
-      case "cancelled":
-        return <Badge variant="outline" className="gap-1" data-testid={`badge-status-cancelled`}><XCircle className="w-3 h-3" />Cancelled</Badge>;
       default:
         return <Badge variant="outline" data-testid={`badge-status-${status}`}>{status}</Badge>;
     }
@@ -304,7 +298,7 @@ export default function OwnerWithdrawals() {
                       To: {withdrawal.paypalEmail}
                     </p>
                     <p className="text-sm text-muted-foreground" data-testid={`text-date-${withdrawal.id}`}>
-                      Requested: {new Date(withdrawal.requestedAt).toLocaleDateString()}
+                      Requested: {withdrawal.requestedAt ? new Date(withdrawal.requestedAt).toLocaleDateString() : 'N/A'}
                     </p>
                     {withdrawal.processedAt && (
                       <p className="text-sm text-muted-foreground" data-testid={`text-processed-${withdrawal.id}`}>

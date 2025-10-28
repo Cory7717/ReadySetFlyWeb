@@ -48,7 +48,7 @@ function Router() {
           <Route path="/marketplace/listing/checkout" component={MarketplaceListingCheckout} />
           <Route path="/rental-payment/:id" component={RentalPayment} />
           <Route path="/owner-payout-setup" component={OwnerPayoutSetup} />
-          <Route path="/withdrawals" component={OwnerWithdrawals} />
+          <Route path="/owner-withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/verify-identity" component={VerifyIdentity} />
         </>

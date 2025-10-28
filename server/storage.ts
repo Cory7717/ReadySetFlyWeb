@@ -1585,7 +1585,7 @@ export class DatabaseStorage implements IStorage {
     const [updatedUser] = await db
       .update(users)
       .set({ 
-        balance: sql`CAST(CAST(COALESCE(${users.balance}, '0') AS DECIMAL(10,2)) + ${amount} AS VARCHAR)`,
+        balance: sql`CAST(COALESCE(${users.balance}, '0') AS DECIMAL(10,2)) + ${amount}`,
         updatedAt: new Date()
       })
       .where(eq(users.id, userId))
@@ -1599,7 +1599,7 @@ export class DatabaseStorage implements IStorage {
     const [updatedUser] = await db
       .update(users)
       .set({ 
-        balance: sql`CAST(CAST(COALESCE(${users.balance}, '0') AS DECIMAL(10,2)) - ${amount} AS VARCHAR)`,
+        balance: sql`CAST(COALESCE(${users.balance}, '0') AS DECIMAL(10,2)) - ${amount}`,
         updatedAt: new Date()
       })
       .where(

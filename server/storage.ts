@@ -1581,26 +1581,40 @@ export class DatabaseStorage implements IStorage {
   }
 
   async addToUserBalance(userId: string, amount: number): Promise<User | undefined> {
-    const user = await this.getUser(userId);
-    if (!user) return undefined;
-
-    const currentBalance = parseFloat(user.balance || "0");
-    const newBalance = (currentBalance + amount).toFixed(2);
-
-    return await this.updateUser(userId, { balance: newBalance });
+    // Atomic balance increment using SQL to avoid race conditions
+    const [updatedUser] = await db
+      .update(users)
+      .set({ 
+        balance: sql`CAST(CAST(COALESCE(${users.balance}, '0') AS DECIMAL(10,2)) + ${amount} AS VARCHAR)`,
+        updatedAt: new Date()
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    
+    return updatedUser;
   }
 
   async deductFromUserBalance(userId: string, amount: number): Promise<User | undefined> {
-    const user = await this.getUser(userId);
-    if (!user) return undefined;
-
-    const currentBalance = parseFloat(user.balance || "0");
-    if (currentBalance < amount) {
+    // Atomic balance decrement with sufficient balance check in WHERE clause to avoid race conditions
+    const [updatedUser] = await db
+      .update(users)
+      .set({ 
+        balance: sql`CAST(CAST(COALESCE(${users.balance}, '0') AS DECIMAL(10,2)) - ${amount} AS VARCHAR)`,
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(users.id, userId),
+          sql`CAST(COALESCE(${users.balance}, '0') AS DECIMAL(10,2)) >= ${amount}`
+        )
+      )
+      .returning();
+    
+    if (!updatedUser) {
       throw new Error("Insufficient balance");
     }
-
-    const newBalance = (currentBalance - amount).toFixed(2);
-    return await this.updateUser(userId, { balance: newBalance });
+    
+    return updatedUser;
   }
 
   async createWithdrawalRequest(insertRequest: InsertWithdrawalRequest): Promise<WithdrawalRequest> {

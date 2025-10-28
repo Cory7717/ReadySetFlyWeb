@@ -136,10 +136,7 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/login", (req, res, next) => {
     console.log("[AUTH] Login initiated for hostname:", req.hostname);
-    // Force account selection with prompt parameter
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      prompt: 'select_account'
-    })(req, res, next);
+    passport.authenticate(`replitauth:${req.hostname}`)(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {

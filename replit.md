@@ -14,6 +14,7 @@ Core architectural decisions include a robust **verification system** for renter
 ## External Dependencies
 - **PostgreSQL**: Primary database, hosted via Neon.
 - **Replit Auth**: OpenID Connect authentication provider (Google, GitHub, email/password).
+  - **Known Limitation**: After logout, clicking "Sign In" will automatically log users back in with their previous Replit account if their browser session is still active. Replit's OIDC provider does not support the `prompt=select_account` parameter to force account selection. Users must manually log out of Replit.com in their browser to switch accounts.
 - **Replit AI Integrations (OpenAI)**: AI-powered description generation for all listing types (aircraft rentals, sales, jobs, CFI, flight schools, mechanics, charter services) using GPT-4o, billed via Replit credits.
 - **PayPal Braintree**: Payment processing for rentals, owner payouts, and marketplace listing fees using Braintree Drop-in UI and server-side transaction verification.
 - **WebSocket server**: Custom implementation for real-time messaging.

@@ -19,7 +19,7 @@ export function Header() {
   const [location] = useLocation();
   const { user } = useAuth();
   
-  const isRentals = location === "/" || location.startsWith("/aircraft");
+  const isRentals = location === "/rentals" || location.startsWith("/aircraft");
   const isMarketplace = location.startsWith("/marketplace");
   
   const displayName = user?.firstName && user?.lastName 
@@ -42,7 +42,7 @@ export function Header() {
 
           {/* Main Navigation Tabs - Compact on mobile */}
           <nav className="flex items-center gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1" role="navigation" aria-label="Main navigation">
-            <Link href="/" data-testid="link-rentals">
+            <Link href="/rentals" data-testid="link-rentals">
               <Button
                 variant="ghost"
                 size="sm"

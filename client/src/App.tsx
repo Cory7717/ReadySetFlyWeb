@@ -32,7 +32,8 @@ function Router() {
   return (
     <Switch>
       {/* Public routes - accessible to everyone */}
-      <Route path="/" component={Home} />
+      <Route path="/" component={Landing} />
+      <Route path="/rentals" component={Home} />
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/aircraft/:id" component={AircraftDetail} />
       

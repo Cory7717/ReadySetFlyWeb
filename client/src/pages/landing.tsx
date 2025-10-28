@@ -7,24 +7,24 @@ export default function Landing() {
     <div className="min-h-screen">
       {/* Hero Section */}
       <div className="relative bg-gradient-to-br from-primary/20 via-background to-background">
-        <div className="container mx-auto px-4 py-20">
-          <div className="max-w-4xl mx-auto text-center space-y-6">
-            <h1 className="text-5xl md:text-6xl font-bold tracking-tight">
+        <div className="container mx-auto px-4 py-12 sm:py-20">
+          <div className="max-w-4xl mx-auto text-center space-y-4 sm:space-y-6">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight">
               Ready Set Fly
             </h1>
-            <p className="text-xl md:text-2xl text-muted-foreground">
+            <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4">
               The Premier Aviation Marketplace for Aircraft Rentals & Sales
             </p>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
               Connect with verified pilots and aircraft owners. List your aircraft, find the perfect rental, or explore our marketplace for sales, jobs, CFIs, and more.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
               <Button 
                 size="lg" 
-                onClick={() => window.location.href = '/api/login'}
-                data-testid="button-login"
+                onClick={() => window.location.href = '/rentals'}
+                data-testid="button-browse-listings"
               >
-                Get Started
+                Browse Listings
               </Button>
               <Button 
                 size="lg" 
@@ -42,12 +42,12 @@ export default function Landing() {
       </div>
 
       {/* Features Section */}
-      <div id="features" className="container mx-auto px-4 py-16">
-        <h2 className="text-3xl font-bold text-center mb-12">
+      <div id="features" className="container mx-auto px-4 py-12 sm:py-16">
+        <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8 sm:mb-12">
           Why Choose Ready Set Fly?
         </h2>
         
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <Card data-testid="card-feature-verified">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center space-y-4">
@@ -135,21 +135,31 @@ export default function Landing() {
       </div>
 
       {/* CTA Section */}
-      <div className="bg-muted/50 py-16">
+      <div className="bg-muted/50 py-12 sm:py-16">
         <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold mb-4">
+          <h2 className="text-2xl sm:text-3xl font-bold mb-4">
             Ready to Take Flight?
           </h2>
-          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
+          <p className="text-base sm:text-xl text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
             Join thousands of pilots and aircraft owners in the most trusted aviation marketplace.
           </p>
-          <Button 
-            size="lg"
-            onClick={() => window.location.href = '/api/login'}
-            data-testid="button-cta-login"
-          >
-            Create Your Account
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button 
+              size="lg"
+              onClick={() => window.location.href = '/api/login'}
+              data-testid="button-cta-login"
+            >
+              Create Your Account
+            </Button>
+            <Button 
+              size="lg"
+              variant="outline"
+              onClick={() => window.location.href = '/rentals'}
+              data-testid="button-cta-browse"
+            >
+              Browse Listings
+            </Button>
+          </div>
         </div>
       </div>
 

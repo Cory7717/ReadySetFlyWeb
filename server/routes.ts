@@ -1363,6 +1363,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Withdrawal Requests (PayPal Payouts)
+  app.get("/api/balance", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const balance = await storage.getUserBalance(userId);
+      res.json({ balance });
+    } catch (error) {
+      console.error("Error fetching user balance:", error);
+      res.status(500).json({ error: "Failed to fetch balance" });
+    }
+  });
+
+  app.post("/api/withdrawals", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { amount, paypalEmail } = req.body;
+
+      // Validate inputs
+      const parsedAmount = parseFloat(amount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({ error: "Invalid withdrawal amount" });
+      }
+
+      if (!paypalEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paypalEmail)) {
+        return res.status(400).json({ error: "Valid PayPal email is required" });
+      }
+
+      // Check if user has sufficient balance
+      const userBalance = parseFloat(await storage.getUserBalance(userId));
+      if (userBalance < parsedAmount) {
+        return res.status(400).json({ error: "Insufficient balance" });
+      }
+
+      // Create withdrawal request
+      const request = await storage.createWithdrawalRequest({
+        userId,
+        amount: amount.toString(),
+        paypalEmail
+      });
+
+      // Deduct amount from user balance (mark as pending withdrawal)
+      await storage.deductFromUserBalance(userId, parsedAmount);
+
+      res.json(request);
+    } catch (error: any) {
+      console.error("Error creating withdrawal request:", error);
+      res.status(500).json({ error: error.message || "Failed to create withdrawal request" });
+    }
+  });
+
+  app.get("/api/withdrawals", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const requests = await storage.getWithdrawalRequestsByUser(userId);
+      res.json(requests);
+    } catch (error) {
+      console.error("Error fetching withdrawal requests:", error);
+      res.status(500).json({ error: "Failed to fetch withdrawal requests" });
+    }
+  });
+
   // Admin routes
   app.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
     try {
@@ -1543,6 +1604,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user metrics:", error);
       res.status(500).json({ error: "Failed to fetch user metrics" });
+    }
+  });
+
+  // Admin - Withdrawal Requests
+  app.get("/api/admin/withdrawals", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const requests = await storage.getAllWithdrawalRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error("Error fetching withdrawal requests:", error);
+      res.status(500).json({ error: "Failed to fetch withdrawal requests" });
+    }
+  });
+
+  app.get("/api/admin/withdrawals/pending", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const requests = await storage.getPendingWithdrawalRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error("Error fetching pending withdrawals:", error);
+      res.status(500).json({ error: "Failed to fetch pending withdrawals" });
+    }
+  });
+
+  app.post("/api/admin/withdrawals/:id/process", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const withdrawalId = req.params.id;
+      const adminId = req.user.claims.sub;
+
+      // Get withdrawal request
+      const withdrawal = await storage.getWithdrawalRequest(withdrawalId);
+      if (!withdrawal) {
+        return res.status(404).json({ error: "Withdrawal request not found" });
+      }
+
+      if (withdrawal.status !== "pending") {
+        return res.status(400).json({ error: "Withdrawal request is not pending" });
+      }
+
+      // Update status to processing
+      await storage.updateWithdrawalRequest(withdrawalId, {
+        status: "processing",
+        processedBy: adminId,
+        processedAt: new Date()
+      });
+
+      // Send payout via PayPal
+      const { sendPayout } = await import("./paypal-payouts");
+      const payoutResult = await sendPayout({
+        recipientEmail: withdrawal.paypalEmail,
+        amount: parseFloat(withdrawal.amount),
+        senderItemId: withdrawalId,
+        note: `Withdrawal request ${withdrawalId}`,
+        emailSubject: "You've received a payout from Ready Set Fly",
+        emailMessage: "Your rental earnings have been sent to your PayPal account."
+      });
+
+      if (payoutResult.success) {
+        // Update withdrawal with PayPal details
+        await storage.updateWithdrawalRequest(withdrawalId, {
+          status: "completed",
+          payoutBatchId: payoutResult.batchId,
+          payoutItemId: payoutResult.itemId,
+          transactionId: payoutResult.transactionId
+        });
+
+        res.json({
+          success: true,
+          message: "Payout sent successfully",
+          withdrawal: await storage.getWithdrawalRequest(withdrawalId)
+        });
+      } else {
+        // Payout failed - refund user balance and mark as failed
+        await storage.addToUserBalance(withdrawal.userId, parseFloat(withdrawal.amount));
+        await storage.updateWithdrawalRequest(withdrawalId, {
+          status: "failed",
+          failureReason: payoutResult.error
+        });
+
+        res.status(400).json({
+          success: false,
+          error: payoutResult.error,
+          message: "Payout failed, user balance has been refunded"
+        });
+      }
+    } catch (error: any) {
+      console.error("Error processing withdrawal:", error);
+      res.status(500).json({ error: error.message || "Failed to process withdrawal" });
+    }
+  });
+
+  app.patch("/api/admin/withdrawals/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const withdrawalId = req.params.id;
+      const { status, adminNotes } = req.body;
+
+      const withdrawal = await storage.getWithdrawalRequest(withdrawalId);
+      if (!withdrawal) {
+        return res.status(404).json({ error: "Withdrawal request not found" });
+      }
+
+      // If cancelling, refund user balance
+      if (status === "cancelled" && withdrawal.status === "pending") {
+        await storage.addToUserBalance(withdrawal.userId, parseFloat(withdrawal.amount));
+      }
+
+      const updated = await storage.updateWithdrawalRequest(withdrawalId, {
+        status,
+        adminNotes,
+        processedBy: req.user.claims.sub,
+        processedAt: new Date()
+      });
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating withdrawal:", error);
+      res.status(500).json({ error: error.message || "Failed to update withdrawal" });
     }
   });
 

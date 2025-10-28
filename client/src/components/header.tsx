@@ -135,9 +135,6 @@ export function Header() {
                     <DropdownMenuItem asChild>
                       <Link href="/messages" data-testid="link-messages">Messages</Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/owner-withdrawals" data-testid="link-withdrawals">Withdrawals</Link>
-                    </DropdownMenuItem>
                     {user?.isAdmin && (
                       <>
                         <DropdownMenuSeparator />

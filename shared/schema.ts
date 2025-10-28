@@ -15,6 +15,7 @@ export const dealStages = ["lead", "prospect", "proposal", "negotiation", "close
 export const activityTypes = ["call", "email", "meeting", "note", "task"] as const;
 export const leadSources = ["website", "referral", "social_media", "advertising", "cold_outreach", "event", "other"] as const;
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
+export const withdrawalStatuses = ["pending", "processing", "completed", "failed", "cancelled"] as const;
 
 // Session storage table (REQUIRED for Replit Auth - from blueprint:javascript_log_in_with_replit)
 export const sessions = pgTable(
@@ -85,6 +86,10 @@ export const users = pgTable("users", {
   // Bank/payout information
   bankAccountConnected: boolean("bank_account_connected").default(false),
   stripeAccountId: text("stripe_account_id"),
+  paypalEmail: text("paypal_email"), // For PayPal Payouts
+  
+  // Balance tracking (for owner payouts)
+  balance: decimal("balance", { precision: 10, scale: 2 }).default("0.00"),
   
   // Rating information
   averageRating: decimal("average_rating", { precision: 3, scale: 2 }), // 0.00-5.00
@@ -427,6 +432,39 @@ export const transactions = pgTable("transactions", {
   
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Withdrawal Requests (PayPal Payouts for aircraft owners)
+export const withdrawalRequests = pgTable("withdrawal_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  paypalEmail: text("paypal_email").notNull(),
+  
+  // Status tracking
+  status: text("status").notNull().default("pending"), // pending, processing, completed, failed, cancelled
+  
+  // PayPal Payouts tracking
+  payoutBatchId: text("payout_batch_id"), // PayPal batch ID
+  payoutItemId: text("payout_item_id"), // PayPal item ID
+  transactionId: text("transaction_id"), // PayPal transaction ID when completed
+  
+  // Processing
+  processedAt: timestamp("processed_at"),
+  processedBy: varchar("processed_by").references(() => users.id), // Admin who processed
+  
+  // Error handling
+  failureReason: text("failure_reason"),
+  
+  // Admin notes
+  adminNotes: text("admin_notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_withdrawal_user").on(table.userId),
+  index("idx_withdrawal_status").on(table.status),
+]);
 
 // Promo Codes (for free/discounted listings)
 export const promoCodes = pgTable("promo_codes", {
@@ -803,6 +841,23 @@ export const insertPromoAlertSchema = createInsertSchema(promoAlerts).omit({
   variant: z.enum(["info", "success", "warning", "destructive"]).default("info"),
 });
 
+export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+  payoutBatchId: true,
+  payoutItemId: true,
+  transactionId: true,
+  processedAt: true,
+  processedBy: true,
+  failureReason: true,
+  adminNotes: true,
+}).extend({
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Amount must be a valid number"),
+  paypalEmail: z.string().email("Valid PayPal email is required"),
+});
+
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -855,6 +910,9 @@ export type InsertJobApplication = z.infer<typeof insertJobApplicationSchema>;
 export type PromoAlert = typeof promoAlerts.$inferSelect;
 export type InsertPromoAlert = z.infer<typeof insertPromoAlertSchema>;
 
+export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
+export type InsertWithdrawalRequest = z.infer<typeof insertWithdrawalRequestSchema>;
+
 // Enum types
 export type CertificationType = typeof certificationTypes[number];
 export type AircraftCategory = typeof aircraftCategories[number];
@@ -866,3 +924,4 @@ export type DealStage = typeof dealStages[number];
 export type ActivityType = typeof activityTypes[number];
 export type LeadSource = typeof leadSources[number];
 export type ExpenseCategory = typeof expenseCategories[number];
+export type WithdrawalStatus = typeof withdrawalStatuses[number];

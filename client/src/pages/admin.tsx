@@ -231,6 +231,67 @@ export default function AdminDashboard() {
     enabled: activeTab === "analytics",
   });
 
+  // Withdrawals query
+  const { data: withdrawals = [], isLoading: withdrawalsLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/withdrawals"],
+    enabled: activeTab === "withdrawals",
+  });
+
+  // Process withdrawal mutation
+  const processWithdrawalMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("POST", `/api/admin/withdrawals/${id}/process`, {});
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
+      if (data.success) {
+        toast({
+          title: "Payout Sent",
+          description: "Withdrawal has been processed successfully via PayPal.",
+        });
+      } else {
+        toast({
+          title: "Payout Failed",
+          description: data.error || "Failed to process payout",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Processing Error",
+        description: error.message || "Failed to process withdrawal",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Cancel withdrawal mutation
+  const cancelWithdrawalMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("PATCH", `/api/admin/withdrawals/${id}`, {
+        status: "cancelled",
+        adminNotes: "Cancelled by admin"
+      });
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
+      toast({
+        title: "Withdrawal Cancelled",
+        description: "User balance has been refunded.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cancellation Error",
+        description: error.message || "Failed to cancel withdrawal",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Approve submission mutation
   const approveMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -637,7 +698,7 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-8 h-auto">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-9 h-auto">
           <TabsTrigger value="analytics" data-testid="tab-analytics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
             <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
             <span>Analytics</span>
@@ -683,6 +744,10 @@ export default function AdminDashboard() {
           <TabsTrigger value="promo" data-testid="tab-promo" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
             <Gift className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
             <span>Promos</span>
+          </TabsTrigger>
+          <TabsTrigger value="withdrawals" data-testid="tab-withdrawals" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span>Payouts</span>
           </TabsTrigger>
         </TabsList>
 
@@ -2200,6 +2265,100 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Withdrawals Tab */}
+        <TabsContent value="withdrawals" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle data-testid="heading-withdrawal-requests">Withdrawal Requests</CardTitle>
+              <CardDescription>Process payout requests from aircraft owners</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {withdrawalsLoading ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Loading withdrawal requests...
+                </div>
+              ) : withdrawals.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground" data-testid="text-no-withdrawals">
+                  No withdrawal requests yet
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {withdrawals.map((withdrawal: any) => (
+                    <Card key={withdrawal.id} className="p-4" data-testid={`card-withdrawal-${withdrawal.id}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-lg" data-testid={`text-amount-${withdrawal.id}`}>
+                              ${parseFloat(withdrawal.amount).toFixed(2)}
+                            </span>
+                            <Badge 
+                              variant={
+                                withdrawal.status === "completed" ? "outline" : 
+                                withdrawal.status === "pending" ? "outline" : 
+                                withdrawal.status === "failed" ? "destructive" : 
+                                "outline"
+                              }
+                              data-testid={`badge-status-${withdrawal.id}`}
+                            >
+                              {withdrawal.status}
+                            </Badge>
+                          </div>
+                          <div className="text-sm space-y-1">
+                            <p><span className="text-muted-foreground">User ID:</span> {withdrawal.userId}</p>
+                            <p><span className="text-muted-foreground">PayPal Email:</span> {withdrawal.paypalEmail}</p>
+                            <p><span className="text-muted-foreground">Requested:</span> {new Date(withdrawal.requestedAt).toLocaleString()}</p>
+                            {withdrawal.processedAt && (
+                              <p><span className="text-muted-foreground">Processed:</span> {new Date(withdrawal.processedAt).toLocaleString()}</p>
+                            )}
+                            {withdrawal.transactionId && (
+                              <p className="text-xs"><span className="text-muted-foreground">Transaction ID:</span> {withdrawal.transactionId}</p>
+                            )}
+                            {withdrawal.failureReason && (
+                              <p className="text-sm text-destructive">
+                                <span className="font-medium">Error:</span> {withdrawal.failureReason}
+                              </p>
+                            )}
+                            {withdrawal.adminNotes && (
+                              <p className="text-sm">
+                                <span className="text-muted-foreground">Admin Notes:</span> {withdrawal.adminNotes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {withdrawal.status === "pending" && (
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => processWithdrawalMutation.mutate(withdrawal.id)}
+                              disabled={processWithdrawalMutation.isPending}
+                              data-testid={`button-process-${withdrawal.id}`}
+                            >
+                              {processWithdrawalMutation.isPending ? "Processing..." : "Process Payout"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (confirm("Are you sure you want to cancel this withdrawal request?")) {
+                                  cancelWithdrawalMutation.mutate(withdrawal.id);
+                                }
+                              }}
+                              disabled={cancelWithdrawalMutation.isPending}
+                              data-testid={`button-cancel-${withdrawal.id}`}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     </Card>
                   ))}
                 </div>

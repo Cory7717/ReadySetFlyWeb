@@ -99,8 +99,26 @@ export async function setupAuth(app: Express) {
     verified(null, user);
   };
 
-  for (const domain of process.env
-    .REPLIT_DOMAINS!.split(",")) {
+  // Get configured domains and add current Replit dev hostname if not included
+  const configuredDomains = process.env.REPLIT_DOMAINS!.split(",").map(d => d.trim());
+  
+  // Try to detect Replit dev hostname from environment
+  // REPLIT_DEV_DOMAIN is typically set by Replit for the dev environment
+  const replitDevDomain = process.env.REPLIT_DEV_DOMAIN;
+  
+  // Include all domains: configured custom domains + Replit dev domain if available
+  const allDomainsSet = new Set(configuredDomains);
+  if (replitDevDomain) {
+    allDomainsSet.add(replitDevDomain);
+  }
+  
+  // Convert Set to Array for iteration
+  const allDomains = Array.from(allDomainsSet);
+  
+  console.log("[AUTH] Registering Replit Auth strategies for domains:", allDomains);
+  
+  // Register a strategy for each domain
+  for (const domain of allDomains) {
     const strategy = new Strategy(
       {
         name: `replitauth:${domain}`,

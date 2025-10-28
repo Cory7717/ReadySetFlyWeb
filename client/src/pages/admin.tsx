@@ -47,6 +47,10 @@ export default function AdminDashboard() {
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<PromoAlert | null>(null);
   
+  // Withdrawal monitoring state
+  const [withdrawalSearch, setWithdrawalSearch] = useState("");
+  const [withdrawalStatusFilter, setWithdrawalStatusFilter] = useState("all");
+  
   // Lead form with Zod validation
   const leadForm = useForm<InsertCrmLead>({
     resolver: zodResolver(insertCrmLeadSchema),
@@ -235,61 +239,6 @@ export default function AdminDashboard() {
   const { data: withdrawals = [], isLoading: withdrawalsLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/withdrawals"],
     enabled: activeTab === "withdrawals",
-  });
-
-  // Process withdrawal mutation
-  const processWithdrawalMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await apiRequest("POST", `/api/admin/withdrawals/${id}/process`, {});
-      return await response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
-      if (data.success) {
-        toast({
-          title: "Payout Sent",
-          description: "Withdrawal has been processed successfully via PayPal.",
-        });
-      } else {
-        toast({
-          title: "Payout Failed",
-          description: data.error || "Failed to process payout",
-          variant: "destructive",
-        });
-      }
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Processing Error",
-        description: error.message || "Failed to process withdrawal",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Cancel withdrawal mutation
-  const cancelWithdrawalMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await apiRequest("PATCH", `/api/admin/withdrawals/${id}`, {
-        status: "cancelled",
-        adminNotes: "Cancelled by admin"
-      });
-      return await response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
-      toast({
-        title: "Withdrawal Cancelled",
-        description: "User balance has been refunded.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Cancellation Error",
-        description: error.message || "Failed to cancel withdrawal",
-        variant: "destructive",
-      });
-    },
   });
 
   // Approve submission mutation
@@ -685,6 +634,28 @@ export default function AdminDashboard() {
       createLeadMutation.mutate(data);
     }
   };
+
+  // Filter withdrawals based on search and status
+  const filteredWithdrawals = withdrawals.filter((withdrawal: any) => {
+    // Status filter
+    if (withdrawalStatusFilter !== "all" && withdrawal.status !== withdrawalStatusFilter) {
+      return false;
+    }
+
+    // Search filter
+    if (withdrawalSearch) {
+      const searchLower = withdrawalSearch.toLowerCase();
+      return (
+        withdrawal.userId?.toLowerCase().includes(searchLower) ||
+        withdrawal.paypalEmail?.toLowerCase().includes(searchLower) ||
+        withdrawal.transactionId?.toLowerCase().includes(searchLower) ||
+        withdrawal.payoutBatchId?.toLowerCase().includes(searchLower) ||
+        withdrawal.amount?.toString().includes(searchLower)
+      );
+    }
+
+    return true;
+  });
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -2273,25 +2244,84 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
-        {/* Withdrawals Tab */}
+        {/* Withdrawals Tab - Monitoring Dashboard */}
         <TabsContent value="withdrawals" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle data-testid="heading-withdrawal-requests">Withdrawal Requests</CardTitle>
-              <CardDescription>Process payout requests from aircraft owners</CardDescription>
+              <CardTitle data-testid="heading-withdrawal-requests">Owner Payouts Dashboard</CardTitle>
+              <CardDescription>Monitor and track all automated payouts to aircraft owners</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* Search and Filter Controls */}
+              <div className="flex flex-wrap gap-4">
+                <div className="flex-1 min-w-[200px]">
+                  <Input
+                    placeholder="Search by user ID, email, transaction ID..."
+                    value={withdrawalSearch}
+                    onChange={(e) => setWithdrawalSearch(e.target.value)}
+                    data-testid="input-withdrawal-search"
+                  />
+                </div>
+                <Select value={withdrawalStatusFilter} onValueChange={setWithdrawalStatusFilter}>
+                  <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="processing">Processing</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Summary Stats */}
+              {!withdrawalsLoading && withdrawals.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card className="p-4">
+                    <div className="text-sm text-muted-foreground">Total Payouts</div>
+                    <div className="text-2xl font-bold">{filteredWithdrawals.length}</div>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="text-sm text-muted-foreground">Completed</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {filteredWithdrawals.filter((w: any) => w.status === "completed").length}
+                    </div>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="text-sm text-muted-foreground">Failed</div>
+                    <div className="text-2xl font-bold text-red-600">
+                      {filteredWithdrawals.filter((w: any) => w.status === "failed").length}
+                    </div>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="text-sm text-muted-foreground">Total Amount</div>
+                    <div className="text-2xl font-bold">
+                      ${filteredWithdrawals
+                        .filter((w: any) => w.status === "completed")
+                        .reduce((sum: number, w: any) => sum + parseFloat(w.amount), 0)
+                        .toFixed(2)}
+                    </div>
+                  </Card>
+                </div>
+              )}
+
+              {/* Withdrawals List */}
               {withdrawalsLoading ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  Loading withdrawal requests...
+                  Loading withdrawal history...
                 </div>
               ) : withdrawals.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground" data-testid="text-no-withdrawals">
-                  No withdrawal requests yet
+                  No withdrawal history yet
+                </div>
+              ) : filteredWithdrawals.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No withdrawals match your search criteria
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {withdrawals.map((withdrawal: any) => (
+                  {filteredWithdrawals.map((withdrawal: any) => (
                     <Card key={withdrawal.id} className="p-4" data-testid={`card-withdrawal-${withdrawal.id}`}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-2">
@@ -2301,8 +2331,8 @@ export default function AdminDashboard() {
                             </span>
                             <Badge 
                               variant={
-                                withdrawal.status === "completed" ? "outline" : 
-                                withdrawal.status === "pending" ? "outline" : 
+                                withdrawal.status === "completed" ? "default" : 
+                                withdrawal.status === "processing" ? "secondary" : 
                                 withdrawal.status === "failed" ? "destructive" : 
                                 "outline"
                               }
@@ -2318,46 +2348,31 @@ export default function AdminDashboard() {
                             {withdrawal.processedAt && (
                               <p><span className="text-muted-foreground">Processed:</span> {new Date(withdrawal.processedAt).toLocaleString()}</p>
                             )}
+                            {withdrawal.payoutBatchId && (
+                              <p className="text-xs"><span className="text-muted-foreground">Batch ID:</span> {withdrawal.payoutBatchId}</p>
+                            )}
                             {withdrawal.transactionId && (
                               <p className="text-xs"><span className="text-muted-foreground">Transaction ID:</span> {withdrawal.transactionId}</p>
                             )}
                             {withdrawal.failureReason && (
                               <p className="text-sm text-destructive">
-                                <span className="font-medium">Error:</span> {withdrawal.failureReason}
-                              </p>
-                            )}
-                            {withdrawal.adminNotes && (
-                              <p className="text-sm">
-                                <span className="text-muted-foreground">Admin Notes:</span> {withdrawal.adminNotes}
+                                <span className="font-medium">Failure Reason:</span> {withdrawal.failureReason}
                               </p>
                             )}
                           </div>
                         </div>
-                        {withdrawal.status === "pending" && (
-                          <div className="flex flex-col gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() => processWithdrawalMutation.mutate(withdrawal.id)}
-                              disabled={processWithdrawalMutation.isPending}
-                              data-testid={`button-process-${withdrawal.id}`}
-                            >
-                              {processWithdrawalMutation.isPending ? "Processing..." : "Process Payout"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                if (confirm("Are you sure you want to cancel this withdrawal request?")) {
-                                  cancelWithdrawalMutation.mutate(withdrawal.id);
-                                }
-                              }}
-                              disabled={cancelWithdrawalMutation.isPending}
-                              data-testid={`button-cancel-${withdrawal.id}`}
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        )}
+                        <div className="text-right text-sm text-muted-foreground">
+                          <p>Automated Payout</p>
+                          {withdrawal.status === "completed" && (
+                            <p className="text-green-600 font-medium">✓ Sent</p>
+                          )}
+                          {withdrawal.status === "failed" && (
+                            <p className="text-red-600 font-medium">✗ Failed</p>
+                          )}
+                          {withdrawal.status === "processing" && (
+                            <p className="text-blue-600 font-medium">⟳ Processing</p>
+                          )}
+                        </div>
                       </div>
                     </Card>
                   ))}

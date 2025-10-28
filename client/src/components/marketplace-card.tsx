@@ -12,6 +12,7 @@ interface MarketplaceCardProps {
   image?: string;
   images: number;
   tier?: string;
+  isExample?: boolean;
 }
 
 const categoryColors: Record<string, string> = {
@@ -42,9 +43,15 @@ export function MarketplaceCard({
   image,
   images,
   tier,
+  isExample,
 }: MarketplaceCardProps) {
   return (
     <Card className="overflow-hidden hover-elevate transition-all duration-200 hover:scale-[1.02]" data-testid={`card-marketplace-${id}`}>
+      {isExample && (
+        <div className="bg-amber-500 text-white px-4 py-2 text-center font-semibold text-sm" data-testid="banner-example">
+          ✨ SAMPLE LISTING - For Reference Only
+        </div>
+      )}
       {image ? (
         <div className="relative aspect-[3/2] overflow-hidden">
           <img

@@ -34,27 +34,27 @@ export default function Home() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="relative h-[600px] bg-gradient-to-r from-primary/20 to-secondary/20 flex items-center justify-center overflow-hidden">
+      <section className="relative h-[500px] sm:h-[600px] bg-gradient-to-r from-primary/20 to-secondary/20 flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-transparent z-10" />
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${wingtipImage})` }} />
         
-        <div className="relative z-20 w-full max-w-5xl mx-auto px-4">
-          <div className="text-center mb-8">
-            <h1 className="font-display text-5xl md:text-6xl font-bold text-white mb-4" data-testid="text-hero-title">
+        <div className="relative z-20 w-full max-w-5xl mx-auto px-3 sm:px-4 lg:px-8">
+          <div className="text-center mb-6 sm:mb-8">
+            <h1 className="font-display text-3xl sm:text-5xl md:text-6xl font-bold text-white mb-3 sm:mb-4" data-testid="text-hero-title">
               Find Your Perfect Aircraft
             </h1>
-            <p className="text-xl text-white/90 max-w-2xl mx-auto">
+            <p className="text-base sm:text-xl text-white/90 max-w-2xl mx-auto px-4">
               Rent from certified aircraft owners. Fly with confidence.
             </p>
           </div>
 
           {/* Search Card */}
-          <div className="bg-background/95 backdrop-blur-lg rounded-2xl shadow-2xl p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+          <div className="bg-background/95 backdrop-blur-lg rounded-xl sm:rounded-2xl shadow-2xl p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">Aircraft Type</label>
+                <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">Aircraft Type</label>
                 <Select data-testid="select-aircraft-type">
-                  <SelectTrigger>
+                  <SelectTrigger className="text-sm">
                     <SelectValue placeholder="Any type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -68,9 +68,9 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-2 block">Certification Required</label>
+                <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">Certification Required</label>
                 <Select data-testid="select-certification">
-                  <SelectTrigger>
+                  <SelectTrigger className="text-sm">
                     <SelectValue placeholder="Select certification" />
                   </SelectTrigger>
                   <SelectContent>
@@ -84,37 +84,37 @@ export default function Home() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-2 block">Location</label>
+                <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">Location</label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="City or airport code"
-                    className="pl-10"
+                    className="pl-10 text-sm"
                     data-testid="input-location"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-2 block">Dates</label>
+                <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">Dates</label>
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="date"
-                    className="pl-10"
+                    className="pl-10 text-sm"
                     data-testid="input-dates"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div className="flex flex-wrap gap-2 flex-1">
                 {quickFilters.map((filter) => (
                   <Badge
                     key={filter.value}
                     variant="outline"
-                    className="cursor-pointer hover-elevate"
+                    className="cursor-pointer hover-elevate text-xs sm:text-sm"
                     data-testid={`badge-filter-${filter.value}`}
                   >
                     {filter.label}
@@ -122,7 +122,7 @@ export default function Home() {
                 ))}
               </div>
               <Button className="bg-accent text-accent-foreground hover:bg-accent rounded-full w-full sm:w-auto" size="lg" data-testid="button-search">
-                <Search className="h-5 w-5 mr-2" />
+                <Search className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                 Find Aircraft
               </Button>
             </div>

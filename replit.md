@@ -40,3 +40,42 @@ Added December 2024: A comprehensive system to track and maintain listing qualit
 - API endpoints: GET `/api/admin/stale-listings`, GET `/api/admin/orphaned-listings`, POST `/api/admin/send-listing-reminders`, PATCH `/api/aircraft/:id/refresh`, PATCH `/api/marketplace/:id/refresh`
 - Email templates: HTML and plain text versions showing aircraft count and marketplace count
 
+## PayPal Payouts Integration - Owner Withdrawal System
+Added October 2025: A comprehensive dual-payment system where aircraft owners earn rental income and can withdraw funds via PayPal.
+
+**Architecture:**
+- **Incoming Payments**: Braintree handles all incoming payments (rentals, marketplace listing fees)
+- **Outgoing Payments**: PayPal Payouts API handles owner withdrawals
+- **Balance Tracking**: Thread-safe atomic balance operations prevent race conditions
+
+**Revenue Flow:**
+1. Renter completes rental payment via Braintree
+2. Owner balance automatically credited with `ownerPayout` amount (baseCost - 7.5% platform fee)
+3. Owner requests withdrawal to their PayPal account
+4. Admin reviews and processes withdrawal via PayPal Payouts API
+5. Funds arrive in owner's PayPal account (typically within 30 minutes)
+6. PayPal charges ~2% fee per payout (absorbed by platform)
+
+**Key Features:**
+- **Atomic Balance Operations**: All balance increments/decrements use single SQL UPDATE statements to prevent race conditions
+- **Owner Withdrawal Page**: Interface for owners to set PayPal email, view balance, request withdrawals, and track withdrawal history
+- **Admin Withdrawals Tab**: Dashboard interface for reviewing pending requests, processing payouts, and viewing withdrawal history
+- **Automatic Balance Crediting**: When rental payment completes, owner balance is immediately credited atomically
+- **Security**: Owners can only withdraw their own balance; admins must manually approve withdrawals before payout
+- **Status Tracking**: Withdrawals tracked as pending/completed/cancelled with timestamps and admin notes
+
+**Implementation:**
+- PayPal Payouts service: `server/paypal-payouts.ts` - Authentication and payout sending via PayPal Payouts API
+- Database schemas: `users.balance` field, `withdrawalRequests` table in `shared/schema.ts`
+- Storage methods: `addToUserBalance()`, `deductFromUserBalance()` (atomic SQL operations), `createWithdrawalRequest()`, `getWithdrawalRequestsByUser()`, `getPendingWithdrawalRequests()`, `updateWithdrawalRequest()`
+- API endpoints: GET `/api/user/balance`, POST `/api/withdrawals`, GET `/api/withdrawals`, GET `/api/admin/withdrawals`, POST `/api/admin/withdrawals/:id/process`, PATCH `/api/admin/withdrawals/:id`
+- Frontend pages: `/owner-withdrawals` page with balance display, PayPal setup, withdrawal form, and history
+- Admin interface: "Withdrawals" tab in admin dashboard with pending/completed sections
+- Rental completion: `/api/rentals/:id/complete-payment` automatically credits owner balance after payment verification
+
+**Security & Data Integrity:**
+- Balance operations use atomic SQL: `balance = COALESCE(balance, 0) + amount` (no read-then-write)
+- Deductions include balance check in WHERE clause: `WHERE balance >= amount` (prevents overdrafts)
+- Concurrent operations safe: Multiple simultaneous credits/withdrawals won't corrupt balances
+- Failed PayPal payouts: Marked as cancelled, balance automatically refunded to owner
+

@@ -77,8 +77,8 @@ export default function OwnerWithdrawals() {
       queryClient.invalidateQueries({ queryKey: ["/api/withdrawals"] });
       setWithdrawalAmount("");
       toast({
-        title: "Withdrawal Requested",
-        description: "Your withdrawal request has been submitted for processing."
+        title: "Payout Processing",
+        description: "Your funds are being sent to PayPal now. Funds typically arrive within minutes."
       });
     },
     onError: (error: any) => {
@@ -263,10 +263,10 @@ export default function OwnerWithdrawals() {
           <div className="bg-muted p-4 rounded-md space-y-2">
             <p className="text-sm font-medium">Important Information</p>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>• Withdrawals are processed manually by our team</li>
+              <li>• Withdrawals are processed instantly via PayPal Payouts</li>
               <li>• PayPal charges approximately 2% per payout (deducted from platform funds)</li>
-              <li>• Funds typically arrive in 15-30 minutes after approval</li>
-              <li>• You'll receive an email confirmation when your withdrawal is processed</li>
+              <li>• Funds typically arrive in your PayPal account within minutes</li>
+              <li>• You'll receive an email confirmation from PayPal when funds arrive</li>
             </ul>
           </div>
         </CardContent>

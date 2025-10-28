@@ -80,3 +80,19 @@ Added October 2025: A fully automated dual-payment system where aircraft owners 
 - Concurrent operations safe: Multiple simultaneous credits/withdrawals won't corrupt balances
 - Failed PayPal payouts: Marked as cancelled, balance automatically refunded to owner
 
+## Sample Marketplace Listings
+Added October 2025: A system to provide high-quality example listings for all marketplace categories to help users understand proper listing format and quality standards.
+
+**Key Features:**
+- **Example Listings**: 6 professionally-written sample listings (one per category) showcasing best practices
+- **Visual Distinction**: Prominent "EXAMPLE LISTING - For Reference Only" banner on both grid cards and detail modals
+- **Backend Protections**: Sample listings are read-only and excluded from user management
+- **Categories Covered**: Aviation Jobs, Aircraft For Sale, CFIs, Flight Schools, Mechanics, Charter Services
+
+**Implementation:**
+- Database schema: `isExample` boolean field in `marketplaceListings` table
+- Storage: Sample listings excluded from `getMarketplaceListingsByUser()` query
+- API protections: PATCH and DELETE routes check `isExample` flag and return 403 error
+- UI components: `MarketplaceCard` and `MarketplaceListingModal` display amber banner for example listings
+- Sample data: Realistic listings with professional descriptions, contact info, and pricing guidance
+

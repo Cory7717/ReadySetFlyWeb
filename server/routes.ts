@@ -813,6 +813,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Listing not found" });
       }
       
+      // Prevent editing sample listings
+      if ((existingListing as any).isExample) {
+        return res.status(403).json({ error: "Sample listings cannot be edited" });
+      }
+      
       // Verify the user owns this listing
       if (existingListing.userId !== userId) {
         return res.status(403).json({ error: "Unauthorized - you can only edit your own listings" });
@@ -835,6 +840,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/marketplace/:id", async (req, res) => {
     try {
+      // Check if listing is a sample listing
+      const listing = await storage.getMarketplaceListing(req.params.id);
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      if ((listing as any).isExample) {
+        return res.status(403).json({ error: "Sample listings cannot be deleted" });
+      }
+      
       const deleted = await storage.deleteMarketplaceListing(req.params.id);
       if (!deleted) {
         return res.status(404).json({ error: "Listing not found" });

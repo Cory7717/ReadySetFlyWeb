@@ -632,7 +632,12 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(marketplaceListings)
-      .where(eq(marketplaceListings.userId, userId));
+      .where(
+        and(
+          eq(marketplaceListings.userId, userId),
+          eq(marketplaceListings.isExample, false)
+        )
+      );
   }
 
   async getFilteredMarketplaceListings(filters: {

@@ -22,6 +22,7 @@ import AdminDashboard from "@/pages/admin";
 import VerifyIdentity from "@/pages/verify-identity";
 import OwnerPayoutSetup from "@/pages/owner-payout-setup";
 import OwnerWithdrawals from "@/pages/owner-withdrawals";
+import RequireAuth from "@/pages/require-auth";
 import NotFound from "@/pages/not-found";
 
 // Router component - allows anonymous browsing for rentals/marketplace
@@ -36,7 +37,7 @@ function Router() {
       <Route path="/aircraft/:id" component={AircraftDetail} />
       
       {/* Protected routes - require authentication */}
-      {isAuthenticated && (
+      {isAuthenticated ? (
         <>
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/profile" component={Profile} />
@@ -51,6 +52,23 @@ function Router() {
           <Route path="/owner-withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/verify-identity" component={VerifyIdentity} />
+        </>
+      ) : (
+        <>
+          {/* Show "Sign In Required" page for unauthenticated users trying to access protected routes */}
+          <Route path="/dashboard" component={RequireAuth} />
+          <Route path="/profile" component={RequireAuth} />
+          <Route path="/my-listings" component={RequireAuth} />
+          <Route path="/messages" component={RequireAuth} />
+          <Route path="/list-aircraft" component={RequireAuth} />
+          <Route path="/create-marketplace-listing" component={RequireAuth} />
+          <Route path="/edit-marketplace-listing/:id" component={RequireAuth} />
+          <Route path="/marketplace/listing/checkout" component={RequireAuth} />
+          <Route path="/rental-payment/:id" component={RequireAuth} />
+          <Route path="/owner-payout-setup" component={RequireAuth} />
+          <Route path="/owner-withdrawals" component={RequireAuth} />
+          <Route path="/admin" component={RequireAuth} />
+          <Route path="/verify-identity" component={RequireAuth} />
         </>
       )}
       

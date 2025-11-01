@@ -28,6 +28,20 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
+// Refresh Tokens (for mobile app JWT authentication)
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  deviceInfo: text("device_info"), // Store device fingerprint for security
+  ipAddress: text("ip_address"),
+}, (table) => [
+  index("idx_refresh_tokens_user").on(table.userId),
+  index("idx_refresh_tokens_expires").on(table.expiresAt),
+]);
+
 // Users / Pilots (Merged with Replit Auth requirements - from blueprint:javascript_log_in_with_replit)
 export const users = pgTable("users", {
   // Auth fields (from blueprint - REQUIRED)
@@ -90,6 +104,10 @@ export const users = pgTable("users", {
   
   // Balance tracking (for owner payouts)
   balance: decimal("balance", { precision: 10, scale: 2 }).default("0.00"),
+  
+  // Mobile app authentication (optional - for users who sign up via mobile)
+  hashedPassword: text("hashed_password"), // bcrypt hash, null for Replit Auth only users
+  passwordCreatedAt: timestamp("password_created_at"),
   
   // Rating information
   averageRating: decimal("average_rating", { precision: 3, scale: 2 }), // 0.00-5.00
@@ -688,6 +706,11 @@ export const insertUserSchema = createInsertSchema(users).omit({
   totalFlightHours: z.number().min(0).default(0),
 });
 
+export const insertRefreshTokenSchema = createInsertSchema(refreshTokens).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertAircraftListingSchema = createInsertSchema(aircraftListings).omit({
   id: true,
   createdAt: true,
@@ -863,6 +886,9 @@ export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalReques
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = typeof users.$inferInsert; // For Replit Auth (from blueprint:javascript_log_in_with_replit)
+
+export type RefreshToken = typeof refreshTokens.$inferSelect;
+export type InsertRefreshToken = z.infer<typeof insertRefreshTokenSchema>;
 
 export type AircraftListing = typeof aircraftListings.$inferSelect;
 export type InsertAircraftListing = z.infer<typeof insertAircraftListingSchema>;

@@ -1,0 +1,12 @@
+# Ignore git directory to avoid lock file issues
+../.git
+.git
+*.lock
+
+# Ignore common development files
+node_modules
+.expo
+.expo-shared
+dist
+.vscode
+.idea

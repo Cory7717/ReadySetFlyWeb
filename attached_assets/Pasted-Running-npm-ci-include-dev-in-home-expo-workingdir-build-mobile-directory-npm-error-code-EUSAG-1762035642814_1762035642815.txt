@@ -1,0 +1,129 @@
+Running "npm ci --include=dev" in /home/expo/workingdir/build/mobile directory
+npm error code EUSAGE
+npm error
+npm error `npm ci` can only install packages when your package.json and package-lock.json or npm-shrinkwrap.json are in sync. Please update your lock file with `npm install` before continuing.
+npm error
+npm error Missing: babel-preset-expo@12.0.11 from lock file
+npm error Invalid: lock file's babel-plugin-react-compiler@1.0.0 does not satisfy babel-plugin-react-compiler@19.0.0-beta-ebf51a3-20250411
+npm error Missing: @react-native/babel-preset@0.76.9 from lock file
+npm error Missing: babel-plugin-react-native-web@0.19.13 from lock file
+npm error Missing: @react-native/babel-plugin-codegen@0.76.9 from lock file
+npm error Missing: babel-plugin-syntax-hermes-parser@0.25.1 from lock file
+npm error Missing: @react-native/codegen@0.76.9 from lock file
+npm error Missing: @babel/preset-env@7.28.5 from lock file
+npm error Missing: @babel/plugin-bugfix-firefox-class-in-computed-class-key@7.28.5 from lock file
+npm error Missing: @babel/plugin-bugfix-safari-class-field-initializer-scope@7.27.1 from lock file
+npm error Missing: @babel/plugin-bugfix-safari-id-destructuring-collision-in-function-expression@7.27.1 from lock file
+npm error Missing: @babel/plugin-bugfix-v8-spread-parameters-in-optional-chaining@7.27.1 from lock file
+npm error Missing: @babel/plugin-bugfix-v8-static-class-fields-redefine-readonly@7.28.3 from lock file
+npm error Missing: @babel/plugin-proposal-private-property-in-object@7.21.0-placeholder-for-preset-env.2 from lock file
+npm error Missing: @babel/plugin-syntax-import-assertions@7.27.1 from lock file
+npm error Missing: @babel/plugin-syntax-unicode-sets-regex@7.18.6 from lock file
+npm error Missing: @babel/plugin-transform-block-scoped-functions@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-dotall-regex@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-duplicate-keys@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-duplicate-named-capturing-groups-regex@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-dynamic-import@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-explicit-resource-management@7.28.0 from lock file
+npm error Missing: @babel/plugin-transform-exponentiation-operator@7.28.5 from lock file
+npm error Missing: @babel/plugin-transform-json-strings@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-member-expression-literals@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-modules-amd@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-modules-systemjs@7.28.5 from lock file
+npm error Missing: @babel/plugin-transform-modules-umd@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-new-target@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-object-super@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-property-literals@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-regexp-modifiers@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-reserved-words@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-template-literals@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-typeof-symbol@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-unicode-escapes@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-unicode-property-regex@7.27.1 from lock file
+npm error Missing: @babel/plugin-transform-unicode-sets-regex@7.27.1 from lock file
+npm error Missing: @babel/preset-modules@0.1.6-no-external-plugins from lock file
+npm error Missing: semver@6.3.1 from lock file
+npm error Missing: esutils@2.0.3 from lock file
+npm error Missing: glob@7.2.3 from lock file
+npm error Missing: hermes-parser@0.23.1 from lock file
+npm error Missing: jscodeshift@0.14.0 from lock file
+npm error Missing: mkdirp@0.5.6 from lock file
+npm error Missing: @babel/plugin-proposal-class-properties@7.18.6 from lock file
+npm error Missing: @babel/plugin-proposal-nullish-coalescing-operator@7.18.6 from lock file
+npm error Missing: @babel/plugin-proposal-optional-chaining@7.21.0 from lock file
+npm error Missing: @babel/preset-flow@7.27.1 from lock file
+npm error Missing: @babel/register@7.28.3 from lock file
+npm error Missing: babel-core@7.0.0-bridge.0 from lock file
+npm error Missing: chalk@4.1.2 from lock file
+npm error Missing: flow-parser@0.289.0 from lock file
+npm error Missing: neo-async@2.6.2 from lock file
+npm error Missing: node-dir@0.1.17 from lock file
+npm error Missing: recast@0.21.5 from lock file
+npm error Missing: temp@0.8.4 from lock file
+npm error Missing: write-file-atomic@2.4.3 from lock file
+npm error Missing: clone-deep@4.0.1 from lock file
+npm error Missing: find-cache-dir@2.1.0 from lock file
+npm error Missing: make-dir@2.1.0 from lock file
+npm error Missing: is-plain-object@2.0.4 from lock file
+npm error Missing: kind-of@6.0.3 from lock file
+npm error Missing: shallow-clone@3.0.1 from lock file
+npm error Missing: commondir@1.0.1 from lock file
+npm error Missing: pkg-dir@3.0.0 from lock file
+npm error Missing: isobject@3.0.1 from lock file
+npm error Missing: pify@4.0.1 from lock file
+npm error Missing: semver@5.7.2 from lock file
+npm error Missing: minimatch@3.1.2 from lock file
+npm error Missing: find-up@3.0.0 from lock file
+npm error Missing: ast-types@0.15.2 from lock file
+npm error Missing: source-map@0.6.1 from lock file
+npm error Missing: tslib@2.8.1 from lock file
+npm error Missing: rimraf@2.6.3 from lock file
+npm error Missing: hermes-parser@0.25.1 from lock file
+npm error Missing: minimatch@3.1.2 from lock file
+npm error Missing: hermes-estree@0.23.1 from lock file
+npm error Missing: brace-expansion@1.1.12 from lock file
+npm error Missing: babel-plugin-react-compiler@1.0.0 from lock file
+npm error Missing: ansi-styles@4.3.0 from lock file
+npm error Missing: supports-color@7.2.0 from lock file
+npm error Missing: color-convert@2.0.1 from lock file
+npm error Missing: color-name@1.1.4 from lock file
+npm error Missing: has-flag@4.0.0 from lock file
+npm error Missing: signal-exit@3.0.7 from lock file
+npm error Missing: brace-expansion@1.1.12 from lock file
+npm error Missing: locate-path@3.0.0 from lock file
+npm error Missing: p-locate@3.0.0 from lock file
+npm error Missing: path-exists@3.0.0 from lock file
+npm error Missing: p-limit@2.3.0 from lock file
+npm error Missing: glob@7.2.3 from lock file
+npm error Missing: minimatch@3.1.2 from lock file
+npm error Missing: brace-expansion@1.1.12 from lock file
+npm error Missing: hermes-estree@0.25.1 from lock file
+npm error
+npm error Clean install a project
+npm error
+npm error Usage:
+npm error npm ci
+npm error
+npm error Options:
+npm error [--install-strategy <hoisted|nested|shallow|linked>] [--legacy-bundling]
+npm error [--global-style] [--omit <dev|optional|peer> [--omit <dev|optional|peer> ...]]
+npm error [--include <prod|dev|optional|peer> [--include <prod|dev|optional|peer> ...]]
+npm error [--strict-peer-deps] [--foreground-scripts] [--ignore-scripts] [--no-audit]
+npm error [--no-bin-links] [--no-fund] [--dry-run]
+npm error [-w|--workspace <workspace-name> [-w|--workspace <workspace-name> ...]]
+npm error [-ws|--workspaces] [--include-workspace-root] [--install-links]
+npm error
+npm error aliases: clean-install, ic, install-clean, isntall-clean
+npm error
+npm error Run "npm help ci" for more info
+npm error A complete log of this run can be found in: /home/expo/.npm/_logs/2025-11-01T22_16_03_505Z-debug-0.log
+npm ci --include=dev exited with non-zero code: 1
+
+Fail job
+
+1s
+
+
+Build failed
+
+npm ci --include=dev exited with non-zero code: 1

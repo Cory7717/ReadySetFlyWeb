@@ -17,7 +17,10 @@ Core architectural decisions include a robust **verification system** for renter
   - **Known Limitation (Auto-login)**: After logout, clicking "Sign In" will automatically log users back in with their previous Replit account if their browser session is still active. Replit's OIDC provider does not support the `prompt=select_account` parameter to force account selection. Users must manually log out of Replit.com in their browser to switch accounts.
   - **Email Authentication Behavior**: Replit Auth uses magic links for email-based authentication (not traditional passwords). When logging in with email, users are redirected to an "email sent, check your inbox" page and must click the verification link sent to their email. For instant login, users should use Google or GitHub authentication methods instead.
 - **Replit AI Integrations (OpenAI)**: AI-powered description generation for all listing types (aircraft rentals, sales, jobs, CFI, flight schools, mechanics, charter services) using GPT-4o, billed via Replit credits.
-- **PayPal Braintree**: Payment processing for rentals, owner payouts, and marketplace listing fees using Braintree Drop-in UI and server-side transaction verification.
+- **PayPal Braintree**: Payment processing for incoming payments (rentals and marketplace listing fees) using Braintree Drop-in UI and server-side transaction verification.
+  - **Configuration**: Set to Production environment (`braintree.Environment.Production`) to match Live/Production credentials.
+  - **Current Status (Nov 2025)**: Braintree account access temporarily restricted - awaiting support resolution. Payment logic verified and ready to operate once account access is restored.
+- **PayPal Payouts API**: Handles outgoing payments (instant owner withdrawals) via automated payout processing.
 - **WebSocket server**: Custom implementation for real-time messaging.
 - **Cloud Storage**: Planned integration (e.g., AWS S3, Cloudinary) for file uploads.
 - **FAA Registry API**: Planned integration for automatic N-number lookups and cross-verification.

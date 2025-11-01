@@ -31,6 +31,8 @@ import {
   type InsertPromoAlert,
   type WithdrawalRequest,
   type InsertWithdrawalRequest,
+  type RefreshToken,
+  type InsertRefreshToken,
   users,
   aircraftListings,
   marketplaceListings,
@@ -48,6 +50,7 @@ import {
   expenses,
   jobApplications,
   promoAlerts,
+  refreshTokens,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql } from "drizzle-orm";
@@ -60,6 +63,13 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>; // REQUIRED for Replit Auth
   searchUsers(query: string): Promise<User[]>; // Admin search by name
+  updateUserPassword(id: string, hashedPassword: string): Promise<User | undefined>;
+  
+  // Refresh Tokens (for mobile app JWT authentication)
+  createRefreshToken(token: InsertRefreshToken): Promise<RefreshToken>;
+  getRefreshToken(token: string): Promise<RefreshToken | undefined>;
+  deleteRefreshToken(token: string): Promise<boolean>;
+  deleteUserRefreshTokens(userId: string): Promise<boolean>;
   
   // User Metrics (Admin Analytics)
   getUserMetrics(): Promise<{
@@ -331,6 +341,51 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .limit(50);
+  }
+
+  async updateUserPassword(id: string, hashedPassword: string): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({ 
+        hashedPassword, 
+        passwordCreatedAt: new Date(),
+        updatedAt: new Date() 
+      })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  // Refresh Tokens (for mobile app JWT authentication)
+  async createRefreshToken(token: InsertRefreshToken): Promise<RefreshToken> {
+    const [refreshToken] = await db
+      .insert(refreshTokens)
+      .values(token)
+      .returning();
+    return refreshToken;
+  }
+
+  async getRefreshToken(token: string): Promise<RefreshToken | undefined> {
+    const result = await db
+      .select()
+      .from(refreshTokens)
+      .where(eq(refreshTokens.token, token))
+      .limit(1);
+    return result[0];
+  }
+
+  async deleteRefreshToken(token: string): Promise<boolean> {
+    const result = await db
+      .delete(refreshTokens)
+      .where(eq(refreshTokens.token, token));
+    return true;
+  }
+
+  async deleteUserRefreshTokens(userId: string): Promise<boolean> {
+    await db
+      .delete(refreshTokens)
+      .where(eq(refreshTokens.userId, userId));
+    return true;
   }
 
   // User Metrics (Admin Analytics)

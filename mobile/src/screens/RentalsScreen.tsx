@@ -1,10 +1,12 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, ImageBackground } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { apiEndpoints } from '../services/api';
 import type { AircraftListing } from '@shared/schema';
+
+const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
 
 type Props = NativeStackScreenProps<RentalsStackParamList, 'RentalsList'>;
 
@@ -25,14 +27,9 @@ export default function RentalsScreen({ navigation }: Props) {
       <View style={styles.cardHeader}>
         <Ionicons name="airplane" size={24} color="#1e40af" />
         <View style={styles.cardHeaderText}>
-          <Text style={styles.aircraftType}>{item.type}</Text>
-          <Text style={styles.aircraftNumber}>{item.nNumber}</Text>
+          <Text style={styles.aircraftType}>{item.make} {item.model}</Text>
+          <Text style={styles.aircraftNumber}>{item.registration}</Text>
         </View>
-        {item.available && (
-          <View style={styles.availableBadge}>
-            <Text style={styles.availableText}>Available</Text>
-          </View>
-        )}
       </View>
       
       <View style={styles.cardBody}>
@@ -85,6 +82,18 @@ export default function RentalsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      <ImageBackground 
+        source={WINGTIP_IMAGE}
+        style={styles.header}
+        imageStyle={styles.headerImage}
+      >
+        <View style={styles.headerOverlay}>
+          <Ionicons name="airplane" size={40} color="#fff" />
+          <Text style={styles.headerTitle}>Browse Aircraft</Text>
+          <Text style={styles.headerSubtitle}>Find your perfect aircraft rental</Text>
+        </View>
+      </ImageBackground>
+      
       <FlatList
         data={aircraft || []}
         renderItem={renderAircraft}
@@ -106,6 +115,39 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f3f4f6',
+  },
+  header: {
+    height: 180,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerImage: {
+    opacity: 0.9,
+  },
+  headerOverlay: {
+    flex: 1,
+    width: '100%',
+    backgroundColor: 'rgba(30, 64, 175, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginTop: 12,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#fff',
+    marginTop: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   centerContainer: {
     flex: 1,

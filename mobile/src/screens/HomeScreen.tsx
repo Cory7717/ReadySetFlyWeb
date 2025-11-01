@@ -1,15 +1,57 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useIsAuthenticated, useLogin } from '../utils/auth';
+
+const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
+const LOGO_IMAGE = require('../../assets/logo.png');
 
 export default function HomeScreen({ navigation }: any) {
+  const { isAuthenticated, user, isLoading } = useIsAuthenticated();
+  const login = useLogin();
+
+  const handleLogin = async () => {
+    try {
+      await login.mutateAsync();
+    } catch (error) {
+      console.error('Login failed:', error);
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
-      {/* Hero Section */}
-      <View style={styles.hero}>
-        <Ionicons name="airplane" size={60} color="#fff" />
-        <Text style={styles.heroTitle}>Ready Set Fly</Text>
-        <Text style={styles.heroSubtitle}>Aviation Marketplace & Rental Platform</Text>
-      </View>
+      {/* Hero Section with Wingtip Background */}
+      <ImageBackground 
+        source={WINGTIP_IMAGE}
+        style={styles.hero}
+        imageStyle={styles.heroImage}
+      >
+        <View style={styles.heroOverlay}>
+          <Image source={LOGO_IMAGE} style={styles.logo} resizeMode="contain" />
+          <Text style={styles.heroTitle}>Ready Set Fly</Text>
+          <Text style={styles.heroSubtitle}>Aviation Marketplace & Rental Platform</Text>
+          
+          {!isAuthenticated && !isLoading && (
+            <TouchableOpacity 
+              style={styles.loginButton}
+              onPress={handleLogin}
+              disabled={login.isPending}
+              data-testid="button-login-home"
+            >
+              <Ionicons name="log-in-outline" size={20} color="#fff" />
+              <Text style={styles.loginButtonText}>
+                {login.isPending ? 'Signing in...' : 'Sign In'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          
+          {isAuthenticated && user && (
+            <View style={styles.welcomeContainer}>
+              <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+              <Text style={styles.welcomeText}>Welcome back, {user.firstName}!</Text>
+            </View>
+          )}
+        </View>
+      </ImageBackground>
 
       {/* Quick Actions */}
       <View style={styles.quickActions}>
@@ -18,6 +60,7 @@ export default function HomeScreen({ navigation }: any) {
         <TouchableOpacity 
           style={styles.actionCard}
           onPress={() => navigation.navigate('Rentals')}
+          data-testid="button-browse-aircraft"
         >
           <Ionicons name="airplane-outline" size={32} color="#1e40af" />
           <View style={styles.actionText}>
@@ -30,6 +73,7 @@ export default function HomeScreen({ navigation }: any) {
         <TouchableOpacity 
           style={styles.actionCard}
           onPress={() => navigation.navigate('Marketplace')}
+          data-testid="button-marketplace"
         >
           <Ionicons name="storefront-outline" size={32} color="#1e40af" />
           <View style={styles.actionText}>
@@ -42,6 +86,7 @@ export default function HomeScreen({ navigation }: any) {
         <TouchableOpacity 
           style={styles.actionCard}
           onPress={() => navigation.navigate('Profile')}
+          data-testid="button-my-profile"
         >
           <Ionicons name="person-outline" size={32} color="#1e40af" />
           <View style={styles.actionText}>
@@ -90,22 +135,78 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   hero: {
-    backgroundColor: '#1e40af',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
+    height: 320,
+    justifyContent: 'center',
     alignItems: 'center',
+  },
+  heroImage: {
+    opacity: 0.9,
+  },
+  heroOverlay: {
+    flex: 1,
+    width: '100%',
+    backgroundColor: 'rgba(30, 64, 175, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 16,
   },
   heroTitle: {
     fontSize: 32,
     fontWeight: 'bold',
     color: '#fff',
-    marginTop: 16,
+    marginTop: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   heroSubtitle: {
     fontSize: 16,
-    color: '#93c5fd',
+    color: '#fff',
     marginTop: 8,
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  loginButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#10b981',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  loginButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginLeft: 8,
+  },
+  welcomeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+    marginTop: 20,
+  },
+  welcomeText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginLeft: 8,
   },
   quickActions: {
     padding: 20,

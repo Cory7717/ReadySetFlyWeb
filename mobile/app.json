@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "Ready Set Fly",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,6 +16,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.readysetfly.mobile",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

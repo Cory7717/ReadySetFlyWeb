@@ -1,4 +1,4 @@
-import axios, { AxiosResponse } from 'axios';
+import axios, { AxiosResponse, AxiosError } from 'axios';
 import type { 
   AircraftListing, 
   MarketplaceListing, 
@@ -6,9 +6,23 @@ import type {
   User,
   Message 
 } from '@shared/schema';
+import { TokenStorage } from '../utils/tokenStorage';
 
 // Backend API base URL - update this to your production URL when deploying
 const API_BASE_URL = 'https://readysetfly.us';
+
+// Flag to prevent multiple simultaneous refresh attempts
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+function subscribeTokenRefresh(cb: (token: string) => void) {
+  refreshSubscribers.push(cb);
+}
+
+function onTokenRefreshed(token: string) {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+}
 
 // Create axios instance with default config
 export const api = axios.create({
@@ -17,15 +31,115 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true, // Include cookies for session management
 });
+
+// Request interceptor to add JWT token to headers
+api.interceptors.request.use(
+  async (config) => {
+    const token = await TokenStorage.getAccessToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor to handle token refresh on 401
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as any;
+
+    // If error is 401 and we haven't already tried to refresh
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // Wait for the refresh to complete
+        return new Promise((resolve) => {
+          subscribeTokenRefresh((token: string) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            resolve(axios(originalRequest));
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const refreshToken = await TokenStorage.getRefreshToken();
+        if (!refreshToken) {
+          // No refresh token, clear everything and reject
+          await TokenStorage.clearTokens();
+          isRefreshing = false;
+          return Promise.reject(error);
+        }
+
+        // Try to refresh the token
+        const response = await axios.post(
+          `${API_BASE_URL}/api/mobile/auth/refresh`,
+          { refreshToken },
+          { headers: { 'Content-Type': 'application/json' } }
+        );
+
+        const { accessToken, refreshToken: newRefreshToken } = response.data;
+        
+        // Store new tokens
+        await TokenStorage.setTokens(accessToken, newRefreshToken);
+        
+        // Update the authorization header
+        api.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+
+        // Notify all subscribers
+        onTokenRefreshed(accessToken);
+        isRefreshing = false;
+
+        // Retry the original request
+        return axios(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed, clear tokens
+        await TokenStorage.clearTokens();
+        isRefreshing = false;
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 // Typed API response helper
 type ApiResponse<T> = Promise<AxiosResponse<T>>;
 
 // API endpoints with proper TypeScript types
 export const apiEndpoints = {
-  // Auth
+  // Mobile Auth (JWT-based)
+  mobileAuth: {
+    register: (data: {
+      email: string;
+      password: string;
+      firstName?: string;
+      lastName?: string;
+    }): ApiResponse<{ user: User; accessToken: string; refreshToken: string }> =>
+      api.post('/api/mobile/auth/register', data),
+    
+    login: (data: {
+      email: string;
+      password: string;
+    }): ApiResponse<{ user: User; accessToken: string; refreshToken: string }> =>
+      api.post('/api/mobile/auth/login', data),
+    
+    refresh: (refreshToken: string): ApiResponse<{ accessToken: string; refreshToken: string }> =>
+      api.post('/api/mobile/auth/refresh', { refreshToken }),
+    
+    logout: async (refreshToken: string): Promise<void> => {
+      await api.post('/api/mobile/auth/logout', { refreshToken });
+      await TokenStorage.clearTokens();
+    },
+  },
+
+  // Web Auth (fallback - for compatibility)
   auth: {
     getUser: (): ApiResponse<User | null> => api.get('/api/auth/user'),
     login: () => `${API_BASE_URL}/api/login`,

@@ -1,14 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiEndpoints } from '../services/api';
 import type { User } from '@shared/schema';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
-
-// Important: This tells the auth session to close automatically after redirect
-WebBrowser.maybeCompleteAuthSession();
-
-// Get the API base URL
-const API_BASE_URL = 'https://readysetfly.us';
+import { TokenStorage } from './tokenStorage';
 
 /**
  * Hook to get current authenticated user
@@ -19,13 +12,22 @@ export function useAuth() {
     queryKey: ['/api/auth/user'],
     queryFn: async () => {
       try {
+        // Check if we have a token first
+        const token = await TokenStorage.getAccessToken();
+        if (!token) {
+          return null;
+        }
+
         const response = await apiEndpoints.auth.getUser();
         return response.data;
       } catch (error) {
+        // If token is invalid or expired, clear it
+        await TokenStorage.clearTokens();
         return null;
       }
     },
     retry: false,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }
 
@@ -42,34 +44,62 @@ export function useIsAuthenticated() {
 }
 
 /**
- * Hook to handle login
+ * Hook to handle login with email/password
  */
 export function useLogin() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async () => {
-      // Use Expo's AuthSession to get a proper redirect URI
-      // Note: For mobile apps with Replit Auth, we'll open the login in a browser
-      // and the user will be redirected back to the web app
-      // The mobile app will need to check auth status after returning from browser
+    mutationFn: async (credentials: { email: string; password: string }) => {
+      const response = await apiEndpoints.mobileAuth.login(credentials);
+      return response.data;
+    },
+    onSuccess: async (data) => {
+      // Store tokens in secure storage
+      await TokenStorage.setTokens(data.accessToken, data.refreshToken);
       
-      const loginUrl = `${API_BASE_URL}/api/login`;
+      // Update query cache with user data
+      queryClient.setQueryData(['/api/auth/user'], data.user);
       
-      // Open the login page in a browser
-      const result = await WebBrowser.openBrowserAsync(loginUrl);
-      
-      // After user returns from browser, check if they're now authenticated
-      if (result.type === 'cancel' || result.type === 'dismiss') {
-        // User closed the browser, check if auth succeeded anyway
-        await queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-        const userQuery = queryClient.getQueryData(['/api/auth/user']);
-        return !!userQuery;
-      }
-      
-      // Refetch user data to see if login succeeded
+      // Invalidate to trigger refetch
       await queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-      return true;
+    },
+    onError: async () => {
+      // Clear tokens on login error
+      await TokenStorage.clearTokens();
+    },
+  });
+}
+
+/**
+ * Hook to handle registration with email/password
+ */
+export function useRegister() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (data: {
+      email: string;
+      password: string;
+      firstName?: string;
+      lastName?: string;
+    }) => {
+      const response = await apiEndpoints.mobileAuth.register(data);
+      return response.data;
+    },
+    onSuccess: async (data) => {
+      // Store tokens in secure storage
+      await TokenStorage.setTokens(data.accessToken, data.refreshToken);
+      
+      // Update query cache with user data
+      queryClient.setQueryData(['/api/auth/user'], data.user);
+      
+      // Invalidate to trigger refetch
+      await queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+    },
+    onError: async () => {
+      // Clear tokens on registration error
+      await TokenStorage.clearTokens();
     },
   });
 }
@@ -82,10 +112,17 @@ export function useLogout() {
   
   return useMutation({
     mutationFn: async () => {
-      await apiEndpoints.auth.logout();
+      const refreshToken = await TokenStorage.getRefreshToken();
+      if (refreshToken) {
+        await apiEndpoints.mobileAuth.logout(refreshToken);
+      }
+      // Clear tokens from secure storage
+      await TokenStorage.clearTokens();
+      return true;
+    },
+    onSuccess: () => {
       // Clear all cached data
       queryClient.clear();
-      return true;
     },
   });
 }

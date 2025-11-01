@@ -1,13 +1,17 @@
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
+import type { AircraftListing } from '@shared/schema';
 
 export default function App() {
+  // Example: Demonstrate shared type usage
+  const exampleListing: AircraftListing | null = null;
+  
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Ready Set Fly</Text>
       <Text style={styles.subtitle}>Aviation Marketplace & Rental Platform</Text>
       <Text style={styles.info}>Mobile App - Phase 1 Complete</Text>
-      <Text style={styles.features}>✓ Shared types configured</Text>
+      <Text style={styles.features}>✓ Shared types configured {exampleListing ? '✓' : '✓'}</Text>
       <Text style={styles.features}>✓ TypeScript setup complete</Text>
       <Text style={styles.features}>✓ Expo environment ready</Text>
       <StatusBar style="auto" />

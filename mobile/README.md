@@ -50,20 +50,57 @@ npm run web        # Run in web browser
 ```
 mobile/
 ├── src/
-│   ├── navigation/       # React Navigation setup
-│   ├── screens/          # App screens
+│   ├── navigation/              # React Navigation setup
+│   │   ├── AppNavigator.tsx     # Main tab navigator
+│   │   ├── RentalsStack.tsx     # Rentals nested stack
+│   │   ├── MarketplaceStack.tsx # Marketplace nested stack
+│   │   └── ProfileStack.tsx     # Profile nested stack
+│   ├── screens/                 # App screens
 │   │   ├── HomeScreen.tsx
 │   │   ├── RentalsScreen.tsx
+│   │   ├── AircraftDetailScreen.tsx    # ← Phase 3
+│   │   ├── BookingScreen.tsx           # ← Phase 3
 │   │   ├── MarketplaceScreen.tsx
+│   │   ├── MarketplaceCategoryScreen.tsx # ← Phase 3
+│   │   ├── MarketplaceDetailScreen.tsx   # ← Phase 3
 │   │   ├── MessagesScreen.tsx
-│   │   └── ProfileScreen.tsx
-│   ├── services/         # API client
-│   ├── components/       # Reusable components
-│   └── utils/            # Utility functions
-├── App.tsx               # Main app entry
-├── metro.config.js       # Metro bundler config
-└── package.json          # Dependencies
+│   │   ├── ProfileScreen.tsx
+│   │   ├── MyRentalsScreen.tsx        # ← Phase 3
+│   │   ├── BalanceScreen.tsx          # ← Phase 3
+│   │   ├── VerificationScreen.tsx     # ← Phase 3
+│   │   └── AuthScreen.tsx
+│   ├── services/        # API client with typed endpoints
+│   ├── utils/           # Auth hooks and utilities
+│   └── components/      # Reusable components
+├── App.tsx              # Main app entry
+├── metro.config.js      # Metro bundler config
+└── package.json         # Dependencies
 ```
+
+## 🎯 **Phase 3 Features (NEW!)**
+
+### **Nested Navigation**
+- Stack navigators within each tab for detail screens
+- Smooth transitions between list and detail views
+- Tab bar stays visible during navigation
+
+### **Rentals Flow**
+1. **Browse Aircraft** → Tap card to view details
+2. **Aircraft Detail** → See full specs, location, requirements
+3. **Booking Flow** → Enter dates, hours, see cost breakdown
+4. **Payment** → Continue to payment (integration pending)
+
+### **Marketplace Flow**
+1. **Browse Categories** → 6 aviation categories
+2. **Category Listings** → Filter by category
+3. **Listing Detail** → Full description, contact info
+4. **Contact Seller** → Email/phone integration
+
+### **Profile Features**
+1. **My Rentals** → View booking history with status badges
+2. **Balance & Withdrawals** → Check earnings, withdraw to PayPal
+3. **Verification Status** → Track document uploads
+4. **Settings** → Notifications, help & support
 
 ## 🔧 Configuration
 

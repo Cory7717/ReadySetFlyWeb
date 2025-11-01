@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }: any) {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -21,13 +21,19 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem}>
+        <TouchableOpacity 
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('Verification')}
+        >
           <Ionicons name="shield-checkmark-outline" size={24} color="#1e40af" />
           <Text style={styles.menuText}>Verification Status</Text>
           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem}>
+        <TouchableOpacity 
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('Balance')}
+        >
           <Ionicons name="wallet-outline" size={24} color="#1e40af" />
           <Text style={styles.menuText}>Balance & Withdrawals</Text>
           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
@@ -37,7 +43,10 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>My Activity</Text>
         
-        <TouchableOpacity style={styles.menuItem}>
+        <TouchableOpacity 
+          style={styles.menuItem}
+          onPress={() => navigation.navigate('MyRentals')}
+        >
           <Ionicons name="airplane-outline" size={24} color="#1e40af" />
           <Text style={styles.menuText}>My Rentals</Text>
           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />

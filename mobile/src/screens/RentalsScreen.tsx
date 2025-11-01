@@ -1,10 +1,14 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { apiEndpoints } from '../services/api';
 import type { AircraftListing } from '@shared/schema';
 
-export default function RentalsScreen() {
+type Props = NativeStackScreenProps<RentalsStackParamList, 'RentalsList'>;
+
+export default function RentalsScreen({ navigation }: Props) {
   const { data: aircraft, isLoading, error, refetch } = useQuery({
     queryKey: ['/api/aircraft'],
     queryFn: async () => {
@@ -14,7 +18,10 @@ export default function RentalsScreen() {
   });
 
   const renderAircraft = ({ item }: { item: AircraftListing }) => (
-    <TouchableOpacity style={styles.aircraftCard}>
+    <TouchableOpacity 
+      style={styles.aircraftCard}
+      onPress={() => navigation.navigate('AircraftDetail', { aircraftId: item.id })}
+    >
       <View style={styles.cardHeader}>
         <Ionicons name="airplane" size={24} color="#1e40af" />
         <View style={styles.cardHeaderText}>
@@ -47,9 +54,10 @@ export default function RentalsScreen() {
       </View>
       
       <View style={styles.cardFooter}>
-        <TouchableOpacity style={styles.bookButton}>
-          <Text style={styles.bookButtonText}>Book Now</Text>
-        </TouchableOpacity>
+        <View style={styles.viewDetailsButton}>
+          <Text style={styles.viewDetailsText}>View Details</Text>
+          <Ionicons name="chevron-forward" size={20} color="#1e40af" />
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -174,16 +182,16 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
   },
-  bookButton: {
-    backgroundColor: '#1e40af',
-    paddingVertical: 12,
-    borderRadius: 8,
+  viewDetailsButton: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  bookButtonText: {
+  viewDetailsText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: '#1e40af',
+    marginRight: 4,
   },
   loadingText: {
     fontSize: 16,

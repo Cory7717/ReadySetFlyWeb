@@ -2,10 +2,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
-import RentalsScreen from '../screens/RentalsScreen';
-import MarketplaceScreen from '../screens/MarketplaceScreen';
+import RentalsStack from './RentalsStack';
+import MarketplaceStack from './MarketplaceStack';
 import MessagesScreen from '../screens/MessagesScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import ProfileStack from './ProfileStack';
 
 const Tab = createBottomTabNavigator();
 
@@ -43,10 +43,10 @@ export default function AppNavigator() {
         })}
       >
         <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Ready Set Fly' }} />
-        <Tab.Screen name="Rentals" component={RentalsScreen} />
-        <Tab.Screen name="Marketplace" component={MarketplaceScreen} />
+        <Tab.Screen name="Rentals" component={RentalsStack} options={{ headerShown: false }} />
+        <Tab.Screen name="Marketplace" component={MarketplaceStack} options={{ headerShown: false }} />
         <Tab.Screen name="Messages" component={MessagesScreen} />
-        <Tab.Screen name="Profile" component={ProfileScreen} />
+        <Tab.Screen name="Profile" component={ProfileStack} options={{ headerShown: false }} />
       </Tab.Navigator>
     </NavigationContainer>
   );

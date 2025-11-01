@@ -1,0 +1,42 @@
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import RentalsScreen from '../screens/RentalsScreen';
+import AircraftDetailScreen from '../screens/AircraftDetailScreen';
+import BookingScreen from '../screens/BookingScreen';
+
+export type RentalsStackParamList = {
+  RentalsList: undefined;
+  AircraftDetail: { aircraftId: string };
+  Booking: { aircraftId: string };
+};
+
+const Stack = createNativeStackNavigator<RentalsStackParamList>();
+
+export default function RentalsStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen 
+        name="RentalsList" 
+        component={RentalsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="AircraftDetail" 
+        component={AircraftDetailScreen}
+        options={{ 
+          title: 'Aircraft Details',
+          headerStyle: { backgroundColor: '#1e40af' },
+          headerTintColor: '#fff',
+        }}
+      />
+      <Stack.Screen 
+        name="Booking" 
+        component={BookingScreen}
+        options={{ 
+          title: 'Book Aircraft',
+          headerStyle: { backgroundColor: '#1e40af' },
+          headerTintColor: '#fff',
+        }}
+      />
+    </Stack.Navigator>
+  );
+}

@@ -23,6 +23,7 @@ export default function MarketplaceScreen({ navigation }: any) {
           <TouchableOpacity
             key={category.id}
             style={[styles.categoryCard, { borderLeftColor: category.color }]}
+            onPress={() => navigation.navigate('MarketplaceCategory', { category: category.id })}
           >
             <View style={[styles.iconContainer, { backgroundColor: category.color + '20' }]}>
               <Ionicons name={category.icon as any} size={32} color={category.color} />

@@ -1,31 +1,17 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { apiEndpoints } from '../services/api';
 import type { AircraftListing } from '@shared/schema';
 
 export default function RentalsScreen() {
-  const [aircraft, setAircraft] = useState<AircraftListing[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    loadAircraft();
-  }, []);
-
-  const loadAircraft = async () => {
-    try {
-      setLoading(true);
-      setError('');
+  const { data: aircraft, isLoading, error, refetch } = useQuery({
+    queryKey: ['/api/aircraft'],
+    queryFn: async () => {
       const response = await apiEndpoints.aircraft.getAll();
-      setAircraft(response.data);
-    } catch (err) {
-      setError('Failed to load aircraft listings');
-      console.error('Load aircraft error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return response.data;
+    },
+  });
 
   const renderAircraft = ({ item }: { item: AircraftListing }) => (
     <TouchableOpacity style={styles.aircraftCard}>
@@ -68,7 +54,7 @@ export default function RentalsScreen() {
     </TouchableOpacity>
   );
 
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#1e40af" />
@@ -81,8 +67,8 @@ export default function RentalsScreen() {
     return (
       <View style={styles.centerContainer}>
         <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadAircraft}>
+        <Text style={styles.errorText}>Failed to load aircraft listings</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
           <Text style={styles.retryButtonText}>Try Again</Text>
         </TouchableOpacity>
       </View>
@@ -92,7 +78,7 @@ export default function RentalsScreen() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={aircraft}
+        data={aircraft || []}
         renderItem={renderAircraft}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}

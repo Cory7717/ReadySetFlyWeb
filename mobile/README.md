@@ -71,8 +71,10 @@ mobile/
 Mobile app imports shared TypeScript types from `../shared/schema.ts`:
 
 ```typescript
-import type { AircraftListing } from '@shared/schema';
+import type { AircraftListing, User, Rental } from '@shared/schema';
 ```
+
+All API responses are properly typed using these shared schemas, ensuring type safety across the entire stack.
 
 ### API Configuration
 Backend API URL is configured in `src/services/api.ts`:
@@ -80,6 +82,12 @@ Backend API URL is configured in `src/services/api.ts`:
 ```typescript
 const API_BASE_URL = 'https://readysetfly.us';
 ```
+
+### Authentication
+The app uses Replit Auth (OIDC) for authentication:
+- Session cookies are automatically included in API requests (`withCredentials: true`)
+- `useAuth()` hook provides current user state
+- AuthScreen handles sign-in flow via web browser redirect
 
 ## 🛠 Tech Stack
 

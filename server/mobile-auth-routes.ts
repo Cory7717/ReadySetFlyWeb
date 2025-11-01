@@ -256,6 +256,52 @@ export function registerMobileAuthRoutes(storage: IStorage) {
     }
   });
 
+  /**
+   * GET /api/mobile/auth/me
+   * Get current user from JWT token
+   */
+  router.get('/me', async (req: Request, res: Response): Promise<void> => {
+    try {
+      // Get token from Authorization header
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No token provided' });
+        return;
+      }
+
+      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+      const payload = verifyAccessToken(token);
+      
+      if (!payload) {
+        res.status(401).json({ error: 'Invalid token' });
+        return;
+      }
+
+      // Get user from database
+      const user = await storage.getUser(payload.userId);
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      // Check if account is suspended
+      if (user.isSuspended) {
+        res.status(403).json({ 
+          error: 'Account suspended', 
+          reason: user.suspensionReason || 'Your account has been suspended' 
+        });
+        return;
+      }
+
+      // Return user data (excluding password)
+      const { hashedPassword: _, passwordCreatedAt: __, ...userResponse } = user;
+      res.status(200).json(userResponse);
+    } catch (error) {
+      console.error('Get user error:', error);
+      res.status(500).json({ error: 'Failed to get user' });
+    }
+  });
+
   return router;
 }
 

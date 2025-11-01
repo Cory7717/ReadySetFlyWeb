@@ -9,7 +9,7 @@ import { TokenStorage } from './tokenStorage';
  */
 export function useAuth() {
   return useQuery({
-    queryKey: ['/api/auth/user'],
+    queryKey: ['/api/mobile/auth/me'],
     queryFn: async () => {
       try {
         // Check if we have a token first
@@ -18,7 +18,7 @@ export function useAuth() {
           return null;
         }
 
-        const response = await apiEndpoints.auth.getUser();
+        const response = await apiEndpoints.mobileAuth.getMe();
         return response.data;
       } catch (error) {
         // If token is invalid or expired, clear it
@@ -59,10 +59,10 @@ export function useLogin() {
       await TokenStorage.setTokens(data.accessToken, data.refreshToken);
       
       // Update query cache with user data
-      queryClient.setQueryData(['/api/auth/user'], data.user);
+      queryClient.setQueryData(['/api/mobile/auth/me'], data.user);
       
       // Invalidate to trigger refetch
-      await queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/mobile/auth/me'] });
     },
     onError: async () => {
       // Clear tokens on login error
@@ -92,10 +92,10 @@ export function useRegister() {
       await TokenStorage.setTokens(data.accessToken, data.refreshToken);
       
       // Update query cache with user data
-      queryClient.setQueryData(['/api/auth/user'], data.user);
+      queryClient.setQueryData(['/api/mobile/auth/me'], data.user);
       
       // Invalidate to trigger refetch
-      await queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/mobile/auth/me'] });
     },
     onError: async () => {
       // Clear tokens on registration error

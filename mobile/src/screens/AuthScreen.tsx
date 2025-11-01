@@ -1,115 +1,310 @@
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { useState } from 'react';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  KeyboardAvoidingView, 
+  Platform,
+  ScrollView,
+  ActivityIndicator,
+  Alert
+} from 'react-native';
+import { useLogin, useRegister } from '../utils/auth';
 import { Ionicons } from '@expo/vector-icons';
-import { apiEndpoints } from '../services/api';
 
 export default function AuthScreen() {
-  const handleSignIn = async () => {
-    try {
-      // Open Replit Auth login in browser
-      const loginUrl = apiEndpoints.auth.login();
-      const supported = await Linking.canOpenURL(loginUrl);
-      
-      if (supported) {
-        await Linking.openURL(loginUrl);
-      } else {
-        console.error('Cannot open URL:', loginUrl);
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const loginMutation = useLogin();
+  const registerMutation = useRegister();
+
+  const handleSubmit = async () => {
+    // Basic validation
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    if (!isLogin) {
+      if (password !== confirmPassword) {
+        Alert.alert('Error', 'Passwords do not match');
+        return;
       }
-    } catch (error) {
-      console.error('Sign in error:', error);
+      if (password.length < 8) {
+        Alert.alert('Error', 'Password must be at least 8 characters');
+        return;
+      }
+    }
+
+    try {
+      if (isLogin) {
+        await loginMutation.mutateAsync({ email, password });
+      } else {
+        await registerMutation.mutateAsync({
+          email,
+          password,
+          firstName: firstName || undefined,
+          lastName: lastName || undefined,
+        });
+      }
+      // Navigation handled by auth state change
+    } catch (error: any) {
+      const message = error.response?.data?.error || error.message || 'Authentication failed';
+      Alert.alert('Error', message);
     }
   };
 
+  const isLoading = loginMutation.isPending || registerMutation.isPending;
+
   return (
-    <View style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.logoContainer}>
-          <Ionicons name="airplane" size={80} color="#1e40af" />
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Ionicons name="airplane" size={60} color="#1e40af" />
           <Text style={styles.title}>Ready Set Fly</Text>
-          <Text style={styles.subtitle}>Aviation Marketplace & Rental Platform</Text>
+          <Text style={styles.subtitle}>
+            {isLogin ? 'Welcome back!' : 'Create your account'}
+          </Text>
         </View>
 
-        <View style={styles.features}>
-          <View style={styles.featureItem}>
-            <Ionicons name="shield-checkmark" size={24} color="#10b981" />
-            <Text style={styles.featureText}>Verified pilots & aircraft</Text>
+        {/* Form */}
+        <View style={styles.form}>
+          {!isLogin && (
+            <>
+              <View style={styles.row}>
+                <View style={[styles.inputContainer, styles.halfWidth]}>
+                  <Text style={styles.label}>First Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={firstName}
+                    onChangeText={setFirstName}
+                    placeholder="John"
+                    autoCapitalize="words"
+                    testID="input-firstname"
+                  />
+                </View>
+
+                <View style={[styles.inputContainer, styles.halfWidth]}>
+                  <Text style={styles.label}>Last Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={lastName}
+                    onChangeText={setLastName}
+                    placeholder="Doe"
+                    autoCapitalize="words"
+                    testID="input-lastname"
+                  />
+                </View>
+              </View>
+            </>
+          )}
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="your@email.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="input-email"
+            />
           </View>
-          <View style={styles.featureItem}>
-            <Ionicons name="cash" size={24} color="#10b981" />
-            <Text style={styles.featureText}>Secure payments</Text>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.passwordContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                testID="input-password"
+              />
+              <TouchableOpacity
+                style={styles.eyeIcon}
+                onPress={() => setShowPassword(!showPassword)}
+                testID="button-toggle-password"
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-off" : "eye"} 
+                  size={24} 
+                  color="#6b7280" 
+                />
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.featureItem}>
-            <Ionicons name="chatbubbles" size={24} color="#10b981" />
-            <Text style={styles.featureText}>Real-time messaging</Text>
+
+          {!isLogin && (
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <TextInput
+                style={styles.input}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="••••••••"
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                testID="input-confirm-password"
+              />
+            </View>
+          )}
+
+          {/* Submit Button */}
+          <TouchableOpacity
+            style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
+            onPress={handleSubmit}
+            disabled={isLoading}
+            testID="button-submit"
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.submitButtonText}>
+                {isLogin ? 'Sign In' : 'Create Account'}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Toggle between login and register */}
+          <View style={styles.toggleContainer}>
+            <Text style={styles.toggleText}>
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+            </Text>
+            <TouchableOpacity 
+              onPress={() => {
+                setIsLogin(!isLogin);
+                setPassword('');
+                setConfirmPassword('');
+              }}
+              testID="button-toggle-mode"
+            >
+              <Text style={styles.toggleLink}>
+                {isLogin ? 'Sign Up' : 'Sign In'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
-
-        <TouchableOpacity style={styles.signInButton} onPress={handleSignIn}>
-          <Text style={styles.signInButtonText}>Sign In with Replit</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.disclaimer}>
-          By signing in, you agree to our Terms of Service and Privacy Policy
-        </Text>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
   },
-  content: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
   },
-  logoContainer: {
+  header: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 40,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#1f2937',
+    color: '#1e40af',
     marginTop: 16,
   },
   subtitle: {
     fontSize: 16,
     color: '#6b7280',
     marginTop: 8,
-    textAlign: 'center',
   },
-  features: {
-    marginBottom: 48,
+  form: {
+    width: '100%',
   },
-  featureItem: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 12,
+  },
+  halfWidth: {
+    flex: 1,
+  },
+  inputContainer: {
     marginBottom: 20,
   },
-  featureText: {
-    fontSize: 16,
-    color: '#1f2937',
-    marginLeft: 16,
-  },
-  signInButton: {
-    backgroundColor: '#1e40af',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  signInButtonText: {
-    fontSize: 18,
+  label: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#fff',
+    color: '#374151',
+    marginBottom: 8,
   },
-  disclaimer: {
-    fontSize: 12,
-    color: '#9ca3af',
-    textAlign: 'center',
-    lineHeight: 18,
+  input: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#ffffff',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 12,
+    fontSize: 16,
+  },
+  eyeIcon: {
+    padding: 12,
+  },
+  submitButton: {
+    backgroundColor: '#1e40af',
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#9ca3af',
+  },
+  submitButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 24,
+  },
+  toggleText: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  toggleLink: {
+    fontSize: 14,
+    color: '#1e40af',
+    fontWeight: '600',
   },
 });

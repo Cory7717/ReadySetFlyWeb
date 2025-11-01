@@ -130,6 +130,8 @@ export const apiEndpoints = {
     }): ApiResponse<{ user: User; accessToken: string; refreshToken: string }> =>
       api.post('/api/mobile/auth/login', data),
     
+    getMe: (): ApiResponse<User> => api.get('/api/mobile/auth/me'),
+    
     refresh: (refreshToken: string): ApiResponse<{ accessToken: string; refreshToken: string }> =>
       api.post('/api/mobile/auth/refresh', { refreshToken }),
     

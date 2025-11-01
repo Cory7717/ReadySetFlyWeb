@@ -21,7 +21,7 @@ if (!process.env.BRAINTREE_MERCHANT_ID || !process.env.BRAINTREE_PUBLIC_KEY || !
   throw new Error('Missing required Braintree secrets: BRAINTREE_MERCHANT_ID, BRAINTREE_PUBLIC_KEY, BRAINTREE_PRIVATE_KEY');
 }
 const gateway = new braintree.BraintreeGateway({
-  environment: braintree.Environment.Sandbox, // Change to Production when going live
+  environment: braintree.Environment.Production,
   merchantId: process.env.BRAINTREE_MERCHANT_ID,
   publicKey: process.env.BRAINTREE_PUBLIC_KEY,
   privateKey: process.env.BRAINTREE_PRIVATE_KEY

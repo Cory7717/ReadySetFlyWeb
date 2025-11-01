@@ -9,6 +9,7 @@ import { storage } from "./storage";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { getUncachableResendClient } from "./resendClient";
+import registerMobileAuthRoutes from "./mobile-auth-routes";
 
 // Initialize OpenAI client with Replit AI Integrations
 const openai = new OpenAI({
@@ -94,6 +95,9 @@ const isVerified = async (req: any, res: any, next: any) => {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware (from blueprint:javascript_log_in_with_replit)
   await setupAuth(app);
+
+  // Mobile app authentication routes (JWT-based for React Native)
+  app.use('/api/mobile/auth', registerMobileAuthRoutes(storage));
 
   // Serve uploaded files
   app.use('/uploads', express.static('uploads'));

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "./components/theme-provider";
 import { Header } from "./components/header";
+import { Footer } from "./components/footer";
 import { useAuth } from "@/hooks/useAuth";
 import Home from "@/pages/home";
 import Landing from "@/pages/landing";
@@ -24,6 +25,7 @@ import OwnerPayoutSetup from "@/pages/owner-payout-setup";
 import OwnerWithdrawals from "@/pages/owner-withdrawals";
 import RequireAuth from "@/pages/require-auth";
 import NotFound from "@/pages/not-found";
+import PrivacyPolicy from "@/pages/privacy-policy";
 
 // Router component - allows anonymous browsing for rentals/marketplace
 function Router() {
@@ -36,6 +38,7 @@ function Router() {
       <Route path="/rentals" component={Home} />
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/aircraft/:id" component={AircraftDetail} />
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
       
       {/* Protected routes - require authentication */}
       {isAuthenticated ? (
@@ -83,10 +86,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
-          <div className="min-h-screen bg-background">
+          <div className="min-h-screen bg-background flex flex-col">
             {/* Show Header for all users (authenticated and anonymous) */}
             <Header />
-            <Router />
+            <div className="flex-1">
+              <Router />
+            </div>
+            <Footer />
           </div>
           <Toaster />
         </TooltipProvider>

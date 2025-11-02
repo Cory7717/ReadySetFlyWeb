@@ -8,16 +8,11 @@ import { ConfirmDeletionModal } from '../components/ConfirmDeletionModal';
 
 export default function ProfileScreen({ navigation }: any) {
   const { isAuthenticated, user, isLoading } = useIsAuthenticated();
-  const login = useLogin();
   const logout = useLogout();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  const handleLogin = async () => {
-    try {
-      await login.mutateAsync(undefined);
-    } catch (error) {
-      console.error('Login failed:', error);
-    }
+  const handleLogin = () => {
+    navigation.navigate('Auth');
   };
 
   const handleLogout = async () => {
@@ -234,12 +229,11 @@ export default function ProfileScreen({ navigation }: any) {
           <TouchableOpacity 
             style={styles.signInButton}
             onPress={handleLogin}
-            disabled={login.isPending}
             data-testid="button-sign-in"
           >
             <Ionicons name="log-in-outline" size={20} color="#fff" />
             <Text style={styles.signInButtonText}>
-              {login.isPending ? 'Signing in...' : 'Sign In with Replit'}
+              Sign In
             </Text>
           </TouchableOpacity>
         </View>

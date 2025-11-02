@@ -1,5 +1,7 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
 
 const categories = [
   { id: 'Aviation Jobs', icon: 'briefcase', color: '#1e40af' },
@@ -13,10 +15,17 @@ const categories = [
 export default function MarketplaceScreen({ navigation }: any) {
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Aviation Marketplace</Text>
-        <Text style={styles.headerSubtitle}>Browse listings by category</Text>
-      </View>
+      <ImageBackground 
+        source={WINGTIP_IMAGE}
+        style={styles.header}
+        imageStyle={styles.headerImage}
+      >
+        <View style={styles.headerOverlay}>
+          <Ionicons name="storefront" size={40} color="#fff" />
+          <Text style={styles.headerTitle}>Aviation Marketplace</Text>
+          <Text style={styles.headerSubtitle}>Browse listings by category</Text>
+        </View>
+      </ImageBackground>
 
       <View style={styles.categories}>
         {categories.map((category) => (
@@ -53,20 +62,33 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
   },
   header: {
-    backgroundColor: '#fff',
+    height: 180,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerImage: {
+    opacity: 0.9,
+  },
+  headerOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    width: '100%',
     padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
-    color: '#1f2937',
+    color: '#fff',
+    marginTop: 12,
+    textAlign: 'center',
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 4,
+    fontSize: 16,
+    color: '#e5e7eb',
+    marginTop: 8,
+    textAlign: 'center',
   },
   categories: {
     padding: 16,

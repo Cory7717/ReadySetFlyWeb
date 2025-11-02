@@ -1,20 +1,15 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useIsAuthenticated, useLogin } from '../utils/auth';
+import { useIsAuthenticated } from '../utils/auth';
 
 const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
 const LOGO_IMAGE = require('../../assets/logo.png');
 
 export default function HomeScreen({ navigation }: any) {
   const { isAuthenticated, user, isLoading } = useIsAuthenticated();
-  const login = useLogin();
 
-  const handleLogin = async () => {
-    try {
-      await login.mutateAsync();
-    } catch (error) {
-      console.error('Login failed:', error);
-    }
+  const handleLogin = () => {
+    navigation.navigate('Profile', { screen: 'Auth' });
   };
 
   return (
@@ -34,12 +29,11 @@ export default function HomeScreen({ navigation }: any) {
             <TouchableOpacity 
               style={styles.loginButton}
               onPress={handleLogin}
-              disabled={login.isPending}
               data-testid="button-login-home"
             >
               <Ionicons name="log-in-outline" size={20} color="#fff" />
               <Text style={styles.loginButtonText}>
-                {login.isPending ? 'Signing in...' : 'Sign In'}
+                Sign In
               </Text>
             </TouchableOpacity>
           )}

@@ -210,8 +210,8 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         }
       };
 
-      // Return user data (excluding password)
-      const { hashedPassword: _, passwordCreatedAt: __, ...userResponse } = user;
+      // Return user data (excluding password and verification token)
+      const { hashedPassword: _, passwordCreatedAt: __, emailVerificationToken: ___, ...userResponse } = user;
       res.status(200).json({ user: userResponse });
     } catch (error) {
       console.error('Login error:', error);

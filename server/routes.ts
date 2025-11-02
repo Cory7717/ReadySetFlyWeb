@@ -144,6 +144,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete user account
+  app.delete('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      console.log("[DELETE /api/auth/user] Deleting user account:", userId);
+      
+      const success = await storage.deleteUser(userId);
+      
+      if (success) {
+        // Logout the user by destroying the session
+        req.logout((err: any) => {
+          if (err) {
+            console.error("Error logging out after account deletion:", err);
+          }
+        });
+        
+        res.json({ message: "Account deleted successfully" });
+      } else {
+        res.status(500).json({ error: "Failed to delete account" });
+      }
+    } catch (error) {
+      console.error("Error deleting user account:", error);
+      res.status(500).json({ error: "Failed to delete account" });
+    }
+  });
+
   // Image upload endpoint for marketplace listings
   app.post("/api/upload-images", isAuthenticated, upload.array('images', 15), async (req: any, res) => {
     try {

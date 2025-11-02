@@ -64,6 +64,7 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<User>; // REQUIRED for Replit Auth
   searchUsers(query: string): Promise<User[]>; // Admin search by name
   updateUserPassword(id: string, hashedPassword: string): Promise<User | undefined>;
+  deleteUser(id: string): Promise<boolean>; // Delete user and all related data
   
   // Refresh Tokens (for mobile app JWT authentication)
   createRefreshToken(token: InsertRefreshToken): Promise<RefreshToken>;
@@ -354,6 +355,75 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return user;
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    try {
+      // Delete all user-related data in order to respect foreign key constraints
+      
+      // 1. Delete refresh tokens
+      await db.delete(refreshTokens).where(eq(refreshTokens.userId, id));
+      
+      // 2. Delete messages (both sent and received)
+      await db.delete(messages).where(
+        or(
+          eq(messages.senderId, id),
+          eq(messages.receiverId, id)
+        )
+      );
+      
+      // 3. Delete reviews (both as reviewer and reviewee)
+      await db.delete(reviews).where(
+        or(
+          eq(reviews.reviewerId, id),
+          eq(reviews.revieweeId, id)
+        )
+      );
+      
+      // 4. Delete rentals (both as renter and owner)
+      await db.delete(rentals).where(
+        or(
+          eq(rentals.renterId, id),
+          eq(rentals.ownerId, id)
+        )
+      );
+      
+      // 5. Delete aircraft listings
+      await db.delete(aircraftListings).where(eq(aircraftListings.ownerId, id));
+      
+      // 6. Delete marketplace listings
+      await db.delete(marketplaceListings).where(eq(marketplaceListings.userId, id));
+      
+      // 7. Delete verification submissions
+      await db.delete(verificationSubmissions).where(eq(verificationSubmissions.userId, id));
+      
+      // 8. Delete transactions
+      await db.delete(transactions).where(eq(transactions.userId, id));
+      
+      // 9. Delete withdrawal requests
+      await db.delete(withdrawalRequests).where(eq(withdrawalRequests.userId, id));
+      
+      // 10. Delete job applications
+      await db.delete(jobApplications).where(eq(jobApplications.applicantId, id));
+      
+      // 11. Delete CRM data (contacts, deals assigned to/created by user, activities)
+      await db.delete(crmContacts).where(eq(crmContacts.userId, id));
+      await db.delete(crmDeals).where(eq(crmDeals.assignedTo, id));
+      await db.delete(crmActivities).where(
+        or(
+          eq(crmActivities.createdBy, id),
+          eq(crmActivities.assignedTo, id)
+        )
+      );
+      
+      // 12. Finally, delete the user account
+      const result = await db.delete(users).where(eq(users.id, id)).returning();
+      
+      return result.length > 0;
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      return false;
+    }
   }
 
   // Refresh Tokens (for mobile app JWT authentication)

@@ -36,6 +36,14 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
   - **PayPal Withdrawals (FULLY IMPLEMENTED)**: Mobile app has complete withdrawal functionality with WithdrawalModal component, balance tracking, withdrawal history, and integration with PayPal Payouts API. Users can withdraw earnings instantly to their PayPal account.
   - **Braintree Payments (REQUIRES SETUP)**: RentalPaymentScreen created with WebView-based integration following security best practices. Requires: (1) installing `react-native-webview` via `npx expo install react-native-webview` in mobile directory, (2) creating server-side payment HTML page at `server/mobile-braintree-payment.html`, (3) adding server route for payment page. See `MOBILE_PAYMENT_SETUP.md` for complete setup instructions.
   - **Mobile Auth**: JWT-based authentication with 15-minute access tokens, 7-day refresh tokens, automatic token refresh, and secure token storage using Expo SecureStore.
+- **Mobile Marketplace Features (FULLY IMPLEMENTED)**:
+  - **Listing Creation**: Mobile users can create marketplace listings in all 6 categories (Aircraft for Sale, Aviation Jobs, CFI Services, Flight School, Mechanic Services, Charter Services) with multi-step form (category → base fields → details → tier selection → promo code → payment).
+  - **Cross-Platform Sync**: Listings created on mobile instantly appear on web, and vice versa (shared database).
+  - **Tier Selection**: 3 tiers with varying features and pricing (Basic $25/mo, Standard $100/mo, Premium $250/mo).
+  - **Promo Code Integration**: PromoCodeInput component validates promo codes (e.g., "LAUNCH2025" for free 7-day listings) in real-time.
+  - **Promo Banner**: PromoBanner component displays active promotional campaigns with auto-refresh (30-second polling) to show admin-created promos immediately.
+  - **Payment Flow**: MarketplacePaymentScreen uses WebView Braintree integration for paid listings (requires same setup as rental payments).
+  - **Navigation**: "Create Listing" button on MarketplaceScreen, full navigation stack for listing creation and payment.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database, hosted via Neon.

@@ -14,7 +14,7 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
 - **Backend**: Express.js, serving both clients.
 - **Shared Types**: Common TypeScript schemas.
 - **Database**: PostgreSQL via Drizzle ORM.
-- **Authentication**: Unified email/password authentication for both web and mobile. Web uses session cookies (compatible with legacy Replit Auth middleware), mobile uses JWT tokens (15-min access, 7-day refresh). All users can log in with ANY email provider (not limited to Gmail). Passwords hashed with bcrypt (cost factor 12), refresh tokens hashed with SHA-256 before storage.
+- **Authentication**: Unified authentication supporting both OAuth (Google/GitHub via Replit Auth) and email/password for web and mobile. Web uses session cookies, mobile uses JWT tokens (15-min access, 7-day refresh). OAuth for mobile uses browser-based flow → exchange token (5-min expiry) → deep link callback → JWT tokens. All users can log in with ANY email provider (not limited to Gmail). Passwords hashed with bcrypt (cost factor 12), refresh tokens and exchange tokens hashed with SHA-256 before storage.
 - **Real-time Messaging**: Custom WebSocket server.
 - **UI/UX**: Production-ready components, responsive design across all devices (web and mobile), with specific optimizations for mobile headers, hero sections, and navigation.
 - **Verification System**: Multi-step forms, document uploads (pilot licenses, insurance), admin review interface, and a badge system for visual verification status.
@@ -35,7 +35,7 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
 - **Mobile Payment Integration**: 
   - **PayPal Withdrawals (FULLY IMPLEMENTED)**: Mobile app has complete withdrawal functionality with WithdrawalModal component, balance tracking, withdrawal history, and integration with PayPal Payouts API. Users can withdraw earnings instantly to their PayPal account.
   - **Braintree Payments (REQUIRES SETUP)**: RentalPaymentScreen created with WebView-based integration following security best practices. Requires: (1) installing `react-native-webview` via `npx expo install react-native-webview` in mobile directory, (2) creating server-side payment HTML page at `server/mobile-braintree-payment.html`, (3) adding server route for payment page. See `MOBILE_PAYMENT_SETUP.md` for complete setup instructions.
-  - **Mobile Auth**: JWT-based authentication with 15-minute access tokens, 7-day refresh tokens, automatic token refresh, and secure token storage using Expo SecureStore.
+  - **Mobile Auth**: JWT-based authentication with 15-minute access tokens, 7-day refresh tokens, automatic token refresh, and secure token storage using Expo SecureStore. OAuth support via WebBrowser → exchange token → deep link (readysetfly://) → JWT tokens.
 - **Mobile Marketplace Features (FULLY IMPLEMENTED)**:
   - **Listing Creation**: Mobile users can create marketplace listings in all 6 categories (Aircraft for Sale, Aviation Jobs, CFI Services, Flight School, Mechanic Services, Charter Services) with multi-step form (category → base fields → details → tier selection → promo code → payment).
   - **Cross-Platform Sync**: Listings created on mobile instantly appear on web, and vice versa (shared database).

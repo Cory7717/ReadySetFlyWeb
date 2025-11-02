@@ -536,8 +536,10 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
    */
   router.get('/mobile-oauth-callback', async (req: any, res: Response): Promise<void> => {
     try {
-      // Check if user is authenticated (OAuth should have created session)
-      if (!req.session?.userId) {
+      // Check if user is authenticated via OAuth (req.user.claims.sub) or session
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      
+      if (!userId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
@@ -550,7 +552,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
       // Store exchange token in database
       await storage.createOAuthExchangeToken({
         token: exchangeToken,
-        userId: req.session.userId,
+        userId: userId,
         expiresAt,
       });
 

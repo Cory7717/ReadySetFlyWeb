@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { PromoCodeInput } from '../components/PromoCodeInput';
+import { AIDescriptionGenerator } from '../components/AIDescriptionGenerator';
 import { apiEndpoints } from '../services/api';
 
 const categories = [
@@ -204,7 +205,18 @@ export default function CreateMarketplaceListingScreen({ navigation }: any) {
     </View>
   );
 
-  const renderBaseFields = () => (
+  const renderBaseFields = () => {
+    // Prepare details for AI generation
+    const aiDetails = {
+      title,
+      category: selectedCategory?.label,
+      price,
+      city,
+      state,
+      ...details
+    };
+
+    return (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Basic Information</Text>
       
@@ -226,6 +238,14 @@ export default function CreateMarketplaceListingScreen({ navigation }: any) {
         multiline
         numberOfLines={4}
         data-testid="input-description"
+      />
+
+      {/* AI Description Generator */}
+      <AIDescriptionGenerator
+        listingType={category}
+        details={aiDetails}
+        onDescriptionGenerated={setDescription}
+        currentDescription={description}
       />
 
       <Text style={styles.label}>City</Text>
@@ -278,6 +298,7 @@ export default function CreateMarketplaceListingScreen({ navigation }: any) {
       />
     </View>
   );
+  };
 
   const renderCategoryFields = () => {
     return (

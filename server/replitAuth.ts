@@ -142,8 +142,12 @@ export async function setupAuth(app: Express) {
   app.get("/api/callback", (req, res, next) => {
     console.log("[AUTH] Callback received for hostname:", req.hostname);
     console.log("[AUTH] Query params:", req.query);
+    
+    // Check if this is a mobile OAuth request
+    const isMobileRequest = req.query.mobile === 'true';
+    
     passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/",
+      successReturnToOrRedirect: isMobileRequest ? "/api/auth/mobile-oauth-callback" : "/",
       failureRedirect: "/api/login",
     })(req, res, next);
   });

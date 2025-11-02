@@ -42,6 +42,18 @@ export const refreshTokens = pgTable("refresh_tokens", {
   index("idx_refresh_tokens_expires").on(table.expiresAt),
 ]);
 
+// OAuth Exchange Tokens (for mobile OAuth flow - temporary tokens to exchange for JWT)
+export const oauthExchangeTokens = pgTable("oauth_exchange_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_oauth_exchange_tokens_token").on(table.token),
+  index("idx_oauth_exchange_tokens_expires").on(table.expiresAt),
+]);
+
 // Users / Pilots (Merged with Replit Auth requirements - from blueprint:javascript_log_in_with_replit)
 export const users = pgTable("users", {
   // Auth fields (from blueprint - REQUIRED)
@@ -715,6 +727,11 @@ export const insertRefreshTokenSchema = createInsertSchema(refreshTokens).omit({
   createdAt: true,
 });
 
+export const insertOAuthExchangeTokenSchema = createInsertSchema(oauthExchangeTokens).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertAircraftListingSchema = createInsertSchema(aircraftListings).omit({
   id: true,
   createdAt: true,
@@ -893,6 +910,9 @@ export type UpsertUser = typeof users.$inferInsert; // For Replit Auth (from blu
 
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type InsertRefreshToken = z.infer<typeof insertRefreshTokenSchema>;
+
+export type OAuthExchangeToken = typeof oauthExchangeTokens.$inferSelect;
+export type InsertOAuthExchangeToken = z.infer<typeof insertOAuthExchangeTokenSchema>;
 
 export type AircraftListing = typeof aircraftListings.$inferSelect;
 export type InsertAircraftListing = z.infer<typeof insertAircraftListingSchema>;

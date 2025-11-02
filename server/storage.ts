@@ -33,6 +33,8 @@ import {
   type InsertWithdrawalRequest,
   type RefreshToken,
   type InsertRefreshToken,
+  type OAuthExchangeToken,
+  type InsertOAuthExchangeToken,
   users,
   aircraftListings,
   marketplaceListings,
@@ -51,6 +53,7 @@ import {
   jobApplications,
   promoAlerts,
   refreshTokens,
+  oauthExchangeTokens,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql } from "drizzle-orm";
@@ -71,6 +74,11 @@ export interface IStorage {
   getRefreshToken(token: string): Promise<RefreshToken | undefined>;
   deleteRefreshToken(token: string): Promise<boolean>;
   deleteUserRefreshTokens(userId: string): Promise<boolean>;
+  
+  // OAuth Exchange Tokens (for mobile OAuth flow)
+  createOAuthExchangeToken(token: InsertOAuthExchangeToken): Promise<OAuthExchangeToken>;
+  verifyOAuthExchangeToken(token: string): Promise<OAuthExchangeToken | undefined>;
+  deleteOAuthExchangeToken(token: string): Promise<boolean>;
   
   // User Metrics (Admin Analytics)
   getUserMetrics(): Promise<{
@@ -455,6 +463,34 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(refreshTokens)
       .where(eq(refreshTokens.userId, userId));
+    return true;
+  }
+
+  // OAuth Exchange Tokens (for mobile OAuth flow)
+  async createOAuthExchangeToken(token: InsertOAuthExchangeToken): Promise<OAuthExchangeToken> {
+    const [exchangeToken] = await db
+      .insert(oauthExchangeTokens)
+      .values(token)
+      .returning();
+    return exchangeToken;
+  }
+
+  async verifyOAuthExchangeToken(token: string): Promise<OAuthExchangeToken | undefined> {
+    const [exchangeToken] = await db
+      .select()
+      .from(oauthExchangeTokens)
+      .where(and(
+        eq(oauthExchangeTokens.token, token),
+        gte(oauthExchangeTokens.expiresAt, new Date())
+      ))
+      .limit(1);
+    return exchangeToken;
+  }
+
+  async deleteOAuthExchangeToken(token: string): Promise<boolean> {
+    await db
+      .delete(oauthExchangeTokens)
+      .where(eq(oauthExchangeTokens.token, token));
     return true;
   }
 

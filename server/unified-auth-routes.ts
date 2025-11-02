@@ -530,6 +530,94 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
     }
   });
 
+  /**
+   * GET /api/auth/mobile-oauth-callback
+   * Callback after OAuth login - creates exchange token for mobile
+   */
+  router.get('/mobile-oauth-callback', async (req: any, res: Response): Promise<void> => {
+    try {
+      // Check if user is authenticated (OAuth should have created session)
+      if (!req.session?.userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      // Generate a short-lived exchange token (valid for 5 minutes)
+      const exchangeToken = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 5);
+
+      // Store exchange token in database
+      await storage.createOAuthExchangeToken({
+        token: exchangeToken,
+        userId: req.session.userId,
+        expiresAt,
+      });
+
+      // Redirect to mobile app with exchange token
+      res.redirect(`readysetfly://oauth-callback?token=${exchangeToken}`);
+    } catch (error) {
+      console.error('Mobile OAuth callback error:', error);
+      res.status(500).json({ error: 'Failed to process OAuth callback' });
+    }
+  });
+
+  /**
+   * POST /api/auth/exchange-token
+   * Exchange OAuth token for JWT tokens (mobile)
+   */
+  router.post('/exchange-token', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { token } = req.body;
+
+      if (!token) {
+        res.status(400).json({ error: 'Exchange token is required' });
+        return;
+      }
+
+      // Verify exchange token
+      const exchangeData = await storage.verifyOAuthExchangeToken(token);
+      if (!exchangeData) {
+        res.status(401).json({ error: 'Invalid or expired exchange token' });
+        return;
+      }
+
+      // Get user
+      const user = await storage.getUser(exchangeData.userId);
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      // Generate JWT tokens
+      const accessToken = generateAccessToken(user.id, user.email!);
+      const refreshToken = generateRefreshToken();
+
+      // Store refresh token in database
+      await storage.createRefreshToken({
+        userId: user.id,
+        token: hashRefreshToken(refreshToken),
+        expiresAt: getRefreshTokenExpiry(),
+        deviceInfo: req.headers['user-agent'] || null,
+        ipAddress: req.ip || req.socket.remoteAddress || null,
+      });
+
+      // Delete the exchange token (one-time use)
+      await storage.deleteOAuthExchangeToken(token);
+
+      // Return tokens and user data
+      const { hashedPassword: _, passwordCreatedAt: __, emailVerificationToken: ___, ...userResponse } = user;
+      res.status(200).json({
+        accessToken,
+        refreshToken,
+        user: userResponse,
+      });
+    } catch (error) {
+      console.error('Token exchange error:', error);
+      res.status(500).json({ error: 'Failed to exchange token' });
+    }
+  });
+
   return router;
 }
 

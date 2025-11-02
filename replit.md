@@ -32,6 +32,10 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
     - Mobile: ProfileScreen Settings section with "Delete Account" option, cross-platform ConfirmDeletionModal requiring "DELETE" text confirmation
     - Backend: API endpoint (`DELETE /api/auth/user`) permanently removes all user data across 11+ database tables (listings, rentals, messages, reviews, transactions, documents, etc.)
     - Implementation: Uses React Native Modal and TextInput (not iOS-only Alert.prompt) for cross-platform compatibility on iOS and Android
+- **Mobile Payment Integration**: 
+  - **PayPal Withdrawals (FULLY IMPLEMENTED)**: Mobile app has complete withdrawal functionality with WithdrawalModal component, balance tracking, withdrawal history, and integration with PayPal Payouts API. Users can withdraw earnings instantly to their PayPal account.
+  - **Braintree Payments (REQUIRES SETUP)**: RentalPaymentScreen created with WebView-based integration following security best practices. Requires: (1) installing `react-native-webview` via `npx expo install react-native-webview` in mobile directory, (2) creating server-side payment HTML page at `server/mobile-braintree-payment.html`, (3) adding server route for payment page. See `MOBILE_PAYMENT_SETUP.md` for complete setup instructions.
+  - **Mobile Auth**: JWT-based authentication with 15-minute access tokens, 7-day refresh tokens, automatic token refresh, and secure token storage using Expo SecureStore.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database, hosted via Neon.

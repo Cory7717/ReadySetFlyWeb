@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -9,10 +9,17 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert
+  Alert,
+  Linking
 } from 'react-native';
 import { useLogin, useRegister } from '../utils/auth';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import * as SecureStore from 'expo-secure-store';
+
+const API_BASE_URL = 'https://readysetfly.us';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
@@ -22,9 +29,80 @@ export default function AuthScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isOAuthLoading, setIsOAuthLoading] = useState(false);
 
   const loginMutation = useLogin();
   const registerMutation = useRegister();
+
+  useEffect(() => {
+    const handleDeepLink = async (event: { url: string }) => {
+      const url = event.url;
+      console.log('Deep link received:', url);
+      
+      if (url.startsWith('readysetfly://oauth-callback')) {
+        const params = new URLSearchParams(url.split('?')[1]);
+        const exchangeToken = params.get('token');
+        
+        if (exchangeToken) {
+          try {
+            setIsOAuthLoading(true);
+            const response = await fetch(`${API_BASE_URL}/api/auth/exchange-oauth-token`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ token: exchangeToken }),
+            });
+            
+            if (!response.ok) {
+              throw new Error('Failed to exchange OAuth token');
+            }
+            
+            const data = await response.json();
+            await SecureStore.setItemAsync('accessToken', data.accessToken);
+            await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+            // The auth state will be updated automatically by the App component
+          } catch (error) {
+            console.error('OAuth exchange error:', error);
+            Alert.alert('Error', 'Failed to complete OAuth login');
+          } finally {
+            setIsOAuthLoading(false);
+          }
+        }
+      }
+    };
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink({ url });
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      setIsOAuthLoading(true);
+      const authUrl = `${API_BASE_URL}/api/login?mobile=true`;
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, 'readysetfly://oauth-callback');
+      
+      if (result.type === 'cancel') {
+        Alert.alert('Cancelled', 'OAuth login was cancelled');
+      } else if (result.type === 'dismiss') {
+        console.log('OAuth browser dismissed');
+      }
+    } catch (error) {
+      console.error('OAuth error:', error);
+      Alert.alert('Error', 'Failed to initiate OAuth login');
+    } finally {
+      setIsOAuthLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
     // Basic validation
@@ -62,7 +140,7 @@ export default function AuthScreen() {
     }
   };
 
-  const isLoading = loginMutation.isPending || registerMutation.isPending;
+  const isLoading = loginMutation.isPending || registerMutation.isPending || isOAuthLoading;
 
   return (
     <KeyboardAvoidingView 
@@ -176,12 +254,36 @@ export default function AuthScreen() {
             disabled={isLoading}
             testID="button-submit"
           >
-            {isLoading ? (
+            {(loginMutation.isPending || registerMutation.isPending) ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
               <Text style={styles.submitButtonText}>
                 {isLogin ? 'Sign In' : 'Create Account'}
               </Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.dividerContainer}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or continue with</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Google OAuth Button */}
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={handleGoogleLogin}
+            disabled={isLoading}
+            testID="button-google-oauth"
+          >
+            {isOAuthLoading ? (
+              <ActivityIndicator color="#1e40af" />
+            ) : (
+              <>
+                <Ionicons name="logo-google" size={20} color="#1e40af" />
+                <Text style={styles.googleButtonText}>Google</Text>
+              </>
             )}
           </TouchableOpacity>
 
@@ -290,6 +392,37 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  dividerText: {
+    color: '#6b7280',
+    fontSize: 14,
+    marginHorizontal: 16,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    padding: 16,
+    gap: 8,
+  },
+  googleButtonText: {
+    color: '#1e40af',
     fontSize: 16,
     fontWeight: '600',
   },

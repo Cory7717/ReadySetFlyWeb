@@ -563,10 +563,10 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
   });
 
   /**
-   * POST /api/auth/exchange-token
+   * POST /api/auth/exchange-oauth-token
    * Exchange OAuth token for JWT tokens (mobile)
    */
-  router.post('/exchange-token', async (req: Request, res: Response): Promise<void> => {
+  router.post('/exchange-oauth-token', async (req: Request, res: Response): Promise<void> => {
     try {
       const { token } = req.body;
 

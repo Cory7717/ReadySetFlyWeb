@@ -1,15 +1,20 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsAuthenticated, useLogin, useLogout } from '../utils/auth';
+import { useMutation } from '@tanstack/react-query';
+import { api } from '../services/api';
+import { ConfirmDeletionModal } from '../components/ConfirmDeletionModal';
 
 export default function ProfileScreen({ navigation }: any) {
   const { isAuthenticated, user, isLoading } = useIsAuthenticated();
   const login = useLogin();
   const logout = useLogout();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const handleLogin = async () => {
     try {
-      await login.mutateAsync();
+      await login.mutateAsync(undefined);
     } catch (error) {
       console.error('Login failed:', error);
     }
@@ -17,10 +22,57 @@ export default function ProfileScreen({ navigation }: any) {
 
   const handleLogout = async () => {
     try {
-      await logout.mutateAsync();
+      await logout.mutateAsync(undefined);
     } catch (error) {
       console.error('Logout failed:', error);
     }
+  };
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.delete('/api/auth/user');
+      return response.data;
+    },
+    onSuccess: () => {
+      setShowDeleteModal(false);
+      Alert.alert(
+        'Account Deleted',
+        'Your account and all associated data have been permanently deleted.',
+        [
+          {
+            text: 'OK',
+            onPress: () => logout.mutate(undefined),
+          },
+        ]
+      );
+    },
+    onError: (error: any) => {
+      setShowDeleteModal(false);
+      Alert.alert(
+        'Error',
+        error.response?.data?.error || 'Failed to delete account. Please try again.'
+      );
+    },
+  });
+
+  const handleDeleteAccount = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = () => {
+    deleteAccountMutation.mutate();
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+  };
+
+  const handleOpenPrivacyPolicy = () => {
+    Linking.openURL('https://readysetfly.us/privacy-policy');
+  };
+
+  const handleOpenTermsOfService = () => {
+    Linking.openURL('https://readysetfly.us/terms-of-service');
   };
 
   if (isLoading) {
@@ -122,6 +174,43 @@ export default function ProfileScreen({ navigation }: any) {
               <Text style={styles.menuText}>Help & Support</Text>
               <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
             </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={handleOpenPrivacyPolicy}
+              data-testid="button-privacy-policy"
+            >
+              <Ionicons name="shield-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Privacy Policy</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={handleOpenTermsOfService}
+              data-testid="button-terms-of-service"
+            >
+              <Ionicons name="document-text-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Terms of Service</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Danger Zone</Text>
+            
+            <TouchableOpacity 
+              style={styles.deleteAccountButton}
+              onPress={handleDeleteAccount}
+              disabled={deleteAccountMutation.isPending}
+              data-testid="button-delete-account"
+            >
+              <Ionicons name="trash-outline" size={24} color="#ef4444" />
+              <Text style={styles.deleteAccountText}>
+                {deleteAccountMutation.isPending ? 'Deleting...' : 'Delete Account'}
+              </Text>
+              <Ionicons name="chevron-forward" size={20} color="#ef4444" />
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity 
@@ -155,6 +244,14 @@ export default function ProfileScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Account Deletion Confirmation Modal */}
+      <ConfirmDeletionModal
+        visible={showDeleteModal}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+        isLoading={deleteAccountMutation.isPending}
+      />
     </ScrollView>
   );
 }
@@ -275,5 +372,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ef4444',
     marginLeft: 8,
+  },
+  deleteAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: '#fee2e2',
+  },
+  deleteAccountText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ef4444',
+    marginLeft: 12,
   },
 });

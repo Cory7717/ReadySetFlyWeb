@@ -24,6 +24,10 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
 - **Marketplace Features**: Category-specific filters (e.g., keyword search, city, price range, engine type).
 - **Listing Management**: Automated system for detecting and managing stale and orphaned listings, with user refresh buttons and monthly email reminders.
 - **Sample Listings**: Professionally written example listings for all marketplace categories, visually distinct and read-only.
+- **App Store Compliance**: Complete implementation for Apple App Store and Google Play Store submission requirements:
+  - **Privacy Policy**: Comprehensive policy at `/privacy-policy` covering all data collection, usage, sharing, retention, and user rights (GDPR/CCPA compliant).
+  - **Terms of Service**: Full legal agreement at `/terms-of-service` with platform fees, dispute resolution (Texas governing law), liability disclaimers.
+  - **Account Deletion**: Multi-channel deletion system - web Settings page (`/settings`), standalone deletion page (`/delete-account`), mobile app Settings screen, and API endpoint (`DELETE /api/auth/user`). Permanently removes all user data across 11+ database tables (listings, rentals, messages, reviews, transactions, documents, etc.).
 
 ## External Dependencies
 - **PostgreSQL**: Primary database, hosted via Neon.

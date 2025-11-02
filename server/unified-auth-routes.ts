@@ -4,12 +4,25 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { IStorage } from './storage';
 import { generateAccessToken, generateRefreshToken, verifyAccessToken } from './jwt';
+import { getUncachableResendClient } from './resendClient';
 
 const router = Router();
 
 // Helper function to hash refresh tokens for secure storage
 function hashRefreshToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+// Helper function to generate email verification token
+function generateEmailVerificationToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Helper function to get verification token expiry (24 hours from now)
+function getVerificationTokenExpiry(): Date {
+  const expiryDate = new Date();
+  expiryDate.setHours(expiryDate.getHours() + 24);
+  return expiryDate;
 }
 
 // Validation schemas
@@ -74,6 +87,10 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
       // Hash password with bcrypt (cost factor 12)
       const hashedPassword = await bcrypt.hash(password, 12);
 
+      // Generate email verification token
+      const verificationToken = generateEmailVerificationToken();
+      const verificationExpires = getVerificationTokenExpiry();
+
       // Create user
       const user = await storage.createUser({
         email: email,
@@ -81,10 +98,41 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         lastName: lastName,
         hashedPassword: hashedPassword,
         passwordCreatedAt: new Date(),
+        emailVerificationToken: verificationToken,
+        emailVerificationExpires: verificationExpires,
+        emailVerified: false,
         certifications: [],
         totalFlightHours: 0,
         aircraftTypesFlown: [],
       });
+
+      // Send verification email
+      try {
+        const resend = getUncachableResendClient();
+        const verificationUrl = `${req.protocol}://${req.get('host')}/verify-email?token=${verificationToken}`;
+        
+        await resend.emails.send({
+          from: 'Ready Set Fly <noreply@readysetfly.us>',
+          to: email,
+          subject: 'Verify your Ready Set Fly account',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h1 style="color: #1e40af;">Welcome to Ready Set Fly!</h1>
+              <p>Hi ${firstName},</p>
+              <p>Thank you for creating an account with Ready Set Fly. Please verify your email address by clicking the button below:</p>
+              <a href="${verificationUrl}" style="display: inline-block; background-color: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0;">Verify Email Address</a>
+              <p>Or copy and paste this link into your browser:</p>
+              <p style="color: #6b7280; word-break: break-all;">${verificationUrl}</p>
+              <p>This link will expire in 24 hours.</p>
+              <p>If you didn't create this account, you can safely ignore this email.</p>
+              <p style="color: #6b7280; margin-top: 30px;">Best regards,<br>The Ready Set Fly Team</p>
+            </div>
+          `,
+        });
+      } catch (emailError) {
+        console.error('Failed to send verification email:', emailError);
+        // Don't fail registration if email sending fails
+      }
 
       // Create web session (compatible with Replit Auth middleware)
       req.session.userId = user.id;
@@ -99,8 +147,11 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
       };
 
       // Return user data (excluding password)
-      const { hashedPassword: _, passwordCreatedAt: __, ...userResponse } = user;
-      res.status(201).json({ user: userResponse });
+      const { hashedPassword: _, passwordCreatedAt: __, emailVerificationToken: ___, ...userResponse } = user;
+      res.status(201).json({ 
+        user: userResponse,
+        message: 'Account created! Please check your email to verify your account.'
+      });
     } catch (error) {
       console.error('Registration error:', error);
       res.status(500).json({ error: 'Failed to register user' });
@@ -369,6 +420,48 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
     } catch (error) {
       console.error('Token refresh error:', error);
       res.status(500).json({ error: 'Failed to refresh token' });
+    }
+  });
+
+  /**
+   * GET /api/auth/verify-email
+   * Verify email address with token
+   */
+  router.get('/verify-email', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { token } = req.query;
+      
+      if (!token || typeof token !== 'string') {
+        res.status(400).json({ error: 'Verification token is required' });
+        return;
+      }
+
+      // Find user by verification token
+      const users = await storage.getAllUsers();
+      const user = users.find(u => u.emailVerificationToken === token);
+      
+      if (!user) {
+        res.status(404).json({ error: 'Invalid verification token' });
+        return;
+      }
+
+      // Check if token has expired
+      if (user.emailVerificationExpires && new Date() > user.emailVerificationExpires) {
+        res.status(400).json({ error: 'Verification token has expired' });
+        return;
+      }
+
+      // Update user to mark email as verified
+      await storage.updateUser(user.id, {
+        emailVerified: true,
+        emailVerificationToken: null,
+        emailVerificationExpires: null,
+      });
+
+      res.status(200).json({ message: 'Email verified successfully!' });
+    } catch (error) {
+      console.error('Email verification error:', error);
+      res.status(500).json({ error: 'Failed to verify email' });
     }
   });
 

@@ -109,6 +109,10 @@ export const users = pgTable("users", {
   hashedPassword: text("hashed_password"), // bcrypt hash, null for Replit Auth only users
   passwordCreatedAt: timestamp("password_created_at"),
   
+  // Email verification (for email/password auth)
+  emailVerificationToken: text("email_verification_token"),
+  emailVerificationExpires: timestamp("email_verification_expires"),
+  
   // Rating information
   averageRating: decimal("average_rating", { precision: 3, scale: 2 }), // 0.00-5.00
   totalReviews: integer("total_reviews").default(0),

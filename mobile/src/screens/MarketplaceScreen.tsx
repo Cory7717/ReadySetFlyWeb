@@ -31,6 +31,16 @@ export default function MarketplaceScreen({ navigation }: any) {
       {/* Promo Banner - Auto-refreshes every 30 seconds to show admin-created promos */}
       <PromoBanner />
 
+      {/* Create Listing Button */}
+      <TouchableOpacity
+        style={styles.createListingButton}
+        onPress={() => navigation.navigate('CreateMarketplaceListing')}
+        data-testid="button-create-listing"
+      >
+        <Ionicons name="add-circle" size={24} color="#fff" />
+        <Text style={styles.createListingText}>Create New Listing</Text>
+      </TouchableOpacity>
+
       <View style={styles.categories}>
         {categories.map((category) => (
           <TouchableOpacity
@@ -152,5 +162,27 @@ const styles = StyleSheet.create({
     color: '#1e3a8a',
     marginLeft: 12,
     lineHeight: 20,
+  },
+  createListingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  createListingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginLeft: 8,
   },
 });

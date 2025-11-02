@@ -223,6 +223,18 @@ export const apiEndpoints = {
   promoAlerts: {
     getActive: (): ApiResponse<any[]> => api.get('/api/promo-alerts'),
   },
+
+  // Marketplace Listings
+  marketplace: {
+    getAll: (params?: { category?: string }): ApiResponse<any[]> => {
+      const query = params?.category ? `?category=${params.category}` : '';
+      return api.get(`/api/marketplace${query}`);
+    },
+    getById: (id: string): ApiResponse<any> => api.get(`/api/marketplace/${id}`),
+    create: (data: any): ApiResponse<any> => api.post('/api/marketplace', data),
+    update: (id: string, data: any): ApiResponse<any> => api.patch(`/api/marketplace/${id}`, data),
+    delete: (id: string): ApiResponse<void> => api.delete(`/api/marketplace/${id}`),
+  },
 };
 
 export default api;

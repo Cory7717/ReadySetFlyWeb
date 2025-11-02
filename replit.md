@@ -14,7 +14,7 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
 - **Backend**: Express.js, serving both clients.
 - **Shared Types**: Common TypeScript schemas.
 - **Database**: PostgreSQL via Drizzle ORM.
-- **Authentication**: Replit Auth (OpenID Connect) with Passport.js.
+- **Authentication**: Unified email/password authentication for both web and mobile. Web uses session cookies (compatible with legacy Replit Auth middleware), mobile uses JWT tokens (15-min access, 7-day refresh). All users can log in with ANY email provider (not limited to Gmail). Passwords hashed with bcrypt (cost factor 12), refresh tokens hashed with SHA-256 before storage.
 - **Real-time Messaging**: Custom WebSocket server.
 - **UI/UX**: Production-ready components, responsive design across all devices (web and mobile), with specific optimizations for mobile headers, hero sections, and navigation.
 - **Verification System**: Multi-step forms, document uploads (pilot licenses, insurance), admin review interface, and a badge system for visual verification status.

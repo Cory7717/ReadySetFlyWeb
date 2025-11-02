@@ -1,10 +1,16 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { z } from 'zod';
+import crypto from 'crypto';
 import { IStorage } from './storage';
 import { generateAccessToken, generateRefreshToken, verifyAccessToken } from './jwt';
 
 const router = Router();
+
+// Helper function to hash refresh tokens for secure storage
+function hashRefreshToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 // Validation schemas
 const registerSchema = z.object({
@@ -32,13 +38,136 @@ function getRefreshTokenExpiry(): Date {
 
 /**
  * Unified authentication routes for both web and mobile
- * POST /api/auth/register - Create new account with email/password
- * POST /api/auth/login - Login with email/password
- * POST /api/auth/refresh - Refresh access token
+ * POST /api/auth/web-register - Web registration (creates session)
+ * POST /api/auth/web-login - Web login (creates session)
+ * POST /api/auth/register - Mobile registration (returns JWT tokens)
+ * POST /api/auth/login - Mobile login (returns JWT tokens)
+ * POST /api/auth/refresh - Refresh access token (mobile)
  * POST /api/auth/logout - Logout (invalidate refresh token)
- * GET /api/auth/me - Get current user
+ * GET /api/auth/me - Get current user (mobile)
  */
 export function registerUnifiedAuthRoutes(storage: IStorage) {
+  /**
+   * POST /api/auth/web-register
+   * Register a new user with email and password (WEB - creates session)
+   */
+  router.post('/web-register', async (req: any, res: Response): Promise<void> => {
+    try {
+      const result = registerSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({ 
+          error: 'Validation failed', 
+          details: result.error.format() 
+        });
+        return;
+      }
+
+      const { email, password, firstName, lastName } = result.data;
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        res.status(409).json({ error: 'User with this email already exists' });
+        return;
+      }
+
+      // Hash password with bcrypt (cost factor 12)
+      const hashedPassword = await bcrypt.hash(password, 12);
+
+      // Create user
+      const user = await storage.createUser({
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        hashedPassword: hashedPassword,
+        passwordCreatedAt: new Date(),
+        certifications: [],
+        totalFlightHours: 0,
+        aircraftTypesFlown: [],
+      });
+
+      // Create web session (compatible with Replit Auth middleware)
+      req.session.userId = user.id;
+      req.session.passport = {
+        user: {
+          claims: {
+            sub: user.id,
+            email: user.email,
+            name: `${user.firstName} ${user.lastName}`,
+          }
+        }
+      };
+
+      // Return user data (excluding password)
+      const { hashedPassword: _, passwordCreatedAt: __, ...userResponse } = user;
+      res.status(201).json({ user: userResponse });
+    } catch (error) {
+      console.error('Registration error:', error);
+      res.status(500).json({ error: 'Failed to register user' });
+    }
+  });
+
+  /**
+   * POST /api/auth/web-login
+   * Login with email/password (WEB - creates session)
+   */
+  router.post('/web-login', async (req: any, res: Response): Promise<void> => {
+    try {
+      const result = loginSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({ 
+          error: 'Validation failed', 
+          details: result.error.format() 
+        });
+        return;
+      }
+
+      const { email, password } = result.data;
+
+      // Find user by email
+      const user = await storage.getUserByEmail(email);
+      if (!user || !user.hashedPassword) {
+        res.status(401).json({ error: 'Invalid email or password' });
+        return;
+      }
+
+      // Verify password
+      const passwordValid = await bcrypt.compare(password, user.hashedPassword);
+      if (!passwordValid) {
+        res.status(401).json({ error: 'Invalid email or password' });
+        return;
+      }
+
+      // Check if account is suspended
+      if (user.isSuspended) {
+        res.status(403).json({ 
+          error: 'Account suspended', 
+          reason: user.suspensionReason || 'Your account has been suspended' 
+        });
+        return;
+      }
+
+      // Create web session (compatible with Replit Auth middleware)
+      req.session.userId = user.id;
+      req.session.passport = {
+        user: {
+          claims: {
+            sub: user.id,
+            email: user.email,
+            name: `${user.firstName} ${user.lastName}`,
+          }
+        }
+      };
+
+      // Return user data (excluding password)
+      const { hashedPassword: _, passwordCreatedAt: __, ...userResponse } = user;
+      res.status(200).json({ user: userResponse });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ error: 'Failed to login' });
+    }
+  });
+
   /**
    * POST /api/auth/register
    * Register a new user with email and password

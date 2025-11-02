@@ -43,7 +43,7 @@ export default function RegisterPage() {
 
   const registerMutation = useMutation({
     mutationFn: async (data: Omit<RegisterForm, 'confirmPassword'>) => {
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch('/api/auth/web-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -58,6 +58,7 @@ export default function RegisterPage() {
       return response.json();
     },
     onSuccess: () => {
+      // Invalidate user query to refetch with new session
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       toast({
         title: 'Account created!',

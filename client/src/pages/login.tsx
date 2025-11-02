@@ -34,7 +34,7 @@ export default function LoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginForm) => {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/web-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -49,6 +49,7 @@ export default function LoginPage() {
       return response.json();
     },
     onSuccess: () => {
+      // Invalidate user query to refetch with new session
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       toast({
         title: 'Welcome back!',

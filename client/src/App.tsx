@@ -28,6 +28,7 @@ import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfService from "@/pages/terms-of-service";
 import Settings from "@/pages/settings";
+import DeleteAccount from "@/pages/delete-account";
 
 // Router component - allows anonymous browsing for rentals/marketplace
 function Router() {
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/aircraft/:id" component={AircraftDetail} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
+      <Route path="/delete-account" component={DeleteAccount} />
       
       {/* Protected routes - require authentication */}
       {isAuthenticated ? (

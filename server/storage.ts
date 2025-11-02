@@ -280,7 +280,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select()
       .from(users)
-      .where(eq(users.email, email))
+      .where(ilike(users.email, email))
       .limit(1);
     return result[0];
   }

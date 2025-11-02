@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -22,11 +21,29 @@ const certifications = ["PPL", "IR", "CPL", "Multi-Engine", "ATP"];
 const categories = ["Single-Engine", "Multi-Engine", "Jet", "Turboprop", "Helicopter"];
 const avionicsSuites = ["Garmin G1000", "Garmin G500", "Aspen", "Steam Gauges"];
 
-export function AircraftFilters() {
-  const [keyword, setKeyword] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("");
-  const [radius, setRadius] = useState("100");
+interface AircraftFiltersProps {
+  keyword: string;
+  setKeyword: (value: string) => void;
+  city: string;
+  setCity: (value: string) => void;
+  state: string;
+  setState: (value: string) => void;
+  radius: string;
+  setRadius: (value: string) => void;
+  onClearAll: () => void;
+}
+
+export function AircraftFilters({
+  keyword,
+  setKeyword,
+  city,
+  setCity,
+  state,
+  setState,
+  radius,
+  setRadius,
+  onClearAll,
+}: AircraftFiltersProps) {
 
   return (
     <div className="space-y-6" data-testid="aircraft-filters">
@@ -36,12 +53,7 @@ export function AircraftFilters() {
           variant="outline" 
           className="w-full" 
           data-testid="button-clear-filters"
-          onClick={() => {
-            setKeyword("");
-            setCity("");
-            setState("");
-            setRadius("100");
-          }}
+          onClick={onClearAll}
         >
           Clear All
         </Button>

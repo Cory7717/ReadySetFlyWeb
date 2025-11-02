@@ -26,10 +26,44 @@ const quickFilters = [
 export default function Home() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | null>(null);
+  
+  // Filter state
+  const [keyword, setKeyword] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [radius, setRadius] = useState("100");
 
   const { data: aircraft = [], isLoading } = useQuery<AircraftListing[]>({
     queryKey: ["/api/aircraft"],
   });
+
+  // Filter aircraft based on search criteria
+  const filteredAircraft = aircraft.filter((item) => {
+    if (keyword) {
+      const searchText = `${item.make} ${item.model} ${item.registration}`.toLowerCase();
+      if (!searchText.includes(keyword.toLowerCase())) {
+        return false;
+      }
+    }
+    if (city && item.location) {
+      if (!item.location.toLowerCase().includes(city.toLowerCase())) {
+        return false;
+      }
+    }
+    if (state && item.location) {
+      if (!item.location.toLowerCase().includes(state.toLowerCase())) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const handleClearFilters = () => {
+    setKeyword("");
+    setCity("");
+    setState("");
+    setRadius("100");
+  };
 
   return (
     <div className="min-h-screen">
@@ -138,7 +172,7 @@ export default function Home() {
               Rental Aircraft Avaiable 
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground">
-              <span data-testid="text-results-count">{aircraft.length}</span> aircraft match your search
+              <span data-testid="text-results-count">{filteredAircraft.length}</span> aircraft match your search
             </p>
           </div>
           <Button
@@ -155,7 +189,17 @@ export default function Home() {
           {/* Filters Sidebar */}
           {showFilters && (
             <aside className="w-80 flex-shrink-0">
-              <AircraftFilters />
+              <AircraftFilters
+                keyword={keyword}
+                setKeyword={setKeyword}
+                city={city}
+                setCity={setCity}
+                state={state}
+                setState={setState}
+                radius={radius}
+                setRadius={setRadius}
+                onClearAll={handleClearFilters}
+              />
             </aside>
           )}
 
@@ -167,13 +211,13 @@ export default function Home() {
                   <div key={i} className="h-96 rounded-xl bg-muted animate-pulse" />
                 ))}
               </div>
-            ) : aircraft.length === 0 ? (
+            ) : filteredAircraft.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">No aircraft available at this time</p>
+                <p className="text-muted-foreground">No aircraft found matching your filters</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {aircraft.map((listing) => (
+                {filteredAircraft.map((listing) => (
                   <AircraftCard
                     key={listing.id}
                     id={listing.id}

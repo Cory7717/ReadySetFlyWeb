@@ -28,12 +28,24 @@ export default function RentalsScreen({ navigation }: Props) {
 
   // Filter aircraft based on search criteria
   const filteredAircraft = aircraft?.filter((item) => {
-    if (keyword && !`${item.make} ${item.model} ${item.registration}`.toLowerCase().includes(keyword.toLowerCase())) {
-      return false;
+    if (keyword) {
+      const searchText = `${item.make} ${item.model} ${item.registration}`.toLowerCase();
+      if (!searchText.includes(keyword.toLowerCase())) {
+        return false;
+      }
     }
-    if (city && !item.location?.toLowerCase().includes(city.toLowerCase())) {
-      return false;
+    if (city && item.location) {
+      if (!item.location.toLowerCase().includes(city.toLowerCase())) {
+        return false;
+      }
     }
+    if (state && item.location) {
+      if (!item.location.toLowerCase().includes(state.toLowerCase())) {
+        return false;
+      }
+    }
+    // Note: Radius filtering would require geocoding/distance calculation
+    // For now, we just filter by keyword, city, and state
     return true;
   });
 

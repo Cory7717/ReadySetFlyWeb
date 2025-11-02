@@ -39,18 +39,28 @@ export default function BookingScreen({ route, navigation }: Props) {
       return;
     }
 
-    // TODO: Navigate to payment screen
+    const total = calculateTotal();
     const aircraftName = `${aircraft?.make} ${aircraft?.model}`;
+    
     Alert.alert(
-      'Booking Confirmation',
-      `You're about to book ${aircraftName} for ${hours} hours.\n\nTotal: $${calculateTotal().toFixed(2)}`,
+      'Confirm Booking',
+      `Aircraft: ${aircraftName}\nDuration: ${hours} hours\nTotal Cost: $${total.toFixed(2)}\n\nProceed to payment?`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'Proceed to Payment', 
+          text: 'Continue', 
           onPress: () => {
-            // TODO: Implement payment flow
-            Alert.alert('Payment', 'Payment integration coming soon!');
+            // Navigate to payment screen
+            navigation.navigate('RentalPayment', {
+              paymentData: {
+                rentalId: 'pending-' + Date.now(), // Temporary ID, backend will create actual rental
+                aircraftId: aircraftId,
+                amount: total,
+                startDate: startDate,
+                endDate: endDate,
+                hours: parseFloat(hours)
+              }
+            });
           }
         },
       ]

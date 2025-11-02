@@ -31,6 +31,7 @@ import Settings from "@/pages/settings";
 import DeleteAccount from "@/pages/delete-account";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import VerifyEmail from "@/pages/verify-email";
 
 // Router component - allows anonymous browsing for rentals/marketplace
 function Router() {
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/rentals" component={Home} />
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/aircraft/:id" component={AircraftDetail} />

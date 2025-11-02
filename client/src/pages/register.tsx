@@ -57,12 +57,12 @@ export default function RegisterPage() {
 
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       // Invalidate user query to refetch with new session
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       toast({
         title: 'Account created!',
-        description: 'Welcome to Ready Set Fly. Your account has been created successfully.',
+        description: data.message || 'Please check your email to verify your account.',
       });
       setLocation('/');
     },

@@ -148,6 +148,9 @@ export function Header() {
                       </>
                     )}
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/settings" data-testid="link-settings">Settings</Link>
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => window.location.href = '/api/logout'} data-testid="button-logout">
                       <LogOut className="mr-2 h-4 w-4" />
                       Log out

@@ -27,6 +27,7 @@ import RequireAuth from "@/pages/require-auth";
 import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfService from "@/pages/terms-of-service";
+import Settings from "@/pages/settings";
 
 // Router component - allows anonymous browsing for rentals/marketplace
 function Router() {
@@ -58,6 +59,7 @@ function Router() {
           <Route path="/owner-withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/verify-identity" component={VerifyIdentity} />
+          <Route path="/settings" component={Settings} />
         </>
       ) : (
         <>
@@ -75,6 +77,7 @@ function Router() {
           <Route path="/owner-withdrawals" component={RequireAuth} />
           <Route path="/admin" component={RequireAuth} />
           <Route path="/verify-identity" component={RequireAuth} />
+          <Route path="/settings" component={RequireAuth} />
         </>
       )}
       

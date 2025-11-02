@@ -274,7 +274,7 @@ export default function PrivacyPolicy() {
             <div className="bg-muted p-4 rounded-md mt-3">
               <p><strong>Email:</strong> privacy@readysetfly.us</p>
               <p><strong>Website:</strong> <a href="https://readysetfly.us" className="text-primary hover:underline">readysetfly.us</a></p>
-              <p><strong>Mail:</strong> Ready Set Fly, [Your Business Address]</p>
+              <p><strong>Mail:</strong> Ready Set Fly, LLC (Address to be provided)</p>
             </div>
           </section>
 

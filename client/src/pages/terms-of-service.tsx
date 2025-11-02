@@ -334,7 +334,7 @@ export default function TermsOfService() {
             <h3 className="text-lg font-semibold mt-4 mb-2">11.2 Arbitration</h3>
             <p>
               Any dispute that cannot be resolved informally shall be resolved by binding arbitration in accordance 
-              with the rules of the American Arbitration Association. The arbitration shall take place in [Your State].
+              with the rules of the American Arbitration Association. The arbitration shall take place in Texas.
             </p>
 
             <h3 className="text-lg font-semibold mt-4 mb-2">11.3 Class Action Waiver</h3>
@@ -345,7 +345,7 @@ export default function TermsOfService() {
 
             <h3 className="text-lg font-semibold mt-4 mb-2">11.4 Governing Law</h3>
             <p>
-              These Terms shall be governed by and construed in accordance with the laws of [Your State], without 
+              These Terms shall be governed by and construed in accordance with the laws of the State of Texas, without 
               regard to its conflict of law provisions.
             </p>
           </section>
@@ -447,7 +447,7 @@ export default function TermsOfService() {
               <p><strong>Email:</strong> legal@readysetfly.us</p>
               <p><strong>Support:</strong> support@readysetfly.us</p>
               <p><strong>Website:</strong> <a href="https://readysetfly.us" className="text-primary hover:underline">readysetfly.us</a></p>
-              <p><strong>Mail:</strong> Ready Set Fly, [Your Business Address]</p>
+              <p><strong>Mail:</strong> Ready Set Fly, LLC (Address to be provided)</p>
             </div>
           </section>
 

@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, ImageBackground } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, ImageBackground, TextInput, Modal, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -11,12 +12,29 @@ const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
 type Props = NativeStackScreenProps<RentalsStackParamList, 'RentalsList'>;
 
 export default function RentalsScreen({ navigation }: Props) {
+  const [keyword, setKeyword] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [radius, setRadius] = useState('100');
+  const [showFilterModal, setShowFilterModal] = useState(false);
+
   const { data: aircraft, isLoading, error, refetch } = useQuery({
     queryKey: ['/api/aircraft'],
     queryFn: async () => {
       const response = await apiEndpoints.aircraft.getAll();
       return response.data;
     },
+  });
+
+  // Filter aircraft based on search criteria
+  const filteredAircraft = aircraft?.filter((item) => {
+    if (keyword && !`${item.make} ${item.model} ${item.registration}`.toLowerCase().includes(keyword.toLowerCase())) {
+      return false;
+    }
+    if (city && !item.location?.toLowerCase().includes(city.toLowerCase())) {
+      return false;
+    }
+    return true;
   });
 
   const renderAircraft = ({ item }: { item: AircraftListing }) => (
@@ -94,16 +112,137 @@ export default function RentalsScreen({ navigation }: Props) {
         </View>
       </ImageBackground>
       
+      {/* Search and Filter Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <Ionicons name="search" size={20} color="#6b7280" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search aircraft (e.g., Cessna 172)"
+            value={keyword}
+            onChangeText={setKeyword}
+            testID="input-search-aircraft"
+          />
+        </View>
+        <TouchableOpacity 
+          style={styles.filterButton}
+          onPress={() => setShowFilterModal(true)}
+          testID="button-show-filters"
+        >
+          <Ionicons name="options-outline" size={24} color="#1e40af" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Filter Modal */}
+      <Modal
+        visible={showFilterModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Filters</Text>
+            <TouchableOpacity 
+              onPress={() => setShowFilterModal(false)}
+              testID="button-close-filters"
+            >
+              <Ionicons name="close" size={28} color="#1f2937" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {/* Location Filters */}
+            <View style={styles.filterSection}>
+              <Text style={styles.filterSectionTitle}>Location</Text>
+              
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>City</Text>
+                <TextInput
+                  style={styles.filterInput}
+                  placeholder="Enter city"
+                  value={city}
+                  onChangeText={setCity}
+                  testID="input-filter-city"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>State</Text>
+                <TextInput
+                  style={styles.filterInput}
+                  placeholder="e.g., CA, TX, FL"
+                  value={state}
+                  onChangeText={setState}
+                  maxLength={2}
+                  autoCapitalize="characters"
+                  testID="input-filter-state"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Radius</Text>
+                <View style={styles.radiusOptions}>
+                  {['25', '50', '100', '200', '500'].map((option) => (
+                    <TouchableOpacity
+                      key={option}
+                      style={[
+                        styles.radiusOption,
+                        radius === option && styles.radiusOptionActive
+                      ]}
+                      onPress={() => setRadius(option)}
+                      testID={`button-radius-${option}`}
+                    >
+                      <Text style={[
+                        styles.radiusOptionText,
+                        radius === option && styles.radiusOptionTextActive
+                      ]}>
+                        {option} mi
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            {/* Clear Filters Button */}
+            <TouchableOpacity
+              style={styles.clearButton}
+              onPress={() => {
+                setKeyword('');
+                setCity('');
+                setState('');
+                setRadius('100');
+              }}
+              testID="button-clear-filters"
+            >
+              <Text style={styles.clearButtonText}>Clear All Filters</Text>
+            </TouchableOpacity>
+          </ScrollView>
+
+          {/* Apply Button */}
+          <View style={styles.modalFooter}>
+            <TouchableOpacity
+              style={styles.applyButton}
+              onPress={() => setShowFilterModal(false)}
+              testID="button-apply-filters"
+            >
+              <Text style={styles.applyButtonText}>Apply Filters</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <FlatList
-        data={aircraft || []}
+        data={filteredAircraft || []}
         renderItem={renderAircraft}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="airplane-outline" size={64} color="#9ca3af" />
-            <Text style={styles.emptyText}>No aircraft available</Text>
-            <Text style={styles.emptySubtext}>Check back later for new listings</Text>
+            <Text style={styles.emptyText}>No aircraft found</Text>
+            <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
           </View>
         }
       />
@@ -272,5 +411,145 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9ca3af',
     marginTop: 8,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    gap: 12,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: '#1f2937',
+  },
+  filterButton: {
+    padding: 8,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  filterSection: {
+    marginBottom: 24,
+  },
+  filterSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 16,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4b5563',
+    marginBottom: 8,
+  },
+  filterInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#1f2937',
+    backgroundColor: '#fff',
+  },
+  radiusOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  radiusOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+  },
+  radiusOptionActive: {
+    backgroundColor: '#1e40af',
+    borderColor: '#1e40af',
+  },
+  radiusOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4b5563',
+  },
+  radiusOptionTextActive: {
+    color: '#fff',
+  },
+  clearButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  clearButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  modalFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  applyButton: {
+    backgroundColor: '#1e40af',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  applyButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

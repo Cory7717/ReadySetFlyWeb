@@ -7,6 +7,16 @@ export type RentalsStackParamList = {
   RentalsList: undefined;
   AircraftDetail: { aircraftId: string };
   Booking: { aircraftId: string };
+  RentalPayment: {
+    paymentData: {
+      rentalId: string;
+      aircraftId: string;
+      amount: number;
+      startDate: string;
+      endDate: string;
+      hours: number;
+    };
+  };
 };
 
 const Stack = createNativeStackNavigator<RentalsStackParamList>();

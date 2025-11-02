@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -26,7 +26,8 @@ export default function BookingScreen({ route, navigation }: Props) {
     const hoursNum = parseFloat(hours);
     if (!aircraft || !hoursNum || isNaN(hoursNum)) return 0;
     
-    const baseCost = aircraft.hourlyRate * hoursNum;
+    const hourlyRate = Number(aircraft.hourlyRate);
+    const baseCost = hourlyRate * hoursNum;
     const platformFee = baseCost * 0.18; // 18% platform fee
     const salesTax = baseCost * 0.0825; // 8.25% sales tax
     return baseCost + platformFee + salesTax;
@@ -39,9 +40,10 @@ export default function BookingScreen({ route, navigation }: Props) {
     }
 
     // TODO: Navigate to payment screen
+    const aircraftName = `${aircraft?.make} ${aircraft?.model}`;
     Alert.alert(
       'Booking Confirmation',
-      `You're about to book ${aircraft?.type} for ${hours} hours.\n\nTotal: $${calculateTotal().toFixed(2)}`,
+      `You're about to book ${aircraftName} for ${hours} hours.\n\nTotal: $${calculateTotal().toFixed(2)}`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -77,9 +79,9 @@ export default function BookingScreen({ route, navigation }: Props) {
       {/* Aircraft Summary */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Aircraft</Text>
-        <Text style={styles.aircraftType}>{aircraft.type}</Text>
-        <Text style={styles.aircraftNumber}>{aircraft.nNumber}</Text>
-        <Text style={styles.rate}>${aircraft.hourlyRate}/hour</Text>
+        <Text style={styles.aircraftType}>{aircraft.make} {aircraft.model}</Text>
+        <Text style={styles.aircraftNumber}>{aircraft.registration}</Text>
+        <Text style={styles.rate}>${Number(aircraft.hourlyRate).toFixed(2)}/hour</Text>
       </View>
 
       {/* Date Selection */}
@@ -124,18 +126,18 @@ export default function BookingScreen({ route, navigation }: Props) {
           <Text style={styles.sectionTitle}>Cost Breakdown</Text>
           
           <View style={styles.costRow}>
-            <Text style={styles.costLabel}>Base Cost ({hours} hrs × ${aircraft.hourlyRate})</Text>
-            <Text style={styles.costValue}>${(aircraft.hourlyRate * parseFloat(hours)).toFixed(2)}</Text>
+            <Text style={styles.costLabel}>Base Cost ({hours} hrs × ${Number(aircraft.hourlyRate).toFixed(2)})</Text>
+            <Text style={styles.costValue}>${(Number(aircraft.hourlyRate) * parseFloat(hours)).toFixed(2)}</Text>
           </View>
 
           <View style={styles.costRow}>
             <Text style={styles.costLabel}>Platform Fee (18%)</Text>
-            <Text style={styles.costValue}>${(aircraft.hourlyRate * parseFloat(hours) * 0.18).toFixed(2)}</Text>
+            <Text style={styles.costValue}>${(Number(aircraft.hourlyRate) * parseFloat(hours) * 0.18).toFixed(2)}</Text>
           </View>
 
           <View style={styles.costRow}>
             <Text style={styles.costLabel}>Sales Tax (8.25%)</Text>
-            <Text style={styles.costValue}>${(aircraft.hourlyRate * parseFloat(hours) * 0.0825).toFixed(2)}</Text>
+            <Text style={styles.costValue}>${(Number(aircraft.hourlyRate) * parseFloat(hours) * 0.0825).toFixed(2)}</Text>
           </View>
 
           <View style={styles.divider} />

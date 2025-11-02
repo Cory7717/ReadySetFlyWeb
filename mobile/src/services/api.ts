@@ -114,6 +114,9 @@ type ApiResponse<T> = Promise<AxiosResponse<T>>;
 
 // API endpoints with proper TypeScript types
 export const apiEndpoints = {
+  // Base URL for WebView payments
+  baseURL: API_BASE_URL,
+  
   // Mobile Auth (JWT-based)
   mobileAuth: {
     register: (data: {
@@ -166,7 +169,7 @@ export const apiEndpoints = {
     getByUser: (): ApiResponse<Rental[]> => api.get('/api/user/rentals'),
     getById: (id: string): ApiResponse<Rental> => api.get(`/api/rentals/${id}`),
     approve: (id: string): ApiResponse<Rental> => api.patch(`/api/rentals/${id}/approve`),
-    completePayment: (id: string, data: { nonce: string }): ApiResponse<Rental> => 
+    completePayment: (id: string, data: { paymentNonce: string; amount: number }): ApiResponse<Rental> => 
       api.post(`/api/rentals/${id}/complete-payment`, data),
   },
   
@@ -197,6 +200,13 @@ export const apiEndpoints = {
       api.get(`/api/rentals/${rentalId}/messages`),
     send: (rentalId: string, content: string): ApiResponse<Message> => 
       api.post(`/api/rentals/${rentalId}/messages`, { content }),
+  },
+
+  // Withdrawals (PayPal Payouts)
+  withdrawals: {
+    getAll: (): ApiResponse<any[]> => api.get('/api/withdrawals'),
+    create: (data: { amount: number; paypalEmail: string }): ApiResponse<any> => 
+      api.post('/api/withdrawals', data),
   },
 };
 

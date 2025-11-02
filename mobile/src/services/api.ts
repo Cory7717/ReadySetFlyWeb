@@ -75,9 +75,9 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        // Try to refresh the token
+        // Try to refresh the token using unified auth endpoint
         const response = await axios.post(
-          `${API_BASE_URL}/api/mobile/auth/refresh`,
+          `${API_BASE_URL}/api/auth/refresh`,
           { refreshToken },
           { headers: { 'Content-Type': 'application/json' } }
         );
@@ -117,29 +117,29 @@ export const apiEndpoints = {
   // Base URL for WebView payments
   baseURL: API_BASE_URL,
   
-  // Mobile Auth (JWT-based)
+  // Unified Auth (JWT-based for both web and mobile)
   mobileAuth: {
     register: (data: {
       email: string;
       password: string;
-      firstName?: string;
-      lastName?: string;
+      firstName: string;
+      lastName: string;
     }): ApiResponse<{ user: User; accessToken: string; refreshToken: string }> =>
-      api.post('/api/mobile/auth/register', data),
+      api.post('/api/auth/register', data),
     
     login: (data: {
       email: string;
       password: string;
     }): ApiResponse<{ user: User; accessToken: string; refreshToken: string }> =>
-      api.post('/api/mobile/auth/login', data),
+      api.post('/api/auth/login', data),
     
-    getMe: (): ApiResponse<User> => api.get('/api/mobile/auth/me'),
+    getMe: (): ApiResponse<User> => api.get('/api/auth/me'),
     
     refresh: (refreshToken: string): ApiResponse<{ accessToken: string; refreshToken: string }> =>
-      api.post('/api/mobile/auth/refresh', { refreshToken }),
+      api.post('/api/auth/refresh', { refreshToken }),
     
     logout: async (refreshToken: string): Promise<void> => {
-      await api.post('/api/mobile/auth/logout', { refreshToken });
+      await api.post('/api/auth/logout', { refreshToken });
       await TokenStorage.clearTokens();
     },
   },

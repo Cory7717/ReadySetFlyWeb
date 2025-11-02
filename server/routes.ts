@@ -10,6 +10,7 @@ import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRent
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { getUncachableResendClient } from "./resendClient";
 import registerMobileAuthRoutes from "./mobile-auth-routes";
+import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
 
 // Initialize OpenAI client with Replit AI Integrations
 const openai = new OpenAI({
@@ -96,7 +97,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware (from blueprint:javascript_log_in_with_replit)
   await setupAuth(app);
 
-  // Mobile app authentication routes (JWT-based for React Native)
+  // Unified authentication routes (for both web and mobile)
+  app.use('/api/auth', registerUnifiedAuthRoutes(storage));
+
+  // Mobile app authentication routes (JWT-based for React Native) - DEPRECATED, use /api/auth instead
   app.use('/api/mobile/auth', registerMobileAuthRoutes(storage));
 
   // Serve uploaded files

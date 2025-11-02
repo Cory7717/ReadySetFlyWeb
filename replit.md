@@ -22,6 +22,10 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
 - **Financial Transactions**: Platform-captured payments with transfers via **PayPal Braintree** for rentals and marketplace fees. **PayPal Payouts API** for instant owner withdrawals.
 - **Admin Dashboard**: Role-based access, expense tracking, marketplace listing metrics, rental metrics, and monitoring of all financial transactions and withdrawals.
 - **Marketplace Features**: Category-specific filters (e.g., keyword search, city, price range, engine type).
+- **Aircraft Rental Filters (Updated November 2024)**: 
+  - **Web**: Location-based filtering with keyword search (aircraft model/make), city/state inputs, and radius selector (25-500 miles). Removed price range and hour requirements filters. State managed in parent component (home.tsx) with real-time filtering of aircraft listings.
+  - **Mobile**: Modal-based filter UI with search bar, city/state inputs, and radius selector matching web functionality. Filters apply to aircraft list in real-time based on keyword, city, and state criteria.
+  - **Limitation**: Radius filtering is UI-only (distance calculation requires geocoding/backend support for future implementation).
 - **Listing Management**: Automated system for detecting and managing stale and orphaned listings, with user refresh buttons and monthly email reminders.
 - **Sample Listings**: Professionally written example listings for all marketplace categories, visually distinct and read-only.
 - **App Store Compliance**: Complete implementation for Apple App Store and Google Play Store submission requirements:

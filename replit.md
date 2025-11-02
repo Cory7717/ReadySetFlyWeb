@@ -15,6 +15,7 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
 - **Shared Types**: Common TypeScript schemas.
 - **Database**: PostgreSQL via Drizzle ORM.
 - **Authentication**: Unified authentication supporting both OAuth (Google/GitHub via Replit Auth) and email/password for web and mobile. Web uses session cookies, mobile uses JWT tokens (15-min access, 7-day refresh). OAuth for mobile uses browser-based flow → exchange token (5-min expiry) → deep link callback → JWT tokens. All users can log in with ANY email provider (not limited to Gmail). Passwords hashed with bcrypt (cost factor 12), refresh tokens and exchange tokens hashed with SHA-256 before storage.
+  - **Email Verification**: OAuth users (Google/GitHub) automatically have emailVerified set to true since OAuth providers verify emails. Email/password users must verify via email link (24-hour expiry). Existing users switching from email/password to OAuth have emailVerified automatically updated to true on next OAuth login.
 - **Real-time Messaging**: Custom WebSocket server.
 - **UI/UX**: Production-ready components, responsive design across all devices (web and mobile), with specific optimizations for mobile headers, hero sections, and navigation.
 - **Verification System**: Multi-step forms, document uploads (pilot licenses, insurance), admin review interface, and a badge system for visual verification status.

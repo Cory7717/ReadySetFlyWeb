@@ -208,6 +208,21 @@ export const apiEndpoints = {
     create: (data: { amount: number; paypalEmail: string }): ApiResponse<any> => 
       api.post('/api/withdrawals', data),
   },
+
+  // Promo Codes
+  promoCodes: {
+    validate: (data: { code: string; category?: string }): ApiResponse<{
+      valid: boolean;
+      description?: string;
+      discountType?: string;
+      message?: string;
+    }> => api.post('/api/promo-codes/validate', data),
+  },
+
+  // Promo Alerts (Public - for displaying active promotions)
+  promoAlerts: {
+    getActive: (): ApiResponse<any[]> => api.get('/api/promo-alerts'),
+  },
 };
 
 export default api;

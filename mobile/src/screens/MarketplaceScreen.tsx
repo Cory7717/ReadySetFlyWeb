@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { PromoBanner } from '../components/PromoBanner';
 
 const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
 
@@ -26,6 +27,9 @@ export default function MarketplaceScreen({ navigation }: any) {
           <Text style={styles.headerSubtitle}>Browse listings by category</Text>
         </View>
       </ImageBackground>
+
+      {/* Promo Banner - Auto-refreshes every 30 seconds to show admin-created promos */}
+      <PromoBanner />
 
       <View style={styles.categories}>
         {categories.map((category) => (

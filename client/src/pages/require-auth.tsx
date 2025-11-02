@@ -25,15 +25,16 @@ export default function RequireAuth() {
             Create an account or sign in to list your aircraft, post marketplace listings, and connect with the aviation community.
           </p>
           <div className="flex flex-col gap-3">
-            <Button 
-              size="lg" 
-              className="w-full"
-              onClick={() => window.location.href = '/api/login'}
-              data-testid="button-sign-in-required"
-            >
-              <LogIn className="mr-2 h-5 w-5" />
-              Sign In to Continue
-            </Button>
+            <Link href="/login">
+              <Button 
+                size="lg" 
+                className="w-full"
+                data-testid="button-sign-in-required"
+              >
+                <LogIn className="mr-2 h-5 w-5" />
+                Sign In to Continue
+              </Button>
+            </Link>
             <Link href="/">
               <Button 
                 size="lg" 

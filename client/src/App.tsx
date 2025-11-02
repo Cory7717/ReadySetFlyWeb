@@ -29,6 +29,8 @@ import PrivacyPolicy from "@/pages/privacy-policy";
 import TermsOfService from "@/pages/terms-of-service";
 import Settings from "@/pages/settings";
 import DeleteAccount from "@/pages/delete-account";
+import Login from "@/pages/login";
+import Register from "@/pages/register";
 
 // Router component - allows anonymous browsing for rentals/marketplace
 function Router() {
@@ -38,6 +40,8 @@ function Router() {
     <Switch>
       {/* Public routes - accessible to everyone */}
       <Route path="/" component={Landing} />
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       <Route path="/rentals" component={Home} />
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/aircraft/:id" component={AircraftDetail} />

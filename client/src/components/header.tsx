@@ -85,13 +85,14 @@ export function Header() {
 
             {/* Show sign in button for anonymous users */}
             {!user ? (
-              <Button 
-                variant="default" 
-                onClick={() => window.location.href = '/api/login'}
-                data-testid="button-login"
-              >
-                Sign In
-              </Button>
+              <Link href="/login">
+                <Button 
+                  variant="default" 
+                  data-testid="button-login"
+                >
+                  Sign In
+                </Button>
+              </Link>
             ) : (
               <>
                 {/* Super Admin Badge */}
@@ -151,9 +152,11 @@ export function Header() {
                     <DropdownMenuItem asChild>
                       <Link href="/settings" data-testid="link-settings">Settings</Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => window.location.href = '/api/logout'} data-testid="button-logout">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      Log out
+                    <DropdownMenuItem asChild>
+                      <Link href="/api/logout" data-testid="button-logout">
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Log out
+                      </Link>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

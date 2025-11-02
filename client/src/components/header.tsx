@@ -153,10 +153,10 @@ export function Header() {
                       <Link href="/settings" data-testid="link-settings">Settings</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href="/api/logout" data-testid="button-logout">
+                      <a href="/api/logout" data-testid="button-logout">
                         <LogOut className="mr-2 h-4 w-4" />
                         Log out
-                      </Link>
+                      </a>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

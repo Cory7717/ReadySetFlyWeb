@@ -26,6 +26,7 @@ import OwnerWithdrawals from "@/pages/owner-withdrawals";
 import RequireAuth from "@/pages/require-auth";
 import NotFound from "@/pages/not-found";
 import PrivacyPolicy from "@/pages/privacy-policy";
+import TermsOfService from "@/pages/terms-of-service";
 
 // Router component - allows anonymous browsing for rentals/marketplace
 function Router() {
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/aircraft/:id" component={AircraftDetail} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/terms-of-service" component={TermsOfService} />
       
       {/* Protected routes - require authentication */}
       {isAuthenticated ? (

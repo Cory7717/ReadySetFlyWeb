@@ -72,6 +72,7 @@ async function upsertUser(
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
     isAdmin: isAdmin,
+    emailVerified: true, // OAuth providers have already verified the email
   });
 }
 

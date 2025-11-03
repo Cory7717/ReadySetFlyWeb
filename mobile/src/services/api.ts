@@ -169,7 +169,7 @@ export const apiEndpoints = {
     getByUser: (): ApiResponse<Rental[]> => api.get('/api/user/rentals'),
     getById: (id: string): ApiResponse<Rental> => api.get(`/api/rentals/${id}`),
     approve: (id: string): ApiResponse<Rental> => api.patch(`/api/rentals/${id}/approve`),
-    completePayment: (id: string, data: { paymentNonce: string; amount: number }): ApiResponse<Rental> => 
+    completePayment: (id: string, data: { transactionId: string }): ApiResponse<Rental> => 
       api.post(`/api/rentals/${id}/complete-payment`, data),
   },
   

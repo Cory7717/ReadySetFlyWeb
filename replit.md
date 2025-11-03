@@ -21,7 +21,7 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
 - **UI/UX**: Production-ready components, responsive design across all devices (web and mobile), with specific optimizations for mobile headers, hero sections, and navigation.
 - **Verification System**: Multi-step forms, document uploads (pilot licenses, insurance), admin review interface, and a badge system for visual verification status. **CRITICAL: Verification is REQUIRED for aircraft rental listings (owners must be verified to list) AND for booking rentals (renters must be verified to rent). Marketplace listings (aircraft sale, jobs, CFI, etc.) do NOT require verification.**
 - **Document Expiration Tracking**: Monitors critical document expiry with automated notifications and account suspension capabilities; admin interface shows status.
-- **Financial Transactions**: Platform-captured payments with transfers via **PayPal Braintree** for rentals and marketplace fees. **PayPal Payouts API** for instant owner withdrawals.
+- **Financial Transactions**: Platform-captured payments via **PayPal Expanded Checkout** (card fields component, Pay Later disabled, credit cards only) for rentals and marketplace fees. **PayPal Payouts API** for instant owner withdrawals. Migration from Braintree to PayPal completed November 2024.
 - **Admin Dashboard**: Role-based access, expense tracking, marketplace listing metrics, rental metrics, and monitoring of all financial transactions and withdrawals.
 - **Marketplace Features**: Category-specific filters (e.g., keyword search, city, price range, engine type).
 - **Aircraft Rental Filters (Updated November 2024)**: 
@@ -40,7 +40,7 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
     - Implementation: Uses React Native Modal and TextInput (not iOS-only Alert.prompt) for cross-platform compatibility on iOS and Android
 - **Mobile Payment Integration**: 
   - **PayPal Withdrawals (FULLY IMPLEMENTED)**: Mobile app has complete withdrawal functionality with WithdrawalModal component, balance tracking, withdrawal history, and integration with PayPal Payouts API. Users can withdraw earnings instantly to their PayPal account.
-  - **Braintree Payments (REQUIRES SETUP)**: RentalPaymentScreen created with WebView-based integration following security best practices. Requires: (1) installing `react-native-webview` via `npx expo install react-native-webview` in mobile directory, (2) creating server-side payment HTML page at `server/mobile-braintree-payment.html`, (3) adding server route for payment page. See `MOBILE_PAYMENT_SETUP.md` for complete setup instructions.
+  - **PayPal Payments (FULLY IMPLEMENTED)**: WebView-based integration for both rental and marketplace listing payments. Server-side HTML pages (`/mobile-paypal-rental-payment`, `/mobile-paypal-marketplace-payment`) use PayPal Advanced Checkout card fields with Pay Later disabled. Payments processed securely through PayPal SDK, captured on frontend, verified on backend.
   - **Mobile Auth**: JWT-based authentication with 15-minute access tokens, 7-day refresh tokens, automatic token refresh, and secure token storage using Expo SecureStore. OAuth support via WebBrowser → exchange token → deep link (readysetfly://) → JWT tokens.
 - **Mobile Marketplace Features (FULLY IMPLEMENTED)**:
   - **Listing Creation**: Mobile users can create marketplace listings in all 6 categories (Aircraft for Sale, Aviation Jobs, CFI Services, Flight School, Mechanic Services, Charter Services) with multi-step form (category → base fields → details → tier selection → promo code → payment).
@@ -48,7 +48,7 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
   - **Tier Selection**: 3 tiers with varying features and pricing (Basic $25/mo, Standard $100/mo, Premium $250/mo).
   - **Promo Code Integration**: PromoCodeInput component validates promo codes (e.g., "LAUNCH2025" for free 7-day listings) in real-time.
   - **Promo Banner**: PromoBanner component displays active promotional campaigns with auto-refresh (30-second polling) to show admin-created promos immediately.
-  - **Payment Flow**: MarketplacePaymentScreen uses WebView Braintree integration for paid listings (requires same setup as rental payments).
+  - **Payment Flow**: MarketplacePaymentScreen uses WebView PayPal integration for paid listings (same implementation as rental payments).
   - **Navigation**: "Create Listing" button on MarketplaceScreen, full navigation stack for listing creation and payment.
   - **Image Upload**: Not yet implemented for mobile (web has full cloud storage via ObjectUploader). Backend API ready (`/api/objects/upload`, `/api/listing-images`). Mobile needs Expo ImagePicker integration.
   - **Contact Inquiries**: Custom email subject lines with category and listing title (e.g., "Inquiry From Ready Set Fly about your Aircraft for Sale Listing: [Title]").
@@ -57,7 +57,7 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
 - **PostgreSQL**: Primary database, hosted via Neon.
 - **Replit Auth**: OpenID Connect provider (Google, GitHub, email/password).
 - **Replit AI Integrations (OpenAI)**: GPT-4o for AI-powered description generation, billed via Replit credits.
-- **PayPal Braintree**: Payment gateway for incoming payments (rentals, marketplace fees) using Drop-in UI. Configured for Production environment.
+- **PayPal Expanded Checkout**: Payment gateway for incoming payments (rentals, marketplace fees) using Advanced Checkout card fields component. Pay Later disabled, credit cards only. Configured for Production environment via PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET secrets.
 - **PayPal Payouts API**: For automated, instant owner withdrawals.
 - **WebSocket server**: Custom implementation for real-time messaging.
 - **Replit Object Storage**: Google Cloud Storage-backed file storage for marketplace listing images and aircraft photos. Implemented with ObjectUploader component (Uppy-based), presigned URL uploads, and ACL-based access control. Images stored with public visibility for listing photos.

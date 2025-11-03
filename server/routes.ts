@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import multer from "multer";
 import OpenAI from "openai";
-import braintree from "braintree";
+import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
 import { storage } from "./storage";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
@@ -20,16 +20,26 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-// Initialize Braintree gateway
-if (!process.env.BRAINTREE_MERCHANT_ID || !process.env.BRAINTREE_PUBLIC_KEY || !process.env.BRAINTREE_PRIVATE_KEY) {
-  throw new Error('Missing required Braintree secrets: BRAINTREE_MERCHANT_ID, BRAINTREE_PUBLIC_KEY, BRAINTREE_PRIVATE_KEY');
+// Initialize PayPal SDK
+if (!process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) {
+  throw new Error('Missing required PayPal secrets: PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET');
 }
-const gateway = new braintree.BraintreeGateway({
-  environment: braintree.Environment.Production,
-  merchantId: process.env.BRAINTREE_MERCHANT_ID,
-  publicKey: process.env.BRAINTREE_PUBLIC_KEY,
-  privateKey: process.env.BRAINTREE_PRIVATE_KEY
+
+const paypalClient = new Client({
+  clientCredentialsAuthCredentials: {
+    oAuthClientId: process.env.PAYPAL_CLIENT_ID,
+    oAuthClientSecret: process.env.PAYPAL_CLIENT_SECRET,
+  },
+  timeout: 0,
+  environment: process.env.NODE_ENV === "production" ? Environment.Production : Environment.Sandbox,
+  logging: {
+    logLevel: LogLevel.Info,
+    logRequest: { logBody: true },
+    logResponse: { logHeaders: true },
+  },
 });
+
+const ordersController = new OrdersController(paypalClient);
 
 // Multer setup for file uploads with disk storage
 const storage_config = multer.diskStorage({
@@ -280,24 +290,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Braintree client token generation (used by frontend to initialize payment UI)
-  app.get("/api/braintree/client-token", isAuthenticated, async (req: any, res) => {
-    try {
-      const response = await gateway.clientToken.generate({});
-      res.json({ clientToken: response.clientToken });
-    } catch (error: any) {
-      console.error("Braintree client token error:", error);
-      res.status(500).json({ error: error.message || "Failed to generate client token" });
-    }
+  // PayPal - Get Client ID for frontend SDK initialization
+  app.get("/api/paypal/config", async (req, res) => {
+    res.json({ 
+      clientId: process.env.PAYPAL_CLIENT_ID,
+      environment: process.env.NODE_ENV === "production" ? "production" : "sandbox"
+    });
   });
 
-  // Braintree checkout for marketplace listing fees
-  app.post("/api/braintree/checkout-listing", isAuthenticated, async (req: any, res) => {
+  // PayPal - Create order for marketplace listing fees
+  app.post("/api/paypal/create-order-listing", isAuthenticated, async (req: any, res) => {
     try {
-      const { paymentMethodNonce, category, tier } = req.body;
+      const { category, tier } = req.body;
       const userId = req.user.claims.sub;
       
-      if (!paymentMethodNonce || !category) {
+      if (!category) {
         return res.status(400).json({ error: "Missing required fields" });
       }
       
@@ -316,74 +323,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
         amount = 25; // Fixed fee for other marketplace categories
       }
       
-      const result = await gateway.transaction.sale({
-        amount: amount.toFixed(2),
-        paymentMethodNonce,
-        options: {
-          submitForSettlement: true
+      const collect = {
+        body: {
+          intent: "CAPTURE",
+          purchaseUnits: [
+            {
+              amount: {
+                currencyCode: "USD",
+                value: amount.toFixed(2),
+              },
+              description: `Ready Set Fly - ${category} listing fee (${tier || 'basic'} tier)`,
+              customId: `user:${userId}|category:${category}|tier:${tier || 'basic'}|purpose:marketplace_listing_fee`,
+            },
+          ],
         },
-        customFields: {
-          user_id: userId,
-          category: category,
-          tier: tier || "basic",
-          purpose: "marketplace_listing_fee"
-        }
-      });
+        prefer: "return=minimal",
+      };
+
+      const { body, ...httpResponse } = await ordersController.createOrder(collect);
+      const jsonResponse = JSON.parse(String(body));
       
-      if (result.success) {
-        res.json({ 
-          success: true,
-          transactionId: result.transaction.id,
-          amount
-        });
-      } else {
-        console.error("Braintree transaction failed:", result.message);
-        res.status(400).json({ 
-          success: false, 
-          error: result.message || "Transaction failed" 
-        });
-      }
+      res.status(httpResponse.statusCode).json(jsonResponse);
     } catch (error: any) {
-      console.error("Braintree checkout error:", error);
-      res.status(500).json({ error: error.message || "Payment processing failed" });
+      console.error("PayPal create order error:", error);
+      res.status(500).json({ error: error.message || "Failed to create order" });
     }
   });
-  
-  // Braintree checkout for rental payments
-  app.post("/api/braintree/checkout-rental", isAuthenticated, isVerified, async (req: any, res) => {
+
+  // PayPal - Create order for rental payments
+  app.post("/api/paypal/create-order-rental", isAuthenticated, isVerified, async (req: any, res) => {
     try {
-      const { paymentMethodNonce, amount, rentalId } = req.body;
+      const { amount, rentalId } = req.body;
+      const userId = req.user.claims.sub;
       
-      if (!paymentMethodNonce || !amount || !rentalId) {
+      if (!amount || !rentalId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
       
-      const result = await gateway.transaction.sale({
-        amount: parseFloat(amount).toFixed(2),
-        paymentMethodNonce,
-        options: {
-          submitForSettlement: true
+      const collect = {
+        body: {
+          intent: "CAPTURE",
+          purchaseUnits: [
+            {
+              amount: {
+                currencyCode: "USD",
+                value: parseFloat(amount).toFixed(2),
+              },
+              description: `Ready Set Fly - Aircraft rental payment`,
+              customId: `rental:${rentalId}|user:${userId}`,
+            },
+          ],
         },
-        customFields: {
-          rental_id: rentalId
-        }
-      });
+        prefer: "return=minimal",
+      };
+
+      const { body, ...httpResponse } = await ordersController.createOrder(collect);
+      const jsonResponse = JSON.parse(String(body));
       
-      if (result.success) {
-        res.json({ 
-          success: true,
-          transactionId: result.transaction.id
-        });
-      } else {
-        console.error("Braintree rental payment failed:", result.message);
-        res.status(400).json({ 
-          success: false, 
-          error: result.message || "Payment failed" 
-        });
-      }
+      res.status(httpResponse.statusCode).json(jsonResponse);
     } catch (error: any) {
-      console.error("Braintree rental checkout error:", error);
-      res.status(500).json({ error: error.message || "Payment processing failed" });
+      console.error("PayPal create rental order error:", error);
+      res.status(500).json({ error: error.message || "Failed to create order" });
+    }
+  });
+
+  // PayPal - Capture order payment (after user approval)
+  app.post("/api/paypal/capture-order/:orderID", isAuthenticated, async (req: any, res) => {
+    try {
+      const { orderID } = req.params;
+      
+      const collect = {
+        id: orderID,
+        prefer: "return=minimal",
+      };
+
+      const { body, ...httpResponse } = await ordersController.captureOrder(collect);
+      const jsonResponse = JSON.parse(String(body));
+      
+      res.status(httpResponse.statusCode).json(jsonResponse);
+    } catch (error: any) {
+      console.error("PayPal capture order error:", error);
+      res.status(500).json({ error: error.message || "Failed to capture order" });
     }
   });
 

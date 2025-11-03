@@ -9,124 +9,191 @@ import { Plane, Calendar, Clock } from "lucide-react";
 
 declare global {
   interface Window {
-    braintree: any;
+    paypal: any;
   }
 }
 
 function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraft: AircraftListing; onSuccess: () => void }) {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [dropinInstance, setDropinInstance] = useState<any>(null);
-  const dropinContainerRef = useRef<HTMLDivElement>(null);
+  const [isReady, setIsReady] = useState(false);
+  const [paypalConfig, setPaypalConfig] = useState<{ clientId: string; environment: string } | null>(null);
+  const cardFieldsRef = useRef<any>(null);
   const { toast } = useToast();
 
+  // Fetch PayPal config
   useEffect(() => {
-    const loadBraintreeAndInitialize = async () => {
-      // Load Braintree scripts if not already loaded
-      if (!window.braintree) {
-        const clientScript = document.createElement('script');
-        clientScript.src = 'https://js.braintreegateway.com/web/3.101.0/js/client.min.js';
-        document.head.appendChild(clientScript);
-
-        const dropinScript = document.createElement('script');
-        dropinScript.src = 'https://js.braintreegateway.com/web/dropin/1.43.0/js/dropin.min.js';
-        document.head.appendChild(dropinScript);
-
-        await new Promise((resolve) => {
-          dropinScript.onload = resolve;
+    fetch('/api/paypal/config')
+      .then(res => res.json())
+      .then(config => setPaypalConfig(config))
+      .catch(err => {
+        console.error('Failed to fetch PayPal config:', err);
+        toast({
+          title: "Error",
+          description: "Failed to load payment configuration",
+          variant: "destructive",
         });
+      });
+  }, []);
+
+  // Load PayPal SDK and initialize card fields
+  useEffect(() => {
+    if (!paypalConfig) return;
+
+    const loadPayPalSDK = async () => {
+      // Check if already loaded
+      if (window.paypal) {
+        initializeCardFields();
+        return;
       }
 
-      // Fetch client token from backend
-      const response = await fetch('/api/braintree/client-token', {
-        credentials: 'include',
-      });
-      const { clientToken } = await response.json();
+      // Load PayPal SDK with card fields and disable Pay Later
+      const script = document.createElement('script');
+      script.src = `https://www.paypal.com/sdk/js?client-id=${paypalConfig.clientId}&components=card-fields&disable-funding=paylater`;
+      script.async = true;
+      
+      script.onload = () => {
+        initializeCardFields();
+      };
+      
+      script.onerror = () => {
+        toast({
+          title: "Error",
+          description: "Failed to load PayPal SDK",
+          variant: "destructive",
+        });
+      };
 
-      // Create Drop-in UI
-      window.braintree.dropin.create({
-        authorization: clientToken,
-        container: dropinContainerRef.current,
-        card: {
-          cardholderName: {
-            required: true
+      document.head.appendChild(script);
+    };
+
+    const initializeCardFields = async () => {
+      if (!window.paypal || !window.paypal.CardFields) {
+        console.error('PayPal CardFields not available');
+        return;
+      }
+
+      try {
+        const cardFields = window.paypal.CardFields({
+          createOrder: async () => {
+            const response = await fetch('/api/paypal/create-order-rental', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                amount: parseFloat(rental.totalCostRenter),
+                rentalId: rental.id
+              })
+            });
+
+            const order = await response.json();
+            return order.id;
+          },
+          onApprove: async (data: any) => {
+            setIsProcessing(true);
+            try {
+              // Capture the payment
+              const captureResponse = await fetch(`/api/paypal/capture-order/${data.orderID}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+              });
+
+              const captureData = await captureResponse.json();
+
+              if (!captureResponse.ok || captureData.status !== 'COMPLETED') {
+                throw new Error('Payment capture failed');
+              }
+
+              // Verify payment and activate rental
+              const completeResponse = await fetch(`/api/rentals/${rental.id}/complete-payment`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ transactionId: data.orderID }),
+              });
+
+              if (!completeResponse.ok) {
+                throw new Error("Failed to complete rental");
+              }
+
+              toast({
+                title: "Payment successful!",
+                description: "Your rental is now active. Safe flying!",
+              });
+              
+              onSuccess();
+            } catch (err: any) {
+              toast({
+                title: "Payment failed",
+                description: err.message || "Please try again",
+                variant: "destructive",
+              });
+              setIsProcessing(false);
+            }
+          },
+          onError: (err: any) => {
+            console.error('PayPal error:', err);
+            toast({
+              title: "Payment error",
+              description: "Please check your card details and try again",
+              variant: "destructive",
+            });
+            setIsProcessing(false);
           }
-        }
-      }, (createErr: any, instance: any) => {
-        if (createErr) {
-          console.error('Braintree Drop-in error:', createErr);
+        });
+
+        // Check if card fields are eligible
+        if (cardFields.isEligible()) {
+          // Render individual card fields
+          const numberField = cardFields.NumberField();
+          numberField.render('#card-number-field');
+
+          const expiryField = cardFields.ExpiryField();
+          expiryField.render('#card-expiry-field');
+
+          const cvvField = cardFields.CVVField();
+          cvvField.render('#card-cvv-field');
+
+          const nameField = cardFields.NameField();
+          nameField.render('#card-name-field');
+
+          cardFieldsRef.current = cardFields;
+          setIsReady(true);
+        } else {
           toast({
-            title: "Error",
-            description: "Failed to initialize payment form",
+            title: "Payment unavailable",
+            description: "Card payments are not available at this time",
             variant: "destructive",
           });
-          return;
         }
-        setDropinInstance(instance);
-      });
-    };
-
-    loadBraintreeAndInitialize();
-
-    return () => {
-      if (dropinInstance) {
-        dropinInstance.teardown();
+      } catch (error) {
+        console.error('Error initializing card fields:', error);
+        toast({
+          title: "Error",
+          description: "Failed to initialize payment form",
+          variant: "destructive",
+        });
       }
     };
-  }, []);
+
+    loadPayPalSDK();
+  }, [paypalConfig, rental.id, rental.totalCostRenter]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!dropinInstance) {
+    if (!cardFieldsRef.current) {
       return;
     }
 
     setIsProcessing(true);
 
     try {
-      // Request payment nonce from Drop-in UI
-      const { nonce } = await dropinInstance.requestPaymentMethod();
-
-      // Send nonce to backend for processing
-      const response = await fetch('/api/braintree/checkout-rental', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          paymentMethodNonce: nonce,
-          amount: parseFloat(rental.totalCostRenter),
-          rentalId: rental.id
-        })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Payment failed');
-      }
-
-      // Verify payment and activate rental
-      const completeResponse = await fetch(`/api/rentals/${rental.id}/complete-payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ transactionId: result.transactionId }),
-      });
-
-      if (!completeResponse.ok) {
-        throw new Error("Failed to complete rental");
-      }
-
-      toast({
-        title: "Payment successful!",
-        description: "Your rental is now active. Safe flying!",
-      });
-      
-      onSuccess();
+      await cardFieldsRef.current.submit();
     } catch (err: any) {
       toast({
         title: "Payment failed",
-        description: err.message || "Please try again",
+        description: err.message || "Please check your card details and try again",
         variant: "destructive",
       });
       setIsProcessing(false);
@@ -134,11 +201,41 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div ref={dropinContainerRef} className="min-h-[300px]"></div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="card-name-field" className="block text-sm font-medium mb-2">
+            Cardholder Name
+          </label>
+          <div id="card-name-field" className="border rounded-md p-3 min-h-[44px]"></div>
+        </div>
+        
+        <div>
+          <label htmlFor="card-number-field" className="block text-sm font-medium mb-2">
+            Card Number
+          </label>
+          <div id="card-number-field" className="border rounded-md p-3 min-h-[44px]"></div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="card-expiry-field" className="block text-sm font-medium mb-2">
+              Expiration Date
+            </label>
+            <div id="card-expiry-field" className="border rounded-md p-3 min-h-[44px]"></div>
+          </div>
+          <div>
+            <label htmlFor="card-cvv-field" className="block text-sm font-medium mb-2">
+              CVV
+            </label>
+            <div id="card-cvv-field" className="border rounded-md p-3 min-h-[44px]"></div>
+          </div>
+        </div>
+      </div>
+
       <Button
         type="submit"
-        disabled={!dropinInstance || isProcessing}
+        disabled={!isReady || isProcessing}
         className="w-full bg-accent text-accent-foreground hover:bg-accent"
         size="lg"
         data-testid="button-submit-payment"

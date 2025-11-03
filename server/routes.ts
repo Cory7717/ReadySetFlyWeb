@@ -738,6 +738,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get flagged marketplace listings (admin only) - MUST come before :id route
+  app.get("/api/marketplace/flagged", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const flaggedListings = await storage.getFlaggedMarketplaceListings();
+      res.json(flaggedListings);
+    } catch (error) {
+      console.error("Error fetching flagged listings:", error);
+      res.status(500).json({ error: "Failed to fetch flagged listings" });
+    }
+  });
+
   app.get("/api/marketplace/:id", async (req: any, res) => {
     try {
       const listing = await storage.getMarketplaceListing(req.params.id);
@@ -1086,17 +1097,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error flagging marketplace listing:", error);
       res.status(500).json({ error: "Failed to flag listing" });
-    }
-  });
-
-  // Get flagged marketplace listings (admin only)
-  app.get("/api/marketplace/flagged", isAuthenticated, isAdmin, async (req, res) => {
-    try {
-      const flaggedListings = await storage.getFlaggedMarketplaceListings();
-      res.json(flaggedListings);
-    } catch (error) {
-      console.error("Error fetching flagged listings:", error);
-      res.status(500).json({ error: "Failed to fetch flagged listings" });
     }
   });
 

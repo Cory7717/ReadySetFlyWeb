@@ -23,14 +23,10 @@ export default function RentalPaymentScreen({ route, navigation }: Props) {
   const [isProcessing, setIsProcessing] = useState(false);
   const webViewRef = useRef<WebView>(null);
 
-  // Construct the payment URL with query parameters
-  const paymentUrl = `${apiEndpoints.baseURL}/mobile-braintree-payment?` +
+  // Construct the PayPal payment URL
+  const paymentUrl = `${apiEndpoints.baseURL}/mobile-paypal-rental-payment?` +
     `amount=${paymentData.amount}&` +
-    `rentalId=${paymentData.rentalId}&` +
-    `aircraftId=${paymentData.aircraftId}&` +
-    `startDate=${encodeURIComponent(paymentData.startDate)}&` +
-    `endDate=${encodeURIComponent(paymentData.endDate)}&` +
-    `hours=${paymentData.hours}`;
+    `rentalId=${paymentData.rentalId}`;
 
   const handleMessage = async (event: WebViewMessageEvent) => {
     try {
@@ -42,8 +38,7 @@ export default function RentalPaymentScreen({ route, navigation }: Props) {
         // Complete the rental payment on the backend
         try {
           await apiEndpoints.rentals.completePayment(paymentData.rentalId, {
-            paymentNonce: data.nonce,
-            amount: paymentData.amount
+            transactionId: data.orderID
           });
 
           Alert.alert(
@@ -132,7 +127,7 @@ export default function RentalPaymentScreen({ route, navigation }: Props) {
       {isLoading && (
         <View style={styles.secureIndicator}>
           <Ionicons name="lock-closed" size={16} color="#10b981" />
-          <Text style={styles.secureText}>Secure Payment</Text>
+          <Text style={styles.secureText}>Secure Payment by PayPal</Text>
         </View>
       )}
     </View>

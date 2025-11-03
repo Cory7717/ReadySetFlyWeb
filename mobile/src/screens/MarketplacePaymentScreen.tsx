@@ -8,10 +8,7 @@ export default function MarketplacePaymentScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // TODO: This screen requires the Braintree payment HTML page to be created on the server
-  // See MOBILE_PAYMENT_SETUP.md for complete setup instructions
-  
-  const paymentUrl = `${apiEndpoints.baseURL}/mobile-marketplace-payment?amount=${amount}`;
+  const paymentUrl = `${apiEndpoints.baseURL}/mobile-paypal-marketplace-payment?amount=${amount}&category=${listingData.category}&tier=${listingData.tier || 'basic'}`;
 
   const handleWebViewMessage = async (event: any) => {
     try {
@@ -19,7 +16,7 @@ export default function MarketplacePaymentScreen({ route, navigation }: any) {
       
       if (data.type === 'PAYMENT_SUCCESS') {
         // Submit listing with payment confirmation
-        await submitListingWithPayment(data.nonce, data.transactionId);
+        await submitListingWithPayment(data.orderID);
       } else if (data.type === 'PAYMENT_ERROR') {
         Alert.alert('Payment Failed', data.error || 'An error occurred');
         navigation.goBack();
@@ -32,12 +29,11 @@ export default function MarketplacePaymentScreen({ route, navigation }: any) {
     }
   };
 
-  const submitListingWithPayment = async (nonce: string, transactionId: string) => {
+  const submitListingWithPayment = async (orderID: string) => {
     try {
       const fullListingData = {
         ...listingData,
-        paymentNonce: nonce,
-        transactionId,
+        paymentIntentId: orderID,
       };
 
       await apiEndpoints.marketplace.create(fullListingData);
@@ -58,7 +54,7 @@ export default function MarketplacePaymentScreen({ route, navigation }: any) {
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{error}</Text>
         <Text style={styles.errorSubtext}>
-          Please complete the Braintree payment setup. See MOBILE_PAYMENT_SETUP.md for instructions.
+          Unable to load payment form. Please try again.
         </Text>
       </View>
     );

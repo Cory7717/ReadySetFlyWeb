@@ -407,6 +407,282 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mobile PayPal Payment Page - Rental Payments
+  app.get("/mobile-paypal-rental-payment", (req, res) => {
+    const { amount, rentalId } = req.query;
+    res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: #f9fafb; }
+    .container { max-width: 500px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 24px; }
+    .header h1 { font-size: 24px; color: #111827; margin-bottom: 8px; }
+    .header p { color: #6b7280; font-size: 14px; }
+    .card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 16px; }
+    .amount { text-align: center; font-size: 36px; font-weight: bold; color: #1e40af; margin-bottom: 24px; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; color: #374151; }
+    .field-container { border: 1px solid #d1d5db; border-radius: 8px; padding: 12px; min-height: 44px; background: #fff; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .btn { width: 100%; padding: 14px; background: #1e40af; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .loading { text-align: center; color: #6b7280; padding: 20px; }
+    .error { color: #dc2626; background: #fee2e2; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+  </style>
+  <script src="https://www.paypal.com/sdk/js?client-id=${process.env.PAYPAL_CLIENT_ID}&components=card-fields&disable-funding=paylater"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Complete Payment</h1>
+      <p>Secure payment powered by PayPal</p>
+    </div>
+    
+    <div class="card">
+      <div class="amount">$${amount}</div>
+      
+      <div id="error-message"></div>
+      
+      <div class="field">
+        <label>Cardholder Name</label>
+        <div id="card-name-field" class="field-container"></div>
+      </div>
+      
+      <div class="field">
+        <label>Card Number</label>
+        <div id="card-number-field" class="field-container"></div>
+      </div>
+      
+      <div class="field-row">
+        <div class="field">
+          <label>Expiry Date</label>
+          <div id="card-expiry-field" class="field-container"></div>
+        </div>
+        <div class="field">
+          <label>CVV</label>
+          <div id="card-cvv-field" class="field-container"></div>
+        </div>
+      </div>
+      
+      <button id="pay-button" class="btn" disabled>Loading...</button>
+    </div>
+  </div>
+
+  <script>
+    const button = document.getElementById('pay-button');
+    const errorDiv = document.getElementById('error-message');
+    
+    const cardFields = paypal.CardFields({
+      createOrder: async () => {
+        const response = await fetch('/api/paypal/create-order-rental', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            amount: '${amount}',
+            rentalId: '${rentalId}'
+          })
+        });
+        const order = await response.json();
+        return order.id;
+      },
+      onApprove: async (data) => {
+        button.disabled = true;
+        button.textContent = 'Processing...';
+        
+        try {
+          const response = await fetch('/api/paypal/capture-order/' + data.orderID, {
+            method: 'POST',
+            credentials: 'include'
+          });
+          const result = await response.json();
+          
+          if (result.status === 'COMPLETED') {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'PAYMENT_SUCCESS',
+              orderID: data.orderID
+            }));
+          } else {
+            throw new Error('Payment not completed');
+          }
+        } catch (error) {
+          errorDiv.innerHTML = '<div class="error">Payment failed. Please try again.</div>';
+          button.disabled = false;
+          button.textContent = 'Pay $${amount}';
+        }
+      },
+      onError: (error) => {
+        console.error('PayPal error:', error);
+        errorDiv.innerHTML = '<div class="error">Payment error. Please check your card details.</div>';
+      }
+    });
+
+    if (cardFields.isEligible()) {
+      cardFields.NameField().render('#card-name-field');
+      cardFields.NumberField().render('#card-number-field');
+      cardFields.ExpiryField().render('#card-expiry-field');
+      cardFields.CVVField().render('#card-cvv-field');
+      
+      button.disabled = false;
+      button.textContent = 'Pay $${amount}';
+      
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        button.textContent = 'Processing...';
+        await cardFields.submit();
+      });
+    } else {
+      errorDiv.innerHTML = '<div class="error">Card payments are not available.</div>';
+    }
+  </script>
+</body>
+</html>
+    `);
+  });
+
+  // Mobile PayPal Payment Page - Marketplace Listings
+  app.get("/mobile-paypal-marketplace-payment", (req, res) => {
+    const { amount, category, tier } = req.query;
+    res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: #f9fafb; }
+    .container { max-width: 500px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 24px; }
+    .header h1 { font-size: 24px; color: #111827; margin-bottom: 8px; }
+    .header p { color: #6b7280; font-size: 14px; }
+    .card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 16px; }
+    .amount { text-align: center; font-size: 36px; font-weight: bold; color: #1e40af; margin-bottom: 24px; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; color: #374151; }
+    .field-container { border: 1px solid #d1d5db; border-radius: 8px; padding: 12px; min-height: 44px; background: #fff; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .btn { width: 100%; padding: 14px; background: #1e40af; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .loading { text-align: center; color: #6b7280; padding: 20px; }
+    .error { color: #dc2626; background: #fee2e2; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+  </style>
+  <script src="https://www.paypal.com/sdk/js?client-id=${process.env.PAYPAL_CLIENT_ID}&components=card-fields&disable-funding=paylater"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Complete Payment</h1>
+      <p>Secure payment powered by PayPal</p>
+    </div>
+    
+    <div class="card">
+      <div class="amount">$${amount}</div>
+      
+      <div id="error-message"></div>
+      
+      <div class="field">
+        <label>Cardholder Name</label>
+        <div id="card-name-field" class="field-container"></div>
+      </div>
+      
+      <div class="field">
+        <label>Card Number</label>
+        <div id="card-number-field" class="field-container"></div>
+      </div>
+      
+      <div class="field-row">
+        <div class="field">
+          <label>Expiry Date</label>
+          <div id="card-expiry-field" class="field-container"></div>
+        </div>
+        <div class="field">
+          <label>CVV</label>
+          <div id="card-cvv-field" class="field-container"></div>
+        </div>
+      </div>
+      
+      <button id="pay-button" class="btn" disabled>Loading...</button>
+    </div>
+  </div>
+
+  <script>
+    const button = document.getElementById('pay-button');
+    const errorDiv = document.getElementById('error-message');
+    
+    const cardFields = paypal.CardFields({
+      createOrder: async () => {
+        const response = await fetch('/api/paypal/create-order-listing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            category: '${category}',
+            tier: '${tier}'
+          })
+        });
+        const order = await response.json();
+        return order.id;
+      },
+      onApprove: async (data) => {
+        button.disabled = true;
+        button.textContent = 'Processing...';
+        
+        try {
+          const response = await fetch('/api/paypal/capture-order/' + data.orderID, {
+            method: 'POST',
+            credentials: 'include'
+          });
+          const result = await response.json();
+          
+          if (result.status === 'COMPLETED') {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'PAYMENT_SUCCESS',
+              orderID: data.orderID
+            }));
+          } else {
+            throw new Error('Payment not completed');
+          }
+        } catch (error) {
+          errorDiv.innerHTML = '<div class="error">Payment failed. Please try again.</div>';
+          button.disabled = false;
+          button.textContent = 'Pay $${amount}';
+        }
+      },
+      onError: (error) => {
+        console.error('PayPal error:', error);
+        errorDiv.innerHTML = '<div class="error">Payment error. Please check your card details.</div>';
+      }
+    });
+
+    if (cardFields.isEligible()) {
+      cardFields.NameField().render('#card-name-field');
+      cardFields.NumberField().render('#card-number-field');
+      cardFields.ExpiryField().render('#card-expiry-field');
+      cardFields.CVVField().render('#card-cvv-field');
+      
+      button.disabled = false;
+      button.textContent = 'Pay $${amount}';
+      
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        button.textContent = 'Processing...';
+        await cardFields.submit();
+      });
+    } else {
+      errorDiv.innerHTML = '<div class="error">Card payments are not available.</div>';
+    }
+  </script>
+</body>
+</html>
+    `);
+  });
+
   // AI Description Generation endpoint
   app.post("/api/generate-description", isAuthenticated, async (req, res) => {
     try {

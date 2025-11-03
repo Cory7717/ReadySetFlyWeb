@@ -58,5 +58,5 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
 - **PayPal Braintree**: Payment gateway for incoming payments (rentals, marketplace fees) using Drop-in UI. Configured for Production environment.
 - **PayPal Payouts API**: For automated, instant owner withdrawals.
 - **WebSocket server**: Custom implementation for real-time messaging.
-- **Cloud Storage**: Planned integration (e.g., AWS S3, Cloudinary) for file uploads.
+- **Replit Object Storage**: Google Cloud Storage-backed file storage for marketplace listing images and aircraft photos. Implemented with ObjectUploader component (Uppy-based), presigned URL uploads, and ACL-based access control. Images stored with public visibility for listing photos.
 - **FAA Registry API**: Planned integration for N-number lookups.

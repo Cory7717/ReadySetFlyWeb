@@ -11,6 +11,8 @@ import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { getUncachableResendClient } from "./resendClient";
 import registerMobileAuthRoutes from "./mobile-auth-routes";
 import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { ObjectPermission } from "./objectAcl";
 
 // Initialize OpenAI client with Replit AI Integrations
 const openai = new OpenAI({
@@ -105,6 +107,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Serve uploaded files
   app.use('/uploads', express.static('uploads'));
+
+  // Object Storage Routes (for marketplace listing images)
+  // Get upload URL for listing images
+  app.post('/api/objects/upload', isAuthenticated, async (req: any, res) => {
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error) {
+      console.error('Error getting upload URL:', error);
+      res.status(500).json({ error: 'Failed to get upload URL' });
+    }
+  });
+
+  // Set ACL policy for uploaded listing images
+  app.put('/api/listing-images', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!req.body.imageURL) {
+        return res.status(400).json({ error: 'imageURL is required' });
+      }
+
+      const userId = req.user.claims.sub;
+      const objectStorageService = new ObjectStorageService();
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        req.body.imageURL,
+        {
+          owner: userId,
+          visibility: "public", // Listing images are public
+        },
+      );
+
+      res.status(200).json({ objectPath });
+    } catch (error) {
+      console.error('Error setting listing image ACL:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Serve objects with ACL check
+  app.get('/objects/:objectPath(*)', async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub; // May be undefined for unauthenticated requests
+      const objectStorageService = new ObjectStorageService();
+      const objectFile = await objectStorageService.getObjectEntityFile(req.path);
+      
+      const canAccess = await objectStorageService.canAccessObjectEntity({
+        objectFile,
+        userId: userId,
+        requestedPermission: ObjectPermission.READ,
+      });
+      
+      if (!canAccess) {
+        return res.sendStatus(401);
+      }
+      
+      await objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error('Error serving object:', error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
+    }
+  });
 
   // Auth routes (from blueprint:javascript_log_in_with_replit)
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {

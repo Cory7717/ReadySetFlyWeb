@@ -19,6 +19,8 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import { insertMarketplaceListingSchema } from "@shared/schema";
 import { z } from "zod";
 import type { MarketplaceListing } from "@shared/schema";
+import { ObjectUploader } from "@/components/ObjectUploader";
+import type { UploadResult } from "@uppy/core";
 
 // Base form schema
 const baseFormSchema = insertMarketplaceListingSchema.omit({ userId: true }).extend({
@@ -201,43 +203,55 @@ export default function CreateMarketplaceListing() {
 
   const maxImages = getMaxImages(selectedCategory, selectedTier);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length + imageFiles.length > maxImages) {
+  // Get upload URL from server
+  const handleGetUploadParameters = async () => {
+    const response = await fetch('/api/objects/upload', {
+      method: 'POST',
+      credentials: 'include',
+    });
+    const data = await response.json();
+    return {
+      method: 'PUT' as const,
+      url: data.uploadURL,
+    };
+  };
+
+  // Handle upload completion
+  const handleUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    try {
+      // Process each successful upload
+      const uploadedUrls: string[] = [];
+      
+      for (const file of result.successful || []) {
+        if (file.uploadURL) {
+          // Set ACL policy for the uploaded image
+          const response = await fetch('/api/listing-images', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageURL: file.uploadURL }),
+            credentials: 'include',
+          });
+          
+          const data = await response.json();
+          uploadedUrls.push(data.objectPath);
+        }
+      }
+      
+      // Add uploaded images to the list
+      setImageFiles([...imageFiles, ...uploadedUrls]);
+      
       toast({
-        title: "Too many images",
-        description: `You can only upload up to ${maxImages} images for this category${selectedCategory === 'aircraft-sale' ? ' and tier' : ''}.`,
+        title: "Images Uploaded Successfully",
+        description: `Added ${uploadedUrls.length} image(s) to your listing.`,
+      });
+    } catch (error) {
+      console.error('Error processing uploads:', error);
+      toast({
+        title: "Upload Error",
+        description: "Some images failed to upload. Please try again.",
         variant: "destructive",
       });
-      return;
     }
-    
-    // TODO: In production, upload to cloud storage (S3, Cloudinary) and get permanent URLs
-    // For now, use placeholder images from Unsplash for demo purposes
-    const placeholderImages = [
-      'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=1200&h=800&fit=crop', // Aircraft exterior
-      'https://images.unsplash.com/photo-1583792645866-f6b9d2e755e7?w=1200&h=800&fit=crop', // Aircraft cockpit
-      'https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1200&h=800&fit=crop', // Aircraft in flight
-      'https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?w=1200&h=800&fit=crop', // Aircraft side view
-      'https://images.unsplash.com/photo-1474302770737-173ee21bab63?w=1200&h=800&fit=crop', // Aircraft detail
-      'https://images.unsplash.com/photo-1542362567-b07e54a88f93?w=1200&h=800&fit=crop', // Aircraft interior
-      'https://images.unsplash.com/photo-1569629743817-70d8db6c323b?w=1200&h=800&fit=crop', // Airport
-      'https://images.unsplash.com/photo-1556388158-158ea5ccacbd?w=1200&h=800&fit=crop', // Aviation
-      'https://images.unsplash.com/photo-1473968512647-3e447244af8f?w=1200&h=800&fit=crop', // Private jet
-      'https://images.unsplash.com/photo-1583792645866-f6b9d2e755e7?w=1200&h=800&fit=crop', // Cockpit controls
-    ];
-    
-    const urls = files.map((_, index) => {
-      const placeholderIndex = (imageFiles.length + index) % placeholderImages.length;
-      return placeholderImages[placeholderIndex];
-    });
-    
-    setImageFiles([...imageFiles, ...urls]);
-    
-    toast({
-      title: "Images Added",
-      description: `Added ${files.length} placeholder image(s). Cloud storage integration coming soon!`,
-    });
   };
 
   const removeImage = (index: number) => {
@@ -873,18 +887,17 @@ export default function CreateMarketplaceListing() {
                     </div>
                   ))}
                   {imageFiles.length < maxImages && (
-                    <label className="aspect-square rounded-md border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover-elevate active-elevate-2 transition-all">
+                    <ObjectUploader
+                      maxNumberOfFiles={maxImages - imageFiles.length}
+                      maxFileSize={10 * 1024 * 1024}
+                      onGetUploadParameters={handleGetUploadParameters}
+                      onComplete={handleUploadComplete}
+                      buttonClassName="aspect-square rounded-md border-2 border-dashed flex flex-col items-center justify-center w-full h-full"
+                      buttonVariant="ghost"
+                    >
                       <Upload className="h-8 w-8 text-muted-foreground mb-2" />
                       <span className="text-sm text-muted-foreground">Upload</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={handleImageUpload}
-                        data-testid="input-upload-images"
-                      />
-                    </label>
+                    </ObjectUploader>
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground">

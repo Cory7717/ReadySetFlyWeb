@@ -20,7 +20,19 @@ export default function MarketplaceDetailScreen({ route }: Props) {
 
   const handleContact = () => {
     if (listing?.email) {
-      Linking.openURL(`mailto:${listing.email}`);
+      // Create custom subject line based on category
+      const categoryNames: Record<string, string> = {
+        'aircraft-sale': 'Aircraft for Sale',
+        'job': 'Aviation Job',
+        'cfi': 'CFI Services',
+        'flight-school': 'Flight School',
+        'mechanic': 'Mechanic Services',
+        'charter': 'Charter Service'
+      };
+      const categoryName = categoryNames[listing.category] || listing.category;
+      const subject = encodeURIComponent(`Inquiry From Ready Set Fly about your ${categoryName} Listing: ${listing.title}`);
+      const body = encodeURIComponent(`Hi,\n\nI'm interested in your ${categoryName} listing: ${listing.title}\n\n`);
+      Linking.openURL(`mailto:${listing.email}?subject=${subject}&body=${body}`);
     } else if (listing?.phone) {
       Linking.openURL(`tel:${listing.phone}`);
     }

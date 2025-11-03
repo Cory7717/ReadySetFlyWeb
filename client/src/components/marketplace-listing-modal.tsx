@@ -591,8 +591,19 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                           setLoginPromptOpen(true);
                           return;
                         }
-                        const subject = `Inquiry about ${listing.title}`;
-                        const mailtoLink = `mailto:${listing.contactEmail}?subject=${encodeURIComponent(subject)}`;
+                        // Create custom subject line based on category
+                        const categoryNames: Record<string, string> = {
+                          'aircraft-sale': 'Aircraft for Sale',
+                          'job': 'Aviation Job',
+                          'cfi': 'CFI Services',
+                          'flight-school': 'Flight School',
+                          'mechanic': 'Mechanic Services',
+                          'charter': 'Charter Service'
+                        };
+                        const categoryName = categoryNames[listing.category] || listing.category;
+                        const subject = `Inquiry From Ready Set Fly about your ${categoryName} Listing: ${listing.title}`;
+                        const body = `Hi,\n\nI'm interested in your ${categoryName} listing: ${listing.title}\n\n`;
+                        const mailtoLink = `mailto:${listing.contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                         window.location.href = mailtoLink;
                       }}
                       data-testid="button-contact-seller"

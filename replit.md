@@ -50,6 +50,8 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
   - **Promo Banner**: PromoBanner component displays active promotional campaigns with auto-refresh (30-second polling) to show admin-created promos immediately.
   - **Payment Flow**: MarketplacePaymentScreen uses WebView Braintree integration for paid listings (requires same setup as rental payments).
   - **Navigation**: "Create Listing" button on MarketplaceScreen, full navigation stack for listing creation and payment.
+  - **Image Upload**: Not yet implemented for mobile (web has full cloud storage via ObjectUploader). Backend API ready (`/api/objects/upload`, `/api/listing-images`). Mobile needs Expo ImagePicker integration.
+  - **Contact Inquiries**: Custom email subject lines with category and listing title (e.g., "Inquiry From Ready Set Fly about your Aircraft for Sale Listing: [Title]").
 
 ## External Dependencies
 - **PostgreSQL**: Primary database, hosted via Neon.

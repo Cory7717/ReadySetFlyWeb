@@ -611,7 +611,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  app.patch("/api/aircraft/:id", isAuthenticated, async (req: any, res) => {
+  app.patch("/api/aircraft/:id", isAuthenticated, isVerified, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const listing = await storage.getAircraftListing(req.params.id);
@@ -633,7 +633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/aircraft/:id/toggle", isAuthenticated, async (req: any, res) => {
+  app.post("/api/aircraft/:id/toggle", isAuthenticated, isVerified, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const listing = await storage.getAircraftListing(req.params.id);
@@ -655,7 +655,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/aircraft/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/aircraft/:id", isAuthenticated, isVerified, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const listing = await storage.getAircraftListing(req.params.id);

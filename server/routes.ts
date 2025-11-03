@@ -350,7 +350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Braintree checkout for rental payments
-  app.post("/api/braintree/checkout-rental", async (req, res) => {
+  app.post("/api/braintree/checkout-rental", isAuthenticated, isVerified, async (req: any, res) => {
     try {
       const { paymentMethodNonce, amount, rentalId } = req.body;
       
@@ -611,36 +611,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  app.patch("/api/aircraft/:id", async (req, res) => {
+  app.patch("/api/aircraft/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const listing = await storage.updateAircraftListing(req.params.id, req.body);
+      const userId = req.user.claims.sub;
+      const listing = await storage.getAircraftListing(req.params.id);
+      
       if (!listing) {
         return res.status(404).json({ error: "Aircraft not found" });
       }
-      res.json(listing);
+      
+      // Verify ownership or admin status
+      const user = await storage.getUser(userId);
+      if (listing.ownerId !== userId && !user?.isAdmin && !user?.isSuperAdmin) {
+        return res.status(403).json({ error: "Not authorized to update this aircraft" });
+      }
+      
+      const updatedListing = await storage.updateAircraftListing(req.params.id, req.body);
+      res.json(updatedListing);
     } catch (error) {
       res.status(500).json({ error: "Failed to update aircraft" });
     }
   });
 
-  app.post("/api/aircraft/:id/toggle", async (req, res) => {
+  app.post("/api/aircraft/:id/toggle", isAuthenticated, async (req: any, res) => {
     try {
-      const listing = await storage.toggleAircraftListingStatus(req.params.id);
+      const userId = req.user.claims.sub;
+      const listing = await storage.getAircraftListing(req.params.id);
+      
       if (!listing) {
         return res.status(404).json({ error: "Aircraft not found" });
       }
-      res.json(listing);
+      
+      // Verify ownership or admin status
+      const user = await storage.getUser(userId);
+      if (listing.ownerId !== userId && !user?.isAdmin && !user?.isSuperAdmin) {
+        return res.status(403).json({ error: "Not authorized to toggle this aircraft" });
+      }
+      
+      const toggledListing = await storage.toggleAircraftListingStatus(req.params.id);
+      res.json(toggledListing);
     } catch (error) {
       res.status(500).json({ error: "Failed to toggle aircraft status" });
     }
   });
 
-  app.delete("/api/aircraft/:id", async (req, res) => {
+  app.delete("/api/aircraft/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const deleted = await storage.deleteAircraftListing(req.params.id);
-      if (!deleted) {
+      const userId = req.user.claims.sub;
+      const listing = await storage.getAircraftListing(req.params.id);
+      
+      if (!listing) {
         return res.status(404).json({ error: "Aircraft not found" });
       }
+      
+      // Verify ownership or admin status
+      const user = await storage.getUser(userId);
+      if (listing.ownerId !== userId && !user?.isAdmin && !user?.isSuperAdmin) {
+        return res.status(403).json({ error: "Not authorized to delete this aircraft" });
+      }
+      
+      await storage.deleteAircraftListing(req.params.id);
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete aircraft" });

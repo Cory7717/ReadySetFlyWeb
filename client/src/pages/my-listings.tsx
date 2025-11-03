@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -6,15 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import type { MarketplaceListing, AircraftListing } from "@shared/schema";
-import { Plane, DollarSign, MapPin, Calendar, RefreshCw } from "lucide-react";
+import { Plane, DollarSign, MapPin, Calendar, RefreshCw, TrendingUp } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { UpgradeListingModal } from "@/components/upgrade-listing-modal";
 
 export default function MyListings() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const [selectedListingForUpgrade, setSelectedListingForUpgrade] = useState<MarketplaceListing | null>(null);
 
   const { data: marketplaceListings = [], isLoading: loadingMarketplace } = useQuery<MarketplaceListing[]>({
     queryKey: ["/api/marketplace/user", user?.id],
@@ -164,33 +167,44 @@ export default function MyListings() {
                         <span>Created {new Date(listing.createdAt).toLocaleDateString()}</span>
                       </div>
                     )}
-                    <div className="flex gap-2 mt-4">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="flex-1" 
-                        onClick={() => navigate(`/edit-marketplace-listing/${listing.id}`)}
-                        data-testid={`button-edit-marketplace-${listing.id}`}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        data-testid={`button-toggle-marketplace-${listing.id}`}
-                      >
-                        {listing.isActive ? "Deactivate" : "Activate"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => refreshMarketplaceMutation.mutate(listing.id)}
-                        disabled={refreshMarketplaceMutation.isPending}
-                        data-testid={`button-refresh-marketplace-${listing.id}`}
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="outline" className="text-xs">
+                          {listing.tier === 'basic' ? 'Basic' : listing.tier === 'standard' ? 'Standard' : 'Premium'} Tier
+                        </Badge>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1" 
+                          onClick={() => navigate(`/edit-marketplace-listing/${listing.id}`)}
+                          data-testid={`button-edit-marketplace-${listing.id}`}
+                        >
+                          Edit
+                        </Button>
+                        {listing.tier !== 'premium' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => setSelectedListingForUpgrade(listing)}
+                            data-testid={`button-upgrade-marketplace-${listing.id}`}
+                          >
+                            <TrendingUp className="h-4 w-4 mr-1" />
+                            Upgrade
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => refreshMarketplaceMutation.mutate(listing.id)}
+                          disabled={refreshMarketplaceMutation.isPending}
+                          data-testid={`button-refresh-marketplace-${listing.id}`}
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -291,6 +305,14 @@ export default function MyListings() {
           )}
         </TabsContent>
       </Tabs>
+
+      {selectedListingForUpgrade && (
+        <UpgradeListingModal
+          listing={selectedListingForUpgrade}
+          isOpen={!!selectedListingForUpgrade}
+          onClose={() => setSelectedListingForUpgrade(null)}
+        />
+      )}
     </div>
   );
 }

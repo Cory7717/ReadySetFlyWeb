@@ -938,6 +938,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Upgrade marketplace listing tier
+  app.post("/api/marketplace/:id/upgrade", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const listingId = req.params.id;
+      const { newTier, transactionId } = req.body;
+      
+      // Validate new tier
+      if (!['basic', 'standard', 'premium'].includes(newTier)) {
+        return res.status(400).json({ error: "Invalid tier" });
+      }
+      
+      // Fetch the existing listing
+      const existingListing = await storage.getMarketplaceListing(listingId);
+      if (!existingListing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      
+      // Prevent upgrading sample listings
+      if ((existingListing as any).isExample) {
+        return res.status(403).json({ error: "Sample listings cannot be upgraded" });
+      }
+      
+      // Verify ownership
+      if (existingListing.userId !== userId) {
+        return res.status(403).json({ error: "Unauthorized - you can only upgrade your own listings" });
+      }
+      
+      // Check if already at this tier
+      if (existingListing.tier === newTier) {
+        return res.status(400).json({ error: "Listing is already at this tier" });
+      }
+      
+      // Define tier pricing
+      const tierPrices: Record<string, number> = {
+        basic: 25,
+        standard: 100,
+        premium: 250,
+      };
+      
+      // Calculate price difference
+      const currentPrice = tierPrices[existingListing.tier] || 25;
+      const newPrice = tierPrices[newTier];
+      const priceDifference = newPrice - currentPrice;
+      
+      // Verify upgrade is to a higher tier
+      if (priceDifference <= 0) {
+        return res.status(400).json({ error: "Can only upgrade to a higher tier" });
+      }
+      
+      // For now, we'll update the tier immediately (payment verification would go here)
+      // In production, you'd verify the Braintree transaction before updating
+      const updatedListing = await storage.updateMarketplaceListing(listingId, {
+        tier: newTier,
+        monthlyFee: newPrice.toString(),
+      });
+      
+      res.json({
+        message: "Listing upgraded successfully",
+        listing: updatedListing,
+        upgradeCost: priceDifference,
+      });
+    } catch (error: any) {
+      console.error("Marketplace listing upgrade error:", error);
+      res.status(500).json({ error: error.message || "Failed to upgrade listing" });
+    }
+  });
+
   app.delete("/api/marketplace/:id", async (req, res) => {
     try {
       // Check if listing is a sample listing

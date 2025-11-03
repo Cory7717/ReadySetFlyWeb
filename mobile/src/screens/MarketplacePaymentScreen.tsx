@@ -33,7 +33,7 @@ export default function MarketplacePaymentScreen({ route, navigation }: any) {
     try {
       const fullListingData = {
         ...listingData,
-        paymentIntentId: orderID,
+        transactionId: orderID,
       };
 
       await apiEndpoints.marketplace.create(fullListingData);

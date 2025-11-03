@@ -446,22 +446,11 @@ export default function CreateMarketplaceListing() {
   const onSubmit = (data: FormData) => {
     console.log("Form submitted with data:", data);
     console.log("Form errors:", form.formState.errors);
-    console.log("User verification status:", isVerified);
-    console.log("User is super admin:", isSuperAdmin);
     console.log("User data:", user);
     
-    // Super admins can create listings without verification
-    if (!isVerified && !isSuperAdmin) {
-      console.error("Verification check failed:", { isVerified, isSuperAdmin, user });
-      toast({
-        title: "Verification Required",
-        description: "Please complete account verification before creating listings.",
-        variant: "destructive",
-      });
-      navigate("/profile");
-      return;
-    }
-
+    // NOTE: Verification is NOT required for marketplace listings
+    // Verification is only required for rental listings
+    
     // Validate category-specific required fields
     let validationError: string | null = null;
     
@@ -510,6 +499,17 @@ export default function CreateMarketplaceListing() {
       return;
     }
 
+    // If editing an existing listing, update it directly (no payment required for edits)
+    if (isEditMode && listingId) {
+      console.log("Updating existing listing...");
+      createListingMutation.mutate({
+        ...data,
+        price: data.price || undefined,
+        images: imageFiles.length > 0 ? imageFiles : [],
+      });
+      return;
+    }
+
     // Super admins bypass payment and create listing directly
     if (isSuperAdmin) {
       console.log("Super admin creating listing directly...");
@@ -522,7 +522,7 @@ export default function CreateMarketplaceListing() {
       return;
     }
 
-    // Regular users: redirect to payment
+    // Regular users creating new listing: redirect to payment
     const listingPayload = {
       ...data,
       price: data.price || undefined,
@@ -559,19 +559,6 @@ export default function CreateMarketplaceListing() {
             : "List your services, aircraft for sale, job openings, or other aviation-related offerings"}
         </p>
       </div>
-
-      {!isVerified && (
-        <Alert className="mb-6" data-testid="alert-verification-required">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Verification Required</AlertTitle>
-          <AlertDescription>
-            You must be a verified user to create marketplace listings.{" "}
-            <Link href="/profile" className="font-medium underline">
-              Complete verification in your profile
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
@@ -1608,7 +1595,7 @@ export default function CreateMarketplaceListing() {
               type="submit"
               size="lg"
               className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
-              disabled={(!isVerified && !isSuperAdmin) || createListingMutation.isPending || (isEditMode && loadingListing)}
+              disabled={createListingMutation.isPending || (isEditMode && loadingListing)}
               data-testid="button-submit-listing"
             >
               {loadingListing

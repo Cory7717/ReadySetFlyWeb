@@ -9,7 +9,7 @@ export type MarketplaceStackParamList = {
   MarketplaceHome: undefined;
   MarketplaceCategory: { category: string };
   MarketplaceDetail: { listingId: string };
-  CreateMarketplaceListing: undefined;
+  CreateMarketplaceListing: { listingId?: string } | undefined;
   MarketplacePayment: { amount: number; listingData: any };
 };
 

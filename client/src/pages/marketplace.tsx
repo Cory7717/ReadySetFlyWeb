@@ -429,7 +429,7 @@ export default function Marketplace() {
                   title={listing.title}
                   description={listing.description}
                   price={formatPrice(listing.price)}
-                  location={listing.location || "N/A"}
+                  location={listing.city && listing.state ? `${listing.city}, ${listing.state}` : (listing.location || "N/A")}
                   image={listing.images?.[0]}
                   images={listing.images?.length || 0}
                   tier={listing.tier || undefined}

@@ -1,14 +1,20 @@
+import { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MarketplaceStackParamList } from '../navigation/MarketplaceStack';
 import { apiEndpoints } from '../services/api';
+import { useIsAuthenticated } from '../utils/auth';
+import UpgradeListingModal from '../components/UpgradeListingModal';
 
 type Props = NativeStackScreenProps<MarketplaceStackParamList, 'MarketplaceDetail'>;
 
 export default function MarketplaceDetailScreen({ route }: Props) {
   const { listingId } = route.params;
+  const { user } = useIsAuthenticated();
+  const queryClient = useQueryClient();
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const { data: listing, isLoading, error } = useQuery({
     queryKey: ['/api/marketplace', listingId],
@@ -18,8 +24,10 @@ export default function MarketplaceDetailScreen({ route }: Props) {
     },
   });
 
+  const isOwner = user && listing && listing.userId === user.id;
+
   const handleContact = () => {
-    if (listing?.email) {
+    if (listing?.contactEmail) {
       // Create custom subject line based on category
       const categoryNames: Record<string, string> = {
         'aircraft-sale': 'Aircraft for Sale',
@@ -32,9 +40,9 @@ export default function MarketplaceDetailScreen({ route }: Props) {
       const categoryName = categoryNames[listing.category] || listing.category;
       const subject = encodeURIComponent(`Inquiry From Ready Set Fly about your ${categoryName} Listing: ${listing.title}`);
       const body = encodeURIComponent(`Hi,\n\nI'm interested in your ${categoryName} listing: ${listing.title}\n\n`);
-      Linking.openURL(`mailto:${listing.email}?subject=${subject}&body=${body}`);
-    } else if (listing?.phone) {
-      Linking.openURL(`tel:${listing.phone}`);
+      Linking.openURL(`mailto:${listing.contactEmail}?subject=${subject}&body=${body}`);
+    } else if (listing?.contactPhone) {
+      Linking.openURL(`tel:${listing.contactPhone}`);
     }
   };
 
@@ -91,33 +99,73 @@ export default function MarketplaceDetailScreen({ route }: Props) {
       )}
 
       {/* Contact Information */}
-      {(listing.email || listing.phone) && (
+      {(listing.contactEmail || listing.contactPhone) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact</Text>
           
-          {listing.email && (
+          {listing.contactEmail && (
             <View style={styles.contactRow}>
               <Ionicons name="mail-outline" size={20} color="#6b7280" />
-              <Text style={styles.contactText}>{listing.email}</Text>
+              <Text style={styles.contactText}>{listing.contactEmail}</Text>
             </View>
           )}
           
-          {listing.phone && (
+          {listing.contactPhone && (
             <View style={styles.contactRow}>
               <Ionicons name="call-outline" size={20} color="#6b7280" />
-              <Text style={styles.contactText}>{listing.phone}</Text>
+              <Text style={styles.contactText}>{listing.contactPhone}</Text>
             </View>
           )}
         </View>
       )}
 
-      {/* Contact Button */}
+      {/* Tier Badge (for owners) */}
+      {isOwner && listing.tier && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Listing Tier</Text>
+          <View style={styles.tierBadge}>
+            <Text style={styles.tierText}>
+              {listing.tier === 'basic' ? 'Basic' : listing.tier === 'standard' ? 'Standard' : 'Premium'} Tier
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Action Buttons */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.contactButton} onPress={handleContact}>
-          <Ionicons name="chatbubble-outline" size={20} color="#fff" />
-          <Text style={styles.contactButtonText}>Contact Seller</Text>
-        </TouchableOpacity>
+        {isOwner ? (
+          <>
+            {listing.tier !== 'premium' && (
+              <TouchableOpacity
+                style={styles.upgradeButton}
+                onPress={() => setShowUpgradeModal(true)}
+                data-testid="button-upgrade-listing"
+              >
+                <Ionicons name="trending-up" size={20} color="#fff" />
+                <Text style={styles.upgradeButtonText}>Upgrade Listing</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (
+          <TouchableOpacity style={styles.contactButton} onPress={handleContact}>
+            <Ionicons name="chatbubble-outline" size={20} color="#fff" />
+            <Text style={styles.contactButtonText}>Contact Seller</Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* Upgrade Modal */}
+      {isOwner && listing && (
+        <UpgradeListingModal
+          visible={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          listing={listing}
+          onUpgradeSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['/api/marketplace', listingId] });
+            queryClient.invalidateQueries({ queryKey: ['/api/marketplace'] });
+          }}
+        />
+      )}
     </ScrollView>
   );
 }
@@ -202,6 +250,18 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginLeft: 12,
   },
+  tierBadge: {
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  tierText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#4b5563',
+  },
   buttonContainer: {
     padding: 20,
   },
@@ -214,6 +274,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   contactButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginLeft: 8,
+  },
+  upgradeButton: {
+    backgroundColor: '#10b981',
+    paddingVertical: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upgradeButtonText: {
     fontSize: 18,
     fontWeight: '600',
     color: '#fff',

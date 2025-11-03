@@ -8,7 +8,7 @@ import { ArrowLeft } from 'lucide-react';
 
 declare global {
   interface Window {
-    braintree: any;
+    paypal: any;
   }
 }
 
@@ -27,110 +27,177 @@ interface CheckoutFormProps {
 const CheckoutForm = ({ listingData, onSuccess }: CheckoutFormProps) => {
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [dropinInstance, setDropinInstance] = useState<any>(null);
-  const dropinContainerRef = useRef<HTMLDivElement>(null);
+  const [isReady, setIsReady] = useState(false);
+  const [paypalConfig, setPaypalConfig] = useState<{ clientId: string; environment: string } | null>(null);
+  const cardFieldsRef = useRef<any>(null);
 
+  // Fetch PayPal config
   useEffect(() => {
-    const loadBraintreeAndInitialize = async () => {
-      // Load Braintree scripts if not already loaded
-      if (!window.braintree) {
-        const clientScript = document.createElement('script');
-        clientScript.src = 'https://js.braintreegateway.com/web/3.101.0/js/client.min.js';
-        document.head.appendChild(clientScript);
-
-        const dropinScript = document.createElement('script');
-        dropinScript.src = 'https://js.braintreegateway.com/web/dropin/1.43.0/js/dropin.min.js';
-        document.head.appendChild(dropinScript);
-
-        await new Promise((resolve) => {
-          dropinScript.onload = resolve;
+    fetch('/api/paypal/config')
+      .then(res => res.json())
+      .then(config => setPaypalConfig(config))
+      .catch(err => {
+        console.error('Failed to fetch PayPal config:', err);
+        toast({
+          title: "Error",
+          description: "Failed to load payment configuration",
+          variant: "destructive",
         });
+      });
+  }, []);
+
+  // Load PayPal SDK and initialize card fields
+  useEffect(() => {
+    if (!paypalConfig) return;
+
+    const loadPayPalSDK = async () => {
+      // Check if already loaded
+      if (window.paypal) {
+        initializeCardFields();
+        return;
       }
 
-      // Fetch client token from backend
-      const response = await fetch('/api/braintree/client-token', {
-        credentials: 'include',
-      });
-      const { clientToken } = await response.json();
+      // Load PayPal SDK with card fields and disable Pay Later
+      const script = document.createElement('script');
+      script.src = `https://www.paypal.com/sdk/js?client-id=${paypalConfig.clientId}&components=card-fields&disable-funding=paylater`;
+      script.async = true;
+      
+      script.onload = () => {
+        initializeCardFields();
+      };
+      
+      script.onerror = () => {
+        toast({
+          title: "Error",
+          description: "Failed to load PayPal SDK",
+          variant: "destructive",
+        });
+      };
 
-      // Create Drop-in UI
-      window.braintree.dropin.create({
-        authorization: clientToken,
-        container: dropinContainerRef.current,
-        card: {
-          cardholderName: {
-            required: true
+      document.head.appendChild(script);
+    };
+
+    const initializeCardFields = async () => {
+      if (!window.paypal || !window.paypal.CardFields) {
+        console.error('PayPal CardFields not available');
+        return;
+      }
+
+      try {
+        const cardFields = window.paypal.CardFields({
+          createOrder: async () => {
+            const response = await fetch('/api/paypal/create-order-listing', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                category: listingData.category,
+                tier: listingData.tier
+              })
+            });
+
+            const order = await response.json();
+            return order.id;
+          },
+          onApprove: async (data: any) => {
+            setIsProcessing(true);
+            try {
+              // Capture the payment
+              const captureResponse = await fetch(`/api/paypal/capture-order/${data.orderID}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+              });
+
+              const captureData = await captureResponse.json();
+
+              if (!captureResponse.ok || captureData.status !== 'COMPLETED') {
+                throw new Error('Payment capture failed');
+              }
+
+              toast({
+                title: "Payment Successful",
+                description: "Your listing is being created!",
+              });
+              
+              // Update listing data with transaction ID in localStorage
+              const updatedData = { ...listingData, transactionId: data.orderID };
+              localStorage.setItem('pendingListingData', JSON.stringify(updatedData));
+              
+              // Pass transaction ID to parent component
+              onSuccess(data.orderID);
+            } catch (error: any) {
+              toast({
+                title: "Payment Failed",
+                description: error.message || "An unexpected error occurred",
+                variant: "destructive",
+              });
+              setIsProcessing(false);
+            }
+          },
+          onError: (err: any) => {
+            console.error('PayPal error:', err);
+            toast({
+              title: "Payment error",
+              description: "Please check your card details and try again",
+              variant: "destructive",
+            });
+            setIsProcessing(false);
           }
-        }
-      }, (createErr: any, instance: any) => {
-        if (createErr) {
-          console.error('Braintree Drop-in error:', createErr);
+        });
+
+        // Check if card fields are eligible
+        if (cardFields.isEligible()) {
+          // Render individual card fields
+          const numberField = cardFields.NumberField();
+          numberField.render('#card-number-field');
+
+          const expiryField = cardFields.ExpiryField();
+          expiryField.render('#card-expiry-field');
+
+          const cvvField = cardFields.CVVField();
+          cvvField.render('#card-cvv-field');
+
+          const nameField = cardFields.NameField();
+          nameField.render('#card-name-field');
+
+          cardFieldsRef.current = cardFields;
+          setIsReady(true);
+        } else {
           toast({
-            title: "Error",
-            description: "Failed to initialize payment form",
+            title: "Payment unavailable",
+            description: "Card payments are not available at this time",
             variant: "destructive",
           });
-          return;
         }
-        setDropinInstance(instance);
-      });
-    };
-
-    loadBraintreeAndInitialize();
-
-    return () => {
-      if (dropinInstance) {
-        dropinInstance.teardown();
+      } catch (error) {
+        console.error('Error initializing card fields:', error);
+        toast({
+          title: "Error",
+          description: "Failed to initialize payment form",
+          variant: "destructive",
+        });
       }
     };
-  }, []);
+
+    loadPayPalSDK();
+  }, [paypalConfig, listingData.category, listingData.tier]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!dropinInstance) {
+    if (!cardFieldsRef.current) {
       return;
     }
 
     setIsProcessing(true);
 
     try {
-      // Request payment nonce from Drop-in UI
-      const { nonce } = await dropinInstance.requestPaymentMethod();
-
-      // Send nonce to backend for processing
-      const response = await fetch('/api/braintree/checkout-listing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          paymentMethodNonce: nonce,
-          category: listingData.category,
-          tier: listingData.tier
-        })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Payment failed');
-      }
-
+      await cardFieldsRef.current.submit();
+    } catch (err: any) {
       toast({
-        title: "Payment Successful",
-        description: "Your listing is being created!",
-      });
-      
-      // Update listing data with transaction ID in localStorage
-      const updatedData = { ...listingData, transactionId: result.transactionId };
-      localStorage.setItem('pendingListingData', JSON.stringify(updatedData));
-      
-      // Pass transaction ID to parent component
-      onSuccess(result.transactionId);
-    } catch (error: any) {
-      toast({
-        title: "Payment Failed",
-        description: error.message || "An unexpected error occurred",
+        title: "Payment failed",
+        description: err.message || "Please check your card details and try again",
         variant: "destructive",
       });
       setIsProcessing(false);
@@ -138,13 +205,43 @@ const CheckoutForm = ({ listingData, onSuccess }: CheckoutFormProps) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div ref={dropinContainerRef} className="min-h-[300px]"></div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="card-name-field" className="block text-sm font-medium mb-2">
+            Cardholder Name
+          </label>
+          <div id="card-name-field" className="border rounded-md p-3 min-h-[44px]"></div>
+        </div>
+        
+        <div>
+          <label htmlFor="card-number-field" className="block text-sm font-medium mb-2">
+            Card Number
+          </label>
+          <div id="card-number-field" className="border rounded-md p-3 min-h-[44px]"></div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="card-expiry-field" className="block text-sm font-medium mb-2">
+              Expiration Date
+            </label>
+            <div id="card-expiry-field" className="border rounded-md p-3 min-h-[44px]"></div>
+          </div>
+          <div>
+            <label htmlFor="card-cvv-field" className="block text-sm font-medium mb-2">
+              CVV
+            </label>
+            <div id="card-cvv-field" className="border rounded-md p-3 min-h-[44px]"></div>
+          </div>
+        </div>
+      </div>
+
       <Button
         type="submit"
         size="lg"
         className="w-full bg-accent text-accent-foreground hover:bg-accent"
-        disabled={!dropinInstance || isProcessing}
+        disabled={!isReady || isProcessing}
         data-testid="button-confirm-payment"
       >
         {isProcessing ? "Processing..." : "Confirm Payment"}
@@ -242,7 +339,7 @@ export default function MarketplaceListingCheckout() {
             Complete Your Payment
           </CardTitle>
           <CardDescription>
-            Secure payment powered by PayPal Braintree
+            Secure payment powered by PayPal
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -269,7 +366,7 @@ export default function MarketplaceListingCheckout() {
           <CheckoutForm listingData={listingData} onSuccess={handlePaymentSuccess} />
 
           <p className="text-xs text-muted-foreground text-center">
-            Your payment information is securely processed by PayPal Braintree. We never store your card details.
+            Your payment information is securely processed by PayPal. We never store your card details.
           </p>
         </CardContent>
       </Card>

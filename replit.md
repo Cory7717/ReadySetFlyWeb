@@ -19,7 +19,7 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
   - **Session Persistence**: Web sessions stored in PostgreSQL (persist across server restarts), 7-day expiration with rolling refresh (extends on each request), secure HTTP-only cookies. Mobile uses refresh tokens stored in secure storage (7-day expiration). Users remain logged in until explicit logout.
 - **Real-time Messaging**: Custom WebSocket server.
 - **UI/UX**: Production-ready components, responsive design across all devices (web and mobile), with specific optimizations for mobile headers, hero sections, and navigation.
-- **Verification System**: Multi-step forms, document uploads (pilot licenses, insurance), admin review interface, and a badge system for visual verification status.
+- **Verification System**: Multi-step forms, document uploads (pilot licenses, insurance), admin review interface, and a badge system for visual verification status. **CRITICAL: Verification is REQUIRED for aircraft rental listings (owners must be verified to list) AND for booking rentals (renters must be verified to rent). Marketplace listings (aircraft sale, jobs, CFI, etc.) do NOT require verification.**
 - **Document Expiration Tracking**: Monitors critical document expiry with automated notifications and account suspension capabilities; admin interface shows status.
 - **Financial Transactions**: Platform-captured payments with transfers via **PayPal Braintree** for rentals and marketplace fees. **PayPal Payouts API** for instant owner withdrawals.
 - **Admin Dashboard**: Role-based access, expense tracking, marketplace listing metrics, rental metrics, and monitoring of all financial transactions and withdrawals.

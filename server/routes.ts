@@ -70,6 +70,8 @@ const upload = multer({
 });
 
 // Verification middleware - checks if user is verified
+// CRITICAL: For rental-related endpoints (aircraft listings, rental bookings),
+// verification is ALWAYS enforced for safety and security, regardless of any flags
 const isVerified = async (req: any, res: any, next: any) => {
   try {
     const userId = req.user.claims.sub;
@@ -79,12 +81,12 @@ const isVerified = async (req: any, res: any, next: any) => {
       return res.status(404).json({ error: "User not found" });
     }
     
-    // Verification enforcement feature flag - disabled until verification system is complete
-    const ENABLE_VERIFICATION_ENFORCEMENT = process.env.ENABLE_VERIFICATION_ENFORCEMENT === 'true';
-    if (ENABLE_VERIFICATION_ENFORCEMENT && !user.isVerified) {
+    // ALWAYS enforce verification for rentals (aircraft listings and bookings)
+    // This is a critical security requirement that cannot be disabled
+    if (!user.isVerified) {
       return res.status(403).json({ 
         error: "Account verification required",
-        message: "You must complete account verification before creating listings."
+        message: "Aircraft rentals require verified users for safety and security. Please complete account verification."
       });
     }
     
@@ -1117,7 +1119,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/rentals", isAuthenticated, async (req: any, res) => {
+  app.post("/api/rentals", isAuthenticated, isVerified, async (req: any, res) => {
     try {
       const renterId = req.user.claims.sub;
       

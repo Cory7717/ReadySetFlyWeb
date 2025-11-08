@@ -51,6 +51,7 @@ function Router() {
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
       <Route path="/delete-account" component={DeleteAccount} />
+      <Route path="/404" component={NotFound} />
       
       {/* Protected routes - require authentication */}
       {isAuthenticated ? (

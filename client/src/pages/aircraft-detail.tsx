@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { AircraftListing, User } from "@shared/schema";
@@ -45,7 +45,7 @@ export default function AircraftDetail() {
     userId: "user-123",
   });
 
-  const { data: aircraft, isLoading } = useQuery<AircraftListing>({
+  const { data: aircraft, isLoading, error } = useQuery<AircraftListing>({
     queryKey: ["/api/aircraft", params?.id],
     enabled: !!params?.id,
   });
@@ -55,6 +55,13 @@ export default function AircraftDetail() {
     queryKey: ["/api/users", aircraft?.ownerId],
     enabled: !!aircraft?.ownerId,
   });
+
+  // Redirect to 404 if aircraft not found (after loading completes)
+  useEffect(() => {
+    if (!isLoading && (error || !aircraft)) {
+      navigate("/404");
+    }
+  }, [isLoading, error, aircraft, navigate]);
 
   // Rental request mutation
   const createRentalMutation = useMutation({

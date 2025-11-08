@@ -36,7 +36,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
     message: "",
   });
 
-  const { data: aircraft, isLoading } = useQuery<AircraftListing>({
+  const { data: aircraft, isLoading, error } = useQuery<AircraftListing>({
     queryKey: ["/api/aircraft", aircraftId],
     enabled: open,
   });
@@ -49,6 +49,13 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
       setAdminNotes("");
     }
   }, [aircraft?.id, aircraft?.adminNotes]);
+
+  // Close modal if aircraft not found (after loading completes)
+  useEffect(() => {
+    if (open && !isLoading && (error || !aircraft)) {
+      onOpenChange(false);
+    }
+  }, [open, isLoading, error, aircraft, onOpenChange]);
 
   const requestRentalMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -145,8 +152,6 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
   const handleSaveNotes = () => {
     updateAircraftAdminMutation.mutate({ adminNotes });
   };
-
-  if (!aircraft && !isLoading) return null;
 
   // Ensure we always have at least one image (fallback if none uploaded)
   const displayImages = aircraft && aircraft.images && aircraft.images.length > 0 

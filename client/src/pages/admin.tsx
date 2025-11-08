@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -702,7 +702,7 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-10 h-auto">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-11 h-auto">
           <TabsTrigger value="analytics" data-testid="tab-analytics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
             <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
             <span>Analytics</span>
@@ -763,6 +763,10 @@ export default function AdminDashboard() {
                 </Badge>
               )}
             </span>
+          </TabsTrigger>
+          <TabsTrigger value="banners" data-testid="tab-banners" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <Image className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span>Banners</span>
           </TabsTrigger>
         </TabsList>
 
@@ -2505,6 +2509,28 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Banner Ads Tab */}
+        <TabsContent value="banners" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle data-testid="heading-banners">Banner Ad Management</CardTitle>
+              <CardDescription>
+                Create and manage sponsored banner ads for homepage and category pages
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-12">
+                <Image className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Banner Ad System</h3>
+                <p className="text-muted-foreground max-w-md mx-auto">
+                  Full banner ad management system with image uploads, placement targeting, 
+                  scheduling, and analytics tracking. Coming soon.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

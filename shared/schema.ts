@@ -598,6 +598,40 @@ export const adminNotifications = pgTable("admin_notifications", {
   readAt: timestamp("read_at"),
 });
 
+// Banner Ads (sponsored listing promotions)
+export const bannerAds = pgTable("banner_ads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Content
+  title: text("title").notNull(),
+  imageUrl: text("image_url").notNull(), // Stored in object storage
+  targetUrl: text("target_url").notNull(), // Where clicking leads
+  
+  // Placement
+  placement: text("placement").notNull(), // homepage, marketplace, rentals, category-specific
+  category: text("category"), // For category-specific placements (marketplace categories)
+  
+  // Linked listing (optional - for promoting specific listings)
+  listingId: varchar("listing_id"),
+  listingType: text("listing_type"), // marketplace or rental
+  
+  // Scheduling
+  isActive: boolean("is_active").default(true),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  
+  // Analytics
+  impressions: integer("impressions").default(0),
+  clicks: integer("clicks").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_banner_ads_placement").on(table.placement),
+  index("idx_banner_ads_active").on(table.isActive),
+  index("idx_banner_ads_dates").on(table.startDate, table.endDate),
+]);
+
 // Verification Submissions (admin review queue)
 export const verificationSubmissions = pgTable("verification_submissions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -917,6 +951,14 @@ export const insertAdminNotificationSchema = createInsertSchema(adminNotificatio
   readAt: true,
 });
 
+export const insertBannerAdSchema = createInsertSchema(bannerAds).omit({
+  id: true,
+  impressions: true,
+  clicks: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertJobApplicationSchema = createInsertSchema(jobApplications).omit({
   id: true,
   createdAt: true,
@@ -1017,6 +1059,9 @@ export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 
 export type AdminNotification = typeof adminNotifications.$inferSelect;
 export type InsertAdminNotification = z.infer<typeof insertAdminNotificationSchema>;
+
+export type BannerAd = typeof bannerAds.$inferSelect;
+export type InsertBannerAd = z.infer<typeof insertBannerAdSchema>;
 
 export type JobApplication = typeof jobApplications.$inferSelect;
 export type InsertJobApplication = z.infer<typeof insertJobApplicationSchema>;

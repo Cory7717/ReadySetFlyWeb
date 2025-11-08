@@ -309,19 +309,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Server-side pricing calculation - NEVER trust client
-      const TIER_PRICING: Record<string, number> = {
-        basic: 25,
-        standard: 100,
-        premium: 250,
+      // Category-specific pricing (base price before tax)
+      const CATEGORY_PRICING: Record<string, Record<string, number> | number> = {
+        'aircraft-sale': {
+          basic: 25,
+          standard: 40,
+          premium: 100,
+        },
+        'charter': 250,
+        'cfi': 30,
+        'flight-school': 250,
+        'mechanic': 40,
+        'jobs': 40,
       };
       
-      // Calculate amount server-side based on category and tier
-      let amount: number;
-      if (category === 'aircraft-sale' && tier) {
-        amount = TIER_PRICING[tier] || 25;
+      // Calculate base amount based on category and tier
+      let baseAmount: number;
+      const categoryPricing = CATEGORY_PRICING[category];
+      
+      if (typeof categoryPricing === 'object' && tier) {
+        // Tier-based pricing (aircraft-sale)
+        baseAmount = categoryPricing[tier] || categoryPricing.basic || 25;
+      } else if (typeof categoryPricing === 'number') {
+        // Fixed pricing for category
+        baseAmount = categoryPricing;
       } else {
-        amount = 25; // Fixed fee for other marketplace categories
+        // Fallback
+        baseAmount = 25;
       }
+      
+      // Add 8.25% sales tax
+      const salesTax = baseAmount * 0.0825;
+      const amount = baseAmount + salesTax;
       
       const collect = {
         body: {
@@ -1310,11 +1329,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Listing is already at this tier" });
       }
       
-      // Define tier pricing
+      // Define tier pricing based on category
+      const getTierPrice = (category: string, tier: string): number => {
+        const CATEGORY_PRICING: Record<string, Record<string, number> | number> = {
+          'aircraft-sale': { basic: 25, standard: 40, premium: 100 },
+          'charter': 250,
+          'cfi': 30,
+          'flight-school': 250,
+          'mechanic': 40,
+          'jobs': 40,
+        };
+        
+        const categoryPricing = CATEGORY_PRICING[category];
+        if (typeof categoryPricing === 'object') {
+          return categoryPricing[tier] || 25;
+        }
+        return typeof categoryPricing === 'number' ? categoryPricing : 25;
+      };
+      
       const tierPrices: Record<string, number> = {
-        basic: 25,
-        standard: 100,
-        premium: 250,
+        basic: getTierPrice(existingListing.category, 'basic'),
+        standard: getTierPrice(existingListing.category, 'standard'),
+        premium: getTierPrice(existingListing.category, 'premium'),
       };
       
       // Calculate price difference

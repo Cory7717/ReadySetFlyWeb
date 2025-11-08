@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -450,6 +450,25 @@ export const reviews = pgTable("reviews", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Favorites (saved listings for users)
+export const favorites = pgTable("favorites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  
+  // Type of listing favorited
+  listingType: text("listing_type").notNull(), // "marketplace" or "aircraft"
+  
+  // ID of the favorited listing (polymorphic reference)
+  listingId: varchar("listing_id").notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  idxFavoritesUser: index("idx_favorites_user").on(table.userId),
+  idxFavoritesListing: index("idx_favorites_listing").on(table.listingType, table.listingId),
+  // Unique constraint to ensure user can't favorite the same listing twice
+  uniqueUserListing: uniqueIndex("idx_favorites_user_listing_unique").on(table.userId, table.listingType, table.listingId),
+}));
+
 // Transactions (financial tracking)
 export const transactions = pgTable("transactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -814,6 +833,13 @@ export const insertReviewSchema = createInsertSchema(reviews).omit({
   comment: z.string().max(1000).optional(),
 });
 
+export const insertFavoriteSchema = createInsertSchema(favorites).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  listingType: z.enum(["marketplace", "aircraft"]),
+});
+
 export const insertCrmLeadSchema = createInsertSchema(crmLeads).omit({
   id: true,
   createdAt: true,
@@ -932,6 +958,9 @@ export type InsertMessage = z.infer<typeof insertMessageSchema>;
 
 export type Review = typeof reviews.$inferSelect;
 export type InsertReview = z.infer<typeof insertReviewSchema>;
+
+export type Favorite = typeof favorites.$inferSelect;
+export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
 
 export type Transaction = typeof transactions.$inferSelect;
 

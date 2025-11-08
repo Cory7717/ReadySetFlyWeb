@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { JobApplicationModal } from "./job-application-modal";
+import { FavoriteButton } from "./favorite-button";
 
 interface MarketplaceListingModalProps {
   listingId: string;
@@ -238,13 +239,19 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                     </div>
                   )}
                 </div>
-                {listing.price && (
-                  <div className="text-right">
-                    <div className="text-3xl font-bold text-primary">
-                      ${parseFloat(listing.price).toLocaleString()}
+                <div className="flex items-start gap-2">
+                  <FavoriteButton 
+                    listingId={listing.id} 
+                    listingType="marketplace"
+                  />
+                  {listing.price && (
+                    <div className="text-right">
+                      <div className="text-3xl font-bold text-primary">
+                        ${parseFloat(listing.price).toLocaleString()}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </DialogHeader>
 

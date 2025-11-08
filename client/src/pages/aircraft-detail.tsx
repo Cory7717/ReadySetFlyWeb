@@ -5,6 +5,7 @@ import type { AircraftListing, User } from "@shared/schema";
 import { MapPin, Gauge, Shield, Calendar, Heart, Share2, Star, Info } from "lucide-react";
 import { RentalMessaging } from "@/components/rental-messaging";
 import { StarRating } from "@/components/star-rating";
+import { FavoriteButton } from "@/components/favorite-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -215,9 +216,11 @@ export default function AircraftDetail() {
             <Button variant="outline" size="icon" data-testid="button-share" aria-label="Share listing">
               <Share2 className="h-5 w-5" />
             </Button>
-            <Button variant="outline" size="icon" data-testid="button-favorite-detail" aria-label="Add to favorites">
-              <Heart className="h-5 w-5" />
-            </Button>
+            <FavoriteButton 
+              listingId={aircraft.id} 
+              listingType="aircraft"
+              variant="outline"
+            />
           </div>
         </div>
       </section>

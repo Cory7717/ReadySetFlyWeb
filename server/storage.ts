@@ -12,6 +12,8 @@ import {
   type InsertMessage,
   type Review,
   type InsertReview,
+  type Favorite,
+  type InsertFavorite,
   type Transaction,
   type VerificationSubmission,
   type InsertVerificationSubmission,
@@ -42,6 +44,7 @@ import {
   rentals,
   messages,
   reviews,
+  favorites,
   transactions,
   withdrawalRequests,
   verificationSubmissions,
@@ -56,7 +59,7 @@ import {
   oauthExchangeTokens,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, asc, or, ilike, gte, lte, sql } from "drizzle-orm";
+import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -166,6 +169,12 @@ export interface IStorage {
   getReviewsByRental(rentalId: string): Promise<Review[]>; // Get reviews for a specific rental
   createReview(review: InsertReview): Promise<Review>;
   hasUserReviewedRental(rentalId: string, reviewerId: string): Promise<boolean>;
+
+  // Favorites
+  addFavorite(userId: string, listingType: "marketplace" | "aircraft", listingId: string): Promise<Favorite>;
+  removeFavorite(userId: string, listingType: "marketplace" | "aircraft", listingId: string): Promise<boolean>;
+  checkIfFavorited(userId: string, listingType: "marketplace" | "aircraft", listingId: string): Promise<boolean>;
+  getUserFavorites(userId: string): Promise<{ marketplace: MarketplaceListing[]; aircraft: AircraftListing[] }>;
 
   // Transactions
   getTransactionsByUser(userId: string): Promise<Transaction[]>;
@@ -1306,6 +1315,96 @@ export class DatabaseStorage implements IStorage {
       ))
       .limit(1);
     return result.length > 0;
+  }
+
+  // Favorites
+  async addFavorite(userId: string, listingType: "marketplace" | "aircraft", listingId: string): Promise<Favorite> {
+    // Check if already favorited
+    const existing = await this.checkIfFavorited(userId, listingType, listingId);
+    if (existing) {
+      // Return existing favorite
+      const [favorite] = await db
+        .select()
+        .from(favorites)
+        .where(and(
+          eq(favorites.userId, userId),
+          eq(favorites.listingType, listingType),
+          eq(favorites.listingId, listingId)
+        ))
+        .limit(1);
+      return favorite;
+    }
+
+    const [favorite] = await db
+      .insert(favorites)
+      .values({ userId, listingType, listingId })
+      .returning();
+    return favorite;
+  }
+
+  async removeFavorite(userId: string, listingType: "marketplace" | "aircraft", listingId: string): Promise<boolean> {
+    const result = await db
+      .delete(favorites)
+      .where(and(
+        eq(favorites.userId, userId),
+        eq(favorites.listingType, listingType),
+        eq(favorites.listingId, listingId)
+      ))
+      .returning();
+    return result.length > 0;
+  }
+
+  async checkIfFavorited(userId: string, listingType: "marketplace" | "aircraft", listingId: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(favorites)
+      .where(and(
+        eq(favorites.userId, userId),
+        eq(favorites.listingType, listingType),
+        eq(favorites.listingId, listingId)
+      ))
+      .limit(1);
+    return result.length > 0;
+  }
+
+  async getUserFavorites(userId: string): Promise<{ marketplace: MarketplaceListing[]; aircraft: AircraftListing[] }> {
+    // Get all favorites for user
+    const userFavorites = await db
+      .select()
+      .from(favorites)
+      .where(eq(favorites.userId, userId))
+      .orderBy(desc(favorites.createdAt));
+
+    // Separate marketplace and aircraft favorite IDs
+    const marketplaceFavoriteIds = userFavorites
+      .filter(f => f.listingType === "marketplace")
+      .map(f => f.listingId);
+    const aircraftFavoriteIds = userFavorites
+      .filter(f => f.listingType === "aircraft")
+      .map(f => f.listingId);
+
+    // Fetch marketplace listings
+    let marketplaceListings: MarketplaceListing[] = [];
+    if (marketplaceFavoriteIds.length > 0) {
+      marketplaceListings = await db
+        .select()
+        .from(marketplaceListings)
+        .where(inArray(marketplaceListings.id, marketplaceFavoriteIds));
+    }
+
+    // Fetch aircraft listings
+    let aircraftListingsList: AircraftListing[] = [];
+    if (aircraftFavoriteIds.length > 0) {
+      aircraftListingsList = await db
+        .select()
+        .from(aircraftListings)
+        .where(inArray(aircraftListings.id, aircraftFavoriteIds));
+    }
+
+    return {
+      marketplace: marketplaceListings,
+      aircraft: aircraftListingsList,
+    };
   }
 
   // Transactions

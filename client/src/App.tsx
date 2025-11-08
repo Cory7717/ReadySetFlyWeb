@@ -14,6 +14,7 @@ import Dashboard from "@/pages/dashboard";
 import Profile from "@/pages/profile";
 import MyListings from "@/pages/my-listings";
 import Messages from "@/pages/messages";
+import Favorites from "@/pages/favorites";
 import AircraftDetail from "@/pages/aircraft-detail";
 import ListAircraft from "@/pages/list-aircraft";
 import CreateMarketplaceListing from "@/pages/create-marketplace-listing";
@@ -57,6 +58,7 @@ function Router() {
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/profile" component={Profile} />
           <Route path="/my-listings" component={MyListings} />
+          <Route path="/favorites" component={Favorites} />
           <Route path="/messages" component={Messages} />
           <Route path="/list-aircraft" component={ListAircraft} />
           <Route path="/create-marketplace-listing" component={CreateMarketplaceListing} />
@@ -75,6 +77,7 @@ function Router() {
           <Route path="/dashboard" component={RequireAuth} />
           <Route path="/profile" component={RequireAuth} />
           <Route path="/my-listings" component={RequireAuth} />
+          <Route path="/favorites" component={RequireAuth} />
           <Route path="/messages" component={RequireAuth} />
           <Route path="/list-aircraft" component={RequireAuth} />
           <Route path="/create-marketplace-listing" component={RequireAuth} />

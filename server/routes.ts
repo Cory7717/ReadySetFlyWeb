@@ -6,7 +6,7 @@ import multer from "multer";
 import OpenAI from "openai";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
 import { storage } from "./storage";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { getUncachableResendClient } from "./resendClient";
 import registerMobileAuthRoutes from "./mobile-auth-routes";
@@ -1735,6 +1735,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Review creation error:", error);
       res.status(400).json({ error: error.message || "Invalid review data" });
+    }
+  });
+
+  // Favorites
+  app.post("/api/favorites", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Validate request body with Zod
+      const validatedData = insertFavoriteSchema.parse({
+        ...req.body,
+        userId, // Server-side, not from client
+      });
+
+      const favorite = await storage.addFavorite(userId, validatedData.listingType, validatedData.listingId);
+      res.status(201).json(favorite);
+    } catch (error: any) {
+      console.error("Add favorite error:", error);
+      res.status(400).json({ error: error.message || "Failed to add favorite" });
+    }
+  });
+
+  app.delete("/api/favorites/:listingType/:listingId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { listingType, listingId } = req.params;
+
+      if (listingType !== "marketplace" && listingType !== "aircraft") {
+        return res.status(400).json({ error: "listingType must be 'marketplace' or 'aircraft'" });
+      }
+
+      const removed = await storage.removeFavorite(userId, listingType, listingId);
+      if (!removed) {
+        return res.status(404).json({ error: "Favorite not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Remove favorite error:", error);
+      res.status(500).json({ error: "Failed to remove favorite" });
+    }
+  });
+
+  app.get("/api/favorites/check/:listingType/:listingId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { listingType, listingId } = req.params;
+
+      if (listingType !== "marketplace" && listingType !== "aircraft") {
+        return res.status(400).json({ error: "listingType must be 'marketplace' or 'aircraft'" });
+      }
+
+      const isFavorited = await storage.checkIfFavorited(userId, listingType, listingId);
+      res.json({ isFavorited });
+    } catch (error) {
+      console.error("Check favorite error:", error);
+      res.status(500).json({ error: "Failed to check favorite status" });
+    }
+  });
+
+  app.get("/api/favorites", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const favorites = await storage.getUserFavorites(userId);
+      res.json(favorites);
+    } catch (error) {
+      console.error("Get favorites error:", error);
+      res.status(500).json({ error: "Failed to fetch favorites" });
     }
   });
 

@@ -29,6 +29,8 @@ import {
   type InsertExpense,
   type AdminNotification,
   type InsertAdminNotification,
+  type BannerAd,
+  type InsertBannerAd,
   type JobApplication,
   type InsertJobApplication,
   type PromoAlert,
@@ -56,6 +58,7 @@ import {
   crmActivities,
   expenses,
   adminNotifications,
+  bannerAds,
   jobApplications,
   promoAlerts,
   refreshTokens,
@@ -257,6 +260,16 @@ export interface IStorage {
   markNotificationAsRead(id: string): Promise<AdminNotification | undefined>;
   markNotificationAsActionable(id: string, isActionable: boolean): Promise<AdminNotification | undefined>;
   deleteAdminNotification(id: string): Promise<boolean>;
+  
+  // Banner Ads
+  getAllBannerAds(): Promise<BannerAd[]>;
+  getActiveBannerAds(placement?: string, category?: string): Promise<BannerAd[]>;
+  getBannerAd(id: string): Promise<BannerAd | undefined>;
+  createBannerAd(ad: InsertBannerAd): Promise<BannerAd>;
+  updateBannerAd(id: string, updates: Partial<BannerAd>): Promise<BannerAd | undefined>;
+  deleteBannerAd(id: string): Promise<boolean>;
+  incrementBannerImpressions(id: string): Promise<void>;
+  incrementBannerClicks(id: string): Promise<void>;
   
   // Job Applications
   createJobApplication(application: InsertJobApplication): Promise<JobApplication>;
@@ -1846,6 +1859,74 @@ export class DatabaseStorage implements IStorage {
   async deleteAdminNotification(id: string): Promise<boolean> {
     const result = await db.delete(adminNotifications).where(eq(adminNotifications.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Banner Ads
+  async getAllBannerAds(): Promise<BannerAd[]> {
+    return await db.select().from(bannerAds).orderBy(desc(bannerAds.createdAt));
+  }
+
+  async getActiveBannerAds(placement?: string, category?: string): Promise<BannerAd[]> {
+    const now = new Date();
+    let query = db
+      .select()
+      .from(bannerAds)
+      .where(
+        and(
+          eq(bannerAds.isActive, true),
+          lte(bannerAds.startDate, now),
+          gte(bannerAds.endDate, now)
+        )
+      )
+      .$dynamic();
+
+    if (placement) {
+      query = query.where(eq(bannerAds.placement, placement));
+    }
+
+    if (category) {
+      query = query.where(eq(bannerAds.category, category));
+    }
+
+    return await query.orderBy(desc(bannerAds.impressions));
+  }
+
+  async getBannerAd(id: string): Promise<BannerAd | undefined> {
+    const [ad] = await db.select().from(bannerAds).where(eq(bannerAds.id, id));
+    return ad;
+  }
+
+  async createBannerAd(insertAd: InsertBannerAd): Promise<BannerAd> {
+    const [ad] = await db.insert(bannerAds).values(insertAd).returning();
+    return ad;
+  }
+
+  async updateBannerAd(id: string, updates: Partial<BannerAd>): Promise<BannerAd | undefined> {
+    const [ad] = await db
+      .update(bannerAds)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(bannerAds.id, id))
+      .returning();
+    return ad;
+  }
+
+  async deleteBannerAd(id: string): Promise<boolean> {
+    const result = await db.delete(bannerAds).where(eq(bannerAds.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async incrementBannerImpressions(id: string): Promise<void> {
+    await db
+      .update(bannerAds)
+      .set({ impressions: sql`${bannerAds.impressions} + 1` })
+      .where(eq(bannerAds.id, id));
+  }
+
+  async incrementBannerClicks(id: string): Promise<void> {
+    await db
+      .update(bannerAds)
+      .set({ clicks: sql`${bannerAds.clicks} + 1` })
+      .where(eq(bannerAds.id, id));
   }
 
   // Job Applications

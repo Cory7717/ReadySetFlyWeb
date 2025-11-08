@@ -2856,6 +2856,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Banner Ads - Admin Management
+  app.get("/api/admin/banner-ads", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const ads = await storage.getAllBannerAds();
+      res.json(ads);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch banner ads" });
+    }
+  });
+
+  app.get("/api/admin/banner-ads/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const ad = await storage.getBannerAd(req.params.id);
+      if (!ad) {
+        return res.status(404).json({ error: "Banner ad not found" });
+      }
+      res.json(ad);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch banner ad" });
+    }
+  });
+
+  app.post("/api/admin/banner-ads", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const ad = await storage.createBannerAd(req.body);
+      res.status(201).json(ad);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create banner ad" });
+    }
+  });
+
+  app.patch("/api/admin/banner-ads/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const ad = await storage.updateBannerAd(req.params.id, req.body);
+      if (!ad) {
+        return res.status(404).json({ error: "Banner ad not found" });
+      }
+      res.json(ad);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update banner ad" });
+    }
+  });
+
+  app.delete("/api/admin/banner-ads/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteBannerAd(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Banner ad not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete banner ad" });
+    }
+  });
+
+  // Banner Ads - Public Endpoints
+  app.get("/api/banner-ads/active", async (req, res) => {
+    try {
+      const { placement, category } = req.query;
+      const ads = await storage.getActiveBannerAds(
+        placement as string | undefined,
+        category as string | undefined
+      );
+      res.json(ads);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch active banner ads" });
+    }
+  });
+
+  app.post("/api/banner-ads/:id/impression", async (req, res) => {
+    try {
+      await storage.incrementBannerImpressions(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to track impression" });
+    }
+  });
+
+  app.post("/api/banner-ads/:id/click", async (req, res) => {
+    try {
+      await storage.incrementBannerClicks(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to track click" });
+    }
+  });
+
   // Extract invoice data using OpenAI Vision API
   app.post("/api/admin/extract-invoice-data", isAuthenticated, isAdmin, upload.single('invoice'), async (req, res) => {
     const fs = await import('fs/promises');

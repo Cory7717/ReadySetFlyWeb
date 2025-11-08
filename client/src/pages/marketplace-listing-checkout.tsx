@@ -246,6 +246,15 @@ const CheckoutForm = ({ listingData, onSuccess }: CheckoutFormProps) => {
       >
         {isProcessing ? "Processing..." : "Confirm Payment"}
       </Button>
+      
+      <div className="mt-4 p-3 bg-muted rounded-md">
+        <p className="text-xs text-center text-muted-foreground">
+          🔒 Secure payments processed by <span className="font-semibold">PayPal Business</span>
+        </p>
+        <p className="text-xs text-center text-muted-foreground mt-1">
+          Your payment information is encrypted and never stored on our servers
+        </p>
+      </div>
     </form>
   );
 };

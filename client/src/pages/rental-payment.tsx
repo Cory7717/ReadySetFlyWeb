@@ -242,6 +242,15 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
       >
         {isProcessing ? "Processing..." : `Pay $${parseFloat(rental.totalCostRenter).toFixed(2)}`}
       </Button>
+      
+      <div className="mt-4 p-3 bg-muted rounded-md">
+        <p className="text-xs text-center text-muted-foreground">
+          🔒 Secure payments processed by <span className="font-semibold">PayPal Business</span>
+        </p>
+        <p className="text-xs text-center text-muted-foreground mt-1">
+          Your payment information is encrypted and never stored on our servers
+        </p>
+      </div>
     </form>
   );
 }

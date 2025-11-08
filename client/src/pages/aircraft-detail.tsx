@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { AircraftListing, User } from "@shared/schema";
-import { MapPin, Gauge, Shield, Calendar, Heart, Share2, Star } from "lucide-react";
+import { MapPin, Gauge, Shield, Calendar, Heart, Share2, Star, Info } from "lucide-react";
 import { RentalMessaging } from "@/components/rental-messaging";
 import { StarRating } from "@/components/star-rating";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -22,6 +32,7 @@ export default function AircraftDetail() {
   const [estimatedHours, setEstimatedHours] = useState("6");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [showBestPractices, setShowBestPractices] = useState(false);
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   
@@ -102,6 +113,11 @@ export default function AircraftDetail() {
       return;
     }
 
+    // Show best practices dialog before proceeding
+    setShowBestPractices(true);
+  };
+
+  const handleConfirmBooking = () => {
     // Calculate all pricing fields
     const hourlyRate = parseFloat(aircraft!.hourlyRate);
     const hours = parseFloat(estimatedHours);
@@ -130,6 +146,8 @@ export default function AircraftDetail() {
       totalCostRenter: totalCostRenter.toFixed(2),
       ownerPayout: ownerPayout.toFixed(2),
     });
+    
+    setShowBestPractices(false);
   };
 
   if (isLoading || !aircraft) {
@@ -432,6 +450,68 @@ export default function AircraftDetail() {
           </div>
         </div>
       </section>
+
+      {/* Rental Best Practices Dialog */}
+      <AlertDialog open={showBestPractices} onOpenChange={setShowBestPractices}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Info className="h-5 w-5 text-primary" />
+              Aircraft Rental Best Practices
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-left space-y-4 pt-4">
+              <div className="space-y-3">
+                <div>
+                  <h4 className="font-semibold text-foreground mb-2">Advance Notice Requirements</h4>
+                  <p className="text-sm text-muted-foreground">
+                    We recommend booking aircraft rentals <strong>3-5 days in advance</strong> to ensure 
+                    availability and give aircraft owners adequate time to prepare the aircraft for your flight. 
+                    Last-minute bookings may be subject to owner approval and availability.
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-foreground mb-2">Weather Policy</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Safety is our top priority. If weather conditions are unsafe for flight (low visibility, 
+                    strong winds, thunderstorms, icing, etc.), you may cancel or reschedule your rental at no charge. 
+                    We recommend checking weather forecasts 24-48 hours before your scheduled flight and coordinating 
+                    with the aircraft owner if conditions are questionable.
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-foreground mb-2">Communication</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Please maintain open communication with the aircraft owner regarding your flight plans, 
+                    any changes to your schedule, and any concerns you may have. The owner may require a 
+                    pre-flight briefing or checkout depending on the aircraft and your experience level.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-muted p-3 rounded-lg mt-4">
+                <p className="text-xs text-muted-foreground">
+                  By continuing, you acknowledge that you understand these best practices and will communicate 
+                  with the aircraft owner regarding any questions or concerns.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-booking">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmBooking}
+              className="bg-accent text-accent-foreground hover:bg-accent"
+              data-testid="button-confirm-booking"
+            >
+              I Understand - Continue to Book
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

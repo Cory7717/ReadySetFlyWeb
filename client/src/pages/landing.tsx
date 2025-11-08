@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone } from "lucide-react";
 
 export default function Landing() {
   return (
@@ -159,6 +160,85 @@ export default function Landing() {
             >
               Browse Listings
             </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile App Section */}
+      <div className="py-12 sm:py-16">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto">
+            <Card className="overflow-hidden">
+              <CardContent className="p-0">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
+                  {/* Content Side */}
+                  <div className="p-6 sm:p-8 lg:p-12 flex flex-col justify-center">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Smartphone className="h-6 w-6 text-primary" />
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        Coming Soon
+                      </Badge>
+                    </div>
+                    <h2 className="text-2xl sm:text-3xl font-bold mb-4">
+                      Take Ready Set Fly Anywhere
+                    </h2>
+                    <p className="text-muted-foreground mb-6">
+                      Our mobile app is coming soon to iOS and Android. Book aircraft rentals, 
+                      browse marketplace listings, and manage your account on the go.
+                    </p>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
+                        <span className="text-sm">Browse and book aircraft on your phone</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
+                        <span className="text-sm">Real-time messaging with owners</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
+                        <span className="text-sm">Manage your listings and rentals anywhere</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* App Store Badges Side */}
+                  <div className="bg-muted/30 p-6 sm:p-8 lg:p-12 flex flex-col justify-center items-center gap-4">
+                    <p className="text-sm font-medium text-muted-foreground mb-2">
+                      Download on
+                    </p>
+                    
+                    {/* App Store Badge - Placeholder */}
+                    <div 
+                      className="w-full max-w-[200px] h-[60px] rounded-lg border-2 border-muted flex items-center justify-center bg-background/50 cursor-not-allowed opacity-60"
+                      data-testid="badge-app-store"
+                    >
+                      <div className="text-center">
+                        <div className="text-xs text-muted-foreground">Available Soon</div>
+                        <div className="font-semibold">App Store</div>
+                      </div>
+                    </div>
+
+                    {/* Play Store Badge - Placeholder */}
+                    <div 
+                      className="w-full max-w-[200px] h-[60px] rounded-lg border-2 border-muted flex items-center justify-center bg-background/50 cursor-not-allowed opacity-60"
+                      data-testid="badge-play-store"
+                    >
+                      <div className="text-center">
+                        <div className="text-xs text-muted-foreground">Available Soon</div>
+                        <div className="font-semibold">Google Play</div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground text-center mt-4 max-w-[250px]">
+                      Sign up now to be notified when our mobile apps launch
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

@@ -27,6 +27,8 @@ import {
   type InsertCrmActivity,
   type Expense,
   type InsertExpense,
+  type AdminNotification,
+  type InsertAdminNotification,
   type JobApplication,
   type InsertJobApplication,
   type PromoAlert,
@@ -53,6 +55,7 @@ import {
   crmDeals,
   crmActivities,
   expenses,
+  adminNotifications,
   jobApplications,
   promoAlerts,
   refreshTokens,
@@ -246,6 +249,14 @@ export interface IStorage {
   getExpense(id: string): Promise<Expense | undefined>;
   createExpense(expense: InsertExpense): Promise<Expense>;
   updateExpense(id: string, updates: Partial<Expense>): Promise<Expense | undefined>;
+  
+  // Admin Notifications
+  getAllAdminNotifications(): Promise<AdminNotification[]>;
+  getUnreadAdminNotifications(): Promise<AdminNotification[]>;
+  createAdminNotification(notification: InsertAdminNotification): Promise<AdminNotification>;
+  markNotificationAsRead(id: string): Promise<AdminNotification | undefined>;
+  markNotificationAsActionable(id: string, isActionable: boolean): Promise<AdminNotification | undefined>;
+  deleteAdminNotification(id: string): Promise<boolean>;
   
   // Job Applications
   createJobApplication(application: InsertJobApplication): Promise<JobApplication>;
@@ -1793,6 +1804,47 @@ export class DatabaseStorage implements IStorage {
 
   async deleteExpense(id: string): Promise<boolean> {
     const result = await db.delete(expenses).where(eq(expenses.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Admin Notifications
+  async getAllAdminNotifications(): Promise<AdminNotification[]> {
+    return await db.select().from(adminNotifications).orderBy(desc(adminNotifications.createdAt));
+  }
+
+  async getUnreadAdminNotifications(): Promise<AdminNotification[]> {
+    return await db
+      .select()
+      .from(adminNotifications)
+      .where(eq(adminNotifications.isRead, false))
+      .orderBy(desc(adminNotifications.createdAt));
+  }
+
+  async createAdminNotification(insertNotification: InsertAdminNotification): Promise<AdminNotification> {
+    const [notification] = await db.insert(adminNotifications).values(insertNotification).returning();
+    return notification;
+  }
+
+  async markNotificationAsRead(id: string): Promise<AdminNotification | undefined> {
+    const [notification] = await db
+      .update(adminNotifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(eq(adminNotifications.id, id))
+      .returning();
+    return notification;
+  }
+
+  async markNotificationAsActionable(id: string, isActionable: boolean): Promise<AdminNotification | undefined> {
+    const [notification] = await db
+      .update(adminNotifications)
+      .set({ isActionable })
+      .where(eq(adminNotifications.id, id))
+      .returning();
+    return notification;
+  }
+
+  async deleteAdminNotification(id: string): Promise<boolean> {
+    const result = await db.delete(adminNotifications).where(eq(adminNotifications.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
   }
 

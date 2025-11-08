@@ -577,6 +577,27 @@ export const expenses = pgTable("expenses", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Admin Notifications (for threshold alerts)
+export const adminNotifications = pgTable("admin_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  type: text("type").notNull(), // listing_threshold, verification_pending, flagged_listing, etc.
+  category: text("category"), // marketplace category for listing_threshold notifications
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  
+  // Status
+  isRead: boolean("is_read").default(false),
+  isActionable: boolean("is_actionable").default(true), // false once admin addresses it
+  
+  // Metadata
+  listingCount: integer("listing_count"), // For threshold notifications
+  threshold: integer("threshold"), // The threshold that was reached
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  readAt: timestamp("read_at"),
+});
+
 // Verification Submissions (admin review queue)
 export const verificationSubmissions = pgTable("verification_submissions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -890,6 +911,12 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
   invoiceUrl: z.string().optional(),
 });
 
+export const insertAdminNotificationSchema = createInsertSchema(adminNotifications).omit({
+  id: true,
+  createdAt: true,
+  readAt: true,
+});
+
 export const insertJobApplicationSchema = createInsertSchema(jobApplications).omit({
   id: true,
   createdAt: true,
@@ -987,6 +1014,9 @@ export type InsertPromoCodeUsage = typeof promoCodeUsages.$inferInsert;
 
 export type Expense = typeof expenses.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+
+export type AdminNotification = typeof adminNotifications.$inferSelect;
+export type InsertAdminNotification = z.infer<typeof insertAdminNotificationSchema>;
 
 export type JobApplication = typeof jobApplications.$inferSelect;
 export type InsertJobApplication = z.infer<typeof insertJobApplicationSchema>;

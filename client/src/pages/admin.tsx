@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert } from "@shared/schema";
+import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type AdminNotification } from "@shared/schema";
 import { AdminUserModal } from "@/components/admin-user-modal";
 
 export default function AdminDashboard() {
@@ -241,6 +241,17 @@ export default function AdminDashboard() {
     enabled: activeTab === "withdrawals",
   });
 
+  // Admin Notifications query
+  const { data: adminNotifications = [], isLoading: notificationsLoading } = useQuery<AdminNotification[]>({
+    queryKey: ["/api/admin/notifications"],
+    enabled: activeTab === "notifications",
+  });
+
+  // Unread notifications count (always fetch for badge)
+  const { data: unreadNotifications = [] } = useQuery<AdminNotification[]>({
+    queryKey: ["/api/admin/notifications/unread"],
+  });
+
   // Approve submission mutation
   const approveMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -349,6 +360,28 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/expenses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/analytics"] });
       toast({ title: "Expense deleted successfully" });
+    },
+  });
+
+  // Notification mutations
+  const markNotificationReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("PATCH", `/api/admin/notifications/${id}/read`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications/unread"] });
+    },
+  });
+
+  const deleteNotificationMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/admin/notifications/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications/unread"] });
+      toast({ title: "Notification deleted" });
     },
   });
 
@@ -669,7 +702,7 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-9 h-auto">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-10 h-auto">
           <TabsTrigger value="analytics" data-testid="tab-analytics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
             <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
             <span>Analytics</span>
@@ -719,6 +752,17 @@ export default function AdminDashboard() {
           <TabsTrigger value="withdrawals" data-testid="tab-withdrawals" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
             <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
             <span>Payouts</span>
+          </TabsTrigger>
+          <TabsTrigger value="notifications" data-testid="tab-notifications" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+            <Bell className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="flex items-center gap-1">
+              Alerts
+              {unreadNotifications.length > 0 && (
+                <Badge variant="destructive" className="text-xs px-1">
+                  {unreadNotifications.length}
+                </Badge>
+              )}
+            </span>
           </TabsTrigger>
         </TabsList>
 
@@ -2374,6 +2418,89 @@ export default function AdminDashboard() {
                           )}
                         </div>
                       </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Notifications Tab */}
+        <TabsContent value="notifications" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle data-testid="heading-notifications">Admin Notifications</CardTitle>
+              <CardDescription>
+                System alerts for listing thresholds and important events
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {notificationsLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Loading notifications...</p>
+                </div>
+              ) : adminNotifications.length === 0 ? (
+                <div className="text-center py-8">
+                  <Bell className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                  <p className="text-muted-foreground">No notifications yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {adminNotifications.map((notification) => (
+                    <Card 
+                      key={notification.id} 
+                      className={notification.isRead ? "opacity-60" : "border-primary"}
+                      data-testid={`notification-${notification.id}`}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-sm">{notification.title}</h4>
+                              {!notification.isRead && (
+                                <Badge variant="destructive" className="text-xs">New</Badge>
+                              )}
+                              {notification.type === "listing_threshold" && (
+                                <Badge variant="secondary" className="text-xs">Threshold Alert</Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">{notification.message}</p>
+                            {notification.listingCount && (
+                              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                <span>Category: {notification.category?.replace('-', ' ').toUpperCase()}</span>
+                                <span>•</span>
+                                <span>Count: {notification.listingCount}</span>
+                                <span>•</span>
+                                <span>Threshold: {notification.threshold}</span>
+                              </div>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(notification.createdAt!).toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {!notification.isRead && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => markNotificationReadMutation.mutate(notification.id)}
+                                data-testid={`button-mark-read-${notification.id}`}
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => deleteNotificationMutation.mutate(notification.id)}
+                              data-testid={`button-delete-notification-${notification.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
                     </Card>
                   ))}
                 </div>

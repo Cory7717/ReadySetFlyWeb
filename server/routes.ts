@@ -1271,6 +1271,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
       });
       
+      // Check listing threshold and create notification if needed
+      try {
+        const categoryListings = await storage.getMarketplaceListingsByCategory(listing.category);
+        const activeCount = categoryListings.filter((l: any) => l.isActive).length;
+        
+        // Create notification when reaching 25 or 30 active listings
+        if (activeCount === 25 || activeCount === 30) {
+          await storage.createAdminNotification({
+            type: "listing_threshold",
+            category: listing.category,
+            title: `${listing.category.replace('-', ' ').toUpperCase()} Listings Threshold Reached`,
+            message: `The ${listing.category.replace('-', ' ')} category now has ${activeCount} active listings. Consider monitoring this category for capacity.`,
+            isRead: false,
+            isActionable: true,
+            listingCount: activeCount,
+            threshold: activeCount,
+          });
+        }
+      } catch (notifError) {
+        // Don't fail the listing creation if notification fails
+        console.error("Failed to create threshold notification:", notifError);
+      }
+      
       res.status(201).json(listing);
     } catch (error: any) {
       console.error("Marketplace listing creation error:", error);
@@ -2765,6 +2788,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete expense" });
+    }
+  });
+
+  // Admin Notifications
+  app.get("/api/admin/notifications", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const notifications = await storage.getAllAdminNotifications();
+      res.json(notifications);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  app.get("/api/admin/notifications/unread", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const notifications = await storage.getUnreadAdminNotifications();
+      res.json(notifications);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch unread notifications" });
+    }
+  });
+
+  app.post("/api/admin/notifications", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const notification = await storage.createAdminNotification(req.body);
+      res.status(201).json(notification);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create notification" });
+    }
+  });
+
+  app.patch("/api/admin/notifications/:id/read", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const notification = await storage.markNotificationAsRead(req.params.id);
+      if (!notification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      res.json(notification);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+
+  app.patch("/api/admin/notifications/:id/actionable", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { isActionable } = req.body;
+      const notification = await storage.markNotificationAsActionable(req.params.id, isActionable);
+      if (!notification) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      res.json(notification);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update notification" });
+    }
+  });
+
+  app.delete("/api/admin/notifications/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteAdminNotification(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete notification" });
     }
   });
 

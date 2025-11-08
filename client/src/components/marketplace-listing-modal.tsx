@@ -74,6 +74,16 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
     }
   }, [listing?.id, listing?.adminNotes, listing?.expiresAt]);
 
+  // Track view when listing loads (only once per listing view)
+  useEffect(() => {
+    if (listing && open) {
+      // Fire and forget - don't wait for response
+      apiRequest("POST", `/api/marketplace/${listing.id}/view`, {}).catch(() => {
+        // Silently fail - view tracking shouldn't interrupt user experience
+      });
+    }
+  }, [listing?.id, open]);
+
   const deleteListingMutation = useMutation({
     mutationFn: async (listingId: string) => {
       return await apiRequest("DELETE", `/api/marketplace/${listingId}`, {});

@@ -285,6 +285,9 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   // Fraud detection
   flagCount: integer("flag_count").default(0).notNull(),
   
+  // Analytics
+  viewCount: integer("view_count").default(0).notNull(),
+  
   // Payment
   isPaid: boolean("is_paid").default(false),
   monthlyFee: decimal("monthly_fee", { precision: 10, scale: 2 }),
@@ -754,6 +757,7 @@ export const insertMarketplaceListingSchema = createInsertSchema(marketplaceList
   createdAt: true,
   updatedAt: true,
   flagCount: true, // Managed by the system
+  viewCount: true, // Managed by the system
 }).extend({
   category: z.enum(marketplaceCategories),
   images: z.array(z.string()).max(15),

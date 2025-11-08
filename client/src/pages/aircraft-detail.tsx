@@ -118,6 +118,8 @@ export default function AircraftDetail() {
   };
 
   const handleConfirmBooking = () => {
+    if (!user) return; // Safety check
+    
     // Calculate all pricing fields
     const hourlyRate = parseFloat(aircraft!.hourlyRate);
     const hours = parseFloat(estimatedHours);
@@ -306,7 +308,7 @@ export default function AircraftDetail() {
               <CardContent>
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16">
-                    <AvatarImage src={owner?.profileImageUrl} />
+                    <AvatarImage src={owner?.profileImageUrl || undefined} />
                     <AvatarFallback>
                       {owner?.firstName?.[0]}{owner?.lastName?.[0]}
                     </AvatarFallback>
@@ -316,10 +318,10 @@ export default function AircraftDetail() {
                       {owner?.firstName} {owner?.lastName}
                     </h3>
                     <div className="flex flex-col gap-2">
-                      {owner?.averageRating && owner.totalReviews > 0 && (
+                      {owner?.averageRating && owner.totalReviews && owner.totalReviews > 0 && (
                         <StarRating 
                           rating={parseFloat(owner.averageRating)} 
-                          totalReviews={owner.totalReviews}
+                          totalReviews={owner.totalReviews || 0}
                           size="sm"
                         />
                       )}

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import type { MarketplaceListing, AircraftListing } from "@shared/schema";
-import { Plane, DollarSign, MapPin, Calendar, RefreshCw, TrendingUp } from "lucide-react";
+import { Plane, DollarSign, MapPin, Calendar, RefreshCw, TrendingUp, Eye } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -167,6 +167,10 @@ export default function MyListings() {
                         <span>Created {new Date(listing.createdAt).toLocaleDateString()}</span>
                       </div>
                     )}
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Eye className="w-4 h-4" />
+                      <span>{listing.viewCount || 0} views</span>
+                    </div>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Badge variant="outline" className="text-xs">

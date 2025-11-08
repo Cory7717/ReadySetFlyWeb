@@ -1085,6 +1085,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Increment marketplace listing view count
+  app.post("/api/marketplace/:id/view", async (req: any, res) => {
+    try {
+      const listing = await storage.getMarketplaceListing(req.params.id);
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      
+      // Increment view count
+      await storage.incrementMarketplaceViewCount(req.params.id);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to increment view count:", error);
+      res.status(500).json({ error: "Failed to track view" });
+    }
+  });
+
   // Promo code validation
   app.post("/api/promo-codes/validate", isAuthenticated, async (req: any, res) => {
     try {

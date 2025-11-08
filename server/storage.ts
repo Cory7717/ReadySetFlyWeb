@@ -130,6 +130,9 @@ export interface IStorage {
   deleteMarketplaceListing(id: string): Promise<boolean>;
   deactivateExpiredListings(): Promise<{ deactivatedCount: number }>;
   
+  // Marketplace Analytics
+  incrementMarketplaceViewCount(id: string): Promise<void>;
+  
   // Marketplace Flags
   flagMarketplaceListing(listingId: string, userId: string, reason?: string): Promise<{ success: boolean; flagCount: number }>;
   checkIfUserFlaggedListing(listingId: string, userId: string): Promise<boolean>;
@@ -924,6 +927,16 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return { deactivatedCount: result.length };
+  }
+
+  // Marketplace Analytics
+  async incrementMarketplaceViewCount(id: string): Promise<void> {
+    await db
+      .update(marketplaceListings)
+      .set({
+        viewCount: sql`${marketplaceListings.viewCount} + 1`,
+      })
+      .where(eq(marketplaceListings.id, id));
   }
 
   // Marketplace Flags

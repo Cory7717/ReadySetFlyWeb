@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -172,27 +173,37 @@ export default function AircraftDetail() {
   const processingFee = subtotal * 0.03; // 3% processing fee
   const total = subtotal + processingFee;
 
+  // Ensure we always have at least one image (fallback if none uploaded)
+  const displayImages = aircraft.images && aircraft.images.length > 0 
+    ? aircraft.images 
+    : ["https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=1200"];
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Image Gallery */}
+      {/* Image Gallery Carousel */}
       <section className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-4 gap-2 mb-6">
-          <div className="col-span-4 md:col-span-2 md:row-span-2 rounded-xl overflow-hidden aspect-[3/2]">
-            <img
-              src={aircraft.images[0] || "https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=1200"}
-              alt={`${aircraft.year} ${aircraft.make} ${aircraft.model}`}
-              className="w-full h-full object-cover"
-            />
-          </div>
-          {aircraft.images.slice(1, 5).map((img, i) => (
-            <div key={i} className="rounded-xl overflow-hidden aspect-[3/2]">
-              <img
-                src={img}
-                alt={`${aircraft.make} ${aircraft.model} view ${i + 2}`}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ))}
+        <div className="relative mb-6">
+          <Carousel className="w-full">
+            <CarouselContent>
+              {displayImages.map((img, idx) => (
+                <CarouselItem key={idx}>
+                  <div className="aspect-[16/9] rounded-xl overflow-hidden bg-muted">
+                    <img
+                      src={img}
+                      alt={`${aircraft.year} ${aircraft.make} ${aircraft.model} - Image ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            {displayImages.length > 1 && (
+              <>
+                <CarouselPrevious className="left-4" data-testid="button-carousel-prev" />
+                <CarouselNext className="right-4" data-testid="button-carousel-next" />
+              </>
+            )}
+          </Carousel>
         </div>
 
         <div className="flex items-center justify-between mb-6">

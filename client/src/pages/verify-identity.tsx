@@ -345,18 +345,18 @@ export default function VerifyIdentity() {
                 <Alert>
                   <CreditCard className="h-4 w-4" />
                   <AlertDescription>
-                    Payment method integration with Stripe will be enabled here. For now, this step is informational.
+                    Payment processing is handled securely through PayPal Business when you complete your first rental or listing transaction.
                   </AlertDescription>
                 </Alert>
                 <div className="p-6 border-2 border-dashed rounded-lg text-center">
                   <CreditCard className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-lg font-medium mb-2">Payment Method</p>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Add a credit card to complete verification
+                    Your payment method will be securely added via PayPal Business when you make your first rental or listing payment. All transactions are processed through our trusted payment partner.
                   </p>
-                  <Button variant="outline" disabled data-testid="button-add-payment">
-                    Add Payment Method (Coming Soon)
-                  </Button>
+                  <p className="text-xs text-muted-foreground mt-4">
+                    Ready Set Fly uses PayPal Business for secure payment processing
+                  </p>
                 </div>
               </>
             )}

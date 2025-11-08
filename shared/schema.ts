@@ -6,7 +6,7 @@ import { z } from "zod";
 // Enums
 export const certificationTypes = ["PPL", "IR", "CPL", "Multi-Engine", "ATP", "CFI", "CFII", "MEI"] as const;
 export const aircraftCategories = ["Single-Engine", "Multi-Engine", "Jet", "Turboprop", "Helicopter", "Seaplane"] as const;
-export const engineTypes = ["Single-Engine", "Multi-Engine", "Turboprop", "Jet"] as const;
+export const engineTypes = ["Single-Engine", "Multi-Engine", "Turboprop", "Jet", "Rotor"] as const;
 export const marketplaceCategories = ["aircraft-sale", "charter", "cfi", "flight-school", "mechanic", "job"] as const;
 export const rentalStatuses = ["pending", "approved", "active", "completed", "cancelled"] as const;
 export const listingTiers = ["basic", "standard", "premium"] as const;

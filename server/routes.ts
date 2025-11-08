@@ -2995,9 +2995,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 </html>
         `;
         
+        // Get the listing owner's email
+        const listingOwner = await storage.getUser(listing.userId);
+        const recipientEmail = listing.contactEmail || listingOwner?.email || email;
+        
+        if (!recipientEmail) {
+          throw new Error('No recipient email found for job poster');
+        }
+        
         await client.emails.send({
           from: fromEmail,
-          to: listing.contactEmail || email,
+          to: recipientEmail,
           subject: `New Application for ${listing.title}`,
           html: emailHtml,
         });

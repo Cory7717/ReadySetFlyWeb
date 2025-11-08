@@ -7,7 +7,7 @@ export default function TermsOfService() {
       <Card>
         <CardHeader>
           <CardTitle className="text-3xl">Terms of Service</CardTitle>
-          <CardDescription>Last Updated: November 2, 2024</CardDescription>
+          <CardDescription>Last Updated: November 8, 2024</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 prose prose-sm max-w-none">
           <section>
@@ -29,6 +29,7 @@ export default function TermsOfService() {
             <h2 className="text-xl font-semibold mb-3">2. Eligibility</h2>
             <p>You must meet the following requirements to use the Platform:</p>
             <ul className="list-disc pl-6 space-y-2">
+              <li><strong>You must be a resident of the United States</strong></li>
               <li>You must be at least 18 years old</li>
               <li>You must have the legal capacity to enter into binding contracts</li>
               <li>You must not be prohibited from using the Platform under applicable laws</li>
@@ -37,6 +38,10 @@ export default function TermsOfService() {
                 aircraft ownership documentation as required by law
               </li>
             </ul>
+            <p className="mt-3">
+              Ready Set Fly is exclusively available to United States residents. By using the Platform, you 
+              represent and warrant that you are located in and are a resident of the United States.
+            </p>
           </section>
 
           <Separator />
@@ -108,36 +113,47 @@ export default function TermsOfService() {
               Ready Set Fly charges the following fees for aircraft rental transactions:
             </p>
             <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Renter Fee:</strong> 7.5% of the total rental amount</li>
-              <li><strong>Owner Fee:</strong> 7.5% of the total rental amount</li>
-              <li><strong>Sales Tax:</strong> 8.25% on all rental amounts and fees (where applicable)</li>
+              <li><strong>Renter Booking Fee:</strong> 7.5% of the total rental amount</li>
+              <li><strong>Owner Commission:</strong> 7.5% deducted from owner payout</li>
+              <li><strong>Sales Tax:</strong> 8.25% on all rental amounts and booking fees</li>
+              <li><strong>Credit Card Processing Fee:</strong> 3% to cover payment processing costs</li>
             </ul>
             <p className="mt-3">
-              <strong>Total Platform Fee:</strong> The combined fees amount to 15% of the rental amount 
-              (7.5% from renter + 7.5% from owner), plus applicable sales tax.
+              <strong>Example:</strong> For a $1,000 rental, the renter pays $1,000 (base rental) + $75 (7.5% booking fee) + 
+              $88.69 (8.25% sales tax on $1,075) + $34.91 (3% CC processing fee) = <strong>$1,198.60 total</strong>. 
+              The owner receives $925 after the 7.5% platform commission is deducted.
             </p>
 
             <h3 className="text-lg font-semibold mt-4 mb-2">5.2 Marketplace Listing Fees</h3>
             <p>
-              Marketplace listings require a monthly subscription fee based on the listing category:
+              Marketplace listings require a monthly subscription fee based on the listing category and tier. 
+              All prices include 8.25% sales tax:
             </p>
+            <p className="mt-3"><strong>Aircraft for Sale</strong> (3 tier options):</p>
             <ul className="list-disc pl-6 space-y-2">
-              <li><strong>Aircraft for Sale:</strong> $250/month</li>
-              <li><strong>CFI Listings:</strong> $25/month</li>
-              <li><strong>Job Postings:</strong> $50/month</li>
-              <li><strong>Flight School Listings:</strong> $100/month</li>
-              <li><strong>Mechanic Services:</strong> $50/month</li>
-              <li><strong>Charter Services:</strong> $150/month</li>
+              <li><strong>Basic Tier:</strong> $25/month + tax = $27.06/month</li>
+              <li><strong>Standard Tier:</strong> $40/month + tax = $43.30/month</li>
+              <li><strong>Premium Tier:</strong> $100/month + tax = $108.25/month</li>
+            </ul>
+            <p className="mt-3"><strong>Other Categories</strong> (fixed monthly fees):</p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li><strong>CFI Listings:</strong> $30/month + tax = $32.48/month</li>
+              <li><strong>Job Postings:</strong> $40/month + tax = $43.30/month</li>
+              <li><strong>Flight School Listings:</strong> $250/month + tax = $270.63/month</li>
+              <li><strong>Mechanic Services:</strong> $40/month + tax = $43.30/month</li>
+              <li><strong>Charter Services:</strong> $250/month + tax = $270.63/month</li>
             </ul>
             <p className="mt-3">
               Listings are automatically renewed monthly unless you cancel your subscription. You are responsible 
-              for canceling before the renewal date to avoid being charged for the next billing period.
+              for canceling before the renewal date to avoid being charged for the next billing period. Promotional 
+              codes may be available for limited-time free trials or discounts.
             </p>
 
             <h3 className="text-lg font-semibold mt-4 mb-2">5.3 Payment Processing</h3>
             <p>
-              All payments are processed through our third-party payment processor, PayPal Braintree. You agree 
-              to comply with their terms of service. We do not store your complete payment card information.
+              All payments are processed through PayPal, our exclusive payment processor. You agree to comply 
+              with PayPal's terms of service. We do not store your complete payment card information. Only credit 
+              card payments are accepted (Pay Later options are disabled for compliance and security).
             </p>
 
             <h3 className="text-lg font-semibold mt-4 mb-2">5.4 Owner Withdrawals</h3>

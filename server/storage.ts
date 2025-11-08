@@ -123,6 +123,7 @@ export interface IStorage {
     engineType?: string;
     keyword?: string;
     radius?: number;
+    cfiRating?: string;
   }): Promise<MarketplaceListing[]>;
   createMarketplaceListing(listing: InsertMarketplaceListing): Promise<MarketplaceListing>;
   updateMarketplaceListing(id: string, updates: Partial<MarketplaceListing>): Promise<MarketplaceListing | undefined>;
@@ -809,6 +810,7 @@ export class DatabaseStorage implements IStorage {
     engineType?: string;
     keyword?: string;
     radius?: number;
+    cfiRating?: string;
   }): Promise<MarketplaceListing[]> {
     const conditions: any[] = [eq(marketplaceListings.isActive, true)];
 
@@ -845,9 +847,9 @@ export class DatabaseStorage implements IStorage {
     // For now, the radius parameter is accepted but not actively filtered.
     // TODO: Implement proper distance-based filtering with geocoding service
 
-    // Engine type filter (for aircraft categories, stored in details JSONB)
+    // Engine type & CFI rating filters (stored in details JSONB)
     // This requires a JSON path query which is more complex with Drizzle
-    // For now, we'll fetch all and filter in memory for engineType
+    // For now, we'll fetch all and filter in memory
     // TODO: Optimize with raw SQL or JSONB operators in future
 
     const results = await db
@@ -855,15 +857,25 @@ export class DatabaseStorage implements IStorage {
       .from(marketplaceListings)
       .where(and(...conditions));
 
-    // Post-filter for engineType in details JSONB
+    // Post-filter for engineType or cfiRating in details JSONB
+    let filteredResults = results;
+    
     if (filters.engineType && filters.engineType !== 'all') {
-      return results.filter((listing) => {
+      filteredResults = filteredResults.filter((listing) => {
         const details = listing.details as any;
         return details?.engineType === filters.engineType;
       });
     }
+    
+    if (filters.cfiRating && filters.cfiRating !== 'all') {
+      filteredResults = filteredResults.filter((listing) => {
+        const details = listing.details as any;
+        // Check if the listing's certifications array includes the selected rating
+        return details?.certifications?.includes(filters.cfiRating);
+      });
+    }
 
-    return results;
+    return filteredResults;
   }
 
   async createMarketplaceListing(insertListing: InsertMarketplaceListing): Promise<MarketplaceListing> {

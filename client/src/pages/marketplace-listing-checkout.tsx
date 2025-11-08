@@ -12,11 +12,32 @@ declare global {
   }
 }
 
-// Tier pricing (matching replit.md specs)
-const TIER_PRICING: Record<string, number> = {
-  basic: 25,
-  standard: 100,
-  premium: 250,
+// Category-specific pricing (base price before tax)
+const CATEGORY_PRICING: Record<string, Record<string, number> | number> = {
+  'aircraft-sale': {
+    basic: 25,
+    standard: 40,
+    premium: 100,
+  },
+  'charter': 250,
+  'cfi': 30,
+  'flight-school': 250,
+  'mechanic': 40,
+  'job': 40,
+};
+
+const TAX_RATE = 0.0825; // 8.25% sales tax
+
+// Helper to get base price for a listing
+const getBasePrice = (category: string, tier?: string): number => {
+  const categoryPricing = CATEGORY_PRICING[category];
+  
+  if (typeof categoryPricing === 'object' && tier) {
+    return categoryPricing[tier] || categoryPricing.basic || 25;
+  } else if (typeof categoryPricing === 'number') {
+    return categoryPricing;
+  }
+  return 25; // Default fallback
 };
 
 interface CheckoutFormProps {
@@ -325,10 +346,10 @@ export default function MarketplaceListingCheckout() {
     );
   }
 
-  // Calculate amount based on category and tier
-  const amount = listingData.category === 'aircraft-sale' && listingData.tier
-    ? TIER_PRICING[listingData.tier] || 25
-    : 25;
+  // Calculate amounts based on category and tier
+  const baseAmount = getBasePrice(listingData.category, listingData.tier);
+  const taxAmount = baseAmount * TAX_RATE;
+  const totalAmount = baseAmount + taxAmount;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -365,9 +386,17 @@ export default function MarketplaceListingCheckout() {
                 <span className="capitalize">{listingData.tier}</span>
               </div>
             )}
+            <div className="flex justify-between text-sm pt-2 border-t">
+              <span>Base Price:</span>
+              <span>${baseAmount.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>Sales Tax (8.25%):</span>
+              <span>${taxAmount.toFixed(2)}</span>
+            </div>
             <div className="flex justify-between text-sm font-semibold pt-2 border-t">
               <span>Total (Monthly):</span>
-              <span>${amount.toFixed(2)}</span>
+              <span>${totalAmount.toFixed(2)}</span>
             </div>
           </div>
 

@@ -39,8 +39,9 @@ export default function Marketplace() {
   
   // Category-specific filter states
   const [engineTypeFilter, setEngineTypeFilter] = useState("all"); // Aircraft Sale
-  const [keywordFilter, setKeywordFilter] = useState(""); // Jobs
+  const [keywordFilter, setKeywordFilter] = useState(""); // Jobs, CFI, Flight School, Mechanic, Charter
   const [radiusFilter, setRadiusFilter] = useState("100"); // Jobs - default 100 miles
+  const [cfiRatingFilter, setCfiRatingFilter] = useState("all"); // CFI ratings
   
   const [, navigate] = useLocation();
 
@@ -51,16 +52,17 @@ export default function Marketplace() {
     if (cityFilter) params.set('city', cityFilter);
     if (minPrice) params.set('minPrice', minPrice);
     if (maxPrice) params.set('maxPrice', maxPrice);
-    if (engineTypeFilter) params.set('engineType', engineTypeFilter);
+    if (engineTypeFilter && engineTypeFilter !== 'all') params.set('engineType', engineTypeFilter);
     if (keywordFilter) params.set('keyword', keywordFilter);
     if (radiusFilter) params.set('radius', radiusFilter);
+    if (cfiRatingFilter && cfiRatingFilter !== 'all') params.set('cfiRating', cfiRatingFilter);
     return params.toString();
   };
 
   const queryString = buildQueryParams();
 
   const { data: categoryListings = [], isLoading } = useQuery<MarketplaceListing[]>({
-    queryKey: ["/api/marketplace", selectedCategory, cityFilter, minPrice, maxPrice, engineTypeFilter, keywordFilter, radiusFilter],
+    queryKey: ["/api/marketplace", selectedCategory, cityFilter, minPrice, maxPrice, engineTypeFilter, keywordFilter, radiusFilter, cfiRatingFilter],
     queryFn: async () => {
       const response = await fetch(`/api/marketplace?${queryString}`);
       if (!response.ok) throw new Error('Failed to fetch listings');
@@ -337,9 +339,42 @@ export default function Marketplace() {
                   </>
                 )}
 
-                {/* Default Filters for Other Categories */}
-                {!['job', 'aircraft-sale'].includes(selectedCategory) && (
+                {/* CFI Filters */}
+                {selectedCategory === 'cfi' && (
                   <>
+                    {/* Keyword Search */}
+                    <div className="space-y-2">
+                      <Label htmlFor="keyword-filter">Search</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          id="keyword-filter"
+                          placeholder="Search by name, certifications..."
+                          value={keywordFilter}
+                          onChange={(e) => setKeywordFilter(e.target.value)}
+                          className="pl-9"
+                          data-testid="input-keyword-filter"
+                        />
+                      </div>
+                    </div>
+
+                    {/* CFI Ratings */}
+                    <div className="space-y-2">
+                      <Label htmlFor="cfi-rating">Rating / Certification</Label>
+                      <Select value={cfiRatingFilter} onValueChange={setCfiRatingFilter}>
+                        <SelectTrigger id="cfi-rating" data-testid="select-cfi-rating">
+                          <SelectValue placeholder="All ratings" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All ratings</SelectItem>
+                          <SelectItem value="CFI">CFI (Basic)</SelectItem>
+                          <SelectItem value="CFII">CFII (Instrument)</SelectItem>
+                          <SelectItem value="MEI">MEI (Multi-Engine)</SelectItem>
+                          <SelectItem value="ATP">ATP</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     {/* City Filter */}
                     <div className="space-y-2">
                       <Label htmlFor="city-filter">City</Label>
@@ -355,38 +390,49 @@ export default function Marketplace() {
                         />
                       </div>
                     </div>
+                  </>
+                )}
 
-                    {/* Min Price */}
+                {/* Flight School, Mechanic, Charter Filters (keyword + city only) */}
+                {['flight-school', 'mechanic', 'charter'].includes(selectedCategory) && (
+                  <>
+                    {/* Keyword Search */}
                     <div className="space-y-2">
-                      <Label htmlFor="min-price">Min Price</Label>
-                      <Input
-                        id="min-price"
-                        type="number"
-                        placeholder="$0"
-                        value={minPrice}
-                        onChange={(e) => setMinPrice(e.target.value)}
-                        data-testid="input-min-price"
-                      />
+                      <Label htmlFor="keyword-filter">Search</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          id="keyword-filter"
+                          placeholder="Search by name, services..."
+                          value={keywordFilter}
+                          onChange={(e) => setKeywordFilter(e.target.value)}
+                          className="pl-9"
+                          data-testid="input-keyword-filter"
+                        />
+                      </div>
                     </div>
 
-                    {/* Max Price */}
+                    {/* City Filter */}
                     <div className="space-y-2">
-                      <Label htmlFor="max-price">Max Price</Label>
-                      <Input
-                        id="max-price"
-                        type="number"
-                        placeholder="No max"
-                        value={maxPrice}
-                        onChange={(e) => setMaxPrice(e.target.value)}
-                        data-testid="input-max-price"
-                      />
+                      <Label htmlFor="city-filter">City</Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          id="city-filter"
+                          placeholder="Search by city..."
+                          value={cityFilter}
+                          onChange={(e) => setCityFilter(e.target.value)}
+                          className="pl-9"
+                          data-testid="input-city-filter"
+                        />
+                      </div>
                     </div>
                   </>
                 )}
               </div>
 
               {/* Clear Filters */}
-              {(cityFilter || minPrice || maxPrice || engineTypeFilter || keywordFilter || radiusFilter) && (
+              {(cityFilter || minPrice || maxPrice || engineTypeFilter !== 'all' || keywordFilter || radiusFilter !== '100' || cfiRatingFilter !== 'all') && (
                 <div className="mt-4 flex justify-end">
                   <Button 
                     variant="ghost" 
@@ -397,6 +443,7 @@ export default function Marketplace() {
                       setEngineTypeFilter("all");
                       setKeywordFilter("");
                       setRadiusFilter("100");
+                      setCfiRatingFilter("all");
                     }}
                     data-testid="button-clear-filters"
                   >

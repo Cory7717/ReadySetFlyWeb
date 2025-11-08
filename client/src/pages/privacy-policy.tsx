@@ -7,7 +7,7 @@ export default function PrivacyPolicy() {
       <Card>
         <CardHeader>
           <CardTitle className="text-3xl">Privacy Policy</CardTitle>
-          <CardDescription>Last Updated: November 2, 2024</CardDescription>
+          <CardDescription>Last Updated: November 8, 2024</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 prose prose-sm max-w-none">
           <section>
@@ -53,7 +53,7 @@ export default function PrivacyPolicy() {
               </li>
               <li>
                 <strong>Payment Information:</strong> We collect payment information necessary to process rental payments 
-                and marketplace transactions, including payment method details processed by our payment processor (PayPal Braintree).
+                and marketplace transactions, including payment method details processed by our payment processor (PayPal).
               </li>
               <li>
                 <strong>Messages:</strong> We collect and store messages you send through our platform messaging system.
@@ -113,8 +113,8 @@ export default function PrivacyPolicy() {
             <p>We share information with third-party service providers who assist us in operating the Platform:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>
-                <strong>PayPal Braintree:</strong> Processes payments for aircraft rentals and marketplace fees. 
-                View their privacy policy at <a href="https://www.braintreepayments.com/legal/braintree-privacy-policy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">braintreepayments.com/legal/braintree-privacy-policy</a>
+                <strong>PayPal:</strong> Processes all payments for aircraft rentals and marketplace listing fees. 
+                View their privacy policy at <a href="https://www.paypal.com/us/legalhub/privacy-full" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">paypal.com/us/legalhub/privacy-full</a>
               </li>
               <li>
                 <strong>PayPal Payouts API:</strong> Processes owner withdrawals. 
@@ -237,12 +237,16 @@ export default function PrivacyPolicy() {
           <Separator />
 
           <section>
-            <h2 className="text-xl font-semibold mb-3">9. International Data Transfers</h2>
+            <h2 className="text-xl font-semibold mb-3">9. Geographic Restrictions</h2>
             <p>
-              Your information may be transferred to and maintained on servers located outside of your state, 
-              province, country, or other governmental jurisdiction. If you are located outside the United States 
-              and choose to use the Platform, your information will be transferred to the United States and 
-              processed there.
+              <strong>Ready Set Fly is available exclusively to residents of the United States.</strong> The Platform 
+              is not intended for use by individuals located outside the United States. By using the Platform, you 
+              represent and warrant that you are a resident of the United States.
+            </p>
+            <p className="mt-3">
+              All data is stored and processed on servers located in the United States. We comply with applicable 
+              US federal and state privacy laws, including the California Consumer Privacy Act (CCPA) and other 
+              state-specific privacy regulations.
             </p>
           </section>
 

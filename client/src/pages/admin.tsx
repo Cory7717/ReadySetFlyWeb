@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertBannerAdSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type AdminNotification, type BannerAd, type InsertBannerAd } from "@shared/schema";
 import { AdminUserModal } from "@/components/admin-user-modal";
+import { ObjectUploader } from "@/components/ObjectUploader";
+import type { UploadResult } from "@uppy/core";
 
 export default function AdminDashboard() {
   const [userSearch, setUserSearch] = useState("");
@@ -50,6 +52,7 @@ export default function AdminDashboard() {
   // Banner ads state
   const [bannerDialogOpen, setBannerDialogOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<BannerAd | null>(null);
+  const [bannerImageUrl, setBannerImageUrl] = useState<string>("");
   
   // Withdrawal monitoring state
   const [withdrawalSearch, setWithdrawalSearch] = useState("");
@@ -476,6 +479,58 @@ export default function AdminDashboard() {
     },
   });
 
+  // Banner image upload handlers
+  const handleBannerGetUploadParameters = async () => {
+    const response = await fetch('/api/objects/upload', {
+      method: 'POST',
+      credentials: 'include',
+    });
+    const data = await response.json();
+    return {
+      method: 'PUT' as const,
+      url: data.uploadURL,
+    };
+  };
+
+  const handleBannerUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    try {
+      for (const file of result.successful || []) {
+        if (file.uploadURL) {
+          // Set ACL policy for public access
+          const parsedUrl = new URL(file.uploadURL);
+          const objectPath = parsedUrl.pathname.slice(1); // Remove leading slash
+          
+          await fetch('/api/objects/set-acl', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              path: objectPath,
+              access: 'publicRead', // Banner images need to be publicly accessible
+            }),
+          });
+          
+          // Update form field with the uploaded URL
+          const imageUrl = file.uploadURL.split('?')[0]; // Remove query params
+          setBannerImageUrl(imageUrl);
+          bannerForm.setValue('imageUrl', imageUrl);
+          
+          toast({ 
+            title: "Image uploaded successfully",
+            description: "Your banner image is ready to use"
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error processing banner upload:', error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to process the uploaded image. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Banner ad mutations
   const createBannerAdMutation = useMutation({
     mutationFn: async (data: InsertBannerAd) => {
@@ -486,6 +541,7 @@ export default function AdminDashboard() {
       bannerForm.reset();
       setBannerDialogOpen(false);
       setEditingBanner(null);
+      setBannerImageUrl("");
       toast({ title: "Banner ad created successfully" });
     },
     onError: (error: Error) => {
@@ -506,6 +562,7 @@ export default function AdminDashboard() {
       bannerForm.reset();
       setBannerDialogOpen(false);
       setEditingBanner(null);
+      setBannerImageUrl("");
       toast({ title: "Banner ad updated successfully" });
     },
     onError: (error: Error) => {
@@ -2621,6 +2678,7 @@ export default function AdminDashboard() {
               <Button 
                 onClick={() => {
                   setEditingBanner(null);
+                  setBannerImageUrl(""); // Reset image state
                   bannerForm.reset();
                   setBannerDialogOpen(true);
                 }}
@@ -2645,6 +2703,7 @@ export default function AdminDashboard() {
                   <Button 
                     onClick={() => {
                       setEditingBanner(null);
+                      setBannerImageUrl(""); // Reset image state
                       bannerForm.reset();
                       setBannerDialogOpen(true);
                     }}
@@ -2735,6 +2794,7 @@ export default function AdminDashboard() {
                               variant="ghost"
                               onClick={() => {
                                 setEditingBanner(banner);
+                                setBannerImageUrl(banner.imageUrl); // Populate image preview
                                 bannerForm.reset({
                                   title: banner.title,
                                   imageUrl: banner.imageUrl,
@@ -3733,15 +3793,47 @@ export default function AdminDashboard() {
                 name="imageUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Image URL</FormLabel>
+                    <FormLabel>Banner Image</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder="https://example.com/banner.jpg" 
-                        {...field} 
-                        data-testid="input-banner-image"
-                      />
+                      <div className="space-y-3">
+                        {bannerImageUrl || field.value ? (
+                          <div className="relative border rounded-lg overflow-hidden">
+                            <img 
+                              src={bannerImageUrl || field.value} 
+                              alt="Banner preview" 
+                              className="w-full h-auto max-h-64 object-cover"
+                            />
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="icon"
+                              className="absolute top-2 right-2"
+                              onClick={() => {
+                                setBannerImageUrl("");
+                                bannerForm.setValue('imageUrl', "");
+                              }}
+                              data-testid="button-remove-banner-image"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <ObjectUploader
+                            maxNumberOfFiles={1}
+                            maxFileSize={10 * 1024 * 1024}
+                            onGetUploadParameters={handleBannerGetUploadParameters}
+                            onComplete={handleBannerUploadComplete}
+                            buttonClassName="w-full aspect-[3/1] rounded-md border-2 border-dashed flex flex-col items-center justify-center"
+                            buttonVariant="ghost"
+                          >
+                            <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+                            <span className="text-sm font-medium text-muted-foreground">Upload Banner Image</span>
+                            <span className="text-xs text-muted-foreground mt-1">Recommended: 1200x400px, Max 10MB</span>
+                          </ObjectUploader>
+                        )}
+                      </div>
                     </FormControl>
-                    <FormDescription>Public URL of the banner image (recommended: 1200x400px)</FormDescription>
+                    <FormDescription>Upload a banner image for your ad (JPG, PNG, or WebP)</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

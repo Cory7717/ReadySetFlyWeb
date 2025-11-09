@@ -31,6 +31,8 @@ import {
   type InsertAdminNotification,
   type BannerAd,
   type InsertBannerAd,
+  type BannerAdOrder,
+  type InsertBannerAdOrder,
   type JobApplication,
   type InsertJobApplication,
   type PromoAlert,
@@ -59,6 +61,7 @@ import {
   expenses,
   adminNotifications,
   bannerAds,
+  bannerAdOrders,
   jobApplications,
   promoAlerts,
   refreshTokens,
@@ -260,6 +263,15 @@ export interface IStorage {
   markNotificationAsRead(id: string): Promise<AdminNotification | undefined>;
   markNotificationAsActionable(id: string, isActionable: boolean): Promise<AdminNotification | undefined>;
   deleteAdminNotification(id: string): Promise<boolean>;
+  
+  // Banner Ad Orders
+  getAllBannerAdOrders(): Promise<BannerAdOrder[]>;
+  getBannerAdOrder(id: string): Promise<BannerAdOrder | undefined>;
+  getBannerAdOrdersByStatus(approvalStatus?: string, paymentStatus?: string): Promise<BannerAdOrder[]>;
+  createBannerAdOrder(order: InsertBannerAdOrder): Promise<BannerAdOrder>;
+  updateBannerAdOrder(id: string, updates: Partial<BannerAdOrder>): Promise<BannerAdOrder | undefined>;
+  deleteBannerAdOrder(id: string): Promise<boolean>;
+  activateBannerAdOrder(orderId: string): Promise<BannerAd | undefined>; // Creates live ad from order
   
   // Banner Ads
   getAllBannerAds(): Promise<BannerAd[]>;
@@ -1859,6 +1871,78 @@ export class DatabaseStorage implements IStorage {
   async deleteAdminNotification(id: string): Promise<boolean> {
     const result = await db.delete(adminNotifications).where(eq(adminNotifications.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Banner Ad Orders
+  async getAllBannerAdOrders(): Promise<BannerAdOrder[]> {
+    return await db.select().from(bannerAdOrders).orderBy(desc(bannerAdOrders.createdAt));
+  }
+
+  async getBannerAdOrder(id: string): Promise<BannerAdOrder | undefined> {
+    const [order] = await db.select().from(bannerAdOrders).where(eq(bannerAdOrders.id, id));
+    return order;
+  }
+
+  async getBannerAdOrdersByStatus(approvalStatus?: string, paymentStatus?: string): Promise<BannerAdOrder[]> {
+    const conditions = [];
+    if (approvalStatus) {
+      conditions.push(eq(bannerAdOrders.approvalStatus, approvalStatus));
+    }
+    if (paymentStatus) {
+      conditions.push(eq(bannerAdOrders.paymentStatus, paymentStatus));
+    }
+
+    if (conditions.length === 0) {
+      return await this.getAllBannerAdOrders();
+    }
+
+    return await db
+      .select()
+      .from(bannerAdOrders)
+      .where(and(...conditions))
+      .orderBy(desc(bannerAdOrders.createdAt));
+  }
+
+  async createBannerAdOrder(insertOrder: InsertBannerAdOrder): Promise<BannerAdOrder> {
+    const [order] = await db.insert(bannerAdOrders).values(insertOrder).returning();
+    return order;
+  }
+
+  async updateBannerAdOrder(id: string, updates: Partial<BannerAdOrder>): Promise<BannerAdOrder | undefined> {
+    const [order] = await db
+      .update(bannerAdOrders)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(bannerAdOrders.id, id))
+      .returning();
+    return order;
+  }
+
+  async deleteBannerAdOrder(id: string): Promise<boolean> {
+    const result = await db.delete(bannerAdOrders).where(eq(bannerAdOrders.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async activateBannerAdOrder(orderId: string): Promise<BannerAd | undefined> {
+    const order = await this.getBannerAdOrder(orderId);
+    if (!order || order.paymentStatus !== 'paid') {
+      return undefined;
+    }
+
+    const bannerAdData: InsertBannerAd = {
+      orderId: order.id,
+      title: order.title,
+      description: order.description,
+      imageUrl: order.imageUrl || '',
+      link: order.link,
+      placements: order.placements,
+      category: order.category,
+      isActive: true,
+      startDate: order.startDate || new Date(),
+      endDate: order.endDate || new Date(),
+    };
+
+    const [ad] = await db.insert(bannerAds).values(bannerAdData).returning();
+    return ad;
   }
 
   // Banner Ads

@@ -62,4 +62,21 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
 - **PayPal Payouts API**: For automated, instant owner withdrawals.
 - **WebSocket server**: Custom implementation for real-time messaging.
 - **Replit Object Storage**: Google Cloud Storage-backed file storage for marketplace listing images and aircraft photos. Implemented with ObjectUploader component (Uppy-based), presigned URL uploads, and ACL-based access control. Images stored with public visibility for listing photos.
+- **Resend Email Service**: Transactional email provider for job application notifications and system emails. Integration is installed via Replit Connectors system. **REQUIRES SETUP**: 
+  1. Connect Resend in Replit UI (Tools → Integrations → Resend)
+  2. Add DNS records to domain registrar for readysetfly.us:
+     - TXT: `resend._domainkey` with provided p= value for domain verification
+     - MX: `send` → `feedback-smtp.us-east-1.amazonses.com` (priority 10) for sending
+     - TXT: `send` → `v=spf1 include:amazonses.com ~all` for SPF
+     - TXT: `_dmarc` → `v=DMARC1; p=none;` (optional) for DMARC
+     - MX: `@` → `inbound-smtp.us-east-1.amazonaws.com` (priority 0) for receiving
 - **FAA Registry API**: Planned integration for N-number lookups.
+
+## Domain & SSL Configuration
+- **Custom Domain**: readysetfly.us and www.readysetfly.us
+- **HTTPS/SSL**: Managed by Replit's built-in SSL certificate system. DNS records must be configured at domain registrar to point to Replit servers for automatic SSL provisioning.
+- **DNS Requirements** (configure at domain registrar, e.g., GoDaddy, Namecheap):
+  - A record pointing to Replit's IP address
+  - CNAME for www subdomain
+  - SSL certificates auto-provision once DNS is correctly configured
+- **Note**: HTTPS setup is external to codebase - requires domain registrar configuration, not code changes.

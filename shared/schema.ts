@@ -957,6 +957,11 @@ export const insertBannerAdSchema = createInsertSchema(bannerAds).omit({
   clicks: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  placements: z.array(z.string()).min(1, "At least one page placement is required"),
+  imageUrl: z.string().min(1, "Banner image is required"),
+  targetUrl: z.string().min(1, "Target URL is required"),
+  title: z.string().min(1, "Title is required"),
 });
 
 export const insertJobApplicationSchema = createInsertSchema(jobApplications).omit({

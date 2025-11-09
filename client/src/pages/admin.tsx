@@ -3758,12 +3758,27 @@ export default function AdminDashboard() {
           <Form {...bannerForm}>
             <form 
               onSubmit={bannerForm.handleSubmit((data) => {
+                console.log('Form submitted with data:', data);
+                console.log('Form errors:', bannerForm.formState.errors);
+                
+                // Validate required fields
+                if (!data.placements || data.placements.length === 0) {
+                  toast({
+                    title: "Validation Error",
+                    description: "Please select at least one page for banner placement",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                
                 // Normalize dates to ISO strings for backend
                 const payload: InsertBannerAd = {
                   ...data,
                   startDate: data.startDate instanceof Date ? data.startDate as any : data.startDate as any,
                   endDate: data.endDate instanceof Date ? data.endDate as any : data.endDate as any,
                 };
+                
+                console.log('Submitting payload:', payload);
                 
                 if (editingBanner) {
                   updateBannerAdMutation.mutate({ id: editingBanner.id, data: payload });

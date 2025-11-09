@@ -19,6 +19,9 @@ export default function Landing() {
             <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
               Connect with verified pilots and aircraft owners. List your aircraft, find the perfect rental, or explore our marketplace for sales, jobs, CFIs, and more.
             </p>
+            <Badge variant="outline" className="mx-auto text-xs px-3 py-1">
+              Available for US Residents Only
+            </Badge>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
               <Button 
                 size="lg" 

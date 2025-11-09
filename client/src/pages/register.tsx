@@ -98,6 +98,9 @@ export default function RegisterPage() {
           <CardDescription>
             Join Ready Set Fly to rent aircraft or list your own
           </CardDescription>
+          <p className="text-xs text-muted-foreground pt-2">
+            Service available for US residents only
+          </p>
         </CardHeader>
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

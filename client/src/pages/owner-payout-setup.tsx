@@ -56,7 +56,7 @@ export default function OwnerPayoutSetup() {
     // TODO: Implement API call to create sub-merchant account
     toast({
       title: "Coming Soon",
-      description: "Payout account setup will be available once Braintree Marketplace is fully integrated.",
+      description: "Direct bank account payout setup is coming soon. Use PayPal withdrawals in the meantime.",
     });
   };
 
@@ -106,7 +106,7 @@ export default function OwnerPayoutSetup() {
                 <div>
                   <p className="font-medium">Secure Processing</p>
                   <p className="text-sm text-muted-foreground">
-                    All payment information is encrypted and processed securely by PayPal Braintree
+                    All payment information is encrypted and processed securely by PayPal Business
                   </p>
                 </div>
               </div>

@@ -25,6 +25,18 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
   - **Weather Cancellation Policy (Updated November 2024)**: Strict "no refunds for weather-related cancellations" policy enforced platform-wide. Renters see this disclaimer in the rental booking confirmation dialog (3-5 days advance booking recommended) and in Terms of Service §5.5. Policy prioritizes financial clarity while maintaining safety messaging (FAA compliance, go/no-go decisions). US residents only.
 - **Admin Dashboard**: Role-based access, expense tracking, marketplace listing metrics, rental metrics, and monitoring of all financial transactions and withdrawals.
   - **Admin Notification System**: Automated alerts for marketplace listing thresholds. System monitors active listing counts per category and creates notifications when reaching 25 or 30 listings. Admin "Alerts" tab displays all notifications with unread count badge, mark-read functionality, delete controls, and visual distinction between read/unread. Notifications are non-blocking (failures don't prevent listing creation) and include category, threshold, and listing count metadata.
+  - **Banner Ad Order System (November 2024)**: Two-entity workflow for sponsored banner ads with separate order tracking and live ad management:
+    - **Order Management**: `bannerAdOrders` table tracks sponsor requests before payment. Fields include sponsor contact info (name, email, company), creative content (title, description/tagline, link, image), placement preferences (multi-page array), selected pricing tier, payment tracking (PayPal order ID, payment date, status), and workflow status (draft → sent → approved/rejected, pending → paid → refunded).
+    - **Pricing Structure**: Static pricing tiers in `shared/config/bannerPricing.ts`:
+      - 1 Month: $75/mo (entry-level)
+      - 3 Months: $180 total ($60/mo, most popular)
+      - 6 Months: $300 total ($50/mo, best value)
+      - 12 Months: $540 total ($45/mo, commitment tier)
+      - Plus $40 one-time ad creation fee for all orders
+    - **Live Ads**: `bannerAds` table stores activated campaigns only. Enhanced with description field (taglines), link field (clickable sponsor URLs), and orderId reference linking back to originating order.
+    - **Workflow**: Admin creates order with sponsor details → sponsor receives payment link → payment via PayPal → admin activates order → banner ad goes live with configured start/end dates.
+    - **API Endpoints**: Full CRUD for orders (`/api/admin/banner-ad-orders`), status filtering, activation endpoint (`/activate`), plus existing banner ad management.
+    - **Backend Implementation**: Storage interface methods for order lifecycle management, payment validation during activation (only paid orders with required content can be activated), automatic banner creation from approved orders.
 - **Marketplace Features**: Category-specific filters (e.g., keyword search, city, price range, engine type).
 - **Aircraft Rental Filters (Updated November 2024)**: 
   - **Web**: Location-based filtering with keyword search (aircraft model/make), city/state inputs, and radius selector (25-500 miles). Removed price range and hour requirements filters. State managed in parent component (home.tsx) with real-time filtering of aircraft listings.

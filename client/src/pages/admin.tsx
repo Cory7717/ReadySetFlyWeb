@@ -3976,6 +3976,36 @@ export default function AdminDashboard() {
               
               <FormField
                 control={bannerForm.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description/Tagline (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Fly with confidence - premium rentals" {...field} value={field.value ?? ""} data-testid="input-banner-description" />
+                    </FormControl>
+                    <FormDescription>Short tagline or description for the banner</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={bannerForm.control}
+                name="link"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Link URL (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="https://example.com/landing-page" {...field} value={field.value ?? ""} data-testid="input-banner-link" />
+                    </FormControl>
+                    <FormDescription>URL for clickable banner (leave blank for non-clickable)</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={bannerForm.control}
                 name="imageUrl"
                 render={({ field }) => (
                   <FormItem>
@@ -4196,6 +4226,330 @@ export default function AdminDashboard() {
                     : editingBanner 
                     ? "Update Banner" 
                     : "Create Banner"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create/Edit Banner Ad Order Dialog */}
+      <Dialog 
+        open={orderDialogOpen} 
+        onOpenChange={(open) => {
+          setOrderDialogOpen(open);
+          if (!open) {
+            setEditingOrder(null);
+            orderForm.reset();
+          }
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="dialog-create-order">
+          <DialogHeader>
+            <DialogTitle>{editingOrder ? "Edit" : "Create"} Banner Ad Order</DialogTitle>
+            <DialogDescription>
+              {editingOrder ? "Update" : "Create a new"} banner ad order for sponsor billing and activation
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...orderForm}>
+            <form 
+              onSubmit={orderForm.handleSubmit((data) => {
+                // Validate required fields
+                if (!data.placements || data.placements.length === 0) {
+                  toast({
+                    title: "Validation Error",
+                    description: "Please select at least one page for banner placement",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                
+                if (editingOrder) {
+                  updateOrderMutation.mutate({ id: editingOrder.id, data });
+                } else {
+                  createOrderMutation.mutate(data);
+                }
+              })} 
+              className="space-y-4"
+            >
+              {/* Sponsor Information Section */}
+              <div className="space-y-4 p-4 border rounded-md">
+                <h3 className="font-semibold text-sm">Sponsor Information</h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={orderForm.control}
+                    name="sponsorName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sponsor Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="John Doe" {...field} data-testid="input-order-sponsor-name" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={orderForm.control}
+                    name="sponsorEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sponsor Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="sponsor@example.com" {...field} data-testid="input-order-sponsor-email" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                
+                <FormField
+                  control={orderForm.control}
+                  name="sponsorCompany"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company Name (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Aviation Corp" {...field} value={field.value ?? ""} data-testid="input-order-sponsor-company" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Banner Creative Section */}
+              <div className="space-y-4 p-4 border rounded-md">
+                <h3 className="font-semibold text-sm">Banner Creative</h3>
+                
+                <FormField
+                  control={orderForm.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Banner Title</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Premium Aircraft Rentals" {...field} data-testid="input-order-title" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={orderForm.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description/Tagline (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Fly with confidence" {...field} value={field.value ?? ""} data-testid="input-order-description" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={orderForm.control}
+                  name="link"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Link URL (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="https://example.com" {...field} value={field.value ?? ""} data-testid="input-order-link" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={orderForm.control}
+                  name="imageUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Banner Image</FormLabel>
+                      <FormControl>
+                        <div className="space-y-2">
+                          <Input 
+                            placeholder="Image URL" 
+                            {...field} 
+                            value={field.value ?? ""}
+                            data-testid="input-order-image-url"
+                          />
+                          <ObjectUploader
+                            onGetUploadParameters={handleOrderGetUploadParameters}
+                            onUploadComplete={handleOrderUploadComplete}
+                            allowedFileTypes={['image/*']}
+                            maxNumberOfFiles={1}
+                          />
+                          {orderImageUrl && (
+                            <img 
+                              src={orderImageUrl} 
+                              alt="Banner preview" 
+                              className="w-full h-32 object-cover rounded-md"
+                            />
+                          )}
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Placement & Category Section */}
+              <div className="space-y-4 p-4 border rounded-md">
+                <h3 className="font-semibold text-sm">Banner Placement</h3>
+                
+                <FormField
+                  control={orderForm.control}
+                  name="placements"
+                  render={() => (
+                    <FormItem>
+                      <FormLabel>Display On</FormLabel>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { value: 'homepage', label: 'Homepage' },
+                          { value: 'marketplace', label: 'Marketplace Hub' },
+                          { value: 'aircraft-sale', label: 'Aircraft for Sale' },
+                          { value: 'jobs', label: 'Aviation Jobs' },
+                          { value: 'cfi', label: 'CFI Services' },
+                          { value: 'flight-school', label: 'Flight Schools' },
+                          { value: 'mechanic', label: 'Mechanic Services' },
+                          { value: 'charter', label: 'Charter Services' },
+                        ].map((placement) => (
+                          <FormField
+                            key={placement.value}
+                            control={orderForm.control}
+                            name="placements"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center gap-2 space-y-0">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(placement.value as any) ?? false}
+                                    onCheckedChange={(checked) => {
+                                      const current = field.value || [];
+                                      const updated = checked
+                                        ? [...current, placement.value]
+                                        : current.filter((v) => v !== placement.value);
+                                      field.onChange(updated);
+                                    }}
+                                    data-testid={`checkbox-order-placement-${placement.value}`}
+                                  />
+                                </FormControl>
+                                <FormLabel className="cursor-pointer font-normal">{placement.label}</FormLabel>
+                              </FormItem>
+                            )}
+                          />
+                        ))}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Pricing Tier Section */}
+              <div className="space-y-4 p-4 border rounded-md">
+                <h3 className="font-semibold text-sm">Pricing & Billing</h3>
+                
+                <FormField
+                  control={orderForm.control}
+                  name="tier"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Select Tier</FormLabel>
+                      <FormControl>
+                        <select
+                          {...field}
+                          className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                          onChange={(e) => {
+                            field.onChange(e);
+                            const selectedTier = e.target.value as BannerAdTier;
+                            setSelectedTier(selectedTier);
+                            const pricing = calculateBannerAdPricing(selectedTier);
+                            orderForm.setValue('monthlyRate', pricing.monthlyRate);
+                            orderForm.setValue('totalAmount', pricing.totalAmount);
+                            orderForm.setValue('creationFee', pricing.creationFee);
+                            orderForm.setValue('grandTotal', pricing.grandTotal);
+                          }}
+                          data-testid="select-order-tier"
+                        >
+                          <option value="1month">1 Month - $75/mo</option>
+                          <option value="3months">3 Months - $60/mo (Most Popular)</option>
+                          <option value="6months">6 Months - $50/mo (Best Value)</option>
+                          <option value="12months">12 Months - $45/mo</option>
+                        </select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                {/* Pricing Summary */}
+                <div className="bg-muted p-4 rounded-md space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Monthly Rate:</span>
+                    <span className="font-semibold">${orderForm.watch('monthlyRate')}/mo</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total ({selectedTier === '1month' ? '1' : selectedTier === '3months' ? '3' : selectedTier === '6months' ? '6' : '12'} months):</span>
+                    <span className="font-semibold">${orderForm.watch('totalAmount')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>One-time creation fee:</span>
+                    <span className="font-semibold">${orderForm.watch('creationFee')}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2 mt-2">
+                    <span className="font-bold">Grand Total:</span>
+                    <span className="font-bold text-lg">${orderForm.watch('grandTotal')}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Admin Notes */}
+              <FormField
+                control={orderForm.control}
+                name="adminNotes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Admin Notes (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Internal notes" {...field} value={field.value ?? ""} data-testid="input-order-admin-notes" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setOrderDialogOpen(false);
+                    setEditingOrder(null);
+                    orderForm.reset();
+                  }}
+                  data-testid="button-cancel-create-order"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={createOrderMutation.isPending || updateOrderMutation.isPending}
+                  data-testid="button-submit-order"
+                >
+                  {createOrderMutation.isPending || updateOrderMutation.isPending 
+                    ? "Saving..." 
+                    : editingOrder 
+                    ? "Update Order" 
+                    : "Create Order"}
                 </Button>
               </DialogFooter>
             </form>

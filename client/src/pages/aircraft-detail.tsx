@@ -496,10 +496,10 @@ export default function AircraftDetail() {
                 <div>
                   <h4 className="font-semibold text-foreground mb-2">Weather Policy</h4>
                   <p className="text-sm text-muted-foreground">
-                    Safety is our top priority. If weather conditions are unsafe for flight (low visibility, 
-                    strong winds, thunderstorms, icing, etc.), you may cancel or reschedule your rental at no charge. 
-                    We recommend checking weather forecasts 24-48 hours before your scheduled flight and coordinating 
-                    with the aircraft owner if conditions are questionable.
+                    Safety is our top priority. Weather-related cancellations are subject to the cancellation 
+                    policy agreed upon between you and the aircraft owner. We recommend checking weather forecasts 
+                    24-48 hours before your scheduled flight and coordinating with the aircraft owner. Always 
+                    prioritize safety and follow all FAA regulations when making go/no-go decisions.
                   </p>
                 </div>
 

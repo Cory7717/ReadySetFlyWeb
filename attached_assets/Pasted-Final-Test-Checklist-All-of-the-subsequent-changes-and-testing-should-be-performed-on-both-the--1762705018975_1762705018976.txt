@@ -1,0 +1,73 @@
+Final Test - Checklist
+
+All of the subsequent changes and testing should be performed on both the web and mobile versions.
+Testing - Check all pages for any 404 errors and correct them.
+Testing - Make sure payment flow works as follows
+Rental payment - Renter sends a rental request to the owner.  Number of rental hours times hourly cost
+Add 7.5% booking fee to renters total amount
+Add 8.25% sales tax to renters final total
+Add 3% credit card processing fee to renter.
+Testing - Once the owner approves the rental request, a notification is sent to the renter to complete the payment.  The funds are then held by Ready Set Fly (escrow style).  Once the rental has been marked complete, the owner receives funds the following way:
+The owner receives the total number of rental hours times the hourly rental rate MINUS a 7.5% commission. (e.g, if the rental is for 1 hour at $100, then the owner will receive $92.50 while Ready Set Fly retains $7.50.
+Testing - Each rental transaction, Ready Set Fly should receive a total of 15% (7.5% that is added to the renters total cost and 7.5% that is withheld as a commission from the owner when they are paid out.  Ready Set Fly should also get the 3% credit card processing fee and the 8.25% sales tax that is from the renters side of the transaction.  
+Update - Update all the Privacy Policy and Terms of Use verbiage to reflect the correct fees where necessary.
+Update - Remove any Braintree information from the TOS and Privacy Statement. 
+Update the TOS and Privacy to state that readysetfly.us is only available to residents of the United States.  We should also add restrictions so that it is not reached globally just yet.  
+Update - Add some left and right arrows on the all listing images so the user has a visual that they can scroll left and right on the web version.  On the mobile version, users should be able to swipe left and right to view the images in all the listings.  Also, when a user presses the image on the mobile version, it should open full screen for better user experience.  
+Test and Update if necessary - The Marketplace listing fees should be as follows: (Make sure the fees are listed correctly anywhere they are published, such as the Terms of User/Service and the Privacy Statement and wherever else they are shown.  And make sure that the code reflects the correct pricing and adds the 8.25% state sales tax. 
+Aircraft for Sale: 
+Basic tier - $25 for one month
+Standard - $40
+Premium - $100
+Charter Listings
+$250/month
+CFI Listings
+$30/month
+Flight Schools
+$250/month
+Mechanic/Maintenance Listings
+$40/month
+Aviation Jobs 
+$40/month
+Testing - Test and ensure that only the users who conduct rental transactions (owners and renter) are the only users that need to be completely verified.  Users who are only listing things in the Traditional Marketplace only need to create an account and have their emails verified.  
+Testing and fix if necessary - Based on the fee schedule above, make sure that RSF will receive the payments for the traditional marketplace payments, with the correct taxes that will be deposited into RSFs paypal business account.  
+Fix - Make sure that the www.readysetfly.us URL is HTTPS.  It correctly says Not Secure.  
+Update - Add some verbiage anywhere there is a credit card processing and or payout that RSF uses trusted Paypal Business for processing all transactions.  We should do this to build confidence in the users.  
+Testing and update - Make sure that after the 7 days free for traditional listings, their CC will be charged for a month. This means that they will need to put in their credit card info when they put in the LAUNCH2025 promo.  
+Update - Add a bulk import into the admin dashboard in the CRM that can be uploaded via a xlsx or csv file that will extract and fill in the fields in the CRM.  Maybe add a pdf export CRM report.  
+Update - Lets add a check that once we have reached 25 to 30 initial listings on launch in each category, send a notification to all super admins so we can go in and disable the promo if we choose to do so.
+Update - Add a pop up recommendation that lets renters know that the best advance time for renting an aircraft is 3 - 5 days and that it is up to the users to make sure that weather will not be a factor for the rental. No refunds for weather related cancellations but rather hold funds for another day that is suitable for flying.  
+Update - Add this for google analytics on every main page for the site.  (This is for website analytics only, we will be adding analytics for mobile app later). 
+
+	<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-QTSNM1J659"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-QTSNM1J659');
+</script>
+
+Update - Add a section in the Admin Dashboard where I can create banner rotating ads that I can build for companies who wish to become sponsors.
+Add sections where we can put in the sponsor website that will automatically send the user to their site when they click the ad.
+Add sections for the sponsor information (Name, company, address, business phone, and a section for me to upload an image for the ad.
+Section to add text to the add
+Where the ad needs to be placed on the pages and which page
+Update - We need to add Rotor engine into the engine types for Aircraft for Sale to incorporate helicopters and add it to the filter as well.  This is for those who want to sell their helicopters and for users to search for helicopters
+Update - On the main landing page, we should add a Download the App and link the app via Google Play and Apple Play pressable logos but put coming soon.  And leave then ready to add the download links once we go live on the play stores.  
+Update - We need to change some of the filters in each of the categories.  
+CFIs - remove Min and Max price and add Search by ratings (Instrument, CFI 1, etc)  and search by keyword.  
+Flight Schools - Remove Min and Max price and add search by keyword
+Mechanics - Remove Min and Max and add Search by keyword 
+Charter Services - Remove Min and Max and add search by keyword. 
+Testing - In the Admin Dashboard in the Payouts tab, lets make sure that is fully functional so that any admin user can properly search for users and pull up their complete transaction info.
+Update - Lets also add a view counter to each category for the traditional marketplace.  This can be viewed by all users and give sellers and job posters, etc confidence in the traction their listings are getting.  
+Update - Add a “Favorite” on the various listings in each category that can then be viewed by the user in a list, so they can keep track of the listings they want to follow or circle back to.  
+Fix - I created a job posting.  I then tried to apply for the posting, which the forms and the resume upload all worked great but when I clicked Submit, it did NOT send the email to the email associated with the job posting.  
+Fix - Allow users who upload an image to their listing in Aviation Jobs, CFIs, Mechanics to crop the image.  I just uploaded my logo image to the job posting I did and it cuts off some of it. 
+Update - In the user verification for renters and owners, add an option for them to take a photo of their ID so they can use that or upload the image.  
+Update - In the verification process, it still mentions stripe for the credit card processing.  That should be changed. It also says Coming Soon. That should be corrected since it is now implemented with PayPal Extended Payments
+FIX - Submit for review is not working when the user tries to submit their info.  Review and fix. 
+Verify - Only users with @readysetfly.us emails and coryarmer@gmail.com can be granted admin access. 
+Test -  When a renter or owner’s insurance expires, make sure our system will flag it, notify the user to update 30 days prior to it expiring and if it expires, suspend their account until they can update the insurance.  
+Add/Verify - Owner revenue IRS reporting and tracking.  Make sure the owner dashboard properly tracks the total amount of money they have made through the fiscal year.  

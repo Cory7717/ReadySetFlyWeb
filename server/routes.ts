@@ -2880,10 +2880,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/banner-ads", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      console.log('Creating banner ad with data:', JSON.stringify(req.body, null, 2));
       const ad = await storage.createBannerAd(req.body);
+      console.log('Banner ad created successfully:', ad);
       res.status(201).json(ad);
     } catch (error) {
-      res.status(500).json({ error: "Failed to create banner ad" });
+      console.error('Banner ad creation error:', error);
+      res.status(500).json({ error: "Failed to create banner ad", details: error instanceof Error ? error.message : String(error) });
     }
   });
 

@@ -17,7 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertBannerAdSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type AdminNotification, type BannerAd, type InsertBannerAd } from "@shared/schema";
+import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertBannerAdSchema, insertBannerAdOrderSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder } from "@shared/schema";
+import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
 import { AdminUserModal } from "@/components/admin-user-modal";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
@@ -53,6 +54,12 @@ export default function AdminDashboard() {
   const [bannerDialogOpen, setBannerDialogOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<BannerAd | null>(null);
   const [bannerImageUrl, setBannerImageUrl] = useState<string>("");
+  
+  // Banner ad orders state
+  const [orderDialogOpen, setOrderDialogOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<BannerAdOrder | null>(null);
+  const [selectedTier, setSelectedTier] = useState<BannerAdTier>("3months");
+  const [orderImageUrl, setOrderImageUrl] = useState<string>("");
   
   // Withdrawal monitoring state
   const [withdrawalSearch, setWithdrawalSearch] = useState("");
@@ -108,8 +115,9 @@ export default function AdminDashboard() {
     resolver: zodResolver(insertBannerAdSchema),
     defaultValues: {
       title: "",
+      description: "",
       imageUrl: "",
-      targetUrl: "",
+      link: "",
       placements: [],
       category: undefined,
       listingId: undefined,
@@ -117,6 +125,30 @@ export default function AdminDashboard() {
       isActive: true,
       startDate: new Date(),
       endDate: undefined,
+    },
+  });
+  
+  // Banner ad order form with Zod validation
+  const orderForm = useForm<InsertBannerAdOrder>({
+    resolver: zodResolver(insertBannerAdOrderSchema),
+    defaultValues: {
+      sponsorName: "",
+      sponsorEmail: "",
+      sponsorCompany: "",
+      title: "",
+      description: "",
+      imageUrl: "",
+      link: "",
+      placements: [],
+      category: undefined,
+      tier: "3months",
+      monthlyRate: "60.00",
+      totalAmount: "180.00",
+      creationFee: "40.00",
+      grandTotal: "220.00",
+      approvalStatus: "draft",
+      paymentStatus: "pending",
+      adminNotes: "",
     },
   });
   
@@ -279,6 +311,12 @@ export default function AdminDashboard() {
   // Banner ads query
   const { data: bannerAds = [], isLoading: bannerAdsLoading } = useQuery<BannerAd[]>({
     queryKey: ["/api/admin/banner-ads"],
+    enabled: activeTab === "banners",
+  });
+
+  // Banner ad orders query
+  const { data: bannerOrders = [], isLoading: ordersLoading } = useQuery<BannerAdOrder[]>({
+    queryKey: ["/api/admin/banner-ad-orders"],
     enabled: activeTab === "banners",
   });
 
@@ -598,6 +636,87 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ads"] });
       toast({ title: "Banner ad status updated" });
+    },
+  });
+
+  // Banner ad order mutations
+  const createOrderMutation = useMutation({
+    mutationFn: async (data: InsertBannerAdOrder) => {
+      return await apiRequest("POST", `/api/admin/banner-ad-orders`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ad-orders"] });
+      orderForm.reset();
+      setOrderDialogOpen(false);
+      setEditingOrder(null);
+      setOrderImageUrl("");
+      toast({ title: "Banner ad order created successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to create banner ad order",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const updateOrderMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertBannerAdOrder> }) => {
+      return await apiRequest("PATCH", `/api/admin/banner-ad-orders/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ad-orders"] });
+      orderForm.reset();
+      setOrderDialogOpen(false);
+      setEditingOrder(null);
+      setOrderImageUrl("");
+      toast({ title: "Banner ad order updated successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update banner ad order",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const activateOrderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("POST", `/api/admin/banner-ad-orders/${id}/activate`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ad-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ads"] });
+      toast({ 
+        title: "Order activated", 
+        description: "Banner ad is now live"
+      });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to activate order",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const deleteOrderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/admin/banner-ad-orders/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ad-orders"] });
+      toast({ title: "Banner ad order deleted successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to delete banner ad order",
+        variant: "destructive" 
+      });
     },
   });
 

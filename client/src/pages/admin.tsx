@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, X } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, X, Rocket } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -2948,9 +2948,9 @@ export default function AdminDashboard() {
                                     <span className="font-medium">Placements:</span> {order.placements.length} pages
                                   </span>
                                 )}
-                                {order.paymentDate && (
+                                {order.paypalPaymentDate && (
                                   <span>
-                                    <span className="font-medium">Paid:</span> {new Date(order.paymentDate).toLocaleDateString()}
+                                    <span className="font-medium">Paid:</span> {new Date(order.paypalPaymentDate).toLocaleDateString()}
                                   </span>
                                 )}
                               </div>
@@ -2964,8 +2964,8 @@ export default function AdminDashboard() {
                           
                           {/* Actions */}
                           <div className="flex items-center gap-2">
-                            {/* Activate button - only show for paid orders that haven't been activated */}
-                            {order.paymentStatus === 'paid' && order.approvalStatus === 'approved' && !order.orderId && (
+                            {/* Activate button - only show for paid approved orders */}
+                            {order.paymentStatus === 'paid' && order.approvalStatus === 'approved' && (
                               <Button
                                 size="sm"
                                 variant="default"
@@ -3101,9 +3101,11 @@ export default function AdminDashboard() {
                               <Badge variant={banner.isActive ? "default" : "secondary"}>
                                 {banner.isActive ? "Active" : "Inactive"}
                               </Badge>
-                              <Badge variant="outline" className="capitalize">
-                                {banner.placement.replace('_', ' ')}
-                              </Badge>
+                              {banner.placements && banner.placements.length > 0 && (
+                                <Badge variant="outline" className="capitalize">
+                                  {banner.placements[0].replace('_', ' ')}
+                                </Badge>
+                              )}
                               {banner.category && (
                                 <Badge variant="outline" className="capitalize">
                                   {banner.category.replace('-', ' ')}
@@ -3112,9 +3114,9 @@ export default function AdminDashboard() {
                             </div>
                             
                             <div className="text-sm text-muted-foreground space-y-1">
-                              {banner.targetUrl && (
+                              {banner.link && (
                                 <p className="truncate">
-                                  <span className="font-medium">Target URL:</span> {banner.targetUrl}
+                                  <span className="font-medium">Link URL:</span> {banner.link}
                                 </p>
                               )}
                               <div className="flex items-center gap-4">
@@ -3162,7 +3164,8 @@ export default function AdminDashboard() {
                                 bannerForm.reset({
                                   title: banner.title,
                                   imageUrl: banner.imageUrl,
-                                  targetUrl: banner.targetUrl,
+                                  link: banner.link ?? "",
+                                  description: banner.description ?? "",
                                   placements: banner.placements || [],
                                   category: banner.category || undefined,
                                   listingId: banner.listingId || undefined,
@@ -4250,15 +4253,16 @@ export default function AdminDashboard() {
               
               <FormField
                 control={bannerForm.control}
-                name="targetUrl"
+                name="link"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Target URL</FormLabel>
+                    <FormLabel>Link URL (Optional)</FormLabel>
                     <FormControl>
                       <Input 
-                        placeholder="/marketplace/aviation-jobs" 
-                        {...field} 
-                        data-testid="input-banner-target"
+                        placeholder="https://www.example.com" 
+                        {...field}
+                        value={field.value ?? ""}
+                        data-testid="input-banner-link"
                       />
                     </FormControl>
                     <FormDescription>Where users go when they click the banner</FormDescription>

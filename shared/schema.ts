@@ -1014,7 +1014,9 @@ export const insertBannerAdOrderSchema = createInsertSchema(bannerAdOrders).omit
   sponsorName: z.string().min(1, "Sponsor name is required"),
   sponsorEmail: z.string().email("Valid email is required"),
   title: z.string().min(1, "Title is required"),
-  link: z.string().url("Valid URL is required"),
+  link: z.string().optional().refine((val) => !val || val.trim() === '' || z.string().url().safeParse(val).success, {
+    message: "Please enter a valid URL (e.g., https://www.example.com)",
+  }),
   placements: z.array(z.string()).min(1, "At least one page placement is required"),
   tier: z.enum(["1month", "3months", "6months", "12months"]),
 });
@@ -1028,7 +1030,9 @@ export const insertBannerAdSchema = createInsertSchema(bannerAds).omit({
 }).extend({
   placements: z.array(z.string()).min(1, "At least one page placement is required"),
   imageUrl: z.string().min(1, "Banner image is required"),
-  link: z.string().url("Valid URL is required"),
+  link: z.string().optional().refine((val) => !val || val.trim() === '' || z.string().url().safeParse(val).success, {
+    message: "Please enter a valid URL (e.g., https://www.example.com)",
+  }),
   title: z.string().min(1, "Title is required"),
 });
 

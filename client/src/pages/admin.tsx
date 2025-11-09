@@ -4441,34 +4441,36 @@ export default function AdminDashboard() {
           }
         }}
       >
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="dialog-create-order">
-          <DialogHeader>
-            <DialogTitle>{editingOrder ? "Edit" : "Create"} Banner Ad Order</DialogTitle>
-            <DialogDescription>
-              {editingOrder ? "Update" : "Create a new"} banner ad order for sponsor billing and activation
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...orderForm}>
-            <form 
-              onSubmit={orderForm.handleSubmit((data) => {
-                // Validate required fields
-                if (!data.placements || data.placements.length === 0) {
-                  toast({
-                    title: "Validation Error",
-                    description: "Please select at least one page for banner placement",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                
-                if (editingOrder) {
-                  updateOrderMutation.mutate({ id: editingOrder.id, data });
-                } else {
-                  createOrderMutation.mutate(data);
-                }
-              })} 
-              className="space-y-4"
-            >
+        <DialogContent className="max-w-3xl p-0" data-testid="dialog-create-order">
+          <div className="flex flex-col max-h-[90vh]">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>{editingOrder ? "Edit" : "Create"} Banner Ad Order</DialogTitle>
+              <DialogDescription>
+                {editingOrder ? "Update" : "Create a new"} banner ad order for sponsor billing and activation
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...orderForm}>
+              <form 
+                onSubmit={orderForm.handleSubmit((data) => {
+                  // Validate required fields
+                  if (!data.placements || data.placements.length === 0) {
+                    toast({
+                      title: "Validation Error",
+                      description: "Please select at least one page for banner placement",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  if (editingOrder) {
+                    updateOrderMutation.mutate({ id: editingOrder.id, data });
+                  } else {
+                    createOrderMutation.mutate(data);
+                  }
+                })} 
+                className="flex flex-col flex-1 min-h-0"
+              >
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               {/* Sponsor Information Section */}
               <div className="space-y-4 p-4 border rounded-md">
                 <h3 className="font-semibold text-sm">Sponsor Information</h3>
@@ -4723,34 +4725,36 @@ export default function AdminDashboard() {
                   </FormItem>
                 )}
               />
-              
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setOrderDialogOpen(false);
-                    setEditingOrder(null);
-                    orderForm.reset();
-                  }}
-                  data-testid="button-cancel-create-order"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={createOrderMutation.isPending || updateOrderMutation.isPending}
-                  data-testid="button-submit-order"
-                >
-                  {createOrderMutation.isPending || updateOrderMutation.isPending 
-                    ? "Saving..." 
-                    : editingOrder 
-                    ? "Update Order" 
-                    : "Create Order"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+                </div>
+                
+                <DialogFooter className="sticky bottom-0 border-t bg-background px-6 py-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setOrderDialogOpen(false);
+                      setEditingOrder(null);
+                      orderForm.reset();
+                    }}
+                    data-testid="button-cancel-create-order"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={createOrderMutation.isPending || updateOrderMutation.isPending}
+                    data-testid="button-submit-order"
+                  >
+                    {createOrderMutation.isPending || updateOrderMutation.isPending 
+                      ? "Saving..." 
+                      : editingOrder 
+                      ? "Update Order" 
+                      : "Create Order"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </div>
         </DialogContent>
       </Dialog>
 

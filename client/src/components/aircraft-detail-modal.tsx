@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { X, MapPin, Gauge, Shield, Calendar, DollarSign, Plane, Star, Edit } from "lucide-react";
+import { X, MapPin, Gauge, Shield, Calendar, DollarSign, Plane, Star, Edit, Info } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
   const { user } = useAuth();
   const { toast } = useToast();
   const [showRequestForm, setShowRequestForm] = useState(false);
+  const [showBestPractices, setShowBestPractices] = useState(false);
   const [adminNotes, setAdminNotes] = useState("");
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -224,7 +225,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                     if (user.id === aircraft.ownerId) {
                       return; // Owner can't rent their own aircraft
                     }
-                    setShowRequestForm(true);
+                    setShowBestPractices(true);
                   }}
                   disabled={user?.id === aircraft.ownerId}
                   data-testid="button-request-rental"
@@ -503,6 +504,72 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
             data-testid="button-go-login"
           >
             Sign In / Create Account
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Rental Best Practices Dialog */}
+    <AlertDialog open={showBestPractices} onOpenChange={setShowBestPractices}>
+      <AlertDialogContent className="max-w-2xl">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="flex items-center gap-2">
+            <Info className="h-5 w-5 text-primary" />
+            Aircraft Rental Best Practices
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-left space-y-4 pt-4">
+            <div className="space-y-3">
+              <div>
+                <h4 className="font-semibold text-foreground mb-2">Advance Notice Requirements</h4>
+                <p className="text-sm text-muted-foreground">
+                  We recommend booking aircraft rentals <strong>3-5 days in advance</strong> to ensure 
+                  availability and give aircraft owners adequate time to prepare the aircraft for your flight. 
+                  Last-minute bookings may be subject to owner approval and availability.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-foreground mb-2">Weather Policy & Disclaimer</h4>
+                <p className="text-sm text-muted-foreground">
+                  <strong>Important:</strong> Ready Set Fly is not responsible for weather or weather-related 
+                  cancellations. <strong>No refunds will be issued for weather-related cancellations.</strong> 
+                  We strongly recommend checking weather forecasts 24-48 hours before your scheduled flight 
+                  and coordinating with the aircraft owner. Always prioritize safety and follow all FAA regulations 
+                  when making go/no-go decisions.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-foreground mb-2">Communication</h4>
+                <p className="text-sm text-muted-foreground">
+                  Please maintain open communication with the aircraft owner regarding your flight plans, 
+                  any changes to your schedule, and any concerns you may have. The owner may require a 
+                  pre-flight briefing or checkout depending on the aircraft and your experience level.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-muted p-3 rounded-lg mt-4">
+              <p className="text-xs text-muted-foreground">
+                By continuing, you acknowledge that you understand these best practices and will communicate 
+                with the aircraft owner regarding any questions or concerns.
+              </p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel data-testid="button-cancel-best-practices">
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction 
+            onClick={() => {
+              setShowBestPractices(false);
+              setShowRequestForm(true);
+            }}
+            className="bg-accent text-accent-foreground hover:bg-accent"
+            data-testid="button-confirm-best-practices"
+          >
+            I Understand - Continue to Request
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

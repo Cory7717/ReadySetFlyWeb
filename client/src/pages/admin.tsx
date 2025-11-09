@@ -569,6 +569,58 @@ export default function AdminDashboard() {
     }
   };
 
+  // Order image upload handlers
+  const handleOrderGetUploadParameters = async () => {
+    const response = await fetch('/api/objects/upload', {
+      method: 'POST',
+      credentials: 'include',
+    });
+    const data = await response.json();
+    return {
+      method: 'PUT' as const,
+      url: data.uploadURL,
+    };
+  };
+
+  const handleOrderUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    try {
+      for (const file of result.successful || []) {
+        if (file.uploadURL) {
+          // Set ACL policy for public access
+          const parsedUrl = new URL(file.uploadURL);
+          const objectPath = parsedUrl.pathname.slice(1); // Remove leading slash
+          
+          await fetch('/api/objects/set-acl', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              path: objectPath,
+              access: 'publicRead', // Order banner images need to be publicly accessible
+            }),
+          });
+          
+          // Update form field with the uploaded URL
+          const imageUrl = file.uploadURL.split('?')[0]; // Remove query params
+          setOrderImageUrl(imageUrl);
+          orderForm.setValue('imageUrl', imageUrl);
+          
+          toast({ 
+            title: "Image uploaded successfully",
+            description: "Your banner image is ready to use"
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error processing order upload:', error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to process the uploaded image. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Banner ad mutations
   const createBannerAdMutation = useMutation({
     mutationFn: async (data: InsertBannerAd) => {

@@ -333,6 +333,7 @@ export default function Marketplace() {
                           <SelectItem value="Multi-Engine">Multi-Engine</SelectItem>
                           <SelectItem value="Turboprop">Turboprop</SelectItem>
                           <SelectItem value="Jet">Jet</SelectItem>
+                          <SelectItem value="Rotor">Rotor (Helicopters)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

@@ -3143,6 +3143,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(404).json({ error: "Job listing not found" });
       }
       
+      // CRITICAL: Validate email exists BEFORE creating application to avoid inconsistent state
+      const listingOwner = await storage.getUser(listing.userId);
+      const recipientEmail = listing.contactEmail || listingOwner?.email;
+      
+      if (!recipientEmail) {
+        console.error(`No recipient email found for job listing ${listingId}. contactEmail: ${listing.contactEmail}, owner email: ${listingOwner?.email}`);
+        return res.status(400).json({ 
+          error: "Job listing does not have a contact email configured. Please contact the job poster to update their listing." 
+        });
+      }
+      
       // Get authenticated user if logged in
       const applicantId = req.user ? req.user.claims.sub : null;
       
@@ -3160,10 +3171,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         resumeUrl: `/uploads/documents/${req.file.filename}`,
       });
       
-      // Create the application
-      const application = await storage.createJobApplication(applicationData);
-      
-      // Send email notification to job poster using Resend
+      // CRITICAL: Send email FIRST before creating application to ensure transactional consistency
+      // If email fails, no application is saved (prevents orphaned applications + duplicate submissions)
       try {
         const { client, fromEmail } = await getUncachableResendClient();
         
@@ -3256,26 +3265,28 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 </html>
         `;
         
-        // Get the listing owner's email
-        const listingOwner = await storage.getUser(listing.userId);
-        const recipientEmail = listing.contactEmail || listingOwner?.email || email;
-        
-        if (!recipientEmail) {
-          throw new Error('No recipient email found for job poster');
-        }
+        console.log(`Sending job application email to: ${recipientEmail} for listing: ${listing.title}`);
         
         await client.emails.send({
           from: fromEmail,
           to: recipientEmail,
-          subject: `New Application for ${listing.title}`,
+          subject: `Inquiry From Ready Set Fly about your Aviation Jobs Listing: ${listing.title}`,
           html: emailHtml,
         });
+        
+        console.log(`Job application email sent successfully to: ${recipientEmail}`);
+        
+        // Create application AFTER email sends successfully (transactional consistency)
+        const application = await storage.createJobApplication(applicationData);
+        
+        res.json(application);
       } catch (emailError) {
-        console.error('Failed to send email notification:', emailError);
-        // Don't fail the entire request if email fails
+        console.error(`CRITICAL: Failed to send job application email to ${recipientEmail}:`, emailError);
+        // Email send failed, so don't create application (prevents orphaned records)
+        return res.status(500).json({ 
+          error: "Failed to send notification to job poster. Please try again or contact support@readysetfly.us" 
+        });
       }
-      
-      res.json(application);
     } catch (error: any) {
       console.error('Job application error:', error);
       res.status(500).json({ error: error.message || "Failed to submit application" });

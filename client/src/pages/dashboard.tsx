@@ -82,32 +82,10 @@ export default function Dashboard() {
   const activeListings = userAircraft.filter(a => a.isListed).length;
   const activeRentals = activeRentalsArray.length;
 
-  // Navigate to payout setup page
+  // Navigate to PayPal withdrawals page
   const handleSetupPayouts = () => {
-    navigate("/owner-payout-setup");
+    navigate("/owner-withdrawals");
   };
-
-  // Request payout mutation
-  const requestPayoutMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("POST", "/api/stripe/payout/request", {});
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/rentals/owner", authUser?.id] });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions/user", authUser?.id] });
-      toast({
-        title: "Payout Requested",
-        description: "Your payout request has been submitted. Funds will be transferred within 2-7 business days.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to request payout",
-        variant: "destructive",
-      });
-    },
-  });
 
   // Approve rental request mutation
   const approveRentalMutation = useMutation({
@@ -221,30 +199,30 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Bank Account Setup Alert */}
-        {!user?.bankAccountConnected && pendingPayouts > 0 && (
-          <Alert className="mb-6 border-accent" data-testid="alert-bank-setup">
+        {/* PayPal Setup Alert */}
+        {!user?.paypalEmail && pendingPayouts > 0 && (
+          <Alert className="mb-6 border-accent" data-testid="alert-paypal-setup">
             <CreditCard className="h-4 w-4" />
-            <AlertTitle>Bank Account Required</AlertTitle>
+            <AlertTitle>PayPal Account Required</AlertTitle>
             <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <span>Set up your bank account to receive payouts of ${pendingPayouts.toFixed(2)}</span>
+              <span>Set up your PayPal account to receive instant payouts of ${pendingPayouts.toFixed(2)}</span>
               <Button 
                 onClick={handleSetupPayouts}
-                data-testid="button-setup-bank"
+                data-testid="button-setup-paypal"
                 className="w-full sm:w-auto"
               >
-                Setup Payouts
+                Setup PayPal Payouts
               </Button>
             </AlertDescription>
           </Alert>
         )}
 
-        {user?.bankAccountConnected && (
-          <Alert className="mb-6 border-chart-2" data-testid="alert-bank-connected">
+        {user?.paypalEmail && (
+          <Alert className="mb-6 border-chart-2" data-testid="alert-paypal-connected">
             <CheckCircle2 className="h-4 w-4 text-chart-2" />
-            <AlertTitle>Bank Account Connected</AlertTitle>
+            <AlertTitle>PayPal Account Connected</AlertTitle>
             <AlertDescription>
-              Your bank account is connected and ready to receive payouts
+              Your PayPal account ({user.paypalEmail}) is ready to receive instant payouts
             </AlertDescription>
           </Alert>
         )}
@@ -543,11 +521,10 @@ export default function Dashboard() {
                 <Button 
                   variant="default" 
                   className="bg-accent text-accent-foreground hover:bg-accent w-full sm:w-auto" 
-                  onClick={() => requestPayoutMutation.mutate()}
-                  disabled={!user?.bankAccountConnected || pendingPayouts === 0 || requestPayoutMutation.isPending}
-                  data-testid="button-request-payout"
+                  onClick={() => navigate("/owner-withdrawals")}
+                  data-testid="button-manage-withdrawals"
                 >
-                  {requestPayoutMutation.isPending ? "Processing..." : `Request Payout ($${pendingPayouts.toFixed(2)})`}
+                  Manage Withdrawals
                 </Button>
               </CardHeader>
               <CardContent className="overflow-x-auto">

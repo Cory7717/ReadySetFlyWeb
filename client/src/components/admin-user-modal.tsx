@@ -400,17 +400,17 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                         )}
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm">Bank Account Connected</span>
-                        {user.bankAccountConnected ? (
+                        <span className="text-sm">PayPal Account Connected</span>
+                        {user.paypalEmail ? (
                           <CheckCircle className="h-5 w-5 text-chart-2" />
                         ) : (
                           <XCircle className="h-5 w-5 text-muted-foreground" />
                         )}
                       </div>
-                      {user.stripeAccountId && (
+                      {user.paypalEmail && (
                         <div>
-                          <div className="text-sm font-medium text-muted-foreground mt-3">Stripe Account ID</div>
-                          <div className="text-xs font-mono">{user.stripeAccountId}</div>
+                          <div className="text-sm font-medium text-muted-foreground mt-3">PayPal Email</div>
+                          <div className="text-xs">{user.paypalEmail}</div>
                         </div>
                       )}
                       <div className="mt-3">

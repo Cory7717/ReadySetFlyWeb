@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type AdminNotification } from "@shared/schema";
+import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertBannerAdSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type AdminNotification, type BannerAd, type InsertBannerAd } from "@shared/schema";
 import { AdminUserModal } from "@/components/admin-user-modal";
 
 export default function AdminDashboard() {
@@ -46,6 +46,10 @@ export default function AdminDashboard() {
   // Promo alerts state
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<PromoAlert | null>(null);
+  
+  // Banner ads state
+  const [bannerDialogOpen, setBannerDialogOpen] = useState(false);
+  const [editingBanner, setEditingBanner] = useState<BannerAd | null>(null);
   
   // Withdrawal monitoring state
   const [withdrawalSearch, setWithdrawalSearch] = useState("");
@@ -93,6 +97,23 @@ export default function AdminDashboard() {
       showOnCategoryPages: true,
       targetCategories: [],
       variant: "info",
+    },
+  });
+  
+  // Banner ad form with Zod validation
+  const bannerForm = useForm<InsertBannerAd>({
+    resolver: zodResolver(insertBannerAdSchema),
+    defaultValues: {
+      title: "",
+      imageUrl: "",
+      targetUrl: "",
+      placement: "homepage_hero",
+      category: undefined,
+      listingId: undefined,
+      listingType: undefined,
+      isActive: true,
+      startDate: new Date(),
+      endDate: undefined,
     },
   });
   
@@ -250,6 +271,12 @@ export default function AdminDashboard() {
   // Unread notifications count (always fetch for badge)
   const { data: unreadNotifications = [] } = useQuery<AdminNotification[]>({
     queryKey: ["/api/admin/notifications/unread"],
+  });
+
+  // Banner ads query
+  const { data: bannerAds = [], isLoading: bannerAdsLoading } = useQuery<BannerAd[]>({
+    queryKey: ["/api/admin/banner-ads"],
+    enabled: activeTab === "banners",
   });
 
   // Approve submission mutation
@@ -446,6 +473,74 @@ export default function AdminDashboard() {
         description: error.message || "Failed to create promotional alert",
         variant: "destructive" 
       });
+    },
+  });
+
+  // Banner ad mutations
+  const createBannerAdMutation = useMutation({
+    mutationFn: async (data: InsertBannerAd) => {
+      return await apiRequest("POST", `/api/admin/banner-ads`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ads"] });
+      bannerForm.reset();
+      setBannerDialogOpen(false);
+      setEditingBanner(null);
+      toast({ title: "Banner ad created successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to create banner ad",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const updateBannerAdMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertBannerAd> }) => {
+      return await apiRequest("PATCH", `/api/admin/banner-ads/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ads"] });
+      bannerForm.reset();
+      setBannerDialogOpen(false);
+      setEditingBanner(null);
+      toast({ title: "Banner ad updated successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update banner ad",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const deleteBannerAdMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/admin/banner-ads/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ads"] });
+      toast({ title: "Banner ad deleted successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to delete banner ad",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const toggleBannerAdMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      return await apiRequest("PATCH", `/api/admin/banner-ads/${id}`, { isActive });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ads"] });
+      toast({ title: "Banner ad status updated" });
     },
   });
 
@@ -2516,21 +2611,167 @@ export default function AdminDashboard() {
         {/* Banner Ads Tab */}
         <TabsContent value="banners" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle data-testid="heading-banners">Banner Ad Management</CardTitle>
-              <CardDescription>
-                Create and manage sponsored banner ads for homepage and category pages
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle data-testid="heading-banners">Banner Ad Management</CardTitle>
+                <CardDescription>
+                  Create and manage sponsored banner ads for homepage and category pages
+                </CardDescription>
+              </div>
+              <Button 
+                onClick={() => {
+                  setEditingBanner(null);
+                  bannerForm.reset();
+                  setBannerDialogOpen(true);
+                }}
+                data-testid="button-create-banner"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Banner Ad
+              </Button>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-12">
-                <Image className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Banner Ad System</h3>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  Full banner ad management system with image uploads, placement targeting, 
-                  scheduling, and analytics tracking. Coming soon.
-                </p>
-              </div>
+              {bannerAdsLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Loading banner ads...</p>
+                </div>
+              ) : bannerAds.length === 0 ? (
+                <div className="text-center py-12">
+                  <Image className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Banner Ads Yet</h3>
+                  <p className="text-muted-foreground max-w-md mx-auto mb-4">
+                    Create sponsored banner ads to promote listings on the homepage and category pages.
+                  </p>
+                  <Button 
+                    onClick={() => {
+                      setEditingBanner(null);
+                      bannerForm.reset();
+                      setBannerDialogOpen(true);
+                    }}
+                    data-testid="button-create-first-banner"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Your First Banner Ad
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {bannerAds.map((banner) => (
+                    <Card key={banner.id} data-testid={`banner-card-${banner.id}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-4">
+                          {/* Banner Image Preview */}
+                          {banner.imageUrl && (
+                            <div className="w-32 h-20 rounded overflow-hidden flex-shrink-0 bg-muted">
+                              <img 
+                                src={banner.imageUrl} 
+                                alt={banner.title}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          )}
+                          
+                          {/* Banner Details */}
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold">{banner.title}</h4>
+                              <Badge variant={banner.isActive ? "default" : "secondary"}>
+                                {banner.isActive ? "Active" : "Inactive"}
+                              </Badge>
+                              <Badge variant="outline" className="capitalize">
+                                {banner.placement.replace('_', ' ')}
+                              </Badge>
+                              {banner.category && (
+                                <Badge variant="outline" className="capitalize">
+                                  {banner.category.replace('-', ' ')}
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            <div className="text-sm text-muted-foreground space-y-1">
+                              {banner.targetUrl && (
+                                <p className="truncate">
+                                  <span className="font-medium">Target URL:</span> {banner.targetUrl}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-4">
+                                <span>
+                                  <Clock className="h-3 w-3 inline mr-1" />
+                                  {new Date(banner.startDate).toLocaleDateString()}
+                                  {banner.endDate && ` - ${new Date(banner.endDate).toLocaleDateString()}`}
+                                </span>
+                                <span>
+                                  <Eye className="h-3 w-3 inline mr-1" />
+                                  {banner.impressions ?? 0} impressions
+                                </span>
+                                <span>
+                                  <Activity className="h-3 w-3 inline mr-1" />
+                                  {banner.clicks ?? 0} clicks
+                                </span>
+                                {(banner.impressions ?? 0) > 0 && (
+                                  <span className="text-primary">
+                                    CTR: {(((banner.clicks ?? 0) / (banner.impressions ?? 0)) * 100).toFixed(2)}%
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Actions */}
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => toggleBannerAdMutation.mutate({ 
+                                id: banner.id, 
+                                isActive: !banner.isActive 
+                              })}
+                              data-testid={`button-toggle-banner-${banner.id}`}
+                            >
+                              {banner.isActive ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingBanner(banner);
+                                bannerForm.reset({
+                                  title: banner.title,
+                                  imageUrl: banner.imageUrl,
+                                  targetUrl: banner.targetUrl,
+                                  placement: banner.placement as any,
+                                  category: banner.category || undefined,
+                                  listingId: banner.listingId || undefined,
+                                  listingType: banner.listingType || undefined,
+                                  isActive: banner.isActive,
+                                  startDate: banner.startDate ? new Date(banner.startDate) : new Date(),
+                                  endDate: banner.endDate ? new Date(banner.endDate) : undefined,
+                                });
+                                setBannerDialogOpen(true);
+                              }}
+                              data-testid={`button-edit-banner-${banner.id}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to delete the banner ad "${banner.title}"?`)) {
+                                  deleteBannerAdMutation.mutate(banner.id);
+                                }
+                              }}
+                              data-testid={`button-delete-banner-${banner.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -3350,7 +3591,7 @@ export default function AdminDashboard() {
                     <FormItem className="flex items-center gap-2 space-y-0">
                       <FormControl>
                         <Checkbox 
-                          checked={field.value} 
+                          checked={field.value ?? false} 
                           onCheckedChange={field.onChange}
                           data-testid="checkbox-show-main"
                         />
@@ -3367,7 +3608,7 @@ export default function AdminDashboard() {
                     <FormItem className="flex items-center gap-2 space-y-0">
                       <FormControl>
                         <Checkbox 
-                          checked={field.value} 
+                          checked={field.value ?? false} 
                           onCheckedChange={field.onChange}
                           data-testid="checkbox-show-category"
                         />
@@ -3429,6 +3670,238 @@ export default function AdminDashboard() {
                   data-testid="button-submit-promo"
                 >
                   {createPromoAlertMutation.isPending ? "Creating..." : editingPromo ? "Update" : "Create"} Alert
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create/Edit Banner Ad Dialog */}
+      <Dialog 
+        open={bannerDialogOpen} 
+        onOpenChange={(open) => {
+          setBannerDialogOpen(open);
+          if (!open) {
+            setEditingBanner(null);
+            bannerForm.reset();
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl" data-testid="dialog-create-banner">
+          <DialogHeader>
+            <DialogTitle>{editingBanner ? "Edit" : "Create"} Banner Ad</DialogTitle>
+            <DialogDescription>
+              {editingBanner ? "Update" : "Create a new"} sponsored banner ad for homepage or category pages
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...bannerForm}>
+            <form 
+              onSubmit={bannerForm.handleSubmit((data) => {
+                // Normalize dates to ISO strings for backend
+                const payload: InsertBannerAd = {
+                  ...data,
+                  startDate: data.startDate instanceof Date ? data.startDate as any : data.startDate as any,
+                  endDate: data.endDate instanceof Date ? data.endDate as any : data.endDate as any,
+                };
+                
+                if (editingBanner) {
+                  updateBannerAdMutation.mutate({ id: editingBanner.id, data: payload });
+                } else {
+                  createBannerAdMutation.mutate(payload);
+                }
+              })} 
+              className="space-y-4"
+            >
+              <FormField
+                control={bannerForm.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Title</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Premium Aircraft Rental" {...field} data-testid="input-banner-title" />
+                    </FormControl>
+                    <FormDescription>Internal title for this banner ad</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={bannerForm.control}
+                name="imageUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Image URL</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="https://example.com/banner.jpg" 
+                        {...field} 
+                        data-testid="input-banner-image"
+                      />
+                    </FormControl>
+                    <FormDescription>Public URL of the banner image (recommended: 1200x400px)</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={bannerForm.control}
+                name="targetUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Target URL</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="/marketplace/aviation-jobs" 
+                        {...field} 
+                        data-testid="input-banner-target"
+                      />
+                    </FormControl>
+                    <FormDescription>Where users go when they click the banner</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <FormField
+                control={bannerForm.control}
+                name="placement"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Placement</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-banner-placement">
+                          <SelectValue placeholder="Select placement location" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="homepage_hero">Homepage Hero</SelectItem>
+                        <SelectItem value="marketplace_category">Marketplace Category Page</SelectItem>
+                        <SelectItem value="rentals_list">Rentals List Page</SelectItem>
+                        <SelectItem value="category_specific">Category Specific</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Where the banner should appear</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              {bannerForm.watch("placement") === "category_specific" && (
+                <FormField
+                  control={bannerForm.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Category</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || undefined}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-banner-category">
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="sale">Aircraft for Sale</SelectItem>
+                          <SelectItem value="charter">Charter Services</SelectItem>
+                          <SelectItem value="cfi">CFI Services</SelectItem>
+                          <SelectItem value="flight-school">Flight School</SelectItem>
+                          <SelectItem value="mechanic">Mechanic Services</SelectItem>
+                          <SelectItem value="job">Aviation Jobs</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Specific marketplace category for this banner</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={bannerForm.control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Start Date</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="date" 
+                          value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : (typeof field.value === 'string' ? (field.value as string).split('T')[0] : '')}
+                          onChange={(e) => field.onChange(new Date(e.target.value))}
+                          data-testid="input-banner-start-date"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={bannerForm.control}
+                  name="endDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End Date (Optional)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="date" 
+                          value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : (typeof field.value === 'string' ? (field.value as string).split('T')[0] : '')}
+                          onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                          data-testid="input-banner-end-date"
+                        />
+                      </FormControl>
+                      <FormDescription>Leave blank for no expiration</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              <FormField
+                control={bannerForm.control}
+                name="isActive"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-2 space-y-0">
+                    <FormControl>
+                      <Checkbox 
+                        checked={field.value ?? false} 
+                        onCheckedChange={field.onChange}
+                        data-testid="checkbox-banner-active"
+                      />
+                    </FormControl>
+                    <FormLabel className="cursor-pointer">Active (show banner immediately)</FormLabel>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setBannerDialogOpen(false);
+                    setEditingBanner(null);
+                    bannerForm.reset();
+                  }}
+                  data-testid="button-cancel-create-banner"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={createBannerAdMutation.isPending || updateBannerAdMutation.isPending}
+                  data-testid="button-submit-banner"
+                >
+                  {createBannerAdMutation.isPending || updateBannerAdMutation.isPending 
+                    ? "Saving..." 
+                    : editingBanner 
+                    ? "Update Banner" 
+                    : "Create Banner"}
                 </Button>
               </DialogFooter>
             </form>

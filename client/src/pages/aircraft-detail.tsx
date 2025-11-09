@@ -494,12 +494,13 @@ export default function AircraftDetail() {
                 </div>
 
                 <div>
-                  <h4 className="font-semibold text-foreground mb-2">Weather Policy</h4>
+                  <h4 className="font-semibold text-foreground mb-2">Weather Policy & Disclaimer</h4>
                   <p className="text-sm text-muted-foreground">
-                    Safety is our top priority. Weather-related cancellations are subject to the cancellation 
-                    policy agreed upon between you and the aircraft owner. We recommend checking weather forecasts 
-                    24-48 hours before your scheduled flight and coordinating with the aircraft owner. Always 
-                    prioritize safety and follow all FAA regulations when making go/no-go decisions.
+                    <strong>Important:</strong> Ready Set Fly is not responsible for weather or weather-related 
+                    cancellations. <strong>No refunds will be issued for weather-related cancellations.</strong> 
+                    We strongly recommend checking weather forecasts 24-48 hours before your scheduled flight 
+                    and coordinating with the aircraft owner. Always prioritize safety and follow all FAA regulations 
+                    when making go/no-go decisions.
                   </p>
                 </div>
 

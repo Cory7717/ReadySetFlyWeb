@@ -170,7 +170,9 @@ export default function TermsOfService() {
             <ul className="list-disc pl-6 space-y-2">
               <li>
                 <strong>Rental Refunds:</strong> Subject to the cancellation policy agreed upon between owner 
-                and renter. Platform fees are non-refundable.
+                and renter. <strong>No refunds will be issued for weather-related cancellations.</strong> Ready Set Fly 
+                is not responsible for weather or weather-related cancellations. Platform fees are non-refundable under 
+                all circumstances.
               </li>
               <li>
                 <strong>Marketplace Listing Fees:</strong> Non-refundable. You may cancel at any time to prevent 

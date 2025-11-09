@@ -598,14 +598,66 @@ export const adminNotifications = pgTable("admin_notifications", {
   readAt: timestamp("read_at"),
 });
 
-// Banner Ads (sponsored listing promotions)
+// Banner Ad Orders (sponsor requests before going live)
+export const bannerAdOrders = pgTable("banner_ad_orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Sponsor information
+  sponsorName: text("sponsor_name").notNull(),
+  sponsorEmail: text("sponsor_email").notNull(),
+  sponsorCompany: text("sponsor_company"),
+  
+  // Creative content (admin creates based on sponsor specs)
+  title: text("title").notNull(),
+  description: text("description"), // Tagline
+  imageUrl: text("image_url"), // Created by admin, uploaded to object storage
+  link: text("link").notNull(), // Sponsor's website
+  
+  // Placement preferences
+  placements: text("placements").array().notNull().default(sql`ARRAY[]::text[]`),
+  category: text("category"),
+  
+  // Pricing tier selected (1month, 3months, 6months, 12months)
+  tier: text("tier").notNull(),
+  monthlyRate: decimal("monthly_rate", { precision: 10, scale: 2 }).notNull(), // Snapshot of pricing
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(), // Total subscription cost
+  creationFee: decimal("creation_fee", { precision: 10, scale: 2 }).default("40.00"), // One-time ad creation fee
+  grandTotal: decimal("grand_total", { precision: 10, scale: 2 }).notNull(), // totalAmount + creationFee
+  
+  // Workflow status
+  approvalStatus: text("approval_status").notNull().default("draft"), // draft, sent, approved, rejected
+  paymentStatus: text("payment_status").notNull().default("pending"), // pending, paid, refunded
+  
+  // PayPal payment tracking
+  paypalOrderId: text("paypal_order_id"),
+  paypalPaymentDate: timestamp("paypal_payment_date"),
+  
+  // Campaign scheduling (after payment)
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  
+  // Admin notes
+  adminNotes: text("admin_notes"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_banner_orders_status").on(table.approvalStatus, table.paymentStatus),
+  index("idx_banner_orders_email").on(table.sponsorEmail),
+]);
+
+// Banner Ads (live campaigns only)
 export const bannerAds = pgTable("banner_ads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   
-  // Content
+  // Link to originating order
+  orderId: varchar("order_id").references(() => bannerAdOrders.id),
+  
+  // Content (copied from approved order)
   title: text("title").notNull(),
+  description: text("description"), // Optional tagline/description
   imageUrl: text("image_url").notNull(), // Stored in object storage
-  targetUrl: text("target_url").notNull(), // Where clicking leads
+  link: text("link").notNull(), // Clickable link to sponsor's website
   
   // Placement - can show on multiple pages
   placements: text("placements").array().notNull().default(sql`ARRAY[]::text[]`), // Array of: homepage, marketplace, rentals, etc.
@@ -618,7 +670,7 @@ export const bannerAds = pgTable("banner_ads", {
   // Scheduling
   isActive: boolean("is_active").default(true),
   startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date"), // Optional - for open-ended campaigns
+  endDate: timestamp("end_date"), // Set based on tier duration
   
   // Analytics
   impressions: integer("impressions").default(0),
@@ -630,6 +682,7 @@ export const bannerAds = pgTable("banner_ads", {
   index("idx_banner_ads_placements").on(table.placements),
   index("idx_banner_ads_active").on(table.isActive),
   index("idx_banner_ads_dates").on(table.startDate, table.endDate),
+  index("idx_banner_ads_order").on(table.orderId),
 ]);
 
 // Verification Submissions (admin review queue)
@@ -951,6 +1004,21 @@ export const insertAdminNotificationSchema = createInsertSchema(adminNotificatio
   readAt: true,
 });
 
+export const insertBannerAdOrderSchema = createInsertSchema(bannerAdOrders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  paypalOrderId: true,
+  paypalPaymentDate: true,
+}).extend({
+  sponsorName: z.string().min(1, "Sponsor name is required"),
+  sponsorEmail: z.string().email("Valid email is required"),
+  title: z.string().min(1, "Title is required"),
+  link: z.string().url("Valid URL is required"),
+  placements: z.array(z.string()).min(1, "At least one page placement is required"),
+  tier: z.enum(["1month", "3months", "6months", "12months"]),
+});
+
 export const insertBannerAdSchema = createInsertSchema(bannerAds).omit({
   id: true,
   impressions: true,
@@ -960,7 +1028,7 @@ export const insertBannerAdSchema = createInsertSchema(bannerAds).omit({
 }).extend({
   placements: z.array(z.string()).min(1, "At least one page placement is required"),
   imageUrl: z.string().min(1, "Banner image is required"),
-  targetUrl: z.string().min(1, "Target URL is required"),
+  link: z.string().url("Valid URL is required"),
   title: z.string().min(1, "Title is required"),
 });
 
@@ -1064,6 +1132,9 @@ export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 
 export type AdminNotification = typeof adminNotifications.$inferSelect;
 export type InsertAdminNotification = z.infer<typeof insertAdminNotificationSchema>;
+
+export type BannerAdOrder = typeof bannerAdOrders.$inferSelect;
+export type InsertBannerAdOrder = z.infer<typeof insertBannerAdOrderSchema>;
 
 export type BannerAd = typeof bannerAds.$inferSelect;
 export type InsertBannerAd = z.infer<typeof insertBannerAdSchema>;

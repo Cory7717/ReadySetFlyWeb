@@ -110,7 +110,7 @@ export default function AdminDashboard() {
       title: "",
       imageUrl: "",
       targetUrl: "",
-      placement: "homepage_hero",
+      placements: [],
       category: undefined,
       listingId: undefined,
       listingType: undefined,
@@ -2799,7 +2799,7 @@ export default function AdminDashboard() {
                                   title: banner.title,
                                   imageUrl: banner.imageUrl,
                                   targetUrl: banner.targetUrl,
-                                  placement: banner.placement as any,
+                                  placements: banner.placements || [],
                                   category: banner.category || undefined,
                                   listingId: banner.listingId || undefined,
                                   listingType: banner.listingType || undefined,
@@ -3860,30 +3860,46 @@ export default function AdminDashboard() {
               
               <FormField
                 control={bannerForm.control}
-                name="placement"
+                name="placements"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Placement</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-banner-placement">
-                          <SelectValue placeholder="Select placement location" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="homepage_hero">Homepage Hero</SelectItem>
-                        <SelectItem value="marketplace_category">Marketplace Category Page</SelectItem>
-                        <SelectItem value="rentals_list">Rentals List Page</SelectItem>
-                        <SelectItem value="category_specific">Category Specific</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>Where the banner should appear</FormDescription>
+                    <FormLabel>Display Banner On (Select Multiple Pages)</FormLabel>
+                    <div className="space-y-2">
+                      {[
+                        { value: 'homepage', label: 'Homepage' },
+                        { value: 'marketplace', label: 'Marketplace (All Categories)' },
+                        { value: 'rentals', label: 'Aircraft Rentals Page' },
+                        { value: 'aircraft-sale', label: 'Aircraft for Sale' },
+                        { value: 'charter', label: 'Charter Services' },
+                        { value: 'cfi', label: 'CFI Services' },
+                        { value: 'flight-school', label: 'Flight Schools' },
+                        { value: 'mechanic', label: 'Mechanic Services' },
+                        { value: 'job', label: 'Aviation Jobs' },
+                      ].map((page) => (
+                        <div key={page.value} className="flex items-center space-x-2">
+                          <Checkbox
+                            checked={field.value?.includes(page.value) ?? false}
+                            onCheckedChange={(checked) => {
+                              const current = field.value || [];
+                              if (checked) {
+                                field.onChange([...current, page.value]);
+                              } else {
+                                field.onChange(current.filter((v: string) => v !== page.value));
+                              }
+                            }}
+                            data-testid={`checkbox-placement-${page.value}`}
+                          />
+                          <Label className="text-sm font-normal cursor-pointer">{page.label}</Label>
+                        </div>
+                      ))}
+                    </div>
+                    <FormDescription>Select all pages where this banner ad should appear</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
               
-              {bannerForm.watch("placement") === "category_specific" && (
+              {bannerForm.watch("placements")?.some((p: string) => ['aircraft-sale', 'charter', 'cfi', 'flight-school', 'mechanic', 'job'].includes(p)) && (
                 <FormField
                   control={bannerForm.control}
                   name="category"

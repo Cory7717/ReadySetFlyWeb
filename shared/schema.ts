@@ -607,8 +607,8 @@ export const bannerAds = pgTable("banner_ads", {
   imageUrl: text("image_url").notNull(), // Stored in object storage
   targetUrl: text("target_url").notNull(), // Where clicking leads
   
-  // Placement
-  placement: text("placement").notNull(), // homepage, marketplace, rentals, category-specific
+  // Placement - can show on multiple pages
+  placements: text("placements").array().notNull().default(sql`ARRAY[]::text[]`), // Array of: homepage, marketplace, rentals, etc.
   category: text("category"), // For category-specific placements (marketplace categories)
   
   // Linked listing (optional - for promoting specific listings)
@@ -618,7 +618,7 @@ export const bannerAds = pgTable("banner_ads", {
   // Scheduling
   isActive: boolean("is_active").default(true),
   startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date").notNull(),
+  endDate: timestamp("end_date"), // Optional - for open-ended campaigns
   
   // Analytics
   impressions: integer("impressions").default(0),
@@ -627,7 +627,7 @@ export const bannerAds = pgTable("banner_ads", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
-  index("idx_banner_ads_placement").on(table.placement),
+  index("idx_banner_ads_placements").on(table.placements),
   index("idx_banner_ads_active").on(table.isActive),
   index("idx_banner_ads_dates").on(table.startDate, table.endDate),
 ]);

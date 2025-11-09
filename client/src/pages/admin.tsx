@@ -2838,12 +2838,205 @@ export default function AdminDashboard() {
 
         {/* Banner Ads Tab */}
         <TabsContent value="banners" className="space-y-6">
+          {/* Banner Ad Orders Section */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-4">
               <div>
-                <CardTitle data-testid="heading-banners">Banner Ad Management</CardTitle>
+                <CardTitle data-testid="heading-banner-orders">Banner Ad Orders</CardTitle>
                 <CardDescription>
-                  Create and manage sponsored banner ads for homepage and category pages
+                  Manage sponsor orders, track payments, and activate banner campaigns
+                </CardDescription>
+              </div>
+              <Button 
+                onClick={() => {
+                  setEditingOrder(null);
+                  setOrderImageUrl("");
+                  orderForm.reset();
+                  setOrderDialogOpen(true);
+                }}
+                data-testid="button-create-order"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Order
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {ordersLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Loading orders...</p>
+                </div>
+              ) : bannerOrders.length === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Orders Yet</h3>
+                  <p className="text-muted-foreground max-w-md mx-auto mb-4">
+                    Create banner ad orders to manage sponsor billing and campaign activation.
+                  </p>
+                  <Button 
+                    onClick={() => {
+                      setEditingOrder(null);
+                      setOrderImageUrl("");
+                      orderForm.reset();
+                      setOrderDialogOpen(true);
+                    }}
+                    data-testid="button-create-first-order"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create First Order
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {bannerOrders.map((order) => (
+                    <Card key={order.id} data-testid={`order-card-${order.id}`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-4">
+                          {/* Order Image Preview */}
+                          {order.imageUrl && (
+                            <div className="w-32 h-20 rounded overflow-hidden flex-shrink-0 bg-muted">
+                              <img 
+                                src={order.imageUrl} 
+                                alt={order.title}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          )}
+                          
+                          {/* Order Details */}
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-semibold">{order.title}</h4>
+                              <Badge variant={
+                                order.approvalStatus === 'approved' ? 'default' : 
+                                order.approvalStatus === 'rejected' ? 'destructive' : 
+                                order.approvalStatus === 'sent' ? 'secondary' : 
+                                'outline'
+                              }>
+                                {order.approvalStatus}
+                              </Badge>
+                              <Badge variant={
+                                order.paymentStatus === 'paid' ? 'default' : 
+                                order.paymentStatus === 'refunded' ? 'destructive' : 
+                                'outline'
+                              }>
+                                {order.paymentStatus}
+                              </Badge>
+                              <Badge variant="outline" className="capitalize">
+                                {order.tier.replace(/(\d+)month/, '$1 Month')}
+                              </Badge>
+                            </div>
+                            
+                            <div className="text-sm text-muted-foreground space-y-1">
+                              <p>
+                                <span className="font-medium">Sponsor:</span> {order.sponsorName}
+                                {order.sponsorCompany && ` (${order.sponsorCompany})`}
+                              </p>
+                              <p>
+                                <span className="font-medium">Email:</span> {order.sponsorEmail}
+                              </p>
+                              {order.description && (
+                                <p>
+                                  <span className="font-medium">Description:</span> {order.description}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-4 flex-wrap">
+                                <span className="font-medium">
+                                  Total: ${order.grandTotal}
+                                </span>
+                                {order.placements && (
+                                  <span>
+                                    <span className="font-medium">Placements:</span> {order.placements.length} pages
+                                  </span>
+                                )}
+                                {order.paymentDate && (
+                                  <span>
+                                    <span className="font-medium">Paid:</span> {new Date(order.paymentDate).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                              {order.adminNotes && (
+                                <p className="text-xs italic">
+                                  <span className="font-medium">Notes:</span> {order.adminNotes}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Actions */}
+                          <div className="flex items-center gap-2">
+                            {/* Activate button - only show for paid orders that haven't been activated */}
+                            {order.paymentStatus === 'paid' && order.approvalStatus === 'approved' && !order.orderId && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => activateOrderMutation.mutate(order.id)}
+                                disabled={activateOrderMutation.isPending}
+                                data-testid={`button-activate-order-${order.id}`}
+                              >
+                                <Rocket className="h-4 w-4 mr-1" />
+                                Activate
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingOrder(order);
+                                setOrderImageUrl(order.imageUrl ?? "");
+                                orderForm.reset({
+                                  sponsorName: order.sponsorName,
+                                  sponsorEmail: order.sponsorEmail,
+                                  sponsorCompany: order.sponsorCompany ?? "",
+                                  title: order.title,
+                                  description: order.description ?? "",
+                                  imageUrl: order.imageUrl ?? "",
+                                  link: order.link ?? "",
+                                  placements: order.placements ?? [],
+                                  category: order.category ?? undefined,
+                                  tier: order.tier,
+                                  monthlyRate: order.monthlyRate,
+                                  totalAmount: order.totalAmount,
+                                  creationFee: order.creationFee,
+                                  grandTotal: order.grandTotal,
+                                  approvalStatus: order.approvalStatus,
+                                  paymentStatus: order.paymentStatus,
+                                  adminNotes: order.adminNotes ?? "",
+                                });
+                                setOrderDialogOpen(true);
+                              }}
+                              data-testid={`button-edit-order-${order.id}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                if (confirm('Are you sure you want to delete this order?')) {
+                                  deleteOrderMutation.mutate(order.id);
+                                }
+                              }}
+                              data-testid={`button-delete-order-${order.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Live Banner Ads Section */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle data-testid="heading-banners">Live Banner Ads</CardTitle>
+                <CardDescription>
+                  Manage active banner campaigns on homepage and category pages
                 </CardDescription>
               </div>
               <Button 

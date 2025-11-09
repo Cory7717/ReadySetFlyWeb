@@ -2856,6 +2856,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Banner Ad Orders - Admin Management
+  app.get("/api/admin/banner-ad-orders", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { approvalStatus, paymentStatus } = req.query;
+      const orders = await storage.getBannerAdOrdersByStatus(
+        approvalStatus as string | undefined,
+        paymentStatus as string | undefined
+      );
+      res.json(orders);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch banner ad orders" });
+    }
+  });
+
+  app.get("/api/admin/banner-ad-orders/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const order = await storage.getBannerAdOrder(req.params.id);
+      if (!order) {
+        return res.status(404).json({ error: "Banner ad order not found" });
+      }
+      res.json(order);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch banner ad order" });
+    }
+  });
+
+  app.post("/api/admin/banner-ad-orders", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const order = await storage.createBannerAdOrder(req.body);
+      res.status(201).json(order);
+    } catch (error) {
+      console.error('Banner ad order creation error:', error);
+      res.status(500).json({ error: "Failed to create banner ad order", details: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.patch("/api/admin/banner-ad-orders/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const order = await storage.updateBannerAdOrder(req.params.id, req.body);
+      if (!order) {
+        return res.status(404).json({ error: "Banner ad order not found" });
+      }
+      res.json(order);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update banner ad order" });
+    }
+  });
+
+  app.delete("/api/admin/banner-ad-orders/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteBannerAdOrder(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Banner ad order not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete banner ad order" });
+    }
+  });
+
+  app.post("/api/admin/banner-ad-orders/:id/activate", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const ad = await storage.activateBannerAdOrder(req.params.id);
+      if (!ad) {
+        return res.status(400).json({ error: "Failed to activate order. Order must be paid and have required content." });
+      }
+      res.json(ad);
+    } catch (error) {
+      console.error('Banner ad order activation error:', error);
+      res.status(500).json({ error: "Failed to activate banner ad order", details: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   // Banner Ads - Admin Management
   app.get("/api/admin/banner-ads", isAuthenticated, isAdmin, async (req, res) => {
     try {

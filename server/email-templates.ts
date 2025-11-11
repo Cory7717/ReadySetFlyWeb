@@ -297,7 +297,7 @@ export async function sendContactFormEmail(data: {
   subject: string;
   message: string;
 }) {
-  const resend = await import('./resendClient').then(m => m.getUncachableResendClient());
+  const { client: resend } = await import('./resendClient').then(m => m.getUncachableResendClient());
   
   const htmlBody = `
 <!DOCTYPE html>

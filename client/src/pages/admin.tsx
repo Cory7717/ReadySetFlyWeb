@@ -54,6 +54,7 @@ export default function AdminDashboard() {
   // Promo codes state
   const [promoCodeDialogOpen, setPromoCodeDialogOpen] = useState(false);
   const [editingPromoCode, setEditingPromoCode] = useState<PromoCode | null>(null);
+  const [promoCodeSearch, setPromoCodeSearch] = useState("");
   
   // Banner ads state
   const [bannerDialogOpen, setBannerDialogOpen] = useState(false);
@@ -116,6 +117,24 @@ export default function AdminDashboard() {
       showOnCategoryPages: true,
       targetCategories: [],
       variant: "info",
+    },
+  });
+
+  // Promo code form with Zod validation
+  const promoCodeForm = useForm<InsertPromoCode>({
+    resolver: zodResolver(insertPromoCodeSchema),
+    defaultValues: {
+      code: "",
+      description: "",
+      discountType: "percentage",
+      discountValue: "",
+      maxRedemptions: undefined,
+      usageLimitPerUser: 1,
+      validFrom: new Date(),
+      validTo: undefined,
+      isActive: true,
+      applicableToBannerAds: false,
+      applicableToMarketplace: true,
     },
   });
   
@@ -256,6 +275,12 @@ export default function AdminDashboard() {
   const { data: promoAlerts = [], isLoading: promoAlertsLoading } = useQuery<PromoAlert[]>({
     queryKey: ["/api/admin/promo-alerts"],
     enabled: activeTab === "promo",
+  });
+
+  // Promo codes query
+  const { data: promoCodes = [], isLoading: promoCodesLoading } = useQuery<PromoCode[]>({
+    queryKey: ["/api/admin/promo-codes"],
+    enabled: activeTab === "promo-codes",
   });
 
   // Stale listings query
@@ -523,6 +548,87 @@ export default function AdminDashboard() {
       toast({ 
         title: "Error", 
         description: error.message || "Failed to create promotional alert",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  // Promo code mutations
+  const createPromoCodeMutation = useMutation({
+    mutationFn: async (data: InsertPromoCode) => {
+      return await apiRequest("POST", "/api/admin/promo-codes", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] });
+      setPromoCodeDialogOpen(false);
+      setEditingPromoCode(null);
+      promoCodeForm.reset();
+      toast({ title: "Promo code created successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to create promo code",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const updatePromoCodeMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertPromoCode> }) => {
+      return await apiRequest("PATCH", `/api/admin/promo-codes/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] });
+      setPromoCodeDialogOpen(false);
+      setEditingPromoCode(null);
+      promoCodeForm.reset();
+      toast({ title: "Promo code updated successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update promo code",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const deletePromoCodeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/admin/promo-codes/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] });
+      setPromoCodeDialogOpen(false);
+      setEditingPromoCode(null);
+      promoCodeForm.reset();
+      toast({ title: "Promo code deleted successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to delete promo code",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const togglePromoCodeMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      return await apiRequest("PATCH", `/api/admin/promo-codes/${id}`, { isActive });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] });
+      setPromoCodeDialogOpen(false);
+      setEditingPromoCode(null);
+      promoCodeForm.reset();
+      toast({ title: "Promo code status updated successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to update promo code status",
         variant: "destructive" 
       });
     },
@@ -2733,6 +2839,240 @@ export default function AdminDashboard() {
           </Card>
         </TabsContent>
 
+        {/* Promo Codes Tab */}
+        <TabsContent value="promo-codes" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <CardTitle>Promo Codes Management</CardTitle>
+                  <CardDescription>
+                    Create and manage promotional discount codes
+                  </CardDescription>
+                </div>
+                <Button 
+                  onClick={() => {
+                    setEditingPromoCode(null);
+                    promoCodeForm.reset();
+                    setPromoCodeDialogOpen(true);
+                  }}
+                  data-testid="button-add-promo-code"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Promo Code
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Search and Filter Toolbar */}
+              <div className="flex flex-wrap gap-4 mb-6">
+                <div className="flex-1 min-w-[200px]">
+                  <Input
+                    placeholder="Search promo codes..."
+                    value={promoCodeSearch}
+                    onChange={(e) => setPromoCodeSearch(e.target.value)}
+                    data-testid="input-promo-code-search"
+                  />
+                </div>
+              </div>
+
+              {/* Loading State */}
+              {promoCodesLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-32 rounded-lg bg-muted animate-pulse" />
+                  ))}
+                </div>
+              ) : promoCodes.filter(code => 
+                promoCodeSearch === "" || 
+                code.code.toLowerCase().includes(promoCodeSearch.toLowerCase()) ||
+                code.description?.toLowerCase().includes(promoCodeSearch.toLowerCase())
+              ).length === 0 ? (
+                <div className="text-center py-12">
+                  <Tag className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground">
+                    {promoCodeSearch ? "No promo codes match your search" : "No promo codes configured"}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {promoCodes
+                    .filter(code => 
+                      promoCodeSearch === "" || 
+                      code.code.toLowerCase().includes(promoCodeSearch.toLowerCase()) ||
+                      code.description?.toLowerCase().includes(promoCodeSearch.toLowerCase())
+                    )
+                    .map((code) => {
+                      const isExpired = code.validTo && new Date(code.validTo) < new Date();
+                      const usage = code.currentRedemptions || 0;
+                      const maxUsage = code.maxRedemptions || "∞";
+                      
+                      return (
+                        <Card key={code.id} className="hover-elevate">
+                          <CardContent className="pt-6">
+                            <div className="flex items-start gap-4">
+                              <div className="p-3 rounded-lg bg-primary/10">
+                                <Tag className="h-5 w-5 text-primary" />
+                              </div>
+                              <div className="flex-1 space-y-3">
+                                {/* Header Row */}
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="flex-1 space-y-2">
+                                    {/* Code with Copy Button */}
+                                    <div className="flex items-center gap-2">
+                                      <code className="px-3 py-1 bg-muted rounded-md font-mono font-bold text-lg">
+                                        {code.code}
+                                      </code>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(code.code);
+                                          toast({ title: "Promo code copied to clipboard" });
+                                        }}
+                                        data-testid={`button-copy-code-${code.id}`}
+                                      >
+                                        <FileText className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                    
+                                    {/* Description */}
+                                    {code.description && (
+                                      <p className="text-sm text-muted-foreground">{code.description}</p>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Status and Actions */}
+                                  <div className="flex items-center gap-2">
+                                    <Badge 
+                                      variant={code.isActive && !isExpired ? "default" : "secondary"}
+                                      data-testid={`badge-status-${code.id}`}
+                                    >
+                                      {isExpired ? "Expired" : code.isActive ? "Active" : "Inactive"}
+                                    </Badge>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => togglePromoCodeMutation.mutate({ 
+                                        id: code.id, 
+                                        isActive: !code.isActive 
+                                      })}
+                                      disabled={togglePromoCodeMutation.isPending || isExpired}
+                                      data-testid={`button-toggle-promo-code-${code.id}`}
+                                    >
+                                      {code.isActive ? "Disable" : "Enable"}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setEditingPromoCode(code);
+                                        promoCodeForm.reset({
+                                          code: code.code,
+                                          description: code.description || "",
+                                          discountType: code.discountType,
+                                          discountValue: code.discountValue,
+                                          maxRedemptions: code.maxRedemptions || undefined,
+                                          usageLimitPerUser: code.usageLimitPerUser,
+                                          validFrom: code.validFrom ? new Date(code.validFrom) : new Date(),
+                                          validTo: code.validTo ? new Date(code.validTo) : undefined,
+                                          isActive: code.isActive,
+                                          applicableToBannerAds: code.applicableToBannerAds,
+                                          applicableToMarketplace: code.applicableToMarketplace,
+                                        });
+                                        setPromoCodeDialogOpen(true);
+                                      }}
+                                      data-testid={`button-edit-promo-code-${code.id}`}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        if (confirm(`Are you sure you want to delete promo code "${code.code}"?`)) {
+                                          deletePromoCodeMutation.mutate(code.id);
+                                        }
+                                      }}
+                                      disabled={deletePromoCodeMutation.isPending}
+                                      data-testid={`button-delete-promo-code-${code.id}`}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                {/* Details Grid */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t">
+                                  {/* Discount */}
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Discount</p>
+                                    <p className="font-semibold">
+                                      {code.discountType === 'percentage' 
+                                        ? `${code.discountValue}%` 
+                                        : `$${code.discountValue}`}
+                                    </p>
+                                  </div>
+
+                                  {/* Valid From */}
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Valid From</p>
+                                    <p className="text-sm">
+                                      {code.validFrom 
+                                        ? new Date(code.validFrom).toLocaleDateString() 
+                                        : "—"}
+                                    </p>
+                                  </div>
+
+                                  {/* Valid To */}
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Valid To</p>
+                                    <p className="text-sm">
+                                      {code.validTo 
+                                        ? new Date(code.validTo).toLocaleDateString() 
+                                        : "No expiry"}
+                                    </p>
+                                  </div>
+
+                                  {/* Usage */}
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Usage</p>
+                                    <p className="font-semibold">
+                                      {usage} / {maxUsage}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Applicability Badges */}
+                                <div className="flex flex-wrap gap-2">
+                                  {code.applicableToBannerAds && (
+                                    <Badge variant="outline" data-testid={`badge-banner-${code.id}`}>
+                                      Banner Ads
+                                    </Badge>
+                                  )}
+                                  {code.applicableToMarketplace && (
+                                    <Badge variant="outline" data-testid={`badge-marketplace-${code.id}`}>
+                                      Marketplace
+                                    </Badge>
+                                  )}
+                                  {code.usageLimitPerUser && code.usageLimitPerUser > 1 && (
+                                    <Badge variant="outline">
+                                      {code.usageLimitPerUser} uses per user
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Withdrawals Tab - Monitoring Dashboard */}
         <TabsContent value="withdrawals" className="space-y-6">
           <Card>
@@ -4784,6 +5124,317 @@ export default function AdminDashboard() {
                       : editingOrder 
                       ? "Update Order" 
                       : "Create Order"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create/Edit Promo Code Dialog */}
+      <Dialog 
+        open={promoCodeDialogOpen} 
+        onOpenChange={(open) => {
+          setPromoCodeDialogOpen(open);
+          if (!open) {
+            setEditingPromoCode(null);
+            promoCodeForm.reset();
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl p-0" data-testid="dialog-create-promo-code">
+          <div className="flex flex-col max-h-[90vh]">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>{editingPromoCode ? "Edit" : "Create"} Promo Code</DialogTitle>
+              <DialogDescription>
+                {editingPromoCode ? "Update" : "Create a new"} promotional discount code for marketplace listings or banner ads
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...promoCodeForm}>
+              <form 
+                onSubmit={promoCodeForm.handleSubmit((data) => {
+                  // Transform code to uppercase and remove spaces
+                  const transformedData = {
+                    ...data,
+                    code: data.code.toUpperCase().replace(/\s+/g, ''),
+                  };
+                  
+                  if (editingPromoCode) {
+                    updatePromoCodeMutation.mutate({ id: editingPromoCode.id, data: transformedData });
+                  } else {
+                    createPromoCodeMutation.mutate(transformedData);
+                  }
+                })} 
+                className="flex flex-col flex-1 min-h-0"
+              >
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                  {/* Code Field */}
+                  <FormField
+                    control={promoCodeForm.control}
+                    name="code"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Code</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="LAUNCH2025" 
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value.toUpperCase().replace(/\s+/g, ''))}
+                            data-testid="input-promo-code-code"
+                          />
+                        </FormControl>
+                        <FormDescription>Uppercase letters and numbers only, no spaces</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {/* Description Field */}
+                  <FormField
+                    control={promoCodeForm.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Textarea 
+                            placeholder="Launch promotion for new users" 
+                            {...field}
+                            rows={3}
+                            data-testid="textarea-promo-code-description"
+                          />
+                        </FormControl>
+                        <FormDescription>Internal description for this promo code</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {/* Discount Type and Value */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={promoCodeForm.control}
+                      name="discountType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Discount Type</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-promo-code-discount-type">
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="percentage">Percentage (%)</SelectItem>
+                              <SelectItem value="fixed">Fixed Amount ($)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={promoCodeForm.control}
+                      name="discountValue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Discount Value</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number"
+                              step="0.01"
+                              placeholder={promoCodeForm.watch('discountType') === 'percentage' ? '10' : '5.00'}
+                              {...field}
+                              data-testid="input-promo-code-discount-value"
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            {promoCodeForm.watch('discountType') === 'percentage' ? 'Percentage (0-100)' : 'Dollar amount'}
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  {/* Max Redemptions and Usage Limit */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={promoCodeForm.control}
+                      name="maxRedemptions"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Max Redemptions</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number"
+                              placeholder="Unlimited"
+                              {...field}
+                              value={field.value ?? ""}
+                              onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                              data-testid="input-promo-code-max-redemptions"
+                            />
+                          </FormControl>
+                          <FormDescription>Leave empty for unlimited</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={promoCodeForm.control}
+                      name="usageLimitPerUser"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Usage Limit Per User</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number"
+                              placeholder="1"
+                              {...field}
+                              value={field.value ?? 1}
+                              onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : 1)}
+                              data-testid="input-promo-code-usage-limit-per-user"
+                            />
+                          </FormControl>
+                          <FormDescription>Times per user (default 1)</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  {/* Valid From and Valid To */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={promoCodeForm.control}
+                      name="validFrom"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Valid From</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="date"
+                              value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : (typeof field.value === 'string' ? (field.value as string).split('T')[0] : '')}
+                              onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : new Date())}
+                              data-testid="input-promo-code-valid-from"
+                            />
+                          </FormControl>
+                          <FormDescription>Start date</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={promoCodeForm.control}
+                      name="validTo"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Valid To</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="date"
+                              value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : (typeof field.value === 'string' ? (field.value as string).split('T')[0] : '')}
+                              onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                              data-testid="input-promo-code-valid-to"
+                            />
+                          </FormControl>
+                          <FormDescription>Leave empty for no expiration</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  
+                  {/* Active Status */}
+                  <FormField
+                    control={promoCodeForm.control}
+                    name="isActive"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center gap-2 space-y-0">
+                        <FormControl>
+                          <Checkbox 
+                            checked={field.value ?? true} 
+                            onCheckedChange={field.onChange}
+                            data-testid="checkbox-promo-code-active"
+                          />
+                        </FormControl>
+                        <FormLabel className="cursor-pointer">Active (code can be used immediately)</FormLabel>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  {/* Applies To Section */}
+                  <div className="space-y-3 p-4 border rounded-md">
+                    <h3 className="font-semibold text-sm">Applies To</h3>
+                    <div className="space-y-2">
+                      <FormField
+                        control={promoCodeForm.control}
+                        name="applicableToBannerAds"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center gap-2 space-y-0">
+                            <FormControl>
+                              <Checkbox 
+                                checked={field.value ?? false} 
+                                onCheckedChange={field.onChange}
+                                data-testid="checkbox-promo-code-banner-ads"
+                              />
+                            </FormControl>
+                            <FormLabel className="cursor-pointer">Banner Ads</FormLabel>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={promoCodeForm.control}
+                        name="applicableToMarketplace"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center gap-2 space-y-0">
+                            <FormControl>
+                              <Checkbox 
+                                checked={field.value ?? true} 
+                                onCheckedChange={field.onChange}
+                                data-testid="checkbox-promo-code-marketplace"
+                              />
+                            </FormControl>
+                            <FormLabel className="cursor-pointer">Marketplace Listings</FormLabel>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    <FormDescription>Select where this promo code can be applied</FormDescription>
+                  </div>
+                </div>
+                
+                <DialogFooter className="sticky bottom-0 border-t bg-background px-6 py-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setPromoCodeDialogOpen(false);
+                      setEditingPromoCode(null);
+                      promoCodeForm.reset();
+                    }}
+                    data-testid="button-cancel-promo-code"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={createPromoCodeMutation.isPending || updatePromoCodeMutation.isPending}
+                    data-testid="button-submit-promo-code"
+                  >
+                    {createPromoCodeMutation.isPending || updatePromoCodeMutation.isPending
+                      ? "Saving..." 
+                      : editingPromoCode 
+                      ? "Update Code" 
+                      : "Create Code"}
                   </Button>
                 </DialogFooter>
               </form>

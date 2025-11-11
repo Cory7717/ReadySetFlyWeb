@@ -19,6 +19,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertBannerAdSchema, insertBannerAdOrderSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder } from "@shared/schema";
 import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
+import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
 import { AdminUserModal } from "@/components/admin-user-modal";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
@@ -60,6 +61,10 @@ export default function AdminDashboard() {
   const [editingOrder, setEditingOrder] = useState<BannerAdOrder | null>(null);
   const [selectedTier, setSelectedTier] = useState<BannerAdTier>("3months");
   const [orderImageUrl, setOrderImageUrl] = useState<string>("");
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [promoCodeValid, setPromoCodeValid] = useState<boolean | null>(null);
+  const [promoCodeMessage, setPromoCodeMessage] = useState("");
+  const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
   
   // Withdrawal monitoring state
   const [withdrawalSearch, setWithdrawalSearch] = useState("");
@@ -146,6 +151,8 @@ export default function AdminDashboard() {
       totalAmount: "180.00",
       creationFee: "40.00",
       grandTotal: "220.00",
+      promoCode: "",
+      discountAmount: "0.00",
       approvalStatus: "draft",
       paymentStatus: "pending",
       adminNotes: "",
@@ -783,6 +790,64 @@ export default function AdminDashboard() {
       setDeleteTarget(null);
     },
   });
+  
+  // Promo code application handler
+  const handleApplyPromoCode = () => {
+    const code = promoCodeInput.trim();
+    
+    if (!code) {
+      setPromoCodeValid(null);
+      setPromoCodeMessage("");
+      setAppliedPromoCode(null);
+      // Reset to base pricing
+      const basePricing = calculateBannerAdPricing(selectedTier);
+      orderForm.setValue('promoCode', "");
+      orderForm.setValue('discountAmount', "0.00");
+      orderForm.setValue('creationFee', basePricing.creationFee.toString());
+      orderForm.setValue('grandTotal', basePricing.grandTotal.toString());
+      return;
+    }
+    
+    const promo = validatePromoCode(code);
+    
+    if (!promo) {
+      setPromoCodeValid(false);
+      setPromoCodeMessage("Invalid or expired promo code");
+      setAppliedPromoCode(null);
+      
+      // CRITICAL FIX: Reset to base pricing when validation fails
+      const basePricing = calculateBannerAdPricing(selectedTier);
+      orderForm.setValue('promoCode', "");
+      orderForm.setValue('discountAmount', "0.00");
+      orderForm.setValue('creationFee', basePricing.creationFee.toString());
+      orderForm.setValue('grandTotal', basePricing.grandTotal.toString());
+      return;
+    }
+    
+    // Calculate discounts
+    const basePricing = calculateBannerAdPricing(selectedTier);
+    const discounts = calculatePromoDiscount(
+      basePricing.creationFee,
+      basePricing.subscriptionTotal,
+      code
+    );
+    
+    // Update form values
+    orderForm.setValue('promoCode', promo.code);
+    orderForm.setValue('discountAmount', discounts.totalDiscount.toFixed(2));
+    orderForm.setValue('creationFee', discounts.finalCreationFee.toFixed(2));
+    orderForm.setValue('grandTotal', discounts.finalGrandTotal.toFixed(2));
+    
+    // Update UI state
+    setPromoCodeValid(true);
+    setPromoCodeMessage(`Promo code applied! You save $${discounts.totalDiscount.toFixed(2)}`);
+    setAppliedPromoCode(promo.code);
+    
+    toast({
+      title: "Promo code applied!",
+      description: promo.description,
+    });
+  };
 
   const handleDeleteListing = () => {
     if (!deleteTarget) return;
@@ -2983,6 +3048,22 @@ export default function AdminDashboard() {
                               onClick={() => {
                                 setEditingOrder(order);
                                 setOrderImageUrl(order.imageUrl ?? "");
+                                setSelectedTier(order.tier);
+                                
+                                // Load promo code state if exists
+                                if (order.promoCode) {
+                                  setPromoCodeInput(order.promoCode);
+                                  setAppliedPromoCode(order.promoCode);
+                                  setPromoCodeValid(true);
+                                  const discountAmt = parseFloat(order.discountAmount || "0");
+                                  setPromoCodeMessage(`Promo code applied! You save $${discountAmt.toFixed(2)}`);
+                                } else {
+                                  setPromoCodeInput("");
+                                  setAppliedPromoCode(null);
+                                  setPromoCodeValid(null);
+                                  setPromoCodeMessage("");
+                                }
+                                
                                 orderForm.reset({
                                   sponsorName: order.sponsorName,
                                   sponsorEmail: order.sponsorEmail,
@@ -2997,6 +3078,8 @@ export default function AdminDashboard() {
                                   monthlyRate: order.monthlyRate,
                                   totalAmount: order.totalAmount,
                                   creationFee: order.creationFee,
+                                  promoCode: order.promoCode ?? "",
+                                  discountAmount: order.discountAmount ?? "0.00",
                                   grandTotal: order.grandTotal,
                                   approvalStatus: order.approvalStatus,
                                   paymentStatus: order.paymentStatus,
@@ -4438,6 +4521,12 @@ export default function AdminDashboard() {
           if (!open) {
             setEditingOrder(null);
             orderForm.reset();
+            // Reset promo code state
+            setPromoCodeInput("");
+            setPromoCodeValid(null);
+            setPromoCodeMessage("");
+            setAppliedPromoCode(null);
+            setOrderImageUrl("");
           }
         }}
       >
@@ -4671,11 +4760,21 @@ export default function AdminDashboard() {
                             field.onChange(e);
                             const selectedTier = e.target.value as BannerAdTier;
                             setSelectedTier(selectedTier);
+                            
+                            // Reset promo code state when tier changes
+                            setPromoCodeInput("");
+                            setPromoCodeValid(null);
+                            setPromoCodeMessage("");
+                            setAppliedPromoCode(null);
+                            
+                            // Calculate base pricing (without promo)
                             const pricing = calculateBannerAdPricing(selectedTier);
-                            orderForm.setValue('monthlyRate', pricing.monthlyRate);
-                            orderForm.setValue('totalAmount', pricing.totalAmount);
-                            orderForm.setValue('creationFee', pricing.creationFee);
-                            orderForm.setValue('grandTotal', pricing.grandTotal);
+                            orderForm.setValue('monthlyRate', pricing.monthlyRate.toString());
+                            orderForm.setValue('totalAmount', pricing.subscriptionTotal.toString());
+                            orderForm.setValue('creationFee', pricing.creationFee.toString());
+                            orderForm.setValue('grandTotal', pricing.grandTotal.toString());
+                            orderForm.setValue('promoCode', "");
+                            orderForm.setValue('discountAmount', "0.00");
                           }}
                           data-testid="select-order-tier"
                         >
@@ -4690,6 +4789,39 @@ export default function AdminDashboard() {
                   )}
                 />
                 
+                {/* Promo Code Section */}
+                <div className="space-y-2">
+                  <Label>Promo Code (Optional)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter promo code"
+                      value={promoCodeInput}
+                      onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                      data-testid="input-order-promo-code"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleApplyPromoCode}
+                      data-testid="button-apply-promo-code"
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                  {promoCodeValid === false && (
+                    <p className="text-sm text-destructive" data-testid="text-promo-error">
+                      {promoCodeMessage}
+                    </p>
+                  )}
+                  {promoCodeValid === true && (
+                    <p className="text-sm text-green-600 flex items-center gap-1" data-testid="text-promo-success">
+                      <CheckCircle className="h-4 w-4" />
+                      {promoCodeMessage}
+                    </p>
+                  )}
+                </div>
+                
                 {/* Pricing Summary */}
                 <div className="bg-muted p-4 rounded-md space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -4697,15 +4829,49 @@ export default function AdminDashboard() {
                     <span className="font-semibold">${orderForm.watch('monthlyRate')}/mo</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Total ({selectedTier === '1month' ? '1' : selectedTier === '3months' ? '3' : selectedTier === '6months' ? '6' : '12'} months):</span>
+                    <span>Subscription ({selectedTier === '1month' ? '1' : selectedTier === '3months' ? '3' : selectedTier === '6months' ? '6' : '12'} months):</span>
                     <span className="font-semibold">${orderForm.watch('totalAmount')}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>One-time creation fee:</span>
                     <span className="font-semibold">${orderForm.watch('creationFee')}</span>
                   </div>
+                  
+                  {/* Discount line items (shown when promo is applied) */}
+                  {appliedPromoCode && parseFloat(orderForm.watch('discountAmount') || "0") > 0 && (
+                    <>
+                      <div className="border-t pt-2 space-y-2">
+                        {(() => {
+                          const basePricing = calculateBannerAdPricing(selectedTier);
+                          const discounts = calculatePromoDiscount(
+                            basePricing.creationFee,
+                            basePricing.subscriptionTotal,
+                            appliedPromoCode
+                          );
+                          
+                          return (
+                            <>
+                              {discounts.creationFeeDiscount > 0 && (
+                                <div className="flex justify-between text-green-600">
+                                  <span>Creation fee discount:</span>
+                                  <span>-${discounts.creationFeeDiscount.toFixed(2)}</span>
+                                </div>
+                              )}
+                              {discounts.subscriptionDiscount > 0 && (
+                                <div className="flex justify-between text-green-600">
+                                  <span>Subscription discount (20%):</span>
+                                  <span>-${discounts.subscriptionDiscount.toFixed(2)}</span>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </>
+                  )}
+                  
                   <div className="flex justify-between border-t pt-2 mt-2">
-                    <span className="font-bold">Grand Total:</span>
+                    <span className="font-bold">Due Today:</span>
                     <span className="font-bold text-lg">${orderForm.watch('grandTotal')}</span>
                   </div>
                 </div>

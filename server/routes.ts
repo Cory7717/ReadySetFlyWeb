@@ -2884,7 +2884,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/banner-ad-orders", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const order = await storage.createBannerAdOrder(req.body);
+      // BACKEND VALIDATION: Recalculate pricing server-side to prevent tampering
+      const { calculateBannerAdPricing } = await import("../shared/config/bannerPricing");
+      const { validatePromoCode, calculatePromoDiscount } = await import("../shared/config/promoCodes");
+      
+      const tier = req.body.tier;
+      const promoCode = req.body.promoCode?.trim();
+      
+      // Calculate base pricing
+      const basePricing = calculateBannerAdPricing(tier);
+      
+      // Apply promo code if provided and valid
+      let finalPricing = {
+        monthlyRate: basePricing.monthlyRate.toString(),
+        totalAmount: basePricing.subscriptionTotal.toString(),
+        creationFee: basePricing.creationFee.toString(),
+        grandTotal: basePricing.grandTotal.toString(),
+        discountAmount: "0.00",
+        promoCode: "",
+      };
+      
+      if (promoCode) {
+        const promo = validatePromoCode(promoCode);
+        if (promo) {
+          const discounts = calculatePromoDiscount(
+            basePricing.creationFee,
+            basePricing.subscriptionTotal,
+            promoCode
+          );
+          
+          finalPricing = {
+            monthlyRate: basePricing.monthlyRate.toString(),
+            totalAmount: basePricing.subscriptionTotal.toString(),
+            creationFee: discounts.finalCreationFee.toFixed(2),
+            grandTotal: discounts.finalGrandTotal.toFixed(2),
+            discountAmount: discounts.totalDiscount.toFixed(2),
+            promoCode: promo.code,
+          };
+        }
+      }
+      
+      // Override request body with validated pricing
+      const validatedOrderData = {
+        ...req.body,
+        ...finalPricing,
+      };
+      
+      const order = await storage.createBannerAdOrder(validatedOrderData);
       res.status(201).json(order);
     } catch (error) {
       console.error('Banner ad order creation error:', error);
@@ -2894,12 +2940,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/admin/banner-ad-orders/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const order = await storage.updateBannerAdOrder(req.params.id, req.body);
-      if (!order) {
+      // CRITICAL: Load existing order to get tier if not provided in request
+      const existingOrder = await storage.getBannerAdOrder(req.params.id);
+      if (!existingOrder) {
         return res.status(404).json({ error: "Banner ad order not found" });
       }
+      
+      // BACKEND VALIDATION: Always recalculate pricing server-side to prevent tampering
+      const { calculateBannerAdPricing } = await import("../shared/config/bannerPricing");
+      const { validatePromoCode, calculatePromoDiscount } = await import("../shared/config/promoCodes");
+      
+      // Use tier from request, or fallback to existing tier
+      const tier = req.body.tier || existingOrder.tier;
+      const promoCode = req.body.promoCode?.trim() ?? (req.body.promoCode === "" ? "" : existingOrder.promoCode);
+      
+      // ALWAYS calculate base pricing
+      const basePricing = calculateBannerAdPricing(tier);
+      
+      // Apply promo code if provided and valid
+      let finalPricing = {
+        monthlyRate: basePricing.monthlyRate.toString(),
+        totalAmount: basePricing.subscriptionTotal.toString(),
+        creationFee: basePricing.creationFee.toString(),
+        grandTotal: basePricing.grandTotal.toString(),
+        discountAmount: "0.00",
+        promoCode: "",
+      };
+      
+      if (promoCode) {
+        const promo = validatePromoCode(promoCode);
+        if (promo) {
+          const discounts = calculatePromoDiscount(
+            basePricing.creationFee,
+            basePricing.subscriptionTotal,
+            promoCode
+          );
+          
+          finalPricing = {
+            monthlyRate: basePricing.monthlyRate.toString(),
+            totalAmount: basePricing.subscriptionTotal.toString(),
+            creationFee: discounts.finalCreationFee.toFixed(2),
+            grandTotal: discounts.finalGrandTotal.toFixed(2),
+            discountAmount: discounts.totalDiscount.toFixed(2),
+            promoCode: promo.code,
+          };
+        }
+      }
+      
+      // ALWAYS override request body with validated pricing
+      req.body = {
+        ...req.body,
+        tier, // Ensure tier is set
+        ...finalPricing,
+      };
+      
+      const order = await storage.updateBannerAdOrder(req.params.id, req.body);
       res.json(order);
     } catch (error) {
+      console.error('Banner ad order update error:', error);
       res.status(500).json({ error: "Failed to update banner ad order" });
     }
   });

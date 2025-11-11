@@ -624,6 +624,10 @@ export const bannerAdOrders = pgTable("banner_ad_orders", {
   creationFee: decimal("creation_fee", { precision: 10, scale: 2 }).default("40.00"), // One-time ad creation fee
   grandTotal: decimal("grand_total", { precision: 10, scale: 2 }).notNull(), // totalAmount + creationFee
   
+  // Promo code and discounts
+  promoCode: text("promo_code"), // Applied promo code (e.g., LAUNCH2025)
+  discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0.00"), // Total discount applied
+  
   // Workflow status
   approvalStatus: text("approval_status").notNull().default("draft"), // draft, sent, approved, rejected
   paymentStatus: text("payment_status").notNull().default("pending"), // pending, paid, refunded

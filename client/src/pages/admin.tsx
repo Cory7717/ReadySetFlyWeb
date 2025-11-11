@@ -128,10 +128,9 @@ export default function AdminDashboard() {
       description: "",
       discountType: "percentage",
       discountValue: "",
-      maxRedemptions: undefined,
-      usageLimitPerUser: 1,
+      maxUses: undefined,
       validFrom: new Date(),
-      validTo: undefined,
+      validUntil: undefined,
       isActive: true,
       applicableToBannerAds: false,
       applicableToMarketplace: true,
@@ -5259,52 +5258,28 @@ export default function AdminDashboard() {
                     />
                   </div>
                   
-                  {/* Max Redemptions and Usage Limit */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={promoCodeForm.control}
-                      name="maxRedemptions"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Max Redemptions</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="number"
-                              placeholder="Unlimited"
-                              {...field}
-                              value={field.value ?? ""}
-                              onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                              data-testid="input-promo-code-max-redemptions"
-                            />
-                          </FormControl>
-                          <FormDescription>Leave empty for unlimited</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={promoCodeForm.control}
-                      name="usageLimitPerUser"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Usage Limit Per User</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="number"
-                              placeholder="1"
-                              {...field}
-                              value={field.value ?? 1}
-                              onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : 1)}
-                              data-testid="input-promo-code-usage-limit-per-user"
-                            />
-                          </FormControl>
-                          <FormDescription>Times per user (default 1)</FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                  {/* Max Uses */}
+                  <FormField
+                    control={promoCodeForm.control}
+                    name="maxUses"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Max Uses</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number"
+                            placeholder="Unlimited"
+                            {...field}
+                            value={field.value ?? ""}
+                            onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                            data-testid="input-promo-code-max-uses"
+                          />
+                        </FormControl>
+                        <FormDescription>Leave empty for unlimited uses</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   
                   {/* Valid From and Valid To */}
                   <div className="grid grid-cols-2 gap-4">
@@ -5330,16 +5305,16 @@ export default function AdminDashboard() {
                     
                     <FormField
                       control={promoCodeForm.control}
-                      name="validTo"
+                      name="validUntil"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Valid To</FormLabel>
+                          <FormLabel>Valid Until</FormLabel>
                           <FormControl>
                             <Input 
                               type="date"
                               value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : (typeof field.value === 'string' ? (field.value as string).split('T')[0] : '')}
                               onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
-                              data-testid="input-promo-code-valid-to"
+                              data-testid="input-promo-code-valid-until"
                             />
                           </FormControl>
                           <FormDescription>Leave empty for no expiration</FormDescription>

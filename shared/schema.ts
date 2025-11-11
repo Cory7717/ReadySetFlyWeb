@@ -1032,13 +1032,18 @@ export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({
   createdAt: true,
   updatedAt: true,
   usedCount: true,
+  applicableCategories: true,
 }).extend({
   code: z.string().min(1, "Promo code is required").toUpperCase(),
   description: z.string().optional(),
   discountType: z.enum(["free_7_day", "percentage", "fixed_amount", "waive_creation_fee"]),
   discountValue: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
   maxUses: z.number().int().positive().optional(),
+  isActive: z.boolean().default(true),
+  validFrom: z.coerce.date().optional(),
   validUntil: z.coerce.date().optional(),
+  applicableToMarketplace: z.boolean().default(true),
+  applicableToBannerAds: z.boolean().default(false),
 });
 
 export const insertExpenseSchema = createInsertSchema(expenses).omit({

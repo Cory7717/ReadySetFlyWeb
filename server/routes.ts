@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import multer from "multer";
 import OpenAI from "openai";
 import { z } from "zod";
+import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
 import { storage } from "./storage";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema } from "@shared/schema";
@@ -673,6 +674,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Complete FREE banner ad order (100% promo discount - no PayPal payment required)
+  // SECURITY: Requires cryptographically signed token to prevent unauthorized completion
+  app.post("/api/banner-ad/complete-free-order/:bannerAdOrderId", async (req, res) => {
+    try {
+      const { bannerAdOrderId } = req.params;
+      const { completionToken } = req.body;
+      
+      // SECURITY: Validate completion token is provided
+      if (!completionToken || typeof completionToken !== 'string') {
+        console.error(`❌ Missing completion token for order ${bannerAdOrderId}`);
+        return res.status(400).json({ error: "Security token is required" });
+      }
+      
+      // SECURITY: Verify and decode the signed token
+      let tokenData: any;
+      try {
+        tokenData = jwt.verify(completionToken, process.env.SESSION_SECRET || 'dev-secret');
+      } catch (error: any) {
+        console.error(`❌ Invalid or expired token for order ${bannerAdOrderId}:`, error.message);
+        return res.status(403).json({ error: "Invalid or expired security token" });
+      }
+      
+      // SECURITY: Verify token is for this specific order
+      if (tokenData.orderId !== bannerAdOrderId) {
+        console.error(`❌ Token/order ID mismatch for ${bannerAdOrderId}. Token says: ${tokenData.orderId}`);
+        return res.status(403).json({ error: "Invalid security token" });
+      }
+      
+      // SECURITY: Verify token type is for free order completion
+      if (tokenData.type !== 'free-order-completion') {
+        console.error(`❌ Wrong token type for order ${bannerAdOrderId}: ${tokenData.type}`);
+        return res.status(403).json({ error: "Invalid security token" });
+      }
+      
+      // Load the banner ad order
+      const order = await storage.getBannerAdOrder(bannerAdOrderId);
+      if (!order) {
+        console.error(`❌ Banner ad order ${bannerAdOrderId} not found`);
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      // SECURITY: Verify sponsor email from token matches order (belt-and-suspenders)
+      if (order.sponsorEmail.toLowerCase() !== tokenData.sponsorEmail.toLowerCase()) {
+        console.error(`❌ Token email mismatch for order ${bannerAdOrderId}. Expected ${order.sponsorEmail}, token says ${tokenData.sponsorEmail}`);
+        return res.status(403).json({ error: "Invalid security token" });
+      }
+      
+      // Verify order hasn't been paid yet
+      if (order.paymentStatus === 'paid') {
+        console.warn(`⚠️ Banner ad order ${bannerAdOrderId} already marked as paid`);
+        return res.status(400).json({ error: "Order already paid" });
+      }
+      
+      // Calculate final amount (must be $0 for free orders)
+      const originalAmount = parseFloat(order.grandTotal);
+      const discountAmount = parseFloat(order.discountAmount || "0");
+      const finalAmount = Math.max(0, originalAmount - discountAmount);
+      
+      // CRITICAL: Verify this is actually a free order
+      if (finalAmount > 0) {
+        console.error(`❌ Free order validation failed for ${bannerAdOrderId}: final amount is $${finalAmount.toFixed(2)}, not $0.00`);
+        return res.status(400).json({ 
+          error: "This is not a free order",
+          details: `Order total is $${finalAmount.toFixed(2)}. Payment is required.`
+        });
+      }
+      
+      // SECURITY: Re-validate promo code is still active and valid
+      if (order.promoCode) {
+        const validPromo = await storage.validatePromoCodeForContext(order.promoCode, 'banner-ad');
+        if (!validPromo) {
+          console.error(`❌ Promo code ${order.promoCode} is no longer valid for order ${bannerAdOrderId}`);
+          return res.status(400).json({ 
+            error: "Promo code is no longer valid",
+            details: "Please refresh the page and try again"
+          });
+        }
+        
+        // Record promo code usage
+        try {
+          await storage.recordPromoCodeUsage({
+            promoCodeCode: order.promoCode,
+            userId: null, // Public banner ad payment - no user ID
+            bannerAdOrderId: bannerAdOrderId,
+            discountAmount: discountAmount.toString(),
+          });
+          console.log(`✅ Promo code ${order.promoCode} usage recorded for FREE banner ad order ${bannerAdOrderId}`);
+        } catch (error) {
+          console.error(`⚠️ Failed to record promo code usage for ${order.promoCode}:`, error);
+          // Don't fail the order completion - just log the error
+        }
+      }
+      
+      // Mark order as paid (even though $0) and set to pending review
+      await storage.updateBannerAdOrder(bannerAdOrderId, {
+        paymentStatus: 'paid',
+        approvalStatus: 'pending_review',
+        paypalOrderId: 'FREE-' + bannerAdOrderId, // Mark as free order
+        paypalPaymentDate: new Date(),
+      });
+      
+      console.log(`✅ FREE banner ad order ${bannerAdOrderId} completed with promo code ${order.promoCode} by ${sponsorEmail}`);
+      
+      res.json({ 
+        status: 'COMPLETED',
+        message: 'Free order completed successfully',
+        orderId: bannerAdOrderId
+      });
+    } catch (error: any) {
+      console.error("Free banner ad order completion error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete free order" });
+    }
+  });
+
   // Mobile PayPal Payment Page - Rental Payments
   app.get("/mobile-paypal-rental-payment", (req, res) => {
     const { amount, rentalId } = req.query;
@@ -965,6 +1080,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     const amount = order.grandTotal;
     const title = order.title;
+    const sponsorEmail = order.sponsorEmail;
+    
+    // Calculate final amount after discount
+    const originalAmount = parseFloat(order.grandTotal);
+    const discountAmount = parseFloat(order.discountAmount || "0");
+    const finalAmount = Math.max(0, originalAmount - discountAmount);
+    const isFreeOrder = finalAmount === 0;
+    
+    // Generate signed completion token for free orders
+    let completionToken = null;
+    if (isFreeOrder) {
+      completionToken = jwt.sign(
+        {
+          type: 'free-order-completion',
+          orderId: orderId,
+          sponsorEmail: sponsorEmail,
+        },
+        process.env.SESSION_SECRET || 'dev-secret',
+        { expiresIn: '15m' } // Token expires in 15 minutes
+      );
+      console.log(`Generated free order completion token for ${orderId}`);
+    }
     
     res.send(`
 <!DOCTYPE html>
@@ -1085,6 +1222,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let currentAmount = ${amount};
     let appliedPromoCode = null;
     
+    // Free order state
+    const isFreeOrder = ${isFreeOrder};
+    const finalAmount = ${finalAmount};
+    const completionToken = '${completionToken || ''}';
+    
     // Payment processing state management (30-second timeout)
     let processingTimeout = null;
     
@@ -1184,87 +1326,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
     
-    const cardFields = paypal.CardFields({
-      createOrder: async () => {
-        const requestBody = {
-          orderId: '${orderId}'
-        };
-        
-        // Include promo code if applied
-        if (appliedPromoCode) {
-          requestBody.promoCode = appliedPromoCode.code;
-        }
-        
-        const response = await fetch('/api/paypal/create-order-banner-ad', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody)
-        });
-        const order = await response.json();
-        if (!order.id) {
-          throw new Error(order.error || 'Failed to create payment');
-        }
-        return order.id;
-      },
-      onApprove: async (data) => {
-        // Clear timeout - payment approved
-        if (processingTimeout) {
-          clearTimeout(processingTimeout);
-          processingTimeout = null;
-        }
-        
-        button.disabled = true;
-        button.textContent = 'Processing...';
+    // Handle FREE orders differently (no PayPal payment required)
+    if (isFreeOrder) {
+      // Show claim button instead of card fields
+      paymentFields.innerHTML = \`
+        <div class="info">Your total is $0.00 after applying the promo code!</div>
+        <button id="claim-button" class="btn" data-testid="button-claim-free-order">Claim Free Banner Ad</button>
+      \`;
+      
+      // Add click handler for free order claim
+      const claimButton = document.getElementById('claim-button');
+      claimButton.addEventListener('click', async () => {
+        startProcessing();
+        claimButton.textContent = 'Processing...';
         
         try {
-          // Capture the payment
-          const response = await fetch('/api/paypal/capture-banner-ad/' + data.orderID + '/${orderId}', {
-            method: 'POST'
+          const response = await fetch('/api/banner-ad/complete-free-order/${orderId}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ completionToken })
           });
+          
           const result = await response.json();
           
-          if (result.status === 'COMPLETED') {
+          if (response.ok) {
+            // Clear timeout - success
+            if (processingTimeout) {
+              clearTimeout(processingTimeout);
+              processingTimeout = null;
+            }
+            
             paymentFields.style.display = 'none';
-            successDiv.innerHTML = '<div class="success"><h3>Payment Successful!</h3><p>Thank you for your payment. Your banner ad order will be reviewed and activated within 1 business day. We will contact you at ${order.sponsorEmail}.</p></div>';
+            successDiv.innerHTML = '<div class="success"><h3>Order Claimed Successfully!</h3><p>Your free banner ad order has been confirmed. It will be reviewed and activated within 1 business day. We will contact you at ${sponsorEmail}.</p></div>';
             
             setTimeout(() => {
               window.location.href = '/';
             }, 5000);
           } else {
-            throw new Error('Payment not completed');
+            resetProcessing(result.error || 'Failed to claim free order. Please contact support@readysetfly.us');
           }
         } catch (error) {
-          console.error('Payment capture error:', error);
-          resetProcessing('Payment capture failed. Please contact support@readysetfly.us with order ID: ${orderId}');
-        }
-      },
-      onError: (error) => {
-        console.error('PayPal error:', error);
-        resetProcessing('Payment error. Please check your card details and try again.');
-      }
-    });
-
-    if (cardFields.isEligible()) {
-      cardFields.NameField().render('#card-name-field');
-      cardFields.NumberField().render('#card-number-field');
-      cardFields.ExpiryField().render('#card-expiry-field');
-      cardFields.CVVField().render('#card-cvv-field');
-      
-      button.disabled = false;
-      button.textContent = 'Pay $${amount}';
-      
-      button.addEventListener('click', async () => {
-        startProcessing();
-        
-        try {
-          await cardFields.submit();
-        } catch (error) {
-          console.error('Card field submission error:', error);
-          resetProcessing('Payment submission failed. Please check your card details and try again.');
+          console.error('Free order claim error:', error);
+          resetProcessing('Failed to claim free order. Please try again or contact support@readysetfly.us');
         }
       });
     } else {
-      errorDiv.innerHTML = '<div class="error">Card payments are not available. Please contact support@readysetfly.us.</div>';
+      // Standard PayPal payment flow for non-free orders
+      const cardFields = paypal.CardFields({
+        createOrder: async () => {
+          const requestBody = {
+            orderId: '${orderId}'
+          };
+          
+          // Include promo code if applied
+          if (appliedPromoCode) {
+            requestBody.promoCode = appliedPromoCode.code;
+          }
+          
+          const response = await fetch('/api/paypal/create-order-banner-ad', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+          });
+          const order = await response.json();
+          if (!order.id) {
+            throw new Error(order.error || 'Failed to create payment');
+          }
+          return order.id;
+        },
+        onApprove: async (data) => {
+          // Clear timeout - payment approved
+          if (processingTimeout) {
+            clearTimeout(processingTimeout);
+            processingTimeout = null;
+          }
+          
+          button.disabled = true;
+          button.textContent = 'Processing...';
+          
+          try {
+            // Capture the payment
+            const response = await fetch('/api/paypal/capture-banner-ad/' + data.orderID + '/${orderId}', {
+              method: 'POST'
+            });
+            const result = await response.json();
+            
+            if (result.status === 'COMPLETED') {
+              paymentFields.style.display = 'none';
+              successDiv.innerHTML = '<div class="success"><h3>Payment Successful!</h3><p>Thank you for your payment. Your banner ad order will be reviewed and activated within 1 business day. We will contact you at ${sponsorEmail}.</p></div>';
+              
+              setTimeout(() => {
+                window.location.href = '/';
+              }, 5000);
+            } else {
+              throw new Error('Payment not completed');
+            }
+          } catch (error) {
+            console.error('Payment capture error:', error);
+            resetProcessing('Payment capture failed. Please contact support@readysetfly.us with order ID: ${orderId}');
+          }
+        },
+        onError: (error) => {
+          console.error('PayPal error:', error);
+          resetProcessing('Payment error. Please check your card details and try again.');
+        }
+      });
+
+      if (cardFields.isEligible()) {
+        cardFields.NameField().render('#card-name-field');
+        cardFields.NumberField().render('#card-number-field');
+        cardFields.ExpiryField().render('#card-expiry-field');
+        cardFields.CVVField().render('#card-cvv-field');
+        
+        button.disabled = false;
+        button.textContent = 'Pay $${amount}';
+        
+        button.addEventListener('click', async () => {
+          startProcessing();
+          
+          try {
+            await cardFields.submit();
+          } catch (error) {
+            console.error('Card field submission error:', error);
+            resetProcessing('Payment submission failed. Please check your card details and try again.');
+          }
+        });
+      } else {
+        errorDiv.innerHTML = '<div class="error">Card payments are not available. Please contact support@readysetfly.us.</div>';
+      }
     }
   </script>
 </body>

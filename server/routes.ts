@@ -493,7 +493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PayPal - Create order for banner ad payments
   app.post("/api/paypal/create-order-banner-ad", async (req: any, res) => {
     try {
-      const { orderId } = req.body;
+      const { orderId, promoCode } = req.body;
       
       if (!orderId) {
         return res.status(400).json({ error: "Missing order ID" });
@@ -505,8 +505,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Order not found" });
       }
       
-      // Use grandTotal which already includes all discounts
-      const amount = parseFloat(order.grandTotal);
+      // Use original grandTotal as baseline (never mutate it)
+      const originalAmount = parseFloat(order.grandTotal);
+      let discountAmount = parseFloat(order.discountAmount || "0");
+      let appliedPromoCode = order.promoCode || null;
+      
+      // Validate and apply promo code if provided (only if not already applied)
+      if (promoCode && !order.promoCode) {
+        const validPromo = await storage.validatePromoCodeForContext(promoCode, 'banner-ad');
+        if (validPromo) {
+          appliedPromoCode = validPromo.code;
+          
+          // Calculate discount from original amount
+          if (validPromo.discountType === 'percentage') {
+            discountAmount = originalAmount * (parseFloat(validPromo.discountValue) / 100);
+          } else if (validPromo.discountType === 'fixed') {
+            discountAmount = parseFloat(validPromo.discountValue);
+          }
+          
+          // Persist promo code and discount (but NOT grandTotal - keep it as original)
+          await storage.updateBannerAdOrder(orderId, {
+            promoCode: validPromo.code,
+            discountAmount: discountAmount.toFixed(2),
+          });
+          
+          console.log(`Promo code ${promoCode} applied to order ${orderId}: -$${discountAmount.toFixed(2)}`);
+        }
+      }
+      
+      // Calculate final amount from original - discount (idempotent)
+      const finalAmount = Math.max(0, originalAmount - discountAmount);
+      
+      // Prevent $0 orders (PayPal rejects them)
+      if (finalAmount <= 0) {
+        return res.status(400).json({ 
+          error: "Order total cannot be $0.00 or negative. Please contact support@readysetfly.us for assistance with promotional credits." 
+        });
+      }
+      
+      console.log(`Creating PayPal order for ${orderId}: original=$${originalAmount.toFixed(2)}, discount=$${discountAmount.toFixed(2)}, final=$${finalAmount.toFixed(2)}`);
+      
       
       const collect = {
         body: {
@@ -515,10 +553,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             {
               amount: {
                 currencyCode: "USD",
-                value: amount.toFixed(2),
+                value: finalAmount.toFixed(2),
               },
               description: `Ready Set Fly - Banner Ad: ${order.title}`,
-              customId: `banner-ad:${orderId}|sponsor:${order.sponsorEmail}`,
+              customId: `banner-ad:${orderId}|sponsor:${order.sponsorEmail}${appliedPromoCode ? `|promo:${appliedPromoCode}` : ''}`,
             },
           ],
         },
@@ -574,7 +612,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Extract customId from purchase units
         const customId = jsonResponse.purchase_units?.[0]?.custom_id || '';
         
-        // Parse customId format: "banner-ad:{orderId}|sponsor:{email}"
+        // Parse customId format: "banner-ad:{orderId}|sponsor:{email}|promo:{code}"
         const orderIdMatch = customId.match(/banner-ad:([^|]+)/);
         const capturedOrderId = orderIdMatch ? orderIdMatch[1] : null;
         
@@ -586,6 +624,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
+        // Extract promo code if present
+        const promoMatch = customId.match(/promo:([^|]+)/);
+        const promoCode = promoMatch ? promoMatch[1] : null;
+        
         // Reload the banner ad order to verify it exists and is pending
         const order = await storage.getBannerAdOrder(bannerAdOrderId);
         if (!order) {
@@ -596,6 +638,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (order.paymentStatus === 'paid') {
           console.warn(`⚠️ Banner ad order ${bannerAdOrderId} already marked as paid`);
           return res.status(400).json({ error: "Order already paid" });
+        }
+        
+        // Record promo code usage if applied
+        if (promoCode) {
+          try {
+            await storage.recordPromoCodeUsage({
+              promoCodeCode: promoCode,
+              userId: null, // Public banner ad payment - no user ID
+              bannerAdOrderId: bannerAdOrderId,
+              discountAmount: null, // We don't have this info in capture
+            });
+            console.log(`✅ Promo code ${promoCode} usage recorded for banner ad order ${bannerAdOrderId}`);
+          } catch (error) {
+            console.error(`⚠️ Failed to record promo code usage for ${promoCode}:`, error);
+            // Don't fail the payment - just log the error
+          }
         }
         
         // Update payment status
@@ -932,8 +990,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .btn { width: 100%; padding: 14px; background: #1e40af; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
     .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .btn-secondary { background: #6b7280; }
+    .btn-secondary:hover { background: #4b5563; }
     .success { background: #d1fae5; color: #047857; padding: 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; }
+    .info { background: #dbeafe; color: #1e40af; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
     .error { color: #dc2626; background: #fee2e2; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+    .promo-section { margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e5e7eb; }
+    .promo-input-group { display: flex; gap: 8px; margin-bottom: 8px; }
+    .promo-input { flex: 1; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
+    .promo-btn { padding: 12px 20px; background: #6b7280; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .promo-btn:hover { background: #4b5563; }
+    .promo-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .discount-info { background: #d1fae5; color: #047857; padding: 12px; border-radius: 8px; font-size: 14px; margin-top: 8px; }
+    .amount-breakdown { font-size: 14px; color: #6b7280; margin-top: 8px; }
+    .amount-breakdown .line { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .amount-breakdown .total { font-weight: bold; color: #111827; padding-top: 8px; border-top: 1px solid #e5e7eb; margin-top: 8px; }
   </style>
   <script src="https://www.paypal.com/sdk/js?client-id=${process.env.PAYPAL_CLIENT_ID}&components=card-fields&disable-funding=paylater"></script>
 </head>
@@ -950,7 +1021,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         <p>${title}</p>
       </div>
       
-      <div class="amount">$${amount}</div>
+      <div class="promo-section">
+        <label style="display: block; font-size: 14px; font-weight: 500; margin-bottom: 8px; color: #374151;">Have a promo code?</label>
+        <div class="promo-input-group">
+          <input 
+            type="text" 
+            id="promo-code-input" 
+            class="promo-input" 
+            placeholder="Enter promo code"
+            style="text-transform: uppercase;"
+          />
+          <button id="apply-promo-btn" class="promo-btn">Apply</button>
+        </div>
+        <div id="promo-message"></div>
+      </div>
+      
+      <div id="amount-display">
+        <div class="amount">$${amount}</div>
+      </div>
       
       <div id="success-message"></div>
       <div id="error-message"></div>
@@ -987,15 +1075,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const errorDiv = document.getElementById('error-message');
     const successDiv = document.getElementById('success-message');
     const paymentFields = document.getElementById('payment-fields');
+    const promoInput = document.getElementById('promo-code-input');
+    const applyPromoBtn = document.getElementById('apply-promo-btn');
+    const promoMessage = document.getElementById('promo-message');
+    const amountDisplay = document.getElementById('amount-display');
+    
+    // Pricing state
+    let originalAmount = ${amount};
+    let currentAmount = ${amount};
+    let appliedPromoCode = null;
+    
+    // Promo code validation
+    applyPromoBtn.addEventListener('click', async () => {
+      const code = promoInput.value.trim().toUpperCase();
+      if (!code) {
+        promoMessage.innerHTML = '<div class="error">Please enter a promo code</div>';
+        return;
+      }
+      
+      applyPromoBtn.disabled = true;
+      applyPromoBtn.textContent = 'Validating...';
+      promoMessage.innerHTML = '';
+      
+      try {
+        const response = await fetch('/api/promo-codes/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, context: 'banner-ad' })
+        });
+        const result = await response.json();
+        
+        if (result.valid) {
+          appliedPromoCode = result;
+          
+          // Calculate discount
+          let discount = 0;
+          if (result.discountType === 'percentage') {
+            discount = originalAmount * (result.discountValue / 100);
+          } else if (result.discountType === 'fixed') {
+            discount = result.discountValue;
+          }
+          
+          currentAmount = Math.max(0, originalAmount - discount);
+          
+          // Update display with breakdown
+          amountDisplay.innerHTML = \`
+            <div class="amount-breakdown">
+              <div class="line">
+                <span>Subtotal:</span>
+                <span>$\${originalAmount.toFixed(2)}</span>
+              </div>
+              <div class="line" style="color: #047857;">
+                <span>Discount (\${result.code}):</span>
+                <span>-$\${discount.toFixed(2)}</span>
+              </div>
+              <div class="line total">
+                <span>Total:</span>
+                <span style="font-size: 24px; color: #1e40af;">$\${currentAmount.toFixed(2)}</span>
+              </div>
+            </div>
+          \`;
+          
+          promoMessage.innerHTML = \`<div class="discount-info">\${result.description}</div>\`;
+          promoInput.disabled = true;
+          applyPromoBtn.textContent = 'Applied';
+          
+          // Update button text with new amount
+          if (button.textContent.includes('Pay')) {
+            button.textContent = 'Pay $' + currentAmount.toFixed(2);
+          }
+        } else {
+          promoMessage.innerHTML = \`<div class="error">\${result.message || 'Invalid promo code'}</div>\`;
+          applyPromoBtn.disabled = false;
+          applyPromoBtn.textContent = 'Apply';
+        }
+      } catch (error) {
+        console.error('Promo code validation error:', error);
+        promoMessage.innerHTML = '<div class="error">Failed to validate promo code</div>';
+        applyPromoBtn.disabled = false;
+        applyPromoBtn.textContent = 'Apply';
+      }
+    });
     
     const cardFields = paypal.CardFields({
       createOrder: async () => {
+        const requestBody = {
+          orderId: '${orderId}'
+        };
+        
+        // Include promo code if applied
+        if (appliedPromoCode) {
+          requestBody.promoCode = appliedPromoCode.code;
+        }
+        
         const response = await fetch('/api/paypal/create-order-banner-ad', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderId: '${orderId}'
-          })
+          body: JSON.stringify(requestBody)
         });
         const order = await response.json();
         if (!order.id) {

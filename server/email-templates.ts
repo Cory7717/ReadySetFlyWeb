@@ -193,7 +193,7 @@ export function getBannerAdOrderEmailHtml(
       
       <div style="text-align: center; margin: 25px 0;">
         <p style="font-size: 16px; font-weight: 600; margin-bottom: 10px;">Ready to proceed with payment?</p>
-        <a href="${process.env.REPLIT_DEV_DOMAIN || 'https://readysetfly.us'}/banner-ad-payment?orderId=${orderDetails.orderId}" class="button">
+        <a href="https://readysetfly.us/banner-ad-payment?orderId=${orderDetails.orderId}" class="button">
           View Order & Make Payment
         </a>
       </div>
@@ -270,7 +270,7 @@ ${hasPromo ? `You saved $${discount.toFixed(2)} with promo code ${orderDetails.p
 
 READY TO PROCEED WITH PAYMENT?
 View your order and make payment here:
-${process.env.REPLIT_DEV_DOMAIN || 'https://readysetfly.us'}/banner-ad-payment?orderId=${orderDetails.orderId}
+https://readysetfly.us/banner-ad-payment?orderId=${orderDetails.orderId}
 
 IMPORTANT: Payment Required
 Your banner ad campaign will be activated once payment is received. Please complete payment within 7 days to secure your advertising slot.

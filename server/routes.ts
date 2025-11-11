@@ -1085,6 +1085,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let currentAmount = ${amount};
     let appliedPromoCode = null;
     
+    // Payment processing state management (30-second timeout)
+    let processingTimeout = null;
+    
+    function startProcessing() {
+      button.disabled = true;
+      button.textContent = 'Processing...';
+      errorDiv.innerHTML = '';
+      
+      // Set 30-second timeout
+      processingTimeout = setTimeout(() => {
+        resetProcessing('Payment timed out after 30 seconds. Please try again or contact support@readysetfly.us');
+      }, 30000);
+    }
+    
+    function resetProcessing(errorMessage = null) {
+      if (processingTimeout) {
+        clearTimeout(processingTimeout);
+        processingTimeout = null;
+      }
+      button.disabled = false;
+      button.textContent = 'Pay $' + currentAmount.toFixed(2);
+      
+      if (errorMessage) {
+        errorDiv.innerHTML = '<div class="error">' + errorMessage + '</div>';
+      }
+    }
+    
     // Promo code validation
     applyPromoBtn.addEventListener('click', async () => {
       const code = promoInput.value.trim().toUpperCase();
@@ -1180,6 +1207,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return order.id;
       },
       onApprove: async (data) => {
+        // Clear timeout - payment approved
+        if (processingTimeout) {
+          clearTimeout(processingTimeout);
+          processingTimeout = null;
+        }
+        
         button.disabled = true;
         button.textContent = 'Processing...';
         
@@ -1201,14 +1234,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             throw new Error('Payment not completed');
           }
         } catch (error) {
-          errorDiv.innerHTML = '<div class="error">Payment capture failed. Please contact support@readysetfly.us with order ID: ${orderId}</div>';
-          button.disabled = false;
-          button.textContent = 'Pay $${amount}';
+          console.error('Payment capture error:', error);
+          resetProcessing('Payment capture failed. Please contact support@readysetfly.us with order ID: ${orderId}');
         }
       },
       onError: (error) => {
         console.error('PayPal error:', error);
-        errorDiv.innerHTML = '<div class="error">Payment error. Please check your card details and try again.</div>';
+        resetProcessing('Payment error. Please check your card details and try again.');
       }
     });
 
@@ -1222,9 +1254,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       button.textContent = 'Pay $${amount}';
       
       button.addEventListener('click', async () => {
-        button.disabled = true;
-        button.textContent = 'Processing...';
-        await cardFields.submit();
+        startProcessing();
+        
+        try {
+          await cardFields.submit();
+        } catch (error) {
+          console.error('Card field submission error:', error);
+          resetProcessing('Payment submission failed. Please check your card details and try again.');
+        }
       });
     } else {
       errorDiv.innerHTML = '<div class="error">Card payments are not available. Please contact support@readysetfly.us.</div>';

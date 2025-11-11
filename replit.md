@@ -66,6 +66,13 @@ The platform is a **monorepo** with shared backend, web, and mobile applications
   - **Navigation**: "Create Listing" button on MarketplaceScreen, full navigation stack for listing creation and payment.
   - **Image Upload**: Not yet implemented for mobile (web has full cloud storage via ObjectUploader). Backend API ready (`/api/objects/upload`, `/api/listing-images`). Mobile needs Expo ImagePicker integration.
   - **Contact Inquiries**: Custom email subject lines with category and listing title (e.g., "Inquiry From Ready Set Fly about your Aircraft for Sale Listing: [Title]").
+- **Contact Form System (November 2024)**:
+  - **Public Endpoint**: `POST /api/contact` with server-side Zod validation (firstName, lastName, email, subject, message fields)
+  - **Rate Limiting**: IP-based abuse prevention with 5 requests per 10-minute rolling window and 20 requests per 24-hour daily limit. Returns HTTP 429 with Retry-After header when limits exceeded
+  - **Database Persistence**: All submissions stored in `contact_submissions` table BEFORE email send for complete audit trail. Tracks IP address, email delivery status (`emailSent`, `emailSentAt`), and submission metadata
+  - **Email Delivery**: Asynchronous non-blocking email sends to support@readysetfly.us via Resend. HTML and plain-text templates with sender info. Proper `replyTo` field configured for direct replies. Email status updated in database after successful delivery
+  - **Memory Management**: Automatic cleanup every 5 minutes to prevent unbounded memory growth from rate limiter timestamp storage
+  - **Security**: IP capture for abuse tracking, server-side validation, error handling prevents unhandled rejections, audit trail preserved even if email fails
 
 ## External Dependencies
 - **PostgreSQL**: Primary database, hosted via Neon.

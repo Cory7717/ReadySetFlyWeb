@@ -374,7 +374,7 @@ Ready Set Fly - Connecting Pilots with Aircraft
       subject: `Contact Form: ${data.subject}`,
       html: htmlBody,
       text: textBody,
-      reply_to: data.email,
+      replyTo: data.email,
     });
   } catch (error) {
     console.error('Failed to send contact form email:', error);

@@ -19,7 +19,7 @@ export function getListingReminderEmailHtml(userName: string, aircraftCount: num
 <body>
   <div class="container">
     <div class="header">
-      <h1>✈️ Ready Set Fly</h1>
+      <h1>Ready Set Fly</h1>
       <p>Monthly Listing Review Reminder</p>
     </div>
     
@@ -30,14 +30,14 @@ export function getListingReminderEmailHtml(userName: string, aircraftCount: num
       
       ${aircraftCount > 0 ? `
       <div class="listing-box">
-        <h3>🛩️ Aircraft Rentals: ${aircraftCount}</h3>
+        <h3>Aircraft Rentals: ${aircraftCount}</h3>
         <p>Keep your aircraft rental listings up to date with current availability, pricing, and maintenance status.</p>
       </div>
       ` : ''}
       
       ${marketplaceCount > 0 ? `
       <div class="listing-box">
-        <h3>🏪 Marketplace Listings: ${marketplaceCount}</h3>
+        <h3>Marketplace Listings: ${marketplaceCount}</h3>
         <p>Review your marketplace listings for aircraft sales, jobs, CFI services, and more.</p>
       </div>
       ` : ''}
@@ -288,4 +288,95 @@ Thank you for choosing Ready Set Fly!
 ---
 Ready Set Fly - Connecting Pilots with Aircraft
   `.trim();
+}
+
+export async function sendContactFormEmail(data: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  subject: string;
+  message: string;
+}) {
+  const resend = await import('./resendClient').then(m => m.getUncachableResendClient());
+  
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #1e40af; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f9fafb; }
+    .info-box { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 10px 0; }
+    .message-box { background: #f3f4f6; border-left: 4px solid #1e40af; padding: 15px; margin: 15px 0; }
+    .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Ready Set Fly Contact Form</h1>
+      <p>New Message Received</p>
+    </div>
+    
+    <div class="content">
+      <div class="info-box">
+        <h3>Contact Information</h3>
+        <p><strong>Name:</strong> ${data.firstName} ${data.lastName}</p>
+        <p><strong>Email:</strong> ${data.email}</p>
+        <p><strong>Subject:</strong> ${data.subject}</p>
+      </div>
+      
+      <div class="message-box">
+        <h3>Message</h3>
+        <p>${data.message.replace(/\n/g, '<br>')}</p>
+      </div>
+      
+      <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
+        Reply to this message by responding to ${data.email}
+      </p>
+    </div>
+    
+    <div class="footer">
+      <p>Ready Set Fly - Connecting Pilots with Aircraft</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+  
+  const textBody = `
+READY SET FLY CONTACT FORM
+New Message Received
+
+CONTACT INFORMATION
+-------------------
+Name: ${data.firstName} ${data.lastName}
+Email: ${data.email}
+Subject: ${data.subject}
+
+MESSAGE
+-------
+${data.message}
+
+---
+Reply to this message by responding to ${data.email}
+
+Ready Set Fly - Connecting Pilots with Aircraft
+  `.trim();
+  
+  try {
+    await resend.emails.send({
+      from: 'Ready Set Fly <noreply@readysetfly.us>',
+      to: 'support@readysetfly.us',
+      subject: `Contact Form: ${data.subject}`,
+      html: htmlBody,
+      text: textBody,
+      reply_to: data.email,
+    });
+  } catch (error) {
+    console.error('Failed to send contact form email:', error);
+  }
 }

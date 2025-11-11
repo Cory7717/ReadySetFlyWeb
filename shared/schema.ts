@@ -598,6 +598,39 @@ export const adminNotifications = pgTable("admin_notifications", {
   readAt: timestamp("read_at"),
 });
 
+// Contact Form Submissions (for audit trail and abuse protection)
+export const contactSubmissions = pgTable("contact_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email").notNull(),
+  subject: text("subject").notNull(),
+  message: text("message").notNull(),
+  
+  // Abuse tracking
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  
+  // Email delivery tracking
+  emailSent: boolean("email_sent").default(false),
+  emailSentAt: timestamp("email_sent_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_contact_email").on(table.email),
+  index("idx_contact_created").on(table.createdAt),
+  index("idx_contact_ip").on(table.ipAddress),
+]);
+
+export type ContactSubmission = typeof contactSubmissions.$inferSelect;
+export const insertContactSubmissionSchema = createInsertSchema(contactSubmissions).omit({
+  id: true,
+  emailSent: true,
+  emailSentAt: true,
+  createdAt: true,
+});
+export type InsertContactSubmission = z.infer<typeof insertContactSubmissionSchema>;
+
 // Banner Ad Orders (sponsor requests before going live)
 export const bannerAdOrders = pgTable("banner_ad_orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

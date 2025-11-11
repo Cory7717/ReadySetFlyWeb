@@ -4,11 +4,13 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import multer from "multer";
 import OpenAI from "openai";
+import { z } from "zod";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
 import { storage } from "./storage";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { getUncachableResendClient } from "./resendClient";
+import { sendContactFormEmail } from "./email-templates";
 import registerMobileAuthRoutes from "./mobile-auth-routes";
 import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -973,6 +975,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
 </body>
 </html>
     `);
+  });
+
+  // Contact Form - Public (no auth required)
+  // Note: Rate limiting is handled by middleware for public endpoints
+  app.post("/api/contact", async (req, res) => {
+    try {
+      // Server-side validation using Zod schema
+      const contactFormSchema = z.object({
+        firstName: z.string().min(1, "First name is required").max(100),
+        lastName: z.string().min(1, "Last name is required").max(100),
+        email: z.string().email("Valid email is required").max(255),
+        subject: z.string().min(1, "Subject is required").max(200),
+        message: z.string().min(10, "Message must be at least 10 characters").max(2000),
+      });
+      
+      const validationResult = contactFormSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          error: "Invalid form data", 
+          details: validationResult.error.errors 
+        });
+      }
+      
+      const data = validationResult.data;
+      
+      // Basic abuse protection: Log submission for tracking
+      console.log(`Contact form submission from ${data.email} (${data.firstName} ${data.lastName})`);
+      
+      // Send email notification to support
+      await sendContactFormEmail(data);
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Contact form error:', error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
   });
 
   // AI Description Generation endpoint

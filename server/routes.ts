@@ -3507,20 +3507,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/admin/banner-ads", isAuthenticated, isAdmin, async (req, res) => {
-    try {
-      console.log('Creating banner ad with data:', JSON.stringify(req.body, null, 2));
-      const ad = await storage.createBannerAd(req.body);
-      console.log('Banner ad created successfully:', ad);
-      res.status(201).json(ad);
-    } catch (error) {
-      console.error('Banner ad creation error:', error);
-      res.status(500).json({ error: "Failed to create banner ad", details: error instanceof Error ? error.message : String(error) });
-    }
+    // Reject manual creation - banner ads must be created by activating paid orders
+    res.status(403).json({ 
+      error: "Manual banner ad creation is not allowed", 
+      message: "Banner ads can only be created by activating paid banner ad orders. Please use the 'Activate Order' button in the Banner Ad Orders section." 
+    });
   });
 
   app.patch("/api/admin/banner-ads/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const ad = await storage.updateBannerAd(req.params.id, req.body);
+      // Only allow updating scheduling and status fields
+      const allowedFields = ['endDate', 'isActive'];
+      const updateData: Partial<{ endDate: Date | undefined; isActive: boolean }> = {};
+      
+      for (const field of allowedFields) {
+        if (field in req.body) {
+          updateData[field as keyof typeof updateData] = req.body[field];
+        }
+      }
+      
+      // Reject if trying to update immutable creative content
+      const immutableFields = ['title', 'description', 'imageUrl', 'link', 'placements', 'category', 'startDate'];
+      const attemptedImmutableUpdates = immutableFields.filter(field => field in req.body);
+      if (attemptedImmutableUpdates.length > 0) {
+        return res.status(403).json({ 
+          error: "Cannot update creative content",
+          message: `The following fields are immutable and cannot be changed: ${attemptedImmutableUpdates.join(', ')}. Only endDate and isActive can be modified.`
+        });
+      }
+      
+      const ad = await storage.updateBannerAd(req.params.id, updateData);
       if (!ad) {
         return res.status(404).json({ error: "Banner ad not found" });
       }

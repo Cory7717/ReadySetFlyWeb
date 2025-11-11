@@ -3484,6 +3484,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/admin/banner-ad-orders/:id/approval", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { approvalStatus, adminNotes } = req.body;
+      
+      // Validate approval status
+      const validStatuses = ['approved', 'rejected', 'sent', 'draft'];
+      if (!approvalStatus || !validStatuses.includes(approvalStatus)) {
+        return res.status(400).json({ error: "Invalid approval status. Must be: approved, rejected, sent, or draft" });
+      }
+      
+      // Get current order to check payment status
+      const order = await storage.getBannerAdOrder(req.params.id);
+      if (!order) {
+        return res.status(404).json({ error: "Banner ad order not found" });
+      }
+      
+      // Only allow approval if order is paid
+      if (approvalStatus === 'approved' && order.paymentStatus !== 'paid') {
+        return res.status(400).json({ error: "Cannot approve unpaid orders. Order must be paid before approval." });
+      }
+      
+      // Update approval status
+      const updated = await storage.updateBannerAdOrder(req.params.id, {
+        approvalStatus,
+        adminNotes: adminNotes || order.adminNotes
+      });
+      
+      console.log(`✅ Banner ad order ${req.params.id} approval status updated to: ${approvalStatus}`);
+      res.json(updated);
+    } catch (error) {
+      console.error('Banner ad order approval error:', error);
+      res.status(500).json({ error: "Failed to update approval status" });
+    }
+  });
+
   // Banner Ads - Admin Management
   app.get("/api/admin/banner-ads", isAuthenticated, isAdmin, async (req, res) => {
     try {

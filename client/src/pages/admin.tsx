@@ -779,6 +779,51 @@ export default function AdminDashboard() {
     },
   });
 
+  const approveOrderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("PATCH", `/api/admin/banner-ad-orders/${id}/approval`, { 
+        approvalStatus: 'approved' 
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ad-orders"] });
+      toast({ 
+        title: "Order approved", 
+        description: "Banner ad order approved successfully. You can now activate it."
+      });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to approve order",
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const rejectOrderMutation = useMutation({
+    mutationFn: async ({ id, adminNotes }: { id: string; adminNotes?: string }) => {
+      return await apiRequest("PATCH", `/api/admin/banner-ad-orders/${id}/approval`, { 
+        approvalStatus: 'rejected',
+        adminNotes 
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/banner-ad-orders"] });
+      toast({ 
+        title: "Order rejected", 
+        description: "Banner ad order has been rejected."
+      });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Error", 
+        description: error.message || "Failed to reject order",
+        variant: "destructive" 
+      });
+    },
+  });
+
   const deleteMarketplaceMutation = useMutation({
     mutationFn: async (id: string) => {
       return await apiRequest("DELETE", `/api/marketplace/${id}`, {});
@@ -3029,6 +3074,36 @@ export default function AdminDashboard() {
                           
                           {/* Actions */}
                           <div className="flex items-center gap-2">
+                            {/* Approve/Reject buttons - only show for paid orders that need approval */}
+                            {order.paymentStatus === 'paid' && (order.approvalStatus === 'draft' || order.approvalStatus === 'sent') && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => approveOrderMutation.mutate(order.id)}
+                                  disabled={approveOrderMutation.isPending}
+                                  data-testid={`button-approve-order-${order.id}`}
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    const notes = prompt('Rejection reason (optional):');
+                                    if (notes !== null) { // null means cancelled, empty string is valid
+                                      rejectOrderMutation.mutate({ id: order.id, adminNotes: notes || undefined });
+                                    }
+                                  }}
+                                  disabled={rejectOrderMutation.isPending}
+                                  data-testid={`button-reject-order-${order.id}`}
+                                >
+                                  <XCircle className="h-4 w-4 mr-1" />
+                                  Reject
+                                </Button>
+                              </>
+                            )}
                             {/* Activate button - only show for paid approved orders */}
                             {order.paymentStatus === 'paid' && order.approvalStatus === 'approved' && (
                               <Button

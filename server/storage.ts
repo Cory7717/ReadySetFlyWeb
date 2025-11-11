@@ -45,6 +45,10 @@ import {
   type InsertOAuthExchangeToken,
   type ContactSubmission,
   type InsertContactSubmission,
+  type PromoCode,
+  type InsertPromoCode,
+  type PromoCodeUsage,
+  type InsertPromoCodeUsage,
   users,
   aircraftListings,
   marketplaceListings,
@@ -66,6 +70,8 @@ import {
   bannerAdOrders,
   jobApplications,
   promoAlerts,
+  promoCodes,
+  promoCodeUsages,
   refreshTokens,
   oauthExchangeTokens,
   contactSubmissions,
@@ -258,6 +264,18 @@ export interface IStorage {
   getExpense(id: string): Promise<Expense | undefined>;
   createExpense(expense: InsertExpense): Promise<Expense>;
   updateExpense(id: string, updates: Partial<Expense>): Promise<Expense | undefined>;
+  
+  // Promo Codes
+  getAllPromoCodes(): Promise<PromoCode[]>;
+  getActivePromoCodes(context: "banner-ad" | "marketplace" | "all"): Promise<PromoCode[]>;
+  getPromoCodeByCode(code: string): Promise<PromoCode | undefined>;
+  getPromoCode(id: string): Promise<PromoCode | undefined>;
+  createPromoCode(promoCode: InsertPromoCode): Promise<PromoCode>;
+  updatePromoCode(id: string, updates: Partial<PromoCode>): Promise<PromoCode | undefined>;
+  deletePromoCode(id: string): Promise<boolean>;
+  validatePromoCodeForContext(code: string, context: "banner-ad" | "marketplace"): Promise<PromoCode | null>;
+  recordPromoCodeUsage(usage: { promoCodeId: string; userId?: string; marketplaceListingId?: string; bannerAdOrderId?: string }): Promise<PromoCodeUsage>;
+  getPromoCodeUsageCount(promoCodeId: string): Promise<number>;
   
   // Admin Notifications
   getAllAdminNotifications(): Promise<AdminNotification[]>;
@@ -1837,6 +1855,117 @@ export class DatabaseStorage implements IStorage {
   async deleteExpense(id: string): Promise<boolean> {
     const result = await db.delete(expenses).where(eq(expenses.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Promo Codes
+  async getAllPromoCodes(): Promise<PromoCode[]> {
+    return await db.select().from(promoCodes).orderBy(desc(promoCodes.createdAt));
+  }
+
+  async getActivePromoCodes(context: "banner-ad" | "marketplace" | "all"): Promise<PromoCode[]> {
+    const now = new Date();
+    
+    let query = db.select().from(promoCodes).where(
+      and(
+        eq(promoCodes.isActive, true),
+        or(
+          sql`${promoCodes.validFrom} IS NULL`,
+          lte(promoCodes.validFrom, now)
+        ),
+        or(
+          sql`${promoCodes.validUntil} IS NULL`,
+          gte(promoCodes.validUntil, now)
+        )
+      )
+    );
+
+    const codes = await query.orderBy(desc(promoCodes.createdAt));
+    
+    // Filter by context
+    if (context === "banner-ad") {
+      return codes.filter(code => code.applicableToBannerAds);
+    } else if (context === "marketplace") {
+      return codes.filter(code => code.applicableToMarketplace);
+    }
+    return codes;
+  }
+
+  async getPromoCodeByCode(code: string): Promise<PromoCode | undefined> {
+    const [promoCode] = await db.select().from(promoCodes).where(eq(promoCodes.code, code.toUpperCase()));
+    return promoCode;
+  }
+
+  async getPromoCode(id: string): Promise<PromoCode | undefined> {
+    const [promoCode] = await db.select().from(promoCodes).where(eq(promoCodes.id, id));
+    return promoCode;
+  }
+
+  async createPromoCode(insertPromoCode: InsertPromoCode): Promise<PromoCode> {
+    const [promoCode] = await db.insert(promoCodes).values({
+      ...insertPromoCode,
+      code: insertPromoCode.code.toUpperCase(),
+    }).returning();
+    return promoCode;
+  }
+
+  async updatePromoCode(id: string, updates: Partial<PromoCode>): Promise<PromoCode | undefined> {
+    const updateData = { ...updates, updatedAt: new Date() };
+    if (updates.code) {
+      updateData.code = updates.code.toUpperCase();
+    }
+    const [promoCode] = await db.update(promoCodes).set(updateData).where(eq(promoCodes.id, id)).returning();
+    return promoCode;
+  }
+
+  async deletePromoCode(id: string): Promise<boolean> {
+    const result = await db.delete(promoCodes).where(eq(promoCodes.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async validatePromoCodeForContext(code: string, context: "banner-ad" | "marketplace"): Promise<PromoCode | null> {
+    const promoCode = await this.getPromoCodeByCode(code);
+    if (!promoCode) return null;
+
+    // Check if active
+    if (!promoCode.isActive) return null;
+
+    // Check context applicability
+    if (context === "banner-ad" && !promoCode.applicableToBannerAds) return null;
+    if (context === "marketplace" && !promoCode.applicableToMarketplace) return null;
+
+    // Check date validity
+    const now = new Date();
+    if (promoCode.validFrom && promoCode.validFrom > now) return null;
+    if (promoCode.validUntil && promoCode.validUntil < now) return null;
+
+    // Check usage limits
+    if (promoCode.maxUses !== null && promoCode.usedCount >= promoCode.maxUses) {
+      return null;
+    }
+
+    return promoCode;
+  }
+
+  async recordPromoCodeUsage(usage: { promoCodeId: string; userId?: string; marketplaceListingId?: string; bannerAdOrderId?: string }): Promise<PromoCodeUsage> {
+    // Record usage
+    const [promoCodeUsage] = await db.insert(promoCodeUsages).values(usage as InsertPromoCodeUsage).returning();
+    
+    // Increment usage count
+    await db.update(promoCodes)
+      .set({ 
+        usedCount: sql`${promoCodes.usedCount} + 1`,
+        updatedAt: new Date()
+      })
+      .where(eq(promoCodes.id, usage.promoCodeId));
+    
+    return promoCodeUsage;
+  }
+
+  async getPromoCodeUsageCount(promoCodeId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)::int` })
+      .from(promoCodeUsages)
+      .where(eq(promoCodeUsages.promoCodeId, promoCodeId));
+    return result[0]?.count || 0;
   }
 
   // Admin Notifications

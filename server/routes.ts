@@ -1517,19 +1517,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Promo code validation
-  app.post("/api/promo-codes/validate", isAuthenticated, async (req: any, res) => {
+  // Promo code validation (public for banner ads, authenticated for marketplace)
+  app.post("/api/promo-codes/validate", async (req: any, res) => {
     try {
-      const { code } = req.body;
-      // For now, accept "LAUNCH2025" as a valid free 7-day promo code
-      if (code && code.toUpperCase() === "LAUNCH2025") {
-        return res.json({ 
-          valid: true, 
-          description: "Free 7-day marketplace listing!",
-          discountType: "free_7_day",
-        });
+      const { code, context } = req.body;
+      
+      if (!code || !context) {
+        return res.status(400).json({ valid: false, message: "Code and context are required" });
       }
-      res.json({ valid: false, message: "Invalid promo code" });
+
+      if (context !== "banner-ad" && context !== "marketplace") {
+        return res.status(400).json({ valid: false, message: "Invalid context" });
+      }
+
+      // Validate using database
+      const promoCode = await storage.validatePromoCodeForContext(code, context);
+      
+      if (!promoCode) {
+        return res.json({ valid: false, message: "Invalid or expired promo code" });
+      }
+
+      // Return valid promo code details
+      res.json({ 
+        valid: true,
+        code: promoCode.code,
+        description: promoCode.description || "Promo code applied successfully!",
+        discountType: promoCode.discountType,
+        discountValue: promoCode.discountValue ? parseFloat(promoCode.discountValue) : null,
+      });
     } catch (error: any) {
       console.error("Promo code validation error:", error);
       res.status(500).json({ valid: false, message: "Failed to validate promo code" });
@@ -3202,6 +3217,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete expense" });
+    }
+  });
+
+  // Promo Codes (Admin only)
+  app.get("/api/admin/promo-codes", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const promoCodes = await storage.getAllPromoCodes();
+      res.json(promoCodes);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch promo codes" });
+    }
+  });
+
+  app.post("/api/admin/promo-codes", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { insertPromoCodeSchema } = await import("@shared/schema");
+      const result = insertPromoCodeSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const promoCode = await storage.createPromoCode(result.data);
+      res.status(201).json(promoCode);
+    } catch (error: any) {
+      // Handle unique constraint violation
+      if (error.code === '23505') {
+        return res.status(400).json({ error: "Promo code already exists" });
+      }
+      res.status(500).json({ error: "Failed to create promo code" });
+    }
+  });
+
+  app.patch("/api/admin/promo-codes/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { insertPromoCodeSchema } = await import("@shared/schema");
+      const result = insertPromoCodeSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const promoCode = await storage.updatePromoCode(req.params.id, result.data);
+      if (!promoCode) {
+        return res.status(404).json({ error: "Promo code not found" });
+      }
+      res.json(promoCode);
+    } catch (error: any) {
+      if (error.code === '23505') {
+        return res.status(400).json({ error: "Promo code already exists" });
+      }
+      res.status(500).json({ error: "Failed to update promo code" });
+    }
+  });
+
+  app.delete("/api/admin/promo-codes/:id", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const success = await storage.deletePromoCode(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Promo code not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete promo code" });
     }
   });
 

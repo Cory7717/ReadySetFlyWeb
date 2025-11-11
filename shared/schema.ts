@@ -530,7 +530,7 @@ export const promoCodes = pgTable("promo_codes", {
   
   // Promo details
   description: text("description"),
-  discountType: text("discount_type").notNull(), // "free_7_day", "percentage", "fixed_amount"
+  discountType: text("discount_type").notNull(), // "free_7_day", "percentage", "fixed_amount", "waive_creation_fee"
   discountValue: decimal("discount_value", { precision: 10, scale: 2 }), // For percentage or fixed amount
   
   // Usage limits
@@ -542,7 +542,9 @@ export const promoCodes = pgTable("promo_codes", {
   validFrom: timestamp("valid_from").defaultNow(),
   validUntil: timestamp("valid_until"),
   
-  // Restrictions
+  // Restrictions - applies to marketplace, banner_ads, or both
+  applicableToMarketplace: boolean("applicable_to_marketplace").default(true),
+  applicableToBannerAds: boolean("applicable_to_banner_ads").default(false),
   applicableCategories: text("applicable_categories").array().default(sql`ARRAY[]::text[]`), // empty = all categories
   
   createdAt: timestamp("created_at").defaultNow(),
@@ -553,8 +555,9 @@ export const promoCodes = pgTable("promo_codes", {
 export const promoCodeUsages = pgTable("promo_code_usages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   promoCodeId: varchar("promo_code_id").notNull().references(() => promoCodes.id),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id").references(() => users.id), // Optional - can be null for public banner ad orders
   marketplaceListingId: varchar("marketplace_listing_id").references(() => marketplaceListings.id),
+  bannerAdOrderId: varchar("banner_ad_order_id").references(() => bannerAdOrders.id),
   
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -1024,6 +1027,20 @@ export const insertCrmActivitySchema = createInsertSchema(crmActivities).omit({
   type: z.enum(activityTypes),
 });
 
+export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  usedCount: true,
+}).extend({
+  code: z.string().min(1, "Promo code is required").toUpperCase(),
+  description: z.string().optional(),
+  discountType: z.enum(["free_7_day", "percentage", "fixed_amount", "waive_creation_fee"]),
+  discountValue: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  maxUses: z.number().int().positive().optional(),
+  validUntil: z.coerce.date().optional(),
+});
+
 export const insertExpenseSchema = createInsertSchema(expenses).omit({
   id: true,
   createdAt: true,
@@ -1163,7 +1180,7 @@ export type CrmActivity = typeof crmActivities.$inferSelect;
 export type InsertCrmActivity = z.infer<typeof insertCrmActivitySchema>;
 
 export type PromoCode = typeof promoCodes.$inferSelect;
-export type InsertPromoCode = typeof promoCodes.$inferInsert;
+export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
 
 export type PromoCodeUsage = typeof promoCodeUsages.$inferSelect;
 export type InsertPromoCodeUsage = typeof promoCodeUsages.$inferInsert;

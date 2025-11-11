@@ -406,6 +406,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // PayPal - Create order for banner ad payments
+  app.post("/api/paypal/create-order-banner-ad", async (req: any, res) => {
+    try {
+      const { orderId } = req.body;
+      
+      if (!orderId) {
+        return res.status(400).json({ error: "Missing order ID" });
+      }
+      
+      // Load the banner ad order to get pricing
+      const order = await storage.getBannerAdOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      // Use grandTotal which already includes all discounts
+      const amount = parseFloat(order.grandTotal);
+      
+      const collect = {
+        body: {
+          intent: "CAPTURE",
+          purchaseUnits: [
+            {
+              amount: {
+                currencyCode: "USD",
+                value: amount.toFixed(2),
+              },
+              description: `Ready Set Fly - Banner Ad: ${order.title}`,
+              customId: `banner-ad:${orderId}|sponsor:${order.sponsorEmail}`,
+            },
+          ],
+        },
+        prefer: "return=minimal",
+      };
+
+      const { body, ...httpResponse } = await ordersController.createOrder(collect);
+      const jsonResponse = JSON.parse(String(body));
+      
+      res.status(httpResponse.statusCode).json(jsonResponse);
+    } catch (error: any) {
+      console.error("PayPal create banner ad order error:", error);
+      res.status(500).json({ error: error.message || "Failed to create order" });
+    }
+  });
+
   // PayPal - Capture order payment (after user approval)
   app.post("/api/paypal/capture-order/:orderID", isAuthenticated, async (req: any, res) => {
     try {
@@ -422,6 +467,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(httpResponse.statusCode).json(jsonResponse);
     } catch (error: any) {
       console.error("PayPal capture order error:", error);
+      res.status(500).json({ error: error.message || "Failed to capture order" });
+    }
+  });
+
+  // PayPal - Capture banner ad payment (public - no auth required)
+  app.post("/api/paypal/capture-banner-ad/:orderID/:bannerAdOrderId", async (req, res) => {
+    try {
+      const { orderID, bannerAdOrderId } = req.params;
+      
+      // Capture the PayPal order
+      const collect = {
+        id: orderID,
+        prefer: "return=minimal",
+      };
+
+      const { body, ...httpResponse } = await ordersController.captureOrder(collect);
+      const jsonResponse = JSON.parse(String(body));
+      
+      // CRITICAL SECURITY: Verify the captured order matches the banner ad order
+      if (jsonResponse.status === 'COMPLETED') {
+        // Extract customId from purchase units
+        const customId = jsonResponse.purchase_units?.[0]?.custom_id || '';
+        
+        // Parse customId format: "banner-ad:{orderId}|sponsor:{email}"
+        const orderIdMatch = customId.match(/banner-ad:([^|]+)/);
+        const capturedOrderId = orderIdMatch ? orderIdMatch[1] : null;
+        
+        if (!capturedOrderId || capturedOrderId !== bannerAdOrderId) {
+          console.error(`❌ Payment fraud attempt: PayPal order ${orderID} customId mismatch. Expected ${bannerAdOrderId}, got ${capturedOrderId}`);
+          return res.status(400).json({ 
+            error: "Payment validation failed",
+            details: "Order ID mismatch - payment cannot be applied to this order" 
+          });
+        }
+        
+        // Reload the banner ad order to verify it exists and is pending
+        const order = await storage.getBannerAdOrder(bannerAdOrderId);
+        if (!order) {
+          console.error(`❌ Banner ad order ${bannerAdOrderId} not found during payment capture`);
+          return res.status(404).json({ error: "Order not found" });
+        }
+        
+        if (order.paymentStatus === 'paid') {
+          console.warn(`⚠️ Banner ad order ${bannerAdOrderId} already marked as paid`);
+          return res.status(400).json({ error: "Order already paid" });
+        }
+        
+        // Update payment status
+        await storage.updateBannerAdOrder(bannerAdOrderId, {
+          paymentStatus: 'paid',
+          paypalOrderId: orderID,
+          paypalPaymentDate: new Date(),
+        });
+        
+        console.log(`✅ Banner ad order ${bannerAdOrderId} payment captured: ${orderID}`);
+      }
+      
+      res.status(httpResponse.statusCode).json(jsonResponse);
+    } catch (error: any) {
+      console.error("PayPal capture banner ad order error:", error);
       res.status(500).json({ error: error.message || "Failed to capture order" });
     }
   });
@@ -695,6 +800,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } else {
       errorDiv.innerHTML = '<div class="error">Card payments are not available.</div>';
+    }
+  </script>
+</body>
+</html>
+    `);
+  });
+
+  // Banner Ad Payment Page - Public (no auth required)
+  app.get("/banner-ad-payment", async (req, res) => {
+    const { orderId } = req.query;
+    
+    if (!orderId) {
+      return res.status(400).send("Order ID is required");
+    }
+    
+    // Load order to get amount and details
+    const order = await storage.getBannerAdOrder(orderId as string);
+    if (!order) {
+      return res.status(404).send("Order not found");
+    }
+    
+    const amount = order.grandTotal;
+    const title = order.title;
+    
+    res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Banner Ad Payment - Ready Set Fly</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: #f9fafb; }
+    .container { max-width: 500px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 24px; }
+    .header h1 { font-size: 24px; color: #111827; margin-bottom: 8px; }
+    .header p { color: #6b7280; font-size: 14px; }
+    .card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 16px; }
+    .order-info { background: #f3f4f6; padding: 16px; border-radius: 8px; margin-bottom: 20px; }
+    .order-info h3 { font-size: 14px; color: #6b7280; margin-bottom: 6px; }
+    .order-info p { font-size: 16px; color: #111827; font-weight: 500; }
+    .amount { text-align: center; font-size: 36px; font-weight: bold; color: #1e40af; margin-bottom: 24px; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 6px; color: #374151; }
+    .field-container { border: 1px solid #d1d5db; border-radius: 8px; padding: 12px; min-height: 44px; background: #fff; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .btn { width: 100%; padding: 14px; background: #1e40af; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .success { background: #d1fae5; color: #047857; padding: 16px; border-radius: 8px; margin-bottom: 16px; text-align: center; }
+    .error { color: #dc2626; background: #fee2e2; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+  </style>
+  <script src="https://www.paypal.com/sdk/js?client-id=${process.env.PAYPAL_CLIENT_ID}&components=card-fields&disable-funding=paylater"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Complete Payment</h1>
+      <p>Secure payment powered by PayPal</p>
+    </div>
+    
+    <div class="card">
+      <div class="order-info">
+        <h3>Banner Ad Campaign</h3>
+        <p>${title}</p>
+      </div>
+      
+      <div class="amount">$${amount}</div>
+      
+      <div id="success-message"></div>
+      <div id="error-message"></div>
+      
+      <div id="payment-fields">
+        <div class="field">
+          <label>Cardholder Name</label>
+          <div id="card-name-field" class="field-container"></div>
+        </div>
+        
+        <div class="field">
+          <label>Card Number</label>
+          <div id="card-number-field" class="field-container"></div>
+        </div>
+        
+        <div class="field-row">
+          <div class="field">
+            <label>Expiry Date</label>
+            <div id="card-expiry-field" class="field-container"></div>
+          </div>
+          <div class="field">
+            <label>CVV</label>
+            <div id="card-cvv-field" class="field-container"></div>
+          </div>
+        </div>
+        
+        <button id="pay-button" class="btn" disabled>Loading...</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const button = document.getElementById('pay-button');
+    const errorDiv = document.getElementById('error-message');
+    const successDiv = document.getElementById('success-message');
+    const paymentFields = document.getElementById('payment-fields');
+    
+    const cardFields = paypal.CardFields({
+      createOrder: async () => {
+        const response = await fetch('/api/paypal/create-order-banner-ad', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: '${orderId}'
+          })
+        });
+        const order = await response.json();
+        if (!order.id) {
+          throw new Error(order.error || 'Failed to create payment');
+        }
+        return order.id;
+      },
+      onApprove: async (data) => {
+        button.disabled = true;
+        button.textContent = 'Processing...';
+        
+        try {
+          // Capture the payment
+          const response = await fetch('/api/paypal/capture-banner-ad/' + data.orderID + '/${orderId}', {
+            method: 'POST'
+          });
+          const result = await response.json();
+          
+          if (result.status === 'COMPLETED') {
+            paymentFields.style.display = 'none';
+            successDiv.innerHTML = '<div class="success"><h3>Payment Successful!</h3><p>Thank you for your payment. Your banner ad order will be reviewed and activated within 1 business day. We will contact you at ${order.sponsorEmail}.</p></div>';
+            
+            setTimeout(() => {
+              window.location.href = '/';
+            }, 5000);
+          } else {
+            throw new Error('Payment not completed');
+          }
+        } catch (error) {
+          errorDiv.innerHTML = '<div class="error">Payment capture failed. Please contact support@readysetfly.us with order ID: ${orderId}</div>';
+          button.disabled = false;
+          button.textContent = 'Pay $${amount}';
+        }
+      },
+      onError: (error) => {
+        console.error('PayPal error:', error);
+        errorDiv.innerHTML = '<div class="error">Payment error. Please check your card details and try again.</div>';
+      }
+    });
+
+    if (cardFields.isEligible()) {
+      cardFields.NameField().render('#card-name-field');
+      cardFields.NumberField().render('#card-number-field');
+      cardFields.ExpiryField().render('#card-expiry-field');
+      cardFields.CVVField().render('#card-cvv-field');
+      
+      button.disabled = false;
+      button.textContent = 'Pay $${amount}';
+      
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        button.textContent = 'Processing...';
+        await cardFields.submit();
+      });
+    } else {
+      errorDiv.innerHTML = '<div class="error">Card payments are not available. Please contact support@readysetfly.us.</div>';
     }
   </script>
 </body>
@@ -2931,6 +3204,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const order = await storage.createBannerAdOrder(validatedOrderData);
+      
+      // Send email notification to sponsor (non-blocking)
+      (async () => {
+        try {
+          const { getUncachableResendClient } = await import("./resendClient");
+          const { getBannerAdOrderEmailHtml, getBannerAdOrderEmailText } = await import("./email-templates");
+          
+          const { client, fromEmail } = await getUncachableResendClient();
+          
+          await client.emails.send({
+            from: fromEmail,
+            to: order.sponsorEmail,
+            subject: `Banner Ad Order Confirmation - ${order.title}`,
+            html: getBannerAdOrderEmailHtml(order.sponsorName, {
+              orderId: order.id,
+              title: order.title,
+              tier: order.tier,
+              monthlyRate: order.monthlyRate,
+              creationFee: order.creationFee,
+              totalAmount: order.totalAmount,
+              grandTotal: order.grandTotal,
+              promoCode: order.promoCode || undefined,
+              discountAmount: order.discountAmount || undefined,
+            }),
+            text: getBannerAdOrderEmailText(order.sponsorName, {
+              orderId: order.id,
+              title: order.title,
+              tier: order.tier,
+              monthlyRate: order.monthlyRate,
+              creationFee: order.creationFee,
+              totalAmount: order.totalAmount,
+              grandTotal: order.grandTotal,
+              promoCode: order.promoCode || undefined,
+              discountAmount: order.discountAmount || undefined,
+            }),
+          });
+          
+          console.log(`✅ Banner ad order confirmation email sent to ${order.sponsorEmail}`);
+        } catch (emailError) {
+          console.error('❌ Failed to send banner ad order email:', emailError);
+        }
+      })();
+      
       res.status(201).json(order);
     } catch (error) {
       console.error('Banner ad order creation error:', error);

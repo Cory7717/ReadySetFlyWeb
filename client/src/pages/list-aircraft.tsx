@@ -105,18 +105,28 @@ export default function ListAircraft() {
           const error = await response.json();
           throw new Error(error.error || "Submission failed");
         }
-        return await response.json();
+        return { data: await response.json(), hasVerificationDocs: hasFiles };
       } else {
         // Use apiRequest for JSON
-        return await apiRequest("POST", "/api/aircraft", formData);
+        return { data: await apiRequest("POST", "/api/aircraft", formData), hasVerificationDocs: false };
       }
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/aircraft"] });
-      toast({
-        title: "Aircraft Listed",
-        description: "Your aircraft has been successfully listed.",
-      });
+      
+      // Show different message based on whether verification docs were uploaded
+      if (result.hasVerificationDocs) {
+        toast({
+          title: "Listing Submitted",
+          description: "Your aircraft listing is pending admin review. It will be visible in the marketplace once approved.",
+        });
+      } else {
+        toast({
+          title: "Aircraft Listed",
+          description: "Your aircraft has been successfully listed and is now visible in the rental marketplace.",
+        });
+      }
+      
       navigate("/dashboard");
     },
     onError: (error: any) => {

@@ -43,6 +43,8 @@ import {
   type InsertRefreshToken,
   type OAuthExchangeToken,
   type InsertOAuthExchangeToken,
+  type ContactSubmission,
+  type InsertContactSubmission,
   users,
   aircraftListings,
   marketplaceListings,
@@ -66,6 +68,7 @@ import {
   promoAlerts,
   refreshTokens,
   oauthExchangeTokens,
+  contactSubmissions,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray } from "drizzle-orm";
@@ -263,6 +266,10 @@ export interface IStorage {
   markNotificationAsRead(id: string): Promise<AdminNotification | undefined>;
   markNotificationAsActionable(id: string, isActionable: boolean): Promise<AdminNotification | undefined>;
   deleteAdminNotification(id: string): Promise<boolean>;
+  
+  // Contact Form Submissions
+  createContactSubmission(submission: InsertContactSubmission): Promise<ContactSubmission>;
+  updateContactSubmissionEmailStatus(id: string, sent: boolean): Promise<ContactSubmission | undefined>;
   
   // Banner Ad Orders
   getAllBannerAdOrders(): Promise<BannerAdOrder[]>;
@@ -1871,6 +1878,21 @@ export class DatabaseStorage implements IStorage {
   async deleteAdminNotification(id: string): Promise<boolean> {
     const result = await db.delete(adminNotifications).where(eq(adminNotifications.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Contact Form Submissions
+  async createContactSubmission(submission: InsertContactSubmission): Promise<ContactSubmission> {
+    const [contactSubmission] = await db.insert(contactSubmissions).values(submission).returning();
+    return contactSubmission;
+  }
+
+  async updateContactSubmissionEmailStatus(id: string, sent: boolean): Promise<ContactSubmission | undefined> {
+    const [submission] = await db
+      .update(contactSubmissions)
+      .set({ emailSent: sent, emailSentAt: sent ? new Date() : null })
+      .where(eq(contactSubmissions.id, id))
+      .returning();
+    return submission;
   }
 
   // Banner Ad Orders

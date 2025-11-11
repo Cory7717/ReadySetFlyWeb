@@ -81,6 +81,88 @@ const upload = multer({
   }
 });
 
+// IP-based rate limiting middleware
+interface RateLimitOptions {
+  windowMs: number;
+  max: number;
+  dailyMax?: number;
+  message?: string;
+}
+
+function createIpRateLimiter(options: RateLimitOptions) {
+  const { windowMs, max, dailyMax, message = "Too many requests, please try again later" } = options;
+  const requests = new Map<string, number[]>();
+
+  // Cleanup stale entries every 5 minutes to prevent memory growth
+  setInterval(() => {
+    const now = Date.now();
+    const dayInMs = 24 * 60 * 60 * 1000;
+    for (const [ip, timestamps] of requests.entries()) {
+      const recentTimestamps = timestamps.filter(t => now - t < dayInMs);
+      if (recentTimestamps.length === 0) {
+        requests.delete(ip);
+      } else {
+        requests.set(ip, recentTimestamps);
+      }
+    }
+  }, 5 * 60 * 1000);
+
+  return (req: any, res: any, next: any) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    const now = Date.now();
+    const dayInMs = 24 * 60 * 60 * 1000;
+    
+    if (!requests.has(ip)) {
+      requests.set(ip, []);
+    }
+    
+    const timestamps = requests.get(ip)!;
+    
+    // Keep all timestamps within 24 hours for daily limit tracking
+    const dailyTimestamps = timestamps.filter(t => now - t < dayInMs);
+    
+    // Check daily limit first if configured
+    if (dailyMax && dailyTimestamps.length >= dailyMax) {
+      const oldestDailyTimestamp = Math.min(...dailyTimestamps);
+      const retryAfter = Math.ceil((dayInMs - (now - oldestDailyTimestamp)) / 1000);
+      
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({ 
+        error: "Daily request limit exceeded",
+        retryAfter 
+      });
+    }
+    
+    // Check rolling window limit
+    const recentTimestamps = dailyTimestamps.filter(t => now - t < windowMs);
+    
+    if (recentTimestamps.length >= max) {
+      const oldestTimestamp = Math.min(...recentTimestamps);
+      const retryAfter = Math.ceil((windowMs - (now - oldestTimestamp)) / 1000);
+      
+      res.set('Retry-After', String(retryAfter));
+      return res.status(429).json({ 
+        error: message,
+        retryAfter 
+      });
+    }
+    
+    // Record this request and update with all daily timestamps
+    dailyTimestamps.push(now);
+    requests.set(ip, dailyTimestamps);
+    
+    next();
+  };
+}
+
+// Rate limiter for contact form: 5 requests per 10 minutes, 20 per day
+const contactFormRateLimiter = createIpRateLimiter({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 5,
+  dailyMax: 20,
+  message: "Too many contact form submissions. Please try again later."
+});
+
 // Verification middleware - checks if user is verified
 // CRITICAL: For rental-related endpoints (aircraft listings, rental bookings),
 // verification is ALWAYS enforced for safety and security, regardless of any flags
@@ -978,8 +1060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Contact Form - Public (no auth required)
-  // Note: Rate limiting is handled by middleware for public endpoints
-  app.post("/api/contact", async (req, res) => {
+  app.post("/api/contact", contactFormRateLimiter, async (req, res) => {
     try {
       // Server-side validation using Zod schema
       const contactFormSchema = z.object({
@@ -999,17 +1080,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const data = validationResult.data;
+      const ip = req.ip || req.connection.remoteAddress || 'unknown';
       
-      // Basic abuse protection: Log submission for tracking
-      console.log(`Contact form submission from ${data.email} (${data.firstName} ${data.lastName})`);
+      // Persist submission to database BEFORE sending email (audit trail)
+      const submission = await storage.createContactSubmission({
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        subject: data.subject,
+        message: data.message,
+        ipAddress: ip,
+        emailSent: false,
+        emailSentAt: null,
+      });
       
-      // Send email notification to support
-      await sendContactFormEmail(data);
+      console.log(`Contact form submission persisted: ${submission.id} from ${data.email}`);
       
+      // Send email asynchronously (non-blocking)
+      sendContactFormEmail(data)
+        .then(async () => {
+          // Update email status on success
+          await storage.updateContactSubmissionEmailStatus(submission.id, true);
+          console.log(`Email sent successfully for submission ${submission.id}`);
+        })
+        .catch((error) => {
+          // Log error but don't block response - submission is already persisted
+          console.error(`Failed to send email for submission ${submission.id}:`, error);
+        });
+      
+      // Respond immediately after persisting (don't wait for email)
       res.json({ success: true });
     } catch (error) {
       console.error('Contact form error:', error);
-      res.status(500).json({ error: "Failed to send message" });
+      res.status(500).json({ error: "Failed to process contact form submission" });
     }
   });
 

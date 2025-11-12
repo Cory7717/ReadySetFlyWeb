@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +49,7 @@ const tiers = [
 export function UpgradeListingModal({ listing, isOpen, onClose }: UpgradeListingModalProps) {
   const [selectedTier, setSelectedTier] = useState<string>('');
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
   const currentTier = tiers.find(t => t.id === listing.tier);
   const currentTierIndex = tiers.findIndex(t => t.id === listing.tier);
@@ -67,6 +69,7 @@ export function UpgradeListingModal({ listing, isOpen, onClose }: UpgradeListing
         description: "Your listing has been upgraded successfully!",
       });
       onClose();
+      navigate("/my-listings");
     },
     onError: (error: any) => {
       toast({

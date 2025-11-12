@@ -16,10 +16,10 @@ import { Search, SlidersHorizontal, Gift, X } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
 
 const categories = [
-  { id: "aircraft-sale", label: "Aircraft For Sale", fee: "$40-125/mo" },
-  { id: "job", label: "Aviation Jobs", fee: "$25/mo" },
-  { id: "cfi", label: "CFIs", fee: "$40/mo" },
-  { id: "flight-school", label: "Flight Schools", fee: "$175/mo" },
+  { id: "aircraft-sale", label: "Aircraft For Sale", fee: "$25-100/mo" },
+  { id: "job", label: "Aviation Jobs", fee: "$40/mo" },
+  { id: "cfi", label: "CFIs", fee: "$30/mo" },
+  { id: "flight-school", label: "Flight Schools", fee: "$250/mo" },
   { id: "mechanic", label: "Mechanics", fee: "$40/mo" },
   { id: "charter", label: "Charter Services", fee: "$250/mo" },
 ];

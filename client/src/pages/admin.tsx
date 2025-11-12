@@ -4594,130 +4594,265 @@ export default function AdminDashboard() {
           if (!open) {
             setEditingBanner(null);
             bannerForm.reset();
+            setBannerImageUrl("");
           }
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden" data-testid="dialog-create-banner">
-          <DialogHeader>
-            <DialogTitle>Manage Live Banner Ad</DialogTitle>
-            <DialogDescription>
-              Adjust the end date and status for this active banner campaign. Creative content is locked and cannot be edited.
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...bannerForm}>
-            <form 
-              onSubmit={bannerForm.handleSubmit((data) => {
-                if (!editingBanner) {
-                  toast({
-                    title: "Error",
-                    description: "Can only edit existing banner ads. Banner ads are created by activating paid orders.",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                
-                // Only send editable fields
-                const payload = {
-                  endDate: data.endDate instanceof Date ? data.endDate as any : data.endDate as any,
-                  isActive: data.isActive,
-                };
-                
-                updateBannerAdMutation.mutate({ id: editingBanner.id, data: payload });
-              })} 
-              className="space-y-4"
-            >
-              <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-4">
-                  {/* Show immutable creative content for reference */}
-                  {editingBanner && (
-                    <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
-                      <p className="text-sm font-medium text-muted-foreground">Campaign Details (Read-Only)</p>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <span className="font-medium">Title:</span> {editingBanner.title}
-                        </div>
-                        {editingBanner.description && (
-                          <div>
-                            <span className="font-medium">Description:</span> {editingBanner.description}
-                          </div>
-                        )}
-                        {editingBanner.link && (
-                          <div className="col-span-2">
-                            <span className="font-medium">Link:</span> <a href={editingBanner.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{editingBanner.link}</a>
-                          </div>
-                        )}
-                        <div className="col-span-2">
-                          <span className="font-medium">Start Date:</span> {new Date(editingBanner.startDate).toLocaleDateString()}
-                        </div>
-                      </div>
-                      {editingBanner.imageUrl && (
-                        <img src={editingBanner.imageUrl} alt={editingBanner.title} className="w-full h-24 object-cover rounded" />
+        <DialogContent className="max-w-3xl p-0" data-testid="dialog-create-banner">
+          <div className="flex flex-col max-h-[90vh]">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>Edit Live Banner Ad</DialogTitle>
+              <DialogDescription>
+                Admin override: You can edit all banner ad fields including creative content, scheduling, and status.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...bannerForm}>
+              <form 
+                onSubmit={bannerForm.handleSubmit((data) => {
+                  if (!editingBanner) {
+                    toast({
+                      title: "Error",
+                      description: "Can only edit existing banner ads. Banner ads are created by activating paid orders.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  // Admin can update ALL fields
+                  const payload = {
+                    title: data.title,
+                    description: data.description,
+                    imageUrl: data.imageUrl,
+                    link: data.link,
+                    placements: data.placements,
+                    category: data.category,
+                    startDate: data.startDate,
+                    endDate: data.endDate,
+                    isActive: data.isActive,
+                  };
+                  
+                  updateBannerAdMutation.mutate({ id: editingBanner.id, data: payload });
+                })} 
+                className="flex flex-col flex-1 min-h-0"
+              >
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                  {/* Banner Creative */}
+                  <div className="space-y-4 p-4 border rounded-md">
+                    <h3 className="font-semibold text-sm">Banner Creative</h3>
+                    
+                    <FormField
+                      control={bannerForm.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Banner Title</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Premium Aircraft Rentals" {...field} data-testid="input-banner-title" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
                       )}
+                    />
+                    
+                    <FormField
+                      control={bannerForm.control}
+                      name="description"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Description/Tagline (Optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Fly with confidence" {...field} value={field.value ?? ""} data-testid="input-banner-description" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={bannerForm.control}
+                      name="link"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Link URL (Optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="https://example.com" {...field} value={field.value ?? ""} data-testid="input-banner-link" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={bannerForm.control}
+                      name="imageUrl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Banner Image</FormLabel>
+                          <FormControl>
+                            <div className="space-y-2">
+                              <Input 
+                                placeholder="Image URL" 
+                                {...field} 
+                                value={field.value ?? ""}
+                                data-testid="input-banner-image-url"
+                              />
+                              <ObjectUploader
+                                onGetUploadParameters={handleBannerGetUploadParameters}
+                                onUploadComplete={handleBannerUploadComplete}
+                                allowedFileTypes={['image/*']}
+                                maxNumberOfFiles={1}
+                              />
+                              {bannerImageUrl && (
+                                <img 
+                                  src={bannerImageUrl} 
+                                  alt="Banner preview" 
+                                  className="w-full h-32 object-cover rounded-md"
+                                />
+                              )}
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Placement & Category */}
+                  <div className="space-y-4 p-4 border rounded-md">
+                    <h3 className="font-semibold text-sm">Banner Placement</h3>
+                    
+                    <FormField
+                      control={bannerForm.control}
+                      name="placements"
+                      render={() => (
+                        <FormItem>
+                          <FormLabel>Display On</FormLabel>
+                          <div className="grid grid-cols-2 gap-2">
+                            {[
+                              { value: 'home', label: 'Homepage' },
+                              { value: 'rentals', label: 'Aircraft Rentals' },
+                              { value: 'marketplace', label: 'Marketplace Hub' },
+                            ].map((placement) => (
+                              <FormField
+                                key={placement.value}
+                                control={bannerForm.control}
+                                name="placements"
+                                render={({ field }) => (
+                                  <FormItem className="flex items-center gap-2 space-y-0">
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={field.value?.includes(placement.value as any) ?? false}
+                                        onCheckedChange={(checked) => {
+                                          const current = field.value || [];
+                                          const updated = checked
+                                            ? [...current, placement.value]
+                                            : current.filter((v) => v !== placement.value);
+                                          field.onChange(updated);
+                                        }}
+                                        data-testid={`checkbox-banner-placement-${placement.value}`}
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="cursor-pointer font-normal">{placement.label}</FormLabel>
+                                  </FormItem>
+                                )}
+                              />
+                            ))}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  {/* Scheduling & Status */}
+                  <div className="space-y-4 p-4 border rounded-md">
+                    <h3 className="font-semibold text-sm">Scheduling & Status</h3>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={bannerForm.control}
+                        name="startDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Start Date</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="date" 
+                                value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : (typeof field.value === 'string' ? (field.value as string).split('T')[0] : '')}
+                                onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                                data-testid="input-banner-start-date"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={bannerForm.control}
+                        name="endDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>End Date</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="date" 
+                                value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : (typeof field.value === 'string' ? (field.value as string).split('T')[0] : '')}
+                                onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                                data-testid="input-banner-end-date"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
-                  )}
-                  
-                  {/* Editable Fields Only */}
-                  <FormField
-                    control={bannerForm.control}
-                    name="endDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Campaign End Date</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="date" 
-                            value={field.value instanceof Date ? field.value.toISOString().split('T')[0] : (typeof field.value === 'string' ? (field.value as string).split('T')[0] : '')}
-                            onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
-                            data-testid="input-banner-end-date"
-                          />
-                        </FormControl>
-                        <FormDescription>Extend or shorten the campaign by adjusting the end date</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <FormField
-                    control={bannerForm.control}
-                    name="isActive"
-                    render={({ field }) => (
-                      <FormItem className="flex items-center gap-2 space-y-0">
-                        <FormControl>
-                          <Checkbox 
-                            checked={field.value ?? false} 
-                            onCheckedChange={field.onChange}
-                            data-testid="checkbox-banner-active"
-                          />
-                        </FormControl>
-                        <FormLabel className="cursor-pointer">Active (show banner immediately)</FormLabel>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-              </div>
-              
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setBannerDialogOpen(false);
-                    setEditingBanner(null);
-                    bannerForm.reset();
-                  }}
-                  data-testid="button-cancel-edit-banner"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={updateBannerAdMutation.isPending}
-                  data-testid="button-submit-edit-banner"
-                >
-                  {updateBannerAdMutation.isPending ? "Updating..." : "Update Campaign"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+                    
+                    <FormField
+                      control={bannerForm.control}
+                      name="isActive"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-2 space-y-0">
+                          <FormControl>
+                            <Checkbox 
+                              checked={field.value ?? false} 
+                              onCheckedChange={field.onChange}
+                              data-testid="checkbox-banner-active"
+                            />
+                          </FormControl>
+                          <FormLabel className="cursor-pointer">Active (show banner immediately)</FormLabel>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+                
+                <DialogFooter className="px-6 pb-6">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setBannerDialogOpen(false);
+                      setEditingBanner(null);
+                      bannerForm.reset();
+                      setBannerImageUrl("");
+                    }}
+                    data-testid="button-cancel-edit-banner"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={updateBannerAdMutation.isPending}
+                    data-testid="button-submit-edit-banner"
+                  >
+                    {updateBannerAdMutation.isPending ? "Updating..." : "Update Banner Ad"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </div>
         </DialogContent>
       </Dialog>
 

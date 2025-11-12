@@ -4597,8 +4597,8 @@ export default function AdminDashboard() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl p-0" data-testid="dialog-create-banner">
-          <div className="flex flex-col max-h-[90vh]">
+        <DialogContent className="max-w-2xl max-h-[90vh] p-0 flex flex-col" data-testid="dialog-create-banner">
+          <div className="flex flex-col flex-1 min-h-0">
             <DialogHeader className="px-6 pt-6">
               <DialogTitle>Manage Live Banner Ad</DialogTitle>
               <DialogDescription>
@@ -4912,7 +4912,8 @@ export default function AdminDashboard() {
                       <FormLabel>Display On</FormLabel>
                       <div className="grid grid-cols-2 gap-2">
                         {[
-                          { value: 'homepage', label: 'Homepage' },
+                          { value: 'home', label: 'Homepage (Landing Page)' },
+                          { value: 'rentals', label: 'Aircraft Rentals Page' },
                           { value: 'marketplace', label: 'Marketplace Hub' },
                           { value: 'aircraft-sale', label: 'Aircraft for Sale' },
                           { value: 'jobs', label: 'Aviation Jobs' },

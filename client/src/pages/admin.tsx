@@ -358,6 +358,20 @@ export default function AdminDashboard() {
     enabled: activeTab === "banners",
   });
 
+  // Create orderId→bannerAd lookup to check activation status
+  const bannerAdsByOrderId = useMemo(() => {
+    const map = new Map<string, BannerAd>();
+    bannerAds.forEach(ad => {
+      if (ad.orderId) {
+        map.set(ad.orderId, ad);
+      }
+    });
+    return map;
+  }, [bannerAds]);
+
+  // Helper to check if an order has been activated
+  const isOrderActivated = (orderId: string) => bannerAdsByOrderId.has(orderId);
+
   // Approve submission mutation
   const approveMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -865,12 +879,22 @@ export default function AdminDashboard() {
         description: "Banner ad is now live"
       });
     },
-    onError: (error: Error) => {
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to activate order",
-        variant: "destructive" 
-      });
+    onError: (error: any) => {
+      // Handle 409 conflict (order already activated)
+      if (error?.status === 409) {
+        toast({
+          title: "Order already activated",
+          description: "This order has an active banner ad.",
+          variant: "destructive",
+        });
+      } else {
+        // Handle other errors
+        toast({
+          title: "Activation failed",
+          description: error?.message || "Failed to activate banner ad order",
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -3456,16 +3480,23 @@ export default function AdminDashboard() {
                             )}
                             {/* Activate button - only show for paid approved orders */}
                             {order.paymentStatus === 'paid' && order.approvalStatus === 'approved' && (
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => activateOrderMutation.mutate(order.id)}
-                                disabled={activateOrderMutation.isPending}
-                                data-testid={`button-activate-order-${order.id}`}
-                              >
-                                <Rocket className="h-4 w-4 mr-1" />
-                                Activate
-                              </Button>
+                              isOrderActivated(order.id) ? (
+                                <Badge variant="secondary" className="cursor-not-allowed" data-testid={`badge-activated-${order.id}`}>
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Already Activated
+                                </Badge>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => activateOrderMutation.mutate(order.id)}
+                                  disabled={activateOrderMutation.isPending}
+                                  data-testid={`button-activate-order-${order.id}`}
+                                >
+                                  <Rocket className="h-4 w-4 mr-1" />
+                                  Activate
+                                </Button>
+                              )
                             )}
                             <Button
                               size="sm"
@@ -3514,7 +3545,8 @@ export default function AdminDashboard() {
                               }}
                               data-testid={`button-edit-order-${order.id}`}
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit Order Details
                             </Button>
                             <Button
                               size="sm"

@@ -381,3 +381,331 @@ Ready Set Fly - Connecting Pilots with Aircraft
     console.error('Failed to send contact form email:', error);
   }
 }
+
+// Banner Ad Expiration Reminder (2 days before endDate)
+export function getBannerAdExpirationReminderHtml(
+  sponsorName: string,
+  orderDetails: {
+    title: string;
+    company: string;
+    tier: string;
+    endDate: string;
+    startDate: string;
+  }
+): string {
+  const tierDisplay = orderDetails.tier === "1month" ? "1 Month" :
+                     orderDetails.tier === "3months" ? "3 Months" :
+                     orderDetails.tier === "6months" ? "6 Months" :
+                     "12 Months";
+  
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #dc2626; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f9fafb; }
+    .alert-box { background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 8px; padding: 15px; margin: 15px 0; }
+    .info-box { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 10px 0; }
+    .button { display: inline-block; background: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 10px 0; }
+    .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Action Required: Banner Campaign Ending Soon</h1>
+    </div>
+    
+    <div class="content">
+      <h2>Hi ${sponsorName},</h2>
+      
+      <div class="alert-box">
+        <h3 style="margin-top: 0; color: #dc2626;">Your banner campaign ends in 2 days</h3>
+        <p style="margin-bottom: 0;">Your ad will be automatically deactivated at midnight on <strong>${new Date(orderDetails.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</strong> and will no longer appear on Ready Set Fly.</p>
+      </div>
+      
+      <div class="info-box">
+        <h3>Campaign Summary</h3>
+        <p><strong>Company:</strong> ${orderDetails.company}</p>
+        <p><strong>Title:</strong> ${orderDetails.title}</p>
+        <p><strong>Tier:</strong> ${tierDisplay}</p>
+        <p><strong>Started:</strong> ${new Date(orderDetails.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+        <p style="margin-bottom: 0;"><strong>Ends:</strong> ${new Date(orderDetails.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+      </div>
+      
+      <h3>What Happens Next?</h3>
+      <p>At expiration, your banner ad will:</p>
+      <ul>
+        <li>Stop displaying across all placements on Ready Set Fly</li>
+        <li>Be removed from the homepage, marketplace, and rental pages</li>
+        <li>No longer receive impressions or clicks</li>
+      </ul>
+      
+      <h3>Interested in Renewing?</h3>
+      <p>We currently handle banner ad renewals manually. To continue your campaign:</p>
+      <ul>
+        <li>Reply to this email to request a renewal quote</li>
+        <li>Our team will send you a new checkout link within 1 business day</li>
+        <li>You can choose the same tier or upgrade to a longer duration</li>
+      </ul>
+      
+      <div style="text-align: center; margin: 20px 0;">
+        <a href="mailto:support@readysetfly.us?subject=Renewal Request for ${encodeURIComponent(orderDetails.title)}" class="button">
+          Request Renewal Quote
+        </a>
+      </div>
+      
+      <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
+        <strong>Note:</strong> Auto-renewal is not currently available. Please contact us before your expiration date to ensure uninterrupted ad visibility.
+      </p>
+      
+      <div style="background: #f3f4f6; border-radius: 8px; padding: 15px; margin: 20px 0; font-size: 12px; color: #6b7280;">
+        <p style="margin: 0;"><strong>Policy Reminder:</strong> Ready Set Fly operates on a strict no-refunds policy for all banner ad campaigns. Services are available to US residents only. All fees and sales tax apply to renewed campaigns.</p>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>Ready Set Fly - Aviation Marketplace</p>
+      <p style="font-size: 12px;">Questions? Contact support@readysetfly.us</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+export function getBannerAdExpirationReminderText(
+  sponsorName: string,
+  orderDetails: {
+    title: string;
+    company: string;
+    tier: string;
+    endDate: string;
+    startDate: string;
+  }
+): string {
+  const tierDisplay = orderDetails.tier === "1month" ? "1 Month" :
+                     orderDetails.tier === "3months" ? "3 Months" :
+                     orderDetails.tier === "6months" ? "6 Months" :
+                     "12 Months";
+  
+  return `
+ACTION REQUIRED: Your Ready Set Fly banner campaign ends in 2 days
+
+Hi ${sponsorName},
+
+Your banner ad will be automatically deactivated at midnight on ${new Date(orderDetails.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} and will no longer appear on Ready Set Fly.
+
+CAMPAIGN SUMMARY
+----------------
+Company: ${orderDetails.company}
+Title: ${orderDetails.title}
+Tier: ${tierDisplay}
+Started: ${new Date(orderDetails.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+Ends: ${new Date(orderDetails.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+
+WHAT HAPPENS AT EXPIRATION?
+At expiration, your banner ad will:
+- Stop displaying across all placements on Ready Set Fly
+- Be removed from the homepage, marketplace, and rental pages
+- No longer receive impressions or clicks
+
+INTERESTED IN RENEWING?
+We currently handle banner ad renewals manually. To continue your campaign:
+- Reply to this email to request a renewal quote
+- Our team will send you a new checkout link within 1 business day
+- You can choose the same tier or upgrade to a longer duration
+
+Request renewal: support@readysetfly.us
+
+Note: Auto-renewal is not currently available. Please contact us before your expiration date to ensure uninterrupted ad visibility.
+
+POLICY REMINDER: Ready Set Fly operates on a strict no-refunds policy for all banner ad campaigns. Services are available to US residents only. All fees and sales tax apply to renewed campaigns.
+
+Ready Set Fly - Aviation Marketplace
+Questions? Contact support@readysetfly.us
+  `.trim();
+}
+
+// Marketplace Listing Expiration Reminder (2 days before expiresAt)
+export function getMarketplaceListingExpirationReminderHtml(
+  userName: string,
+  listingDetails: {
+    id: string;
+    title: string;
+    category: string;
+    tier: string;
+    expiresAt: string;
+  }
+): string {
+  const categoryDisplay = listingDetails.category === "aircraft-sale" ? "Aircraft for Sale" :
+                         listingDetails.category === "charter" ? "Charter Service" :
+                         listingDetails.category === "cfi" ? "CFI Instructor" :
+                         listingDetails.category === "flight-school" ? "Flight School" :
+                         listingDetails.category === "mechanic" ? "Mechanic Service" :
+                         "Job Listing";
+  
+  const tierDisplay = listingDetails.tier === "basic" ? "Basic" :
+                     listingDetails.tier === "standard" ? "Standard" :
+                     "Premium";
+  
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #dc2626; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f9fafb; }
+    .alert-box { background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 8px; padding: 15px; margin: 15px 0; }
+    .info-box { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 10px 0; }
+    .button { display: inline-block; background: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 10px 0; }
+    .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Renew Your Listing – 2 Days Left</h1>
+    </div>
+    
+    <div class="content">
+      <h2>Hi ${userName},</h2>
+      
+      <div class="alert-box">
+        <h3 style="margin-top: 0; color: #dc2626;">Your ${categoryDisplay} listing expires in 2 days</h3>
+        <p style="margin-bottom: 0;">Your listing will be automatically hidden from search results and removed from your active listings at midnight on <strong>${new Date(listingDetails.expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</strong>.</p>
+      </div>
+      
+      <div class="info-box">
+        <h3>Listing Details</h3>
+        <p><strong>Title:</strong> ${listingDetails.title}</p>
+        <p><strong>Category:</strong> ${categoryDisplay}</p>
+        <p><strong>Tier:</strong> ${tierDisplay}</p>
+        <p style="margin-bottom: 0;"><strong>Expires:</strong> ${new Date(listingDetails.expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+      </div>
+      
+      <h3>What Happens at Expiration?</h3>
+      <p>When your listing expires, it will:</p>
+      <ul>
+        <li>Be hidden from all marketplace search results</li>
+        <li>No longer appear in category browsing</li>
+        <li>Become inactive in your dashboard</li>
+        <li>Stop receiving views and inquiries</li>
+      </ul>
+      
+      <h3>Why Stay Active?</h3>
+      <p>Active listings benefit from:</p>
+      <ul>
+        <li>Continuous visibility in search results</li>
+        <li>Higher trust from potential buyers/clients</li>
+        <li>Ongoing lead generation</li>
+        <li>Professional marketplace presence</li>
+      </ul>
+      
+      <h3>How to Renew</h3>
+      <p>To renew your listing, visit your dashboard and create a new listing. You can duplicate your current listing to save time:</p>
+      <ol>
+        <li>Go to your Dashboard → My Listings</li>
+        <li>Find your expiring listing</li>
+        <li>Click "Create New Listing" to post again</li>
+        <li>Select your preferred tier and complete payment</li>
+      </ol>
+      
+      <div style="text-align: center; margin: 20px 0;">
+        <a href="${process.env.REPLIT_DEV_DOMAIN || 'https://readysetfly.us'}/dashboard" class="button">
+          Go to My Listings
+        </a>
+      </div>
+      
+      <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
+        <strong>Need Help?</strong> Reply to this email or contact support@readysetfly.us for assistance with renewing your listing.
+      </p>
+      
+      <div style="background: #f3f4f6; border-radius: 8px; padding: 15px; margin: 20px 0; font-size: 12px; color: #6b7280;">
+        <p style="margin: 0;"><strong>Policy Reminder:</strong> Ready Set Fly operates on a strict no-refunds policy. All marketplace fees and 8.25% sales tax apply to renewed listings. Services are available to US residents only.</p>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>Ready Set Fly - Aviation Marketplace</p>
+      <p style="font-size: 12px;">Questions? Contact support@readysetfly.us</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+export function getMarketplaceListingExpirationReminderText(
+  userName: string,
+  listingDetails: {
+    id: string;
+    title: string;
+    category: string;
+    tier: string;
+    expiresAt: string;
+  }
+): string {
+  const categoryDisplay = listingDetails.category === "aircraft-sale" ? "Aircraft for Sale" :
+                         listingDetails.category === "charter" ? "Charter Service" :
+                         listingDetails.category === "cfi" ? "CFI Instructor" :
+                         listingDetails.category === "flight-school" ? "Flight School" :
+                         listingDetails.category === "mechanic" ? "Mechanic Service" :
+                         "Job Listing";
+  
+  const tierDisplay = listingDetails.tier === "basic" ? "Basic" :
+                     listingDetails.tier === "standard" ? "Standard" :
+                     "Premium";
+  
+  return `
+RENEW YOUR LISTING – 2 DAYS LEFT
+
+Hi ${userName},
+
+Your ${categoryDisplay} listing expires in 2 days. Your listing will be automatically hidden from search results and removed from your active listings at midnight on ${new Date(listingDetails.expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
+
+LISTING DETAILS
+---------------
+Title: ${listingDetails.title}
+Category: ${categoryDisplay}
+Tier: ${tierDisplay}
+Expires: ${new Date(listingDetails.expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+
+WHAT HAPPENS AT EXPIRATION?
+When your listing expires, it will:
+- Be hidden from all marketplace search results
+- No longer appear in category browsing
+- Become inactive in your dashboard
+- Stop receiving views and inquiries
+
+WHY STAY ACTIVE?
+Active listings benefit from:
+- Continuous visibility in search results
+- Higher trust from potential buyers/clients
+- Ongoing lead generation
+- Professional marketplace presence
+
+HOW TO RENEW
+To renew your listing, visit your dashboard and create a new listing:
+1. Go to your Dashboard → My Listings
+2. Find your expiring listing
+3. Click "Create New Listing" to post again
+4. Select your preferred tier and complete payment
+
+View your listings: ${process.env.REPLIT_DEV_DOMAIN || 'https://readysetfly.us'}/dashboard
+
+Need Help? Reply to this email or contact support@readysetfly.us for assistance with renewing your listing.
+
+POLICY REMINDER: Ready Set Fly operates on a strict no-refunds policy. All marketplace fees and 8.25% sales tax apply to renewed listings. Services are available to US residents only.
+
+Ready Set Fly - Aviation Marketplace
+Questions? Contact support@readysetfly.us
+  `.trim();
+}

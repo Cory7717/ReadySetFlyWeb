@@ -27,6 +27,7 @@ The platform operates as a **monorepo** encompassing shared backend, web, and mo
 - **Mobile Marketplace Features**: Allows users to create listings in all categories with multi-step forms, tier selection, promo code integration, and payment processing.
 - **Contact Form System**: Public API endpoint for contact submissions with server-side validation, IP-based rate limiting, database persistence for all submissions, and asynchronous email delivery via Resend.
 - **Expiration Reminder System**: Automated 2-day expiration reminder emails for both banner ads and marketplace listings. Scheduled cron endpoint (`/api/cron/send-expiration-reminders`) checks daily for expiring items, sends professional reminder emails via Resend, and tracks sent status in database. Endpoint is secured with `X-Cron-Secret` header authentication.
+- **Listing Upgrade System**: PayPal-integrated tier upgrade flow for aircraft-sale listings. Users can upgrade from Basic ($25/mo) → Standard ($40/mo) → Premium ($100/mo) tiers through secure payment processing. Features include: modal-based tier selection, upgrade cost calculation with tax, checkout page integration, server-side pricing validation, ownership verification, downgrade prevention, and replay attack protection via upgradeTransactions tracking. Pricing configuration centralized in shared/config/listingPricing.ts for consistency.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database, hosted via Neon.

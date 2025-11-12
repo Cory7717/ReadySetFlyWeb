@@ -4546,6 +4546,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/admin/banner-ads/:id", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      console.log("[BANNER UPDATE] Request body:", req.body);
+      console.log("[BANNER UPDATE] Banner ID:", req.params.id);
+      
       // Only allow updating scheduling and status fields
       const allowedFields = ['endDate', 'isActive'];
       const updateData: Partial<{ endDate: Date | undefined; isActive: boolean }> = {};
@@ -4555,6 +4558,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updateData[field as keyof typeof updateData] = req.body[field];
         }
       }
+      
+      console.log("[BANNER UPDATE] Update data:", updateData);
       
       // Reject if trying to update immutable creative content
       const immutableFields = ['title', 'description', 'imageUrl', 'link', 'placements', 'category', 'startDate'];
@@ -4570,8 +4575,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!ad) {
         return res.status(404).json({ error: "Banner ad not found" });
       }
+      console.log("[BANNER UPDATE] Success! Updated ad:", ad);
       res.json(ad);
     } catch (error) {
+      console.error("[BANNER UPDATE] Error:", error);
       res.status(500).json({ error: "Failed to update banner ad" });
     }
   });

@@ -4549,32 +4549,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("[BANNER UPDATE] Request body:", req.body);
       console.log("[BANNER UPDATE] Banner ID:", req.params.id);
       
-      // Only allow updating scheduling and status fields
-      const allowedFields = ['endDate', 'isActive'];
-      const updateData: Partial<{ endDate: Date | undefined; isActive: boolean }> = {};
+      // Admin can update ALL fields
+      const updateData: any = {};
       
-      for (const field of allowedFields) {
+      // Handle date conversions
+      if (req.body.startDate) {
+        updateData.startDate = new Date(req.body.startDate);
+      }
+      if (req.body.endDate) {
+        updateData.endDate = new Date(req.body.endDate);
+      }
+      
+      // Copy all other fields
+      const fieldsToUpdate = ['title', 'description', 'imageUrl', 'link', 'placements', 'category', 'isActive'];
+      for (const field of fieldsToUpdate) {
         if (field in req.body) {
-          if (field === 'endDate' && req.body[field]) {
-            // Convert string date to Date object
-            updateData.endDate = new Date(req.body[field]);
-          } else {
-            updateData[field as keyof typeof updateData] = req.body[field];
-          }
+          updateData[field] = req.body[field];
         }
       }
       
       console.log("[BANNER UPDATE] Update data:", updateData);
-      
-      // Reject if trying to update immutable creative content
-      const immutableFields = ['title', 'description', 'imageUrl', 'link', 'placements', 'category', 'startDate'];
-      const attemptedImmutableUpdates = immutableFields.filter(field => field in req.body);
-      if (attemptedImmutableUpdates.length > 0) {
-        return res.status(403).json({ 
-          error: "Cannot update creative content",
-          message: `The following fields are immutable and cannot be changed: ${attemptedImmutableUpdates.join(', ')}. Only endDate and isActive can be modified.`
-        });
-      }
       
       const ad = await storage.updateBannerAd(req.params.id, updateData);
       if (!ad) {

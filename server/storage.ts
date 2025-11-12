@@ -2126,6 +2126,16 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
 
+    // Calculate proper end date based on tier duration
+    const startDate = order.startDate || new Date();
+    let endDate: Date = order.endDate || new Date(startDate);
+    
+    // If no endDate is set, calculate based on tier (30 days for all tiers)
+    if (!order.endDate) {
+      endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + 30);
+    }
+
     const bannerAdData: InsertBannerAd = {
       orderId: order.id,
       title: order.title,
@@ -2135,8 +2145,8 @@ export class DatabaseStorage implements IStorage {
       placements: order.placements,
       category: order.category,
       isActive: true,
-      startDate: order.startDate || new Date(),
-      endDate: order.endDate || new Date(),
+      startDate: startDate,
+      endDate: endDate,
     };
 
     const [ad] = await db.insert(bannerAds).values(bannerAdData).returning();

@@ -4555,7 +4555,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       for (const field of allowedFields) {
         if (field in req.body) {
-          updateData[field as keyof typeof updateData] = req.body[field];
+          if (field === 'endDate' && req.body[field]) {
+            // Convert string date to Date object
+            updateData.endDate = new Date(req.body[field]);
+          } else {
+            updateData[field as keyof typeof updateData] = req.body[field];
+          }
         }
       }
       

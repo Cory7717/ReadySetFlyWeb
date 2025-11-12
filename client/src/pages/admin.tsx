@@ -670,7 +670,7 @@ export default function AdminDashboard() {
           // Update form field with the uploaded URL
           const imageUrl = file.uploadURL.split('?')[0]; // Remove query params
           setBannerImageUrl(imageUrl);
-          bannerForm.setValue('imageUrl', imageUrl);
+          bannerForm.setValue('imageUrl', imageUrl, { shouldValidate: true });
           
           toast({ 
             title: "Image uploaded successfully",
@@ -4702,9 +4702,9 @@ export default function AdminDashboard() {
                                 allowedFileTypes={['image/*']}
                                 maxNumberOfFiles={1}
                               />
-                              {bannerImageUrl && (
+                              {(field.value || bannerImageUrl) && (
                                 <img 
-                                  src={bannerImageUrl} 
+                                  src={field.value || bannerImageUrl} 
                                   alt="Banner preview" 
                                   className="w-full h-32 object-cover rounded-md"
                                 />

@@ -641,6 +641,13 @@ export const insertContactSubmissionSchema = createInsertSchema(contactSubmissio
 });
 export type InsertContactSubmission = z.infer<typeof insertContactSubmissionSchema>;
 
+// Banner Ad Order Status Enums
+export const BANNER_APPROVAL_STATUSES = ['draft', 'sent', 'pending_review', 'approved', 'rejected'] as const;
+export type BannerApprovalStatus = typeof BANNER_APPROVAL_STATUSES[number];
+
+export const BANNER_PAYMENT_STATUSES = ['pending', 'paid', 'refunded'] as const;
+export type BannerPaymentStatus = typeof BANNER_PAYMENT_STATUSES[number];
+
 // Banner Ad Orders (sponsor requests before going live)
 export const bannerAdOrders = pgTable("banner_ad_orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -672,7 +679,7 @@ export const bannerAdOrders = pgTable("banner_ad_orders", {
   discountAmount: decimal("discount_amount", { precision: 10, scale: 2 }).default("0.00"), // Total discount applied
   
   // Workflow status
-  approvalStatus: text("approval_status").notNull().default("draft"), // draft, sent, approved, rejected
+  approvalStatus: text("approval_status").notNull().default("draft"), // draft, sent, pending_review, approved, rejected
   paymentStatus: text("payment_status").notNull().default("pending"), // pending, paid, refunded
   
   // PayPal payment tracking

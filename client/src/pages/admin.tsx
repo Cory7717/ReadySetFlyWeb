@@ -3425,7 +3425,7 @@ export default function AdminDashboard() {
                           {/* Actions */}
                           <div className="flex items-center gap-2">
                             {/* Approve/Reject buttons - only show for paid orders that need approval */}
-                            {order.paymentStatus === 'paid' && (order.approvalStatus === 'draft' || order.approvalStatus === 'sent') && (
+                            {order.paymentStatus === 'paid' && (order.approvalStatus === 'draft' || order.approvalStatus === 'sent' || order.approvalStatus === 'pending_review') && (
                               <>
                                 <Button
                                   size="sm"

@@ -3498,56 +3498,59 @@ export default function AdminDashboard() {
                                 </Button>
                               )
                             )}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setEditingOrder(order);
-                                setOrderImageUrl(order.imageUrl ?? "");
-                                setSelectedTier(order.tier);
-                                
-                                // Load promo code state if exists
-                                if (order.promoCode) {
-                                  setPromoCodeInput(order.promoCode);
-                                  setAppliedPromoCode(order.promoCode);
-                                  setPromoCodeValid(true);
-                                  const discountAmt = parseFloat(order.discountAmount || "0");
-                                  setPromoCodeMessage(`Promo code applied! You save $${discountAmt.toFixed(2)}`);
-                                } else {
-                                  setPromoCodeInput("");
-                                  setAppliedPromoCode(null);
-                                  setPromoCodeValid(null);
-                                  setPromoCodeMessage("");
-                                }
-                                
-                                orderForm.reset({
-                                  sponsorName: order.sponsorName,
-                                  sponsorEmail: order.sponsorEmail,
-                                  sponsorCompany: order.sponsorCompany ?? "",
-                                  title: order.title,
-                                  description: order.description ?? "",
-                                  imageUrl: order.imageUrl ?? "",
-                                  link: order.link ?? "",
-                                  placements: order.placements ?? [],
-                                  category: order.category ?? undefined,
-                                  tier: order.tier,
-                                  monthlyRate: order.monthlyRate,
-                                  totalAmount: order.totalAmount,
-                                  creationFee: order.creationFee,
-                                  promoCode: order.promoCode ?? "",
-                                  discountAmount: order.discountAmount ?? "0.00",
-                                  grandTotal: order.grandTotal,
-                                  approvalStatus: order.approvalStatus,
-                                  paymentStatus: order.paymentStatus,
-                                  adminNotes: order.adminNotes ?? "",
-                                });
-                                setOrderDialogOpen(true);
-                              }}
-                              data-testid={`button-edit-order-${order.id}`}
-                            >
-                              <Edit className="h-4 w-4 mr-1" />
-                              Edit Order Details
-                            </Button>
+                            {/* Only allow editing order details if not yet activated */}
+                            {!isOrderActivated(order.id) && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingOrder(order);
+                                  setOrderImageUrl(order.imageUrl ?? "");
+                                  setSelectedTier(order.tier);
+                                  
+                                  // Load promo code state if exists
+                                  if (order.promoCode) {
+                                    setPromoCodeInput(order.promoCode);
+                                    setAppliedPromoCode(order.promoCode);
+                                    setPromoCodeValid(true);
+                                    const discountAmt = parseFloat(order.discountAmount || "0");
+                                    setPromoCodeMessage(`Promo code applied! You save $${discountAmt.toFixed(2)}`);
+                                  } else {
+                                    setPromoCodeInput("");
+                                    setAppliedPromoCode(null);
+                                    setPromoCodeValid(null);
+                                    setPromoCodeMessage("");
+                                  }
+                                  
+                                  orderForm.reset({
+                                    sponsorName: order.sponsorName,
+                                    sponsorEmail: order.sponsorEmail,
+                                    sponsorCompany: order.sponsorCompany ?? "",
+                                    title: order.title,
+                                    description: order.description ?? "",
+                                    imageUrl: order.imageUrl ?? "",
+                                    link: order.link ?? "",
+                                    placements: order.placements ?? [],
+                                    category: order.category ?? undefined,
+                                    tier: order.tier,
+                                    monthlyRate: order.monthlyRate,
+                                    totalAmount: order.totalAmount,
+                                    creationFee: order.creationFee,
+                                    promoCode: order.promoCode ?? "",
+                                    discountAmount: order.discountAmount ?? "0.00",
+                                    grandTotal: order.grandTotal,
+                                    approvalStatus: order.approvalStatus,
+                                    paymentStatus: order.paymentStatus,
+                                    adminNotes: order.adminNotes ?? "",
+                                  });
+                                  setOrderDialogOpen(true);
+                                }}
+                                data-testid={`button-edit-order-${order.id}`}
+                              >
+                                <Edit className="h-4 w-4 mr-1" />
+                                Edit Order Details
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="ghost"

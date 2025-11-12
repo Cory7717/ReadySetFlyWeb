@@ -108,11 +108,11 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
 
       // Send verification email
       try {
-        const resend = getUncachableResendClient();
+        const { client, fromEmail } = await getUncachableResendClient();
         const verificationUrl = `${req.protocol}://${req.get('host')}/verify-email?token=${verificationToken}`;
         
-        await resend.emails.send({
-          from: 'Ready Set Fly <noreply@readysetfly.us>',
+        await client.emails.send({
+          from: fromEmail,
           to: email,
           subject: 'Verify your Ready Set Fly account',
           html: `

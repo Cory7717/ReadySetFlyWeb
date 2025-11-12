@@ -3291,6 +3291,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/verification-submissions/pending", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      // Disable caching for admin verification data
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      
       const submissions = await storage.getPendingVerificationSubmissions();
       res.json(submissions);
     } catch (error) {

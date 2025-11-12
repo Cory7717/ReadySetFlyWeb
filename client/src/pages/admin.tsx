@@ -209,8 +209,9 @@ export default function AdminDashboard() {
   // Pending verification submissions query (always fetch for badge count)
   const { data: verificationSubmissions = [], isLoading: verificationsLoading } = useQuery<VerificationSubmission[]>({
     queryKey: ["/api/verification-submissions/pending"],
-    retry: 1, // Only retry once on failure
-    staleTime: 30000, // Consider data fresh for 30 seconds
+    staleTime: 0, // Always fetch fresh data
+    gcTime: 0, // Don't cache results
+    refetchOnMount: 'always', // Always refetch when component mounts
   });
 
   // Analytics query

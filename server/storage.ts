@@ -77,7 +77,7 @@ import {
   contactSubmissions,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray, isNull, arrayOverlaps } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -2167,27 +2167,33 @@ export class DatabaseStorage implements IStorage {
 
   async getActiveBannerAds(placement?: string, category?: string): Promise<BannerAd[]> {
     const now = new Date();
-    let query = db
+    
+    // Build conditions array
+    const conditions = [
+      eq(bannerAds.isActive, true),
+      lte(bannerAds.startDate, now),
+      // endDate can be null (no expiration) or >= now (not expired yet)
+      or(
+        isNull(bannerAds.endDate),
+        gte(bannerAds.endDate, now)
+      )
+    ];
+
+    // Check if placement is in the placements array (uses arrayOverlaps to check if at least one match)
+    if (placement) {
+      conditions.push(arrayOverlaps(bannerAds.placements, [placement]));
+    }
+
+    // Check category match
+    if (category) {
+      conditions.push(eq(bannerAds.category, category));
+    }
+
+    return await db
       .select()
       .from(bannerAds)
-      .where(
-        and(
-          eq(bannerAds.isActive, true),
-          lte(bannerAds.startDate, now),
-          gte(bannerAds.endDate, now)
-        )
-      )
-      .$dynamic();
-
-    if (placement) {
-      query = query.where(eq(bannerAds.placement, placement));
-    }
-
-    if (category) {
-      query = query.where(eq(bannerAds.category, category));
-    }
-
-    return await query.orderBy(desc(bannerAds.impressions));
+      .where(and(...conditions))
+      .orderBy(desc(bannerAds.impressions));
   }
 
   async getBannerAd(id: string): Promise<BannerAd | undefined> {

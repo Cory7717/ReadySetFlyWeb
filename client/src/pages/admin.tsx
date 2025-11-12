@@ -4597,8 +4597,8 @@ export default function AdminDashboard() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] p-0 flex flex-col" data-testid="dialog-create-banner">
-          <div className="flex flex-col flex-1 min-h-0">
+        <DialogContent className="max-w-2xl p-0" data-testid="dialog-create-banner">
+          <div className="flex flex-col max-h-[90vh]">
             <DialogHeader className="px-6 pt-6">
               <DialogTitle>Manage Live Banner Ad</DialogTitle>
               <DialogDescription>

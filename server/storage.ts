@@ -2107,6 +2107,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteBannerAdOrder(id: string): Promise<boolean> {
+    // Delete related records first to avoid foreign key constraint violations
+    
+    // 1. Delete any banner ads linked to this order
+    await db.delete(bannerAds).where(eq(bannerAds.orderId, id));
+    
+    // 2. Delete any promo code usages linked to this order
+    await db.delete(promoCodeUsages).where(eq(promoCodeUsages.bannerAdOrderId, id));
+    
+    // 3. Now delete the order itself
     const result = await db.delete(bannerAdOrders).where(eq(bannerAdOrders.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
   }

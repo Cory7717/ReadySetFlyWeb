@@ -176,10 +176,17 @@ export async function setupAuth(app: Express) {
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
 
-  if (!req.isAuthenticated() || !user.expires_at) {
+  if (!req.isAuthenticated()) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
+  // Check if this is an email/password session (no expires_at)
+  // These sessions are managed by express-session with rolling expiration
+  if (!user.expires_at) {
+    return next();
+  }
+
+  // OAuth sessions with token expiration
   const now = Math.floor(Date.now() / 1000);
   if (now <= user.expires_at) {
     return next();

@@ -4597,37 +4597,36 @@ export default function AdminDashboard() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl p-0" data-testid="dialog-create-banner">
-          <div className="flex flex-col max-h-[90vh]">
-            <DialogHeader className="px-6 pt-6">
-              <DialogTitle>Manage Live Banner Ad</DialogTitle>
-              <DialogDescription>
-                Adjust the end date and status for this active banner campaign. Creative content is locked and cannot be edited.
-              </DialogDescription>
-            </DialogHeader>
-            <Form {...bannerForm}>
-              <form 
-                onSubmit={bannerForm.handleSubmit((data) => {
-                  if (!editingBanner) {
-                    toast({
-                      title: "Error",
-                      description: "Can only edit existing banner ads. Banner ads are created by activating paid orders.",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-                  
-                  // Only send editable fields
-                  const payload = {
-                    endDate: data.endDate instanceof Date ? data.endDate as any : data.endDate as any,
-                    isActive: data.isActive,
-                  };
-                  
-                  updateBannerAdMutation.mutate({ id: editingBanner.id, data: payload });
-                })} 
-                className="flex flex-col flex-1 min-h-0"
-              >
-                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden" data-testid="dialog-create-banner">
+          <DialogHeader>
+            <DialogTitle>Manage Live Banner Ad</DialogTitle>
+            <DialogDescription>
+              Adjust the end date and status for this active banner campaign. Creative content is locked and cannot be edited.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...bannerForm}>
+            <form 
+              onSubmit={bannerForm.handleSubmit((data) => {
+                if (!editingBanner) {
+                  toast({
+                    title: "Error",
+                    description: "Can only edit existing banner ads. Banner ads are created by activating paid orders.",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                
+                // Only send editable fields
+                const payload = {
+                  endDate: data.endDate instanceof Date ? data.endDate as any : data.endDate as any,
+                  isActive: data.isActive,
+                };
+                
+                updateBannerAdMutation.mutate({ id: editingBanner.id, data: payload });
+              })} 
+              className="space-y-4"
+            >
+              <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-4">
                   {/* Show immutable creative content for reference */}
                   {editingBanner && (
                     <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
@@ -4694,32 +4693,31 @@ export default function AdminDashboard() {
                       </FormItem>
                     )}
                   />
-                </div>
-                
-                <DialogFooter className="sticky bottom-0 border-t bg-background px-6 py-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setBannerDialogOpen(false);
-                      setEditingBanner(null);
-                      bannerForm.reset();
-                    }}
-                    data-testid="button-cancel-edit-banner"
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    type="submit" 
-                    disabled={updateBannerAdMutation.isPending}
-                    data-testid="button-submit-edit-banner"
-                  >
-                    {updateBannerAdMutation.isPending ? "Updating..." : "Update Campaign"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </div>
+              </div>
+              
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setBannerDialogOpen(false);
+                    setEditingBanner(null);
+                    bannerForm.reset();
+                  }}
+                  data-testid="button-cancel-edit-banner"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={updateBannerAdMutation.isPending}
+                  data-testid="button-submit-edit-banner"
+                >
+                  {updateBannerAdMutation.isPending ? "Updating..." : "Update Campaign"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
 

@@ -386,7 +386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PayPal - Create order for marketplace listing fees
   app.post("/api/paypal/create-order-listing", isAuthenticated, async (req: any, res) => {
     try {
-      const { category, tier } = req.body;
+      const { category, tier, promoCode, discountAmount, finalAmount } = req.body;
       const userId = req.user.claims.sub;
       
       if (!category) {
@@ -423,9 +423,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         baseAmount = 25;
       }
       
-      // Add 8.25% sales tax
+      // Add 8.25% sales tax to base amount
       const salesTax = baseAmount * 0.0825;
-      const amount = baseAmount + salesTax;
+      const fullAmount = baseAmount + salesTax;
+      
+      // If promo code applied, validate and use discounted amount
+      let amount = fullAmount;
+      if (promoCode && finalAmount !== undefined) {
+        // Validate numeric input from client
+        const parsedFinal = parseFloat(finalAmount);
+        
+        if (!Number.isFinite(parsedFinal) || parsedFinal < 0) {
+          console.error(`Invalid final amount: ${finalAmount}`);
+          return res.status(400).json({ error: "Invalid final amount" });
+        }
+        
+        // Re-validate promo code server-side and get promo details
+        const validatedPromo = await storage.validatePromoCodeForContext(promoCode, 'marketplace');
+        
+        if (!validatedPromo) {
+          return res.status(400).json({ error: "Invalid or expired promo code" });
+        }
+        
+        // Calculate discount SERVER-SIDE from validated promo details
+        let serverCalculatedDiscount = 0;
+        if (validatedPromo.discountType === 'percentage') {
+          const discountPercent = parseFloat(validatedPromo.discountValue);
+          serverCalculatedDiscount = (fullAmount * discountPercent) / 100;
+        } else if (validatedPromo.discountType === 'fixed') {
+          serverCalculatedDiscount = parseFloat(validatedPromo.discountValue);
+        }
+        
+        // Clamp discount to not exceed full amount
+        serverCalculatedDiscount = Math.min(serverCalculatedDiscount, fullAmount);
+        
+        // Calculate expected final amount from SERVER-CALCULATED discount
+        const expectedFinal = Math.max(0, fullAmount - serverCalculatedDiscount);
+        
+        // Normalize to cents (integers) for precise comparison
+        const expectedFinalCents = Math.round(expectedFinal * 100);
+        const providedFinalCents = Math.round(parsedFinal * 100);
+        
+        // Verify client-provided finalAmount matches server calculation (exact match in cents)
+        if (expectedFinalCents !== providedFinalCents) {
+          console.error(`Amount mismatch: expected ${expectedFinal.toFixed(2)} ($${expectedFinalCents}¢), got ${parsedFinal.toFixed(2)} ($${providedFinalCents}¢)`);
+          return res.status(400).json({ error: "Amount verification failed - promo discount mismatch" });
+        }
+        
+        // Use server-calculated amount (normalized to 2 decimals)
+        amount = expectedFinal;
+      }
+      
+      // Normalize amount to 2 decimal places (prevents PayPal errors)
+      amount = Math.round(amount * 100) / 100;
+      
+      // Ensure amount is never $0 (those should use free completion endpoint)
+      if (amount <= 0) {
+        return res.status(400).json({ error: "Use free completion endpoint for $0 orders" });
+      }
       
       const collect = {
         body: {
@@ -785,6 +840,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Free banner ad order completion error:", error);
       res.status(500).json({ error: error.message || "Failed to complete free order" });
+    }
+  });
+
+  // Complete FREE marketplace listing (100% promo discount - no PayPal payment required)
+  // SECURITY: Requires cryptographically signed token to prevent unauthorized completion
+  app.post("/api/marketplace/complete-free-listing", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { completionToken, listingData } = req.body;
+      
+      // SECURITY: Validate completion token is provided
+      if (!completionToken || typeof completionToken !== 'string') {
+        console.error(`❌ Missing completion token for free marketplace listing`);
+        return res.status(400).json({ error: "Security token is required" });
+      }
+      
+      // SECURITY: Verify and decode the signed token
+      let tokenData: any;
+      try {
+        tokenData = jwt.verify(completionToken, process.env.SESSION_SECRET || 'dev-secret');
+      } catch (error: any) {
+        console.error(`❌ Invalid or expired token for free marketplace listing:`, error.message);
+        return res.status(403).json({ error: "Invalid or expired security token" });
+      }
+      
+      // SECURITY: Verify token type is for free order completion
+      if (tokenData.type !== 'free-marketplace-listing') {
+        console.error(`❌ Wrong token type for free marketplace listing: ${tokenData.type}`);
+        return res.status(403).json({ error: "Invalid security token" });
+      }
+      
+      // SECURITY: Verify user ID from token matches authenticated user
+      if (tokenData.userId !== userId) {
+        console.error(`❌ Token user ID mismatch. Expected ${userId}, token says ${tokenData.userId}`);
+        return res.status(403).json({ error: "Invalid security token" });
+      }
+      
+      // Calculate final amount (must be $0 for free orders)
+      const originalAmount = parseFloat(tokenData.originalAmount);
+      const discountAmount = parseFloat(tokenData.discountAmount);
+      const finalAmount = Math.max(0, originalAmount - discountAmount);
+      
+      // CRITICAL: Verify this is actually a free order
+      if (finalAmount > 0) {
+        console.error(`❌ Free listing validation failed: final amount is $${finalAmount.toFixed(2)}, not $0.00`);
+        return res.status(400).json({ 
+          error: "This is not a free listing",
+          details: `Listing total is $${finalAmount.toFixed(2)}. Payment is required.`
+        });
+      }
+      
+      // SECURITY: Re-validate promo code is still active and valid
+      if (tokenData.promoCode) {
+        const validPromo = await storage.validatePromoCodeForContext(tokenData.promoCode, 'marketplace');
+        if (!validPromo) {
+          console.error(`❌ Promo code ${tokenData.promoCode} is no longer valid for marketplace listing`);
+          return res.status(400).json({ 
+            error: "Promo code is no longer valid",
+            details: "Please refresh the page and try again"
+          });
+        }
+        
+        // Validate the base listing data
+        const validatedData = insertMarketplaceListingSchema.parse({ 
+          ...listingData, 
+          userId,
+          monthlyFee: "0",
+        });
+        
+        // Create listing with free promo benefits
+        const listing = await storage.createMarketplaceListing({
+          ...validatedData,
+          isPaid: true, // Mark as paid since it's free with promo
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        });
+        
+        // Record promo code usage
+        try {
+          await storage.recordPromoCodeUsage({
+            promoCodeCode: tokenData.promoCode,
+            userId: userId,
+            marketplaceListingId: listing.id,
+            discountAmount: discountAmount.toString(),
+          });
+          console.log(`✅ Promo code ${tokenData.promoCode} usage recorded for FREE marketplace listing ${listing.id}`);
+        } catch (error) {
+          console.error(`⚠️ Failed to record promo code usage for ${tokenData.promoCode}:`, error);
+          // Don't fail the listing creation - just log the error
+        }
+        
+        // Create threshold notification if needed
+        try {
+          const categoryListings = await storage.getMarketplaceListingsByCategory(listing.category);
+          const activeCount = categoryListings.filter((l: any) => l.isActive).length;
+          
+          if (activeCount === 25 || activeCount === 30) {
+            await storage.createAdminNotification({
+              type: "listing_threshold",
+              category: listing.category,
+              title: `${listing.category.replace('-', ' ').toUpperCase()} Listings Threshold Reached`,
+              message: `The ${listing.category.replace('-', ' ')} category now has ${activeCount} active listings.`,
+              isRead: false,
+              isActionable: true,
+              listingCount: activeCount,
+              threshold: activeCount,
+            });
+          }
+        } catch (notifError) {
+          console.error("Failed to create threshold notification:", notifError);
+        }
+        
+        console.log(`✅ FREE marketplace listing ${listing.id} completed with promo code ${tokenData.promoCode} by user ${userId}`);
+        
+        res.status(201).json({ 
+          status: 'COMPLETED',
+          message: 'Free listing created successfully',
+          listing
+        });
+      } else {
+        return res.status(400).json({ error: "No promo code provided for free listing" });
+      }
+    } catch (error: any) {
+      console.error("Free marketplace listing completion error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete free listing" });
     }
   });
 

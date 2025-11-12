@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone } from "lucide-react";
 
 export default function Landing() {
@@ -44,6 +45,11 @@ export default function Landing() {
           </div>
         </div>
       </div>
+
+      <BannerAdRotation 
+        placement="home" 
+        className="container mx-auto px-4 py-8 max-w-7xl"
+      />
 
       {/* Features Section */}
       <div id="features" className="container mx-auto px-4 py-12 sm:py-16">

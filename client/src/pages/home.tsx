@@ -16,7 +16,7 @@ import { Card } from "@/components/ui/card";
 import { AircraftCard } from "@/components/aircraft-card";
 import { AircraftFilters } from "@/components/aircraft-filters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
-import { BannerAd } from "@/components/banner-ad";
+import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import wingtipImage from "@assets/wingtip_featured_1761494838973.jpg";
 
 const quickFilters = [
@@ -38,14 +38,6 @@ export default function Home() {
   const { data: aircraft = [], isLoading } = useQuery<AircraftListing[]>({
     queryKey: ["/api/aircraft"],
   });
-
-  // Fetch active banner for homepage hero placement
-  const { data: banners = [] } = useQuery<BannerAdType[]>({
-    queryKey: ["/api/banner-ads/active", { placement: "homepage_hero" }],
-  });
-  
-  // Select the first active banner (highest priority)
-  const homepageBanner = banners[0];
 
   // Filter aircraft based on search criteria
   const filteredAircraft = aircraft.filter((item) => {
@@ -174,20 +166,10 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Sponsored Banner */}
-      {homepageBanner && (
-        <section className="container mx-auto px-4 py-8">
-          <div className="max-w-7xl mx-auto">
-            <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide">Sponsored</p>
-            <Card className="overflow-hidden">
-              <BannerAd 
-                banner={homepageBanner} 
-                className="w-full aspect-video sm:aspect-[16/9] md:min-h-[320px]"
-              />
-            </Card>
-          </div>
-        </section>
-      )}
+      <BannerAdRotation 
+        placement="rentals" 
+        className="container mx-auto px-4 py-8"
+      />
 
       {/* Filters & Results */}
       <section className="container mx-auto px-4 py-12">

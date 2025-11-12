@@ -12,6 +12,7 @@ import type { MarketplaceListing, PromoAlert } from "@shared/schema";
 import { MarketplaceCard } from "@/components/marketplace-card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
+import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { Search, SlidersHorizontal, Gift, X } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
 
@@ -183,6 +184,12 @@ export default function Marketplace() {
             </Button>
           </Alert>
         ))}
+
+        <BannerAdRotation 
+          placement="marketplace" 
+          category={selectedCategory}
+          className="mb-8"
+        />
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex-1">

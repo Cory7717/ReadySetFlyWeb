@@ -277,6 +277,10 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   isActive: boolean("is_active").default(true),
   expiresAt: timestamp("expires_at"),
   
+  // Expiration reminder tracking
+  expirationReminderSent: boolean("expiration_reminder_sent").default(false),
+  expirationReminderSentAt: timestamp("expiration_reminder_sent_at"),
+  
   // Admin management
   adminNotes: text("admin_notes"),
   isFeatured: boolean("is_featured").default(false),
@@ -675,6 +679,10 @@ export const bannerAdOrders = pgTable("banner_ad_orders", {
   // Campaign scheduling (after payment)
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
+  
+  // Expiration reminder tracking
+  expirationReminderSent: boolean("expiration_reminder_sent").default(false),
+  expirationReminderSentAt: timestamp("expiration_reminder_sent_at"),
   
   // Admin notes
   adminNotes: text("admin_notes"),

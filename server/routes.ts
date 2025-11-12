@@ -4474,6 +4474,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(ad);
     } catch (error) {
+      // Handle duplicate activation attempt
+      if (error instanceof Error && error.message === 'ALREADY_ACTIVATED') {
+        return res.status(409).json({ error: "This order has already been activated." });
+      }
       console.error('Banner ad order activation error:', error);
       res.status(500).json({ error: "Failed to activate banner ad order", details: error instanceof Error ? error.message : String(error) });
     }

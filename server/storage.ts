@@ -2126,6 +2126,18 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
 
+    // Check if this order has already been activated
+    const existingAd = await db
+      .select()
+      .from(bannerAds)
+      .where(eq(bannerAds.orderId, orderId))
+      .limit(1);
+    
+    if (existingAd.length > 0) {
+      // Order already activated - throw error to prevent duplicate activation
+      throw new Error('ALREADY_ACTIVATED');
+    }
+
     // Calculate proper end date based on tier duration
     const startDate = order.startDate || new Date();
     let endDate: Date = order.endDate || new Date(startDate);

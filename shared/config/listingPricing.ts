@@ -14,7 +14,8 @@ export const CATEGORY_PRICING: Record<string, Record<string, number> | number> =
   'cfi': 30,
   'flight-school': 250,
   'mechanic': 40,
-  'job': 40,
+  'job': 40,      // Backward compatibility - legacy key
+  'jobs': 40,     // New key for consistency
 };
 
 // Tier information for aircraft-sale category

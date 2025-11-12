@@ -296,6 +296,9 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   isPaid: boolean("is_paid").default(false),
   monthlyFee: decimal("monthly_fee", { precision: 10, scale: 2 }),
   
+  // Upgrade transaction tracking (for replay attack prevention)
+  upgradeTransactions: text("upgrade_transactions").array().default(sql`ARRAY[]::text[]`),
+  
   // Promotional free period (admin customer service gesture)
   promoFreeUntil: timestamp("promo_free_until"),
   promoGrantedBy: varchar("promo_granted_by").references(() => users.id),

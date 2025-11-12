@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
   Dialog,
@@ -12,9 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check, TrendingUp } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { MarketplaceListing } from "@shared/schema";
+import { getUpgradeDelta, calculateTotalWithTax } from "@shared/config/listingPricing";
 
 interface UpgradeListingModalProps {
   listing: MarketplaceListing;
@@ -55,31 +54,6 @@ export function UpgradeListingModal({ listing, isOpen, onClose }: UpgradeListing
   const currentTierIndex = tiers.findIndex(t => t.id === listing.tier);
   const availableTiers = tiers.filter((_, index) => index > currentTierIndex);
 
-  const upgradeMutation = useMutation({
-    mutationFn: async (newTier: string) => {
-      return await apiRequest("POST", `/api/marketplace/${listing.id}/upgrade`, {
-        newTier,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/marketplace", listing.id] });
-      toast({
-        title: "Success",
-        description: "Your listing has been upgraded successfully!",
-      });
-      onClose();
-      navigate("/my-listings");
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to upgrade listing",
-        variant: "destructive",
-      });
-    },
-  });
-
   const handleUpgrade = () => {
     if (!selectedTier) {
       toast({
@@ -89,7 +63,27 @@ export function UpgradeListingModal({ listing, isOpen, onClose }: UpgradeListing
       });
       return;
     }
-    upgradeMutation.mutate(selectedTier);
+
+    // Calculate upgrade cost using shared pricing helpers
+    const upgradeDelta = getUpgradeDelta(listing.category, listing.tier || 'basic', selectedTier);
+    const totalWithTax = calculateTotalWithTax(upgradeDelta);
+
+    // Store upgrade context in localStorage for checkout page
+    const upgradeContext = {
+      listingId: listing.id,
+      listingTitle: listing.title,
+      currentTier: listing.tier || 'basic',
+      newTier: selectedTier,
+      category: listing.category,
+      upgradeDelta,
+      totalWithTax,
+    };
+
+    localStorage.setItem('upgradeContext', JSON.stringify(upgradeContext));
+
+    // Close modal and navigate to checkout with upgrade mode
+    onClose();
+    navigate('/marketplace/listing/checkout?mode=upgrade');
   };
 
   const selectedTierData = tiers.find(t => t.id === selectedTier);
@@ -202,17 +196,16 @@ export function UpgradeListingModal({ listing, isOpen, onClose }: UpgradeListing
             <Button
               variant="outline"
               onClick={onClose}
-              disabled={upgradeMutation.isPending}
               data-testid="button-cancel-upgrade"
             >
               Cancel
             </Button>
             <Button
               onClick={handleUpgrade}
-              disabled={!selectedTier || upgradeMutation.isPending}
+              disabled={!selectedTier}
               data-testid="button-confirm-upgrade"
             >
-              {upgradeMutation.isPending ? "Upgrading..." : "Upgrade Now"}
+              Proceed to Payment
             </Button>
           </div>
         </div>

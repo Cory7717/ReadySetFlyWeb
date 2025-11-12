@@ -592,10 +592,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Calculate final amount from original - discount (idempotent)
       const finalAmount = Math.max(0, originalAmount - discountAmount);
       
-      // Prevent $0 orders (PayPal rejects them)
+      // For $0 orders (100% promo discount), generate a secure token for free completion
       if (finalAmount <= 0) {
-        return res.status(400).json({ 
-          error: "Order total cannot be $0.00 or negative. Please contact support@readysetfly.us for assistance with promotional credits." 
+        // Generate JWT token for secure free order completion
+        const completionToken = jwt.sign(
+          {
+            orderId: orderId,
+            sponsorEmail: order.sponsorEmail,
+            type: 'free-order-completion',
+          },
+          process.env.SESSION_SECRET || 'dev-secret',
+          { expiresIn: '15m' } // Token expires in 15 minutes
+        );
+        
+        console.log(`✅ Generated free completion token for banner ad order ${orderId} (100% discount applied)`);
+        
+        return res.json({
+          useFreeCompletion: true,
+          completionToken,
+          orderId,
+          message: 'This order qualifies for free completion - no payment required'
         });
       }
       
@@ -699,13 +715,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Record promo code usage if applied
         if (promoCode) {
           try {
-            await storage.recordPromoCodeUsage({
-              promoCodeCode: promoCode,
-              userId: null, // Public banner ad payment - no user ID
-              bannerAdOrderId: bannerAdOrderId,
-              discountAmount: null, // We don't have this info in capture
-            });
-            console.log(`✅ Promo code ${promoCode} usage recorded for banner ad order ${bannerAdOrderId}`);
+            const promoCodeRecord = await storage.getPromoCodeByCode(promoCode);
+            if (promoCodeRecord) {
+              await storage.recordPromoCodeUsage({
+                promoCodeId: promoCodeRecord.id,
+                userId: null, // Public banner ad payment - no user ID
+                bannerAdOrderId: bannerAdOrderId,
+              });
+              console.log(`✅ Promo code ${promoCode} usage recorded for banner ad order ${bannerAdOrderId}`);
+            }
           } catch (error) {
             console.error(`⚠️ Failed to record promo code usage for ${promoCode}:`, error);
             // Don't fail the payment - just log the error
@@ -809,13 +827,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Record promo code usage
         try {
-          await storage.recordPromoCodeUsage({
-            promoCodeCode: order.promoCode,
-            userId: null, // Public banner ad payment - no user ID
-            bannerAdOrderId: bannerAdOrderId,
-            discountAmount: discountAmount.toString(),
-          });
-          console.log(`✅ Promo code ${order.promoCode} usage recorded for FREE banner ad order ${bannerAdOrderId}`);
+          const promoCodeRecord = await storage.getPromoCodeByCode(order.promoCode);
+          if (promoCodeRecord) {
+            await storage.recordPromoCodeUsage({
+              promoCodeId: promoCodeRecord.id,
+              userId: null, // Public banner ad payment - no user ID
+              bannerAdOrderId: bannerAdOrderId,
+            });
+            console.log(`✅ Promo code ${order.promoCode} usage recorded for FREE banner ad order ${bannerAdOrderId}`);
+          }
         } catch (error) {
           console.error(`⚠️ Failed to record promo code usage for ${order.promoCode}:`, error);
           // Don't fail the order completion - just log the error
@@ -830,7 +850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paypalPaymentDate: new Date(),
       });
       
-      console.log(`✅ FREE banner ad order ${bannerAdOrderId} completed with promo code ${order.promoCode} by ${sponsorEmail}`);
+      console.log(`✅ FREE banner ad order ${bannerAdOrderId} completed with promo code ${order.promoCode} by ${order.sponsorEmail}`);
       
       res.json({ 
         status: 'COMPLETED',
@@ -1568,6 +1588,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
             body: JSON.stringify(requestBody)
           });
           const order = await response.json();
+          
+          // Check if backend says this is now a free order (100% discount applied)
+          if (order.useFreeCompletion) {
+            // Clear timeout
+            if (processingTimeout) {
+              clearTimeout(processingTimeout);
+              processingTimeout = null;
+            }
+            
+            // Complete the free order immediately
+            const completeResponse = await fetch('/api/banner-ad/complete-free-order/${orderId}', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ 
+                completionToken: order.completionToken 
+              })
+            });
+            
+            const result = await completeResponse.json();
+            
+            if (completeResponse.ok) {
+              paymentFields.style.display = 'none';
+              successDiv.innerHTML = '<div class="success"><h3>Order Claimed Successfully!</h3><p>Your free banner ad order has been confirmed. It will be reviewed and activated within 1 business day. We will contact you at ${sponsorEmail}.</p></div>';
+              
+              setTimeout(() => {
+                window.location.href = '/';
+              }, 5000);
+              
+              // Throw to stop PayPal flow
+              throw new Error('FREE_ORDER_COMPLETED');
+            } else {
+              throw new Error(result.error || 'Failed to complete free order');
+            }
+          }
+          
           if (!order.id) {
             throw new Error(order.error || 'Failed to create payment');
           }

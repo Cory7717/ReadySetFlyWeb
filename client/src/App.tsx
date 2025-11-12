@@ -62,6 +62,7 @@ function Router() {
           <Route path="/favorites" component={Favorites} />
           <Route path="/messages" component={Messages} />
           <Route path="/list-aircraft" component={ListAircraft} />
+          <Route path="/edit-aircraft/:id" component={ListAircraft} />
           <Route path="/create-marketplace-listing" component={CreateMarketplaceListing} />
           <Route path="/edit-marketplace-listing/:id" component={CreateMarketplaceListing} />
           <Route path="/marketplace/listing/checkout" component={MarketplaceListingCheckout} />
@@ -81,6 +82,7 @@ function Router() {
           <Route path="/favorites" component={RequireAuth} />
           <Route path="/messages" component={RequireAuth} />
           <Route path="/list-aircraft" component={RequireAuth} />
+          <Route path="/edit-aircraft/:id" component={RequireAuth} />
           <Route path="/create-marketplace-listing" component={RequireAuth} />
           <Route path="/edit-marketplace-listing/:id" component={RequireAuth} />
           <Route path="/marketplace/listing/checkout" component={RequireAuth} />

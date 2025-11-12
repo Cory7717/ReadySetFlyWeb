@@ -1998,11 +1998,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     isAuthenticated, 
     isVerified,
     upload.fields([
-      { name: 'registrationDoc', maxCount: 1 },
-      { name: 'llcAuthorization', maxCount: 1 },
+      { name: 'insuranceDoc', maxCount: 1 },
       { name: 'annualInspectionDoc', maxCount: 1 },
-      { name: 'hour100InspectionDoc', maxCount: 1 },
-      { name: 'maintenanceTrackingDoc', maxCount: 1 },
     ]),
     async (req: any, res) => {
       try {
@@ -2015,19 +2012,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Create individual placeholder URLs for each verification document type (only if files present)
         const timestamp = Date.now();
-        const registrationDocUrl = hasFiles && files.registrationDoc ? `/uploads/reg-doc-${userId}-${timestamp}.pdf` : null;
-        const llcAuthorizationUrl = hasFiles && files.llcAuthorization ? `/uploads/llc-auth-${userId}-${timestamp}.pdf` : null;
+        const insuranceDocUrl = hasFiles && files.insuranceDoc ? `/uploads/insurance-${userId}-${timestamp}.pdf` : null;
         const annualInspectionDocUrl = hasFiles && files.annualInspectionDoc ? `/uploads/annual-${userId}-${timestamp}.pdf` : null;
-        const hour100InspectionDocUrl = hasFiles && files.hour100InspectionDoc ? `/uploads/100hr-${userId}-${timestamp}.pdf` : null;
-        const maintenanceTrackingDocUrl = hasFiles && files.maintenanceTrackingDoc ? `/uploads/maintenance-${userId}-${timestamp}.pdf` : null;
         
         // Collect all non-null document URLs for verification submission
         const docUrls = [
-          registrationDocUrl,
-          llcAuthorizationUrl,
+          insuranceDocUrl,
           annualInspectionDocUrl,
-          hour100InspectionDocUrl,
-          maintenanceTrackingDocUrl
         ].filter((url): url is string => url !== null);
         
         // Calculate annual due date (12 months from inspection date)
@@ -2062,11 +2053,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           annualDueDate,
           hour100Remaining,
           // Include verification doc URLs in listing for reference
-          registrationDocUrl,
-          llcAuthorizationUrl,
+          insuranceDocUrl,
           annualInspectionDocUrl,
-          hour100InspectionDocUrl,
-          maintenanceTrackingDocUrl,
         });
         
         const listing = await storage.createAircraftListing(validatedData);
@@ -3065,7 +3053,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     upload.fields([
       { name: 'governmentIdFront', maxCount: 1 },
       { name: 'governmentIdBack', maxCount: 1 },
-      { name: 'selfie', maxCount: 1 },
       { name: 'pilotCertificatePhoto', maxCount: 1 },
     ]), 
     async (req: any, res) => {
@@ -3086,9 +3073,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         if (files.governmentIdBack) {
           documentUrls.push(`/uploads/id-back-${userId}-${Date.now()}.jpg`);
-        }
-        if (files.selfie) {
-          documentUrls.push(`/uploads/selfie-${userId}-${Date.now()}.jpg`);
         }
         if (files.pilotCertificatePhoto) {
           documentUrls.push(`/uploads/pilot-cert-${userId}-${Date.now()}.jpg`);

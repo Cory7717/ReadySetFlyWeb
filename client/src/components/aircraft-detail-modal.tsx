@@ -464,7 +464,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 flex-wrap">
-                  <Link href={`/dashboard/aircraft/${aircraft.id}/edit`}>
+                  <Link href={`/edit-aircraft/${aircraft.id}`}>
                     <Button variant="outline" data-testid="button-edit-aircraft">
                       <Edit className="h-4 w-4 mr-2" />
                       Edit Listing

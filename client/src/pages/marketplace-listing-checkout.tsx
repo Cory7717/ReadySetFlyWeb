@@ -50,9 +50,11 @@ interface CheckoutFormProps {
   originalAmount: number;
   finalAmount: number;
   completionToken: string | null;
+  isUpgradeMode?: boolean;
+  upgradeContext?: any;
 }
 
-const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmount, originalAmount, finalAmount, completionToken }: CheckoutFormProps) => {
+const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmount, originalAmount, finalAmount, completionToken, isUpgradeMode, upgradeContext }: CheckoutFormProps) => {
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
   const [isReady, setIsReady] = useState(false);
@@ -114,17 +116,29 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
       try {
         const cardFields = window.paypal.CardFields({
           createOrder: async () => {
-            const response = await fetch('/api/paypal/create-order-listing', {
+            // Different endpoint for upgrade vs new listing
+            const endpoint = isUpgradeMode 
+              ? '/api/paypal/create-order-upgrade'
+              : '/api/paypal/create-order-listing';
+            
+            const body = isUpgradeMode 
+              ? {
+                  listingId: upgradeContext.listingId,
+                  newTier: upgradeContext.newTier,
+                }
+              : {
+                  category: listingData.category,
+                  tier: listingData.tier,
+                  promoCode: promoCode || null,
+                  discountAmount: discountAmount ? discountAmount.toString() : null,
+                  finalAmount: finalAmount ? finalAmount.toString() : null,
+                };
+            
+            const response = await fetch(endpoint, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
-              body: JSON.stringify({
-                category: listingData.category,
-                tier: listingData.tier,
-                promoCode: promoCode || null,
-                discountAmount: discountAmount ? discountAmount.toString() : null,
-                finalAmount: finalAmount ? finalAmount.toString() : null,
-              })
+              body: JSON.stringify(body)
             });
 
             const order = await response.json();
@@ -343,9 +357,11 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
 };
 
 export default function MarketplaceListingCheckout() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const [, params] = useRoute("/marketplace/listing/checkout");
   const [listingData, setListingData] = useState<any>(null);
+  const [isUpgradeMode, setIsUpgradeMode] = useState(false);
+  const [upgradeContext, setUpgradeContext] = useState<any>(null);
   const { toast } = useToast();
   
   // Promo code state
@@ -358,23 +374,81 @@ export default function MarketplaceListingCheckout() {
   const [completionToken, setCompletionToken] = useState<string | null>(null);
 
   useEffect(() => {
-    // Get listing data from localStorage (passed from create-marketplace-listing page)
-    const storedData = localStorage.getItem('pendingListingData');
-    if (!storedData) {
-      toast({
-        title: "Error",
-        description: "No listing data found. Please try again.",
-        variant: "destructive",
-      });
-      navigate("/create-marketplace-listing");
-      return;
-    }
+    // Check if this is upgrade mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const mode = urlParams.get('mode');
+    
+    if (mode === 'upgrade') {
+      setIsUpgradeMode(true);
+      
+      // Get upgrade context from localStorage
+      const storedContext = localStorage.getItem('upgradeContext');
+      if (!storedContext) {
+        toast({
+          title: "Error",
+          description: "No upgrade data found. Please try again.",
+          variant: "destructive",
+        });
+        navigate("/my-listings");
+        return;
+      }
+      
+      const context = JSON.parse(storedContext);
+      setUpgradeContext(context);
+      
+      // Set initial final amount from upgrade context
+      setFinalAmount(context.totalWithTax);
+    } else {
+      // Regular listing creation flow
+      const storedData = localStorage.getItem('pendingListingData');
+      if (!storedData) {
+        toast({
+          title: "Error",
+          description: "No listing data found. Please try again.",
+          variant: "destructive",
+        });
+        navigate("/create-marketplace-listing");
+        return;
+      }
 
-    const data = JSON.parse(storedData);
-    setListingData(data);
+      const data = JSON.parse(storedData);
+      setListingData(data);
+    }
   }, [navigate, toast]);
 
   const handlePaymentSuccess = async (transactionId: string) => {
+    // UPGRADE MODE: Complete the upgrade
+    if (isUpgradeMode && upgradeContext) {
+      try {
+        await apiRequest("POST", `/api/marketplace/${upgradeContext.listingId}/complete-upgrade`, {
+          orderId: transactionId,
+          newTier: upgradeContext.newTier,
+        });
+        
+        // Clear upgrade context
+        localStorage.removeItem('upgradeContext');
+        
+        // Invalidate cache
+        queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/marketplace", upgradeContext.listingId] });
+        
+        toast({
+          title: "Upgrade Successful",
+          description: "Your listing has been upgraded to " + upgradeContext.newTier + " tier!",
+        });
+        
+        navigate("/my-listings");
+      } catch (error: any) {
+        toast({
+          title: "Upgrade Failed",
+          description: error.message || "Could not complete upgrade. Please contact support.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+    
+    // REGULAR LISTING MODE
     if (!listingData || !transactionId) return;
     
     // Handle free order success differently
@@ -515,7 +589,8 @@ export default function MarketplaceListingCheckout() {
     }
   }, [appliedPromo, finalAmount, discountAmount, listingData]);
 
-  if (!listingData) {
+  // Loading state
+  if (!listingData && !upgradeContext) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-2xl">
         <div className="flex items-center justify-center min-h-[400px]">
@@ -525,27 +600,39 @@ export default function MarketplaceListingCheckout() {
     );
   }
 
-  // Calculate amounts based on category and tier
-  const baseAmount = getBasePrice(listingData.category, listingData.tier);
-  const taxAmount = baseAmount * TAX_RATE;
-  const totalAmount = baseAmount + taxAmount;
+  // Calculate amounts based on mode
+  let baseAmount, taxAmount, totalAmount;
+  
+  if (isUpgradeMode && upgradeContext) {
+    // Use upgrade delta from context
+    baseAmount = upgradeContext.upgradeDelta;
+    taxAmount = baseAmount * TAX_RATE;
+    totalAmount = upgradeContext.totalWithTax;
+  } else if (listingData) {
+    // Regular listing calculation
+    baseAmount = getBasePrice(listingData.category, listingData.tier);
+    taxAmount = baseAmount * TAX_RATE;
+    totalAmount = baseAmount + taxAmount;
+  } else {
+    return null;
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <Button
         variant="ghost"
-        onClick={() => navigate("/create-marketplace-listing")}
+        onClick={() => navigate(isUpgradeMode ? "/my-listings" : "/create-marketplace-listing")}
         className="mb-6"
         data-testid="button-back"
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Listing
+        {isUpgradeMode ? "Back to My Listings" : "Back to Listing"}
       </Button>
 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            Complete Your Payment
+            {isUpgradeMode ? "Complete Upgrade Payment" : "Complete Your Payment"}
           </CardTitle>
           <CardDescription>
             Secure payment powered by PayPal
@@ -554,29 +641,61 @@ export default function MarketplaceListingCheckout() {
         <CardContent className="space-y-6">
           {/* Order Summary */}
           <div className="bg-muted p-4 rounded-lg space-y-2">
-            <h3 className="font-semibold">Order Summary</h3>
-            <div className="flex justify-between text-sm">
-              <span>Listing Type:</span>
-              <span className="capitalize">{listingData.category?.replace('-', ' ')}</span>
-            </div>
-            {listingData.tier && (
-              <div className="flex justify-between text-sm">
-                <span>Tier:</span>
-                <span className="capitalize">{listingData.tier}</span>
-              </div>
+            <h3 className="font-semibold">{isUpgradeMode ? "Upgrade Summary" : "Order Summary"}</h3>
+            
+            {isUpgradeMode && upgradeContext ? (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span>Listing:</span>
+                  <span className="font-medium">{upgradeContext.listingTitle}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Current Tier:</span>
+                  <span className="capitalize">{upgradeContext.currentTier}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>New Tier:</span>
+                  <span className="capitalize font-medium text-primary">{upgradeContext.newTier}</span>
+                </div>
+                <div className="flex justify-between text-sm pt-2 border-t">
+                  <span>Upgrade Fee:</span>
+                  <span>${baseAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Sales Tax (8.25%):</span>
+                  <span>${taxAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold pt-2 border-t">
+                  <span>Total:</span>
+                  <span>${totalAmount.toFixed(2)}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span>Listing Type:</span>
+                  <span className="capitalize">{listingData?.category?.replace('-', ' ')}</span>
+                </div>
+                {listingData?.tier && (
+                  <div className="flex justify-between text-sm">
+                    <span>Tier:</span>
+                    <span className="capitalize">{listingData.tier}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm pt-2 border-t">
+                  <span>Base Price:</span>
+                  <span>${baseAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Sales Tax (8.25%):</span>
+                  <span>${taxAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm font-semibold pt-2 border-t">
+                  <span>Total (Monthly):</span>
+                  <span>${totalAmount.toFixed(2)}</span>
+                </div>
+              </>
             )}
-            <div className="flex justify-between text-sm pt-2 border-t">
-              <span>Base Price:</span>
-              <span>${baseAmount.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Sales Tax (8.25%):</span>
-              <span>${taxAmount.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm font-semibold pt-2 border-t">
-              <span>Total (Monthly):</span>
-              <span>${totalAmount.toFixed(2)}</span>
-            </div>
           </div>
 
           {/* Promo Code Section */}
@@ -638,7 +757,7 @@ export default function MarketplaceListingCheckout() {
 
           {/* Payment Form */}
           <CheckoutForm 
-            listingData={listingData} 
+            listingData={listingData || {}} 
             onSuccess={handlePaymentSuccess}
             isFree={appliedPromo !== null && finalAmount === 0}
             promoCode={appliedPromo?.code || null}
@@ -646,6 +765,8 @@ export default function MarketplaceListingCheckout() {
             originalAmount={totalAmount}
             finalAmount={finalAmount || totalAmount}
             completionToken={completionToken}
+            isUpgradeMode={isUpgradeMode}
+            upgradeContext={upgradeContext}
           />
 
           <p className="text-xs text-muted-foreground text-center">

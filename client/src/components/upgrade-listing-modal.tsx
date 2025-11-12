@@ -21,25 +21,26 @@ interface UpgradeListingModalProps {
   onClose: () => void;
 }
 
+// Tier pricing from shared config - only applies to aircraft-sale category
 const tiers = [
   { 
     id: 'basic', 
     label: 'Basic', 
-    price: 25, 
+    price: 25,  // Matches shared config
     description: 'Essential features for smaller listings',
     features: ['30-day listing', 'Basic visibility', 'Up to 3 images'] 
   },
   { 
     id: 'standard', 
     label: 'Standard', 
-    price: 100, 
+    price: 40,  // Matches shared config
     description: 'Enhanced features for better exposure',
     features: ['30-day listing', 'Enhanced visibility', 'Up to 5 images', 'Featured badge'] 
   },
   { 
     id: 'premium', 
     label: 'Premium', 
-    price: 250, 
+    price: 100,  // Matches shared config
     description: 'Maximum visibility and features',
     features: ['30-day listing', 'Top placement', 'Up to 10 images', 'Featured badge', 'Priority support'] 
   },

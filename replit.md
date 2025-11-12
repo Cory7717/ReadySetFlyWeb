@@ -26,6 +26,7 @@ The platform operates as a **monorepo** encompassing shared backend, web, and mo
 - **Mobile Payment & Withdrawal Integration**: Full functionality for withdrawals via PayPal Payouts API and payments via WebView-based PayPal integration for rentals and marketplace listings.
 - **Mobile Marketplace Features**: Allows users to create listings in all categories with multi-step forms, tier selection, promo code integration, and payment processing.
 - **Contact Form System**: Public API endpoint for contact submissions with server-side validation, IP-based rate limiting, database persistence for all submissions, and asynchronous email delivery via Resend.
+- **Expiration Reminder System**: Automated 2-day expiration reminder emails for both banner ads and marketplace listings. Scheduled cron endpoint (`/api/cron/send-expiration-reminders`) checks daily for expiring items, sends professional reminder emails via Resend, and tracks sent status in database. Endpoint is secured with `X-Cron-Secret` header authentication.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database, hosted via Neon.

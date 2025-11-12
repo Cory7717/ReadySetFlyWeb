@@ -1754,6 +1754,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cron endpoint: Send 2-day expiration reminders for banner ads and marketplace listings
+  // SECURITY: Requires CRON_SECRET header to prevent unauthorized access
+  app.post("/api/cron/send-expiration-reminders", async (req, res) => {
+    try {
+      // Verify cron secret token
+      const cronSecret = req.headers['x-cron-secret'];
+      const expectedSecret = process.env.CRON_SECRET || process.env.SESSION_SECRET; // Fallback to SESSION_SECRET if CRON_SECRET not set
+      
+      if (!cronSecret || cronSecret !== expectedSecret) {
+        console.warn('Unauthorized cron attempt from IP:', req.ip);
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      const {  getBannerAdExpirationReminderHtml, getBannerAdExpirationReminderText, getMarketplaceListingExpirationReminderHtml, getMarketplaceListingExpirationReminderText } = await import('./email-templates');
+      const { client, fromEmail } = await getUncachableResendClient();
+      
+      let bannersProcessed = 0;
+      let listingsProcessed = 0;
+      let errors: string[] = [];
+      
+      // Find banner ads expiring in 2 days that haven't been reminded
+      const expiringBanners = await storage.getExpiringBannerAdOrders(2);
+      
+      // Find marketplace listings expiring in 2 days that haven't been reminded
+      const expiringListings = await storage.getExpiringMarketplaceListings(2);
+      
+      // Send banner ad expiration reminders
+      for (const banner of expiringBanners) {
+        try {
+          const htmlBody = getBannerAdExpirationReminderHtml(banner.sponsorName, {
+            title: banner.title,
+            company: banner.sponsorCompany || banner.sponsorName,
+            tier: banner.tier,
+            endDate: banner.endDate?.toISOString() || new Date().toISOString(),
+            startDate: banner.startDate?.toISOString() || new Date().toISOString(),
+          });
+          
+          const textBody = getBannerAdExpirationReminderText(banner.sponsorName, {
+            title: banner.title,
+            company: banner.sponsorCompany || banner.sponsorName,
+            tier: banner.tier,
+            endDate: banner.endDate?.toISOString() || new Date().toISOString(),
+            startDate: banner.startDate?.toISOString() || new Date().toISOString(),
+          });
+          
+          await client.emails.send({
+            from: fromEmail,
+            to: banner.sponsorEmail,
+            subject: 'Action Required: Your Ready Set Fly banner campaign ends in 2 days',
+            html: htmlBody,
+            text: textBody,
+          });
+          
+          // Mark reminder as sent
+          await storage.updateBannerAdOrder(banner.id, {
+            expirationReminderSent: true,
+            expirationReminderSentAt: new Date(),
+          });
+          
+          bannersProcessed++;
+          console.log(`Sent expiration reminder for banner ad order ${banner.id} to ${banner.sponsorEmail}`);
+        } catch (error: any) {
+          console.error(`Failed to send reminder for banner ad ${banner.id}:`, error);
+          errors.push(`Banner ${banner.id}: ${error.message}`);
+        }
+      }
+      
+      // Send marketplace listing expiration reminders
+      for (const listing of expiringListings) {
+        try {
+          // Get user details
+          const user = await storage.getUser(listing.userId);
+          if (!user || !user.email) {
+            console.warn(`Skipping listing ${listing.id} - user not found or no email`);
+            continue;
+          }
+          
+          const userName = user.firstName || user.email.split('@')[0];
+          
+          const htmlBody = getMarketplaceListingExpirationReminderHtml(userName, {
+            id: listing.id,
+            title: listing.title,
+            category: listing.category,
+            tier: listing.tier || 'basic',
+            expiresAt: listing.expiresAt?.toISOString() || new Date().toISOString(),
+          });
+          
+          const textBody = getMarketplaceListingExpirationReminderText(userName, {
+            id: listing.id,
+            title: listing.title,
+            category: listing.category,
+            tier: listing.tier || 'basic',
+            expiresAt: listing.expiresAt?.toISOString() || new Date().toISOString(),
+          });
+          
+          await client.emails.send({
+            from: fromEmail,
+            to: user.email,
+            subject: `Renew your ${listing.category} listing – 2 days left on Ready Set Fly`,
+            html: htmlBody,
+            text: textBody,
+          });
+          
+          // Mark reminder as sent
+          await storage.updateMarketplaceListing(listing.id, {
+            expirationReminderSent: true,
+            expirationReminderSentAt: new Date(),
+          });
+          
+          listingsProcessed++;
+          console.log(`Sent expiration reminder for marketplace listing ${listing.id} to ${user.email}`);
+        } catch (error: any) {
+          console.error(`Failed to send reminder for listing ${listing.id}:`, error);
+          errors.push(`Listing ${listing.id}: ${error.message}`);
+        }
+      }
+      
+      res.json({
+        success: true,
+        bannersProcessed,
+        listingsProcessed,
+        totalReminders: bannersProcessed + listingsProcessed,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error: any) {
+      console.error('Cron job error:', error);
+      res.status(500).json({ 
+        error: "Failed to send expiration reminders",
+        details: error.message 
+      });
+    }
+  });
+
   // AI Description Generation endpoint
   app.post("/api/generate-description", isAuthenticated, async (req, res) => {
     try {

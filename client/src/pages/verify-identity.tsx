@@ -20,7 +20,6 @@ interface VerificationFormData {
   dateOfBirth: string;
   governmentIdFront: File | null;
   governmentIdBack: File | null;
-  selfie: File | null;
   faaCertificateNumber?: string;
   pilotCertificateName?: string;
   pilotCertificatePhoto?: File | null;
@@ -38,7 +37,6 @@ export default function VerifyIdentity() {
     dateOfBirth: "",
     governmentIdFront: null,
     governmentIdBack: null,
-    selfie: null,
     faaCertificateNumber: "",
     pilotCertificateName: "",
     pilotCertificatePhoto: null,
@@ -47,7 +45,6 @@ export default function VerifyIdentity() {
   const [previews, setPreviews] = useState<{
     idFront?: string;
     idBack?: string;
-    selfie?: string;
     pilot?: string;
   }>({});
 
@@ -102,7 +99,6 @@ export default function VerifyIdentity() {
       reader.onloadend = () => {
         const previewKey = field === "governmentIdFront" ? "idFront"
           : field === "governmentIdBack" ? "idBack"
-          : field === "selfie" ? "selfie"
           : "pilot";
         setPreviews(prev => ({ ...prev, [previewKey]: reader.result as string }));
       };
@@ -122,7 +118,7 @@ export default function VerifyIdentity() {
       }
       setCurrentStep("documents");
     } else if (currentStep === "documents") {
-      if (!formData.governmentIdFront || !formData.governmentIdBack || !formData.selfie) {
+      if (!formData.governmentIdFront || !formData.governmentIdBack) {
         toast({
           title: "Missing Documents",
           description: "Please upload all required documents",
@@ -153,9 +149,6 @@ export default function VerifyIdentity() {
     }
     if (formData.governmentIdBack) {
       submitFormData.append("governmentIdBack", formData.governmentIdBack);
-    }
-    if (formData.selfie) {
-      submitFormData.append("selfie", formData.selfie);
     }
     if (formData.pilotCertificatePhoto) {
       submitFormData.append("pilotCertificatePhoto", formData.pilotCertificatePhoto);
@@ -236,7 +229,7 @@ export default function VerifyIdentity() {
             </CardTitle>
             <CardDescription>
               {currentStep === "identity" && "Enter your legal name and date of birth"}
-              {currentStep === "documents" && "Upload clear photos of your government ID and a selfie"}
+              {currentStep === "documents" && "Upload clear photos of your government ID (front and back)"}
               {currentStep === "payment" && "Add a payment method for booking rentals"}
               {currentStep === "pilot" && "Upload your FAA pilot certificate for additional verification"}
             </CardDescription>
@@ -316,24 +309,11 @@ export default function VerifyIdentity() {
                       <img src={previews.idBack} alt="ID Back" className="mt-2 max-w-xs rounded-md border" />
                     )}
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="selfie">Selfie (holding ID) *</Label>
-                    <Input
-                      id="selfie"
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => handleFileChange("selfie", e.target.files?.[0] || null)}
-                      data-testid="input-selfie"
-                    />
-                    {previews.selfie && (
-                      <img src={previews.selfie} alt="Selfie" className="mt-2 max-w-xs rounded-md border" />
-                    )}
-                  </div>
                 </div>
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Ensure all documents are clear and readable. Selfie should show your face and ID clearly.
+                    Ensure all documents are clear and readable.
                   </AlertDescription>
                 </Alert>
               </>

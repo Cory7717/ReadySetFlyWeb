@@ -150,6 +150,7 @@ export interface IStorage {
   updateMarketplaceListing(id: string, updates: Partial<MarketplaceListing>): Promise<MarketplaceListing | undefined>;
   deleteMarketplaceListing(id: string): Promise<boolean>;
   deactivateExpiredListings(): Promise<{ deactivatedCount: number }>;
+  getExpiringMarketplaceListings(daysUntilExpiration: number): Promise<MarketplaceListing[]>; // Find listings expiring in X days that haven't been reminded
   
   // Marketplace Analytics
   incrementMarketplaceViewCount(id: string): Promise<void>;
@@ -297,6 +298,7 @@ export interface IStorage {
   updateBannerAdOrder(id: string, updates: Partial<BannerAdOrder>): Promise<BannerAdOrder | undefined>;
   deleteBannerAdOrder(id: string): Promise<boolean>;
   activateBannerAdOrder(orderId: string): Promise<BannerAd | undefined>; // Creates live ad from order
+  getExpiringBannerAdOrders(daysUntilExpiration: number): Promise<BannerAdOrder[]>; // Find orders expiring in X days that haven't been reminded
   
   // Banner Ads
   getAllBannerAds(): Promise<BannerAd[]>;
@@ -997,6 +999,32 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return { deactivatedCount: result.length };
+  }
+
+  async getExpiringMarketplaceListings(daysUntilExpiration: number): Promise<MarketplaceListing[]> {
+    const now = new Date();
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + daysUntilExpiration);
+    
+    const targetDateStart = new Date(targetDate);
+    targetDateStart.setHours(0, 0, 0, 0);
+    
+    const targetDateEnd = new Date(targetDate);
+    targetDateEnd.setHours(23, 59, 59, 999);
+    
+    return await db
+      .select()
+      .from(marketplaceListings)
+      .where(
+        and(
+          eq(marketplaceListings.isActive, true),
+          eq(marketplaceListings.isPaid, true),
+          eq(marketplaceListings.expirationReminderSent, false),
+          gte(marketplaceListings.expiresAt, targetDateStart),
+          lte(marketplaceListings.expiresAt, targetDateEnd)
+        )
+      )
+      .orderBy(asc(marketplaceListings.expiresAt));
   }
 
   // Marketplace Analytics
@@ -2094,6 +2122,32 @@ export class DatabaseStorage implements IStorage {
 
     const [ad] = await db.insert(bannerAds).values(bannerAdData).returning();
     return ad;
+  }
+
+  async getExpiringBannerAdOrders(daysUntilExpiration: number): Promise<BannerAdOrder[]> {
+    const now = new Date();
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + daysUntilExpiration);
+    
+    const targetDateStart = new Date(targetDate);
+    targetDateStart.setHours(0, 0, 0, 0);
+    
+    const targetDateEnd = new Date(targetDate);
+    targetDateEnd.setHours(23, 59, 59, 999);
+    
+    return await db
+      .select()
+      .from(bannerAdOrders)
+      .where(
+        and(
+          eq(bannerAdOrders.approvalStatus, 'approved'),
+          eq(bannerAdOrders.paymentStatus, 'paid'),
+          eq(bannerAdOrders.expirationReminderSent, false),
+          gte(bannerAdOrders.endDate, targetDateStart),
+          lte(bannerAdOrders.endDate, targetDateEnd)
+        )
+      )
+      .orderBy(asc(bannerAdOrders.endDate));
   }
 
   // Banner Ads

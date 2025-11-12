@@ -83,6 +83,7 @@ export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByVerificationToken(token: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>; // REQUIRED for Replit Auth
@@ -357,6 +358,15 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(users)
       .where(ilike(users.email, email))
+      .limit(1);
+    return result[0];
+  }
+
+  async getUserByVerificationToken(token: string): Promise<User | undefined> {
+    const result = await db
+      .select()
+      .from(users)
+      .where(eq(users.emailVerificationToken, token))
       .limit(1);
     return result[0];
   }

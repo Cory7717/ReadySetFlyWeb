@@ -16,6 +16,7 @@ import registerMobileAuthRoutes from "./mobile-auth-routes";
 import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
+import { getUpgradeDelta, calculateTotalWithTax, isValidUpgrade, VALID_TIERS } from "@shared/config/listingPricing";
 
 // Initialize OpenAI client with Replit AI Integrations
 const openai = new OpenAI({
@@ -506,6 +507,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("PayPal create order error:", error);
       res.status(500).json({ error: error.message || "Failed to create order" });
+    }
+  });
+
+  // PayPal - Create order for marketplace listing upgrade
+  app.post("/api/paypal/create-order-upgrade", isAuthenticated, async (req: any, res) => {
+    try {
+      const { listingId, newTier } = req.body;
+      const userId = req.user.claims.sub;
+      
+      if (!listingId || !newTier) {
+        return res.status(400).json({ error: "Missing required fields: listingId and newTier" });
+      }
+      
+      // Validate new tier
+      if (!VALID_TIERS.includes(newTier as any)) {
+        return res.status(400).json({ error: "Invalid tier" });
+      }
+      
+      // Fetch the existing listing
+      const listing = await storage.getMarketplaceListing(listingId);
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      
+      // Verify ownership
+      if (listing.userId !== userId) {
+        return res.status(403).json({ error: "Not authorized to upgrade this listing" });
+      }
+      
+      // Validate upgrade (must be going up in tier)
+      if (!isValidUpgrade(listing.tier || 'basic', newTier)) {
+        return res.status(400).json({ error: "Invalid upgrade - must upgrade to a higher tier" });
+      }
+      
+      // Calculate upgrade cost using shared pricing helper
+      const upgradeDelta = getUpgradeDelta(listing.category, listing.tier || 'basic', newTier);
+      const totalWithTax = calculateTotalWithTax(upgradeDelta);
+      
+      // Ensure amount is never $0
+      if (totalWithTax <= 0) {
+        return res.status(400).json({ error: "Upgrade amount must be greater than $0" });
+      }
+      
+      // Normalize to 2 decimal places
+      const amount = Math.round(totalWithTax * 100) / 100;
+      
+      console.log(`Creating upgrade order for listing ${listingId}: ${listing.tier} → ${newTier}, amount: $${amount}`);
+      
+      const collect = {
+        body: {
+          intent: "CAPTURE",
+          purchaseUnits: [
+            {
+              amount: {
+                currencyCode: "USD",
+                value: amount.toFixed(2),
+              },
+              description: `Ready Set Fly - Listing Upgrade (${listing.tier} → ${newTier})`,
+              customId: `upgrade:${listingId}|user:${userId}|tier:${newTier}`,
+            },
+          ],
+        },
+        prefer: "return=minimal",
+      };
+
+      const { body, ...httpResponse } = await ordersController.createOrder(collect);
+      const jsonResponse = JSON.parse(String(body));
+      
+      res.status(httpResponse.statusCode).json(jsonResponse);
+    } catch (error: any) {
+      console.error("PayPal create upgrade order error:", error);
+      res.status(500).json({ error: error.message || "Failed to create upgrade order" });
     }
   });
 
@@ -2608,6 +2681,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Marketplace listing upgrade error:", error);
       res.status(500).json({ error: error.message || "Failed to upgrade listing" });
+    }
+  });
+
+  // Complete marketplace listing upgrade after PayPal payment
+  app.post("/api/marketplace/:id/complete-upgrade", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const listingId = req.params.id;
+      const { newTier, orderId } = req.body;
+      
+      if (!newTier || !orderId) {
+        return res.status(400).json({ error: "Missing required fields: newTier and orderId" });
+      }
+      
+      // Validate new tier
+      if (!VALID_TIERS.includes(newTier as any)) {
+        return res.status(400).json({ error: "Invalid tier" });
+      }
+      
+      // Fetch the existing listing
+      const listing = await storage.getMarketplaceListing(listingId);
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+      
+      // Prevent upgrading sample listings
+      if ((listing as any).isExample) {
+        return res.status(403).json({ error: "Sample listings cannot be upgraded" });
+      }
+      
+      // Verify ownership
+      if (listing.userId !== userId) {
+        return res.status(403).json({ error: "Not authorized to upgrade this listing" });
+      }
+      
+      // Validate upgrade (must be going up in tier)
+      if (!isValidUpgrade(listing.tier || 'basic', newTier)) {
+        return res.status(400).json({ error: "Invalid upgrade - must upgrade to a higher tier" });
+      }
+      
+      // Verify PayPal order was captured
+      try {
+        const { body } = await ordersController.getOrder({ id: orderId });
+        const orderData = JSON.parse(String(body));
+        
+        if (orderData.status !== 'COMPLETED') {
+          return res.status(400).json({ error: "Payment not completed" });
+        }
+        
+        // Verify the order is for this listing upgrade
+        const customId = orderData.purchase_units?.[0]?.custom_id || '';
+        if (!customId.includes(`upgrade:${listingId}`)) {
+          return res.status(400).json({ error: "Payment order mismatch" });
+        }
+      } catch (paypalError: any) {
+        console.error("PayPal order verification error:", paypalError);
+        return res.status(400).json({ error: "Failed to verify payment" });
+      }
+      
+      // Check for replay attacks - verify this order hasn't been used before
+      // This is a simple check - in production you'd store used orderIds in the database
+      const transactionHistory = (listing as any).upgradeTransactions || [];
+      if (transactionHistory.includes(orderId)) {
+        return res.status(400).json({ error: "This payment has already been processed" });
+      }
+      
+      // Calculate new monthly fee using shared pricing helper
+      const upgradeDelta = getUpgradeDelta(listing.category, listing.tier || 'basic', newTier);
+      const newMonthlyFee = (parseFloat(listing.monthlyFee || '25') + upgradeDelta).toString();
+      
+      // Update the listing with new tier and track the transaction
+      const updatedListing = await storage.updateMarketplaceListing(listingId, {
+        tier: newTier,
+        monthlyFee: newMonthlyFee,
+        upgradeTransactions: [...transactionHistory, orderId],
+      } as any);
+      
+      console.log(`✅ Listing ${listingId} upgraded: ${listing.tier} → ${newTier}, PayPal order: ${orderId}`);
+      
+      res.json({
+        message: "Listing upgraded successfully",
+        listing: updatedListing,
+        transactionId: orderId,
+      });
+    } catch (error: any) {
+      console.error("Complete upgrade error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete upgrade" });
     }
   });
 

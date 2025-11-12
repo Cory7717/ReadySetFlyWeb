@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import type { User, CertificationType } from "@shared/schema";
+import type { User, CertificationType, Rental } from "@shared/schema";
 import { certificationTypes } from "@shared/schema";
 import { Shield, Award, Plane, Clock, CheckCircle2, Edit, Upload, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,6 +72,21 @@ export default function Profile() {
     queryKey: ["/api/users", authUser?.id],
     enabled: !!authUser?.id,
   });
+
+  // Fetch owner's rentals
+  const { data: ownerRentals = [] } = useQuery<Rental[]>({
+    queryKey: ["/api/rentals/owner", authUser?.id],
+    enabled: !!authUser?.id,
+  });
+
+  // Fetch renter's rentals
+  const { data: renterRentals = [] } = useQuery<Rental[]>({
+    queryKey: ["/api/rentals/renter", authUser?.id],
+    enabled: !!authUser?.id,
+  });
+
+  // Calculate total rental count
+  const totalRentals = ownerRentals.length + renterRentals.length;
 
   const form = useForm<ProfileUpdateForm>({
     resolver: zodResolver(profileUpdateSchema),
@@ -528,7 +543,7 @@ export default function Profile() {
                       <Plane className="h-4 w-4" />
                       Rentals
                     </div>
-                    <p className="text-2xl font-bold" data-testid="text-rental-count">23</p>
+                    <p className="text-2xl font-bold" data-testid="text-rental-count">{totalRentals}</p>
                   </div>
                   <div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">

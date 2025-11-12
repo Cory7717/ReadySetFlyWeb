@@ -66,17 +66,11 @@ export default function ListAircraft() {
   const [imageFiles, setImageFiles] = useState<string[]>([]);
   const [selectedCertifications, setSelectedCertifications] = useState<string[]>(["PPL"]);
   const [verificationDocs, setVerificationDocs] = useState<{
-    registrationDoc: File | null;
-    llcAuthorization: File | null;
+    insuranceDoc: File | null;
     annualInspectionDoc: File | null;
-    hour100InspectionDoc: File | null;
-    maintenanceTrackingDoc: File | null;
   }>({
-    registrationDoc: null,
-    llcAuthorization: null,
+    insuranceDoc: null,
     annualInspectionDoc: null,
-    hour100InspectionDoc: null,
-    maintenanceTrackingDoc: null,
   });
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -243,20 +237,11 @@ export default function ListAircraft() {
       formData.append('listingData', JSON.stringify(listingPayload));
       
       // Append verification document files
-      if (verificationDocs.registrationDoc) {
-        formData.append('registrationDoc', verificationDocs.registrationDoc);
-      }
-      if (verificationDocs.llcAuthorization) {
-        formData.append('llcAuthorization', verificationDocs.llcAuthorization);
+      if (verificationDocs.insuranceDoc) {
+        formData.append('insuranceDoc', verificationDocs.insuranceDoc);
       }
       if (verificationDocs.annualInspectionDoc) {
         formData.append('annualInspectionDoc', verificationDocs.annualInspectionDoc);
-      }
-      if (verificationDocs.hour100InspectionDoc) {
-        formData.append('hour100InspectionDoc', verificationDocs.hour100InspectionDoc);
-      }
-      if (verificationDocs.maintenanceTrackingDoc) {
-        formData.append('maintenanceTrackingDoc', verificationDocs.maintenanceTrackingDoc);
       }
       
       createListingMutation.mutate({ formData, hasFiles: true });
@@ -610,7 +595,7 @@ export default function ListAircraft() {
               <CardHeader>
                 <CardTitle>Owner & Aircraft Verification</CardTitle>
                 <CardDescription>
-                  Provide ownership and maintenance documentation for verification
+                  Provide insurance and annual inspection documentation for verification
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -629,24 +614,24 @@ export default function ListAircraft() {
                 />
 
                 <div className="space-y-2">
-                  <Label>Registration Document</Label>
+                  <Label>Aircraft Insurance Certificate *</Label>
                   <Input
                     type="file"
                     accept="image/*,.pdf"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) setVerificationDocs(prev => ({ ...prev, registrationDoc: file }));
+                      if (file) setVerificationDocs(prev => ({ ...prev, insuranceDoc: file }));
                     }}
-                    data-testid="input-registration-doc"
+                    data-testid="input-insurance-doc"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Upload aircraft registration document
+                    Upload aircraft insurance certificate
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Annual Inspection</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Label>Annual Inspection Certificate *</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
                     <FormField
                       control={form.control}
                       name="annualInspectionDate"
@@ -683,72 +668,10 @@ export default function ListAircraft() {
                     }}
                     data-testid="input-annual-doc"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Upload annual inspection certificate
+                  </p>
                 </div>
-
-                <FormField
-                  control={form.control}
-                  name="requires100Hour"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center space-x-2">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          data-testid="checkbox-requires-100-hour"
-                        />
-                      </FormControl>
-                      <FormLabel className="!mt-0">Aircraft requires 100-hour inspection</FormLabel>
-                    </FormItem>
-                  )}
-                />
-
-                {form.watch("requires100Hour") && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-l-2 border-primary/30 pl-4">
-                    <FormField
-                      control={form.control}
-                      name="currentTach"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Current Tachometer</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.1" placeholder="2450.5" {...field} data-testid="input-current-tach" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="hour100InspectionTach"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Last 100-Hour Tach</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.1" placeholder="2375.0" {...field} data-testid="input-100-hour-tach" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                )}
-
-                <FormField
-                  control={form.control}
-                  name="maintenanceTrackingProvider"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Maintenance Tracking (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., Savvy Aviation, MxManager" {...field} data-testid="input-maintenance-provider" />
-                      </FormControl>
-                      <FormDescription>
-                        If you use a maintenance tracking service, specify the provider
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </CardContent>
             </Card>
 

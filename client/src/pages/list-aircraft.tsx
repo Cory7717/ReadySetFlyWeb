@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { Upload, X, ShieldAlert, Sparkles } from "lucide-react";
+import { ObjectUploader } from "@/components/ObjectUploader";
+import type { UploadResult } from "@uppy/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,6 +77,65 @@ export default function ListAircraft() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user} = useAuth();
+
+  // Aircraft image upload handlers
+  // NOTE: These handlers are ONLY for public aircraft photos
+  // Verification documents use separate FormData upload (lines 671-727) and remain private
+  const handleGetUploadParameters = async () => {
+    const response = await fetch('/api/objects/upload', {
+      method: 'POST',
+      credentials: 'include',
+    });
+    const data = await response.json();
+    return {
+      method: 'PUT' as const,
+      url: data.uploadURL,
+    };
+  };
+
+  const handleUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    try {
+      const uploadedUrls: string[] = [];
+      for (const file of result.successful || []) {
+        if (file.uploadURL) {
+          // Set ACL policy for public access - ONLY for aircraft photos
+          // This handler is explicitly for listing photos that need to be publicly visible
+          const parsedUrl = new URL(file.uploadURL);
+          const objectPath = parsedUrl.pathname.slice(1); // Remove leading slash
+          
+          await fetch('/api/objects/set-acl', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              path: objectPath,
+              access: 'publicRead', // PUBLIC: Aircraft listing photos must be visible to renters
+            }),
+          });
+          
+          // Store the uploaded URL
+          const imageUrl = file.uploadURL.split('?')[0]; // Remove query params
+          uploadedUrls.push(imageUrl);
+        }
+      }
+      
+      if (uploadedUrls.length > 0) {
+        // Add new uploaded URLs to existing images
+        setImageFiles([...imageFiles, ...uploadedUrls]);
+        toast({ 
+          title: "Images uploaded successfully",
+          description: `${uploadedUrls.length} image(s) added to your listing`
+        });
+      }
+    } catch (error) {
+      console.error('Error processing aircraft image upload:', error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to process the uploaded images. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -219,16 +280,11 @@ export default function ListAircraft() {
     // Check if verification documents are provided
     const hasVerificationDocs = Object.values(verificationDocs).some(doc => doc !== null);
     
-    // Convert preview URLs to placeholder URLs for storage
-    // Once cloud storage is integrated, this will upload actual files
-    const placeholderImages = imageFiles.length > 0 
-      ? imageFiles.map((_, idx) => `https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=800&auto=format&fit=crop&q=60&idx=${idx}`)
-      : ["https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=800"];
-    
+    // Use actual uploaded image URLs from cloud storage
     const listingPayload = {
       ...data,
       requiredCertifications: selectedCertifications,
-      images: placeholderImages,
+      images: imageFiles.length > 0 ? imageFiles : [],
     };
     
     if (hasVerificationDocs) {
@@ -679,17 +735,10 @@ export default function ListAircraft() {
             <Card>
               <CardHeader>
                 <CardTitle>Photos</CardTitle>
-                <CardDescription>Add up to 15 photos of your aircraft. You can preview them here before submitting.</CardDescription>
+                <CardDescription>Add up to 15 photos of your aircraft. Upload multiple images at once using cloud storage.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {imageFiles.length > 0 && (
-                    <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
-                      <AlertDescription className="text-sm">
-                        <strong>Note:</strong> Cloud storage integration is currently in development. Your images are previewing correctly and will be stored as placeholders until cloud storage is fully integrated.
-                      </AlertDescription>
-                    </Alert>
-                  )}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {imageFiles.map((url, index) => (
                       <div key={index} className="relative aspect-square rounded-lg overflow-hidden border">
@@ -706,27 +755,19 @@ export default function ListAircraft() {
                       </div>
                     ))}
                     {imageFiles.length < 15 && (
-                      <label className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 flex flex-col items-center justify-center gap-2 hover-elevate cursor-pointer" data-testid="upload-image-area">
-                        <Upload className="h-8 w-8 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">Upload Photo</span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              // Create temporary preview URL
-                              const previewUrl = URL.createObjectURL(file);
-                              setImageFiles([...imageFiles, previewUrl]);
-                              toast({
-                                title: "Image Added",
-                                description: "Note: Cloud storage integration is in progress. Images are currently stored as placeholders.",
-                              });
-                            }
-                          }}
-                        />
-                      </label>
+                      <div className="aspect-square rounded-lg border-2 border-dashed border-muted-foreground/25 flex flex-col items-center justify-center gap-2">
+                        <ObjectUploader
+                          onGetUploadParameters={handleGetUploadParameters}
+                          onComplete={handleUploadComplete}
+                          allowedFileTypes={['image/*']}
+                          maxNumberOfFiles={15 - imageFiles.length}
+                          buttonClassName="w-full h-full flex flex-col items-center justify-center gap-2"
+                          buttonVariant="ghost"
+                        >
+                          <Upload className="h-8 w-8 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">Upload Photos</span>
+                        </ObjectUploader>
+                      </div>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">

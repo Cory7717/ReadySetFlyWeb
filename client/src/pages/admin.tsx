@@ -736,7 +736,7 @@ export default function AdminDashboard() {
           // Update form field with the uploaded URL
           const imageUrl = file.uploadURL.split('?')[0]; // Remove query params
           setOrderImageUrl(imageUrl);
-          orderForm.setValue('imageUrl', imageUrl);
+          orderForm.setValue('imageUrl', imageUrl, { shouldValidate: true, shouldDirty: true });
           
           toast({ 
             title: "Image uploaded successfully",

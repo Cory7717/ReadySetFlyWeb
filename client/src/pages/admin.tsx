@@ -5056,10 +5056,11 @@ export default function AdminDashboard() {
                           />
                           <ObjectUploader
                             onGetUploadParameters={handleOrderGetUploadParameters}
-                            onUploadComplete={handleOrderUploadComplete}
-                            allowedFileTypes={['image/*']}
+                            onComplete={handleOrderUploadComplete}
                             maxNumberOfFiles={1}
-                          />
+                          >
+                            Upload Image
+                          </ObjectUploader>
                           {orderImageUrl && (
                             <img 
                               src={orderImageUrl} 

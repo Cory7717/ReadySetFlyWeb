@@ -887,7 +887,7 @@ export default function AdminDashboard() {
           description: "This order has an active banner ad.",
           variant: "destructive",
         });
-      } else if (error?.message?.includes('IMAGE_REQUIRED')) {
+      } else if (error?.errorCode === 'IMAGE_REQUIRED' || error?.message?.includes('IMAGE_REQUIRED')) {
         toast({
           title: "Image required",
           description: "Please upload a banner image before activating this order.",

@@ -4478,6 +4478,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof Error && error.message === 'ALREADY_ACTIVATED') {
         return res.status(409).json({ error: "This order has already been activated." });
       }
+      // Handle missing image
+      if (error instanceof Error && error.message === 'IMAGE_REQUIRED') {
+        return res.status(400).json({ errorCode: "IMAGE_REQUIRED", error: "Banner image is required. Please upload an image before activating this order." });
+      }
       console.error('Banner ad order activation error:', error);
       res.status(500).json({ error: "Failed to activate banner ad order", details: error instanceof Error ? error.message : String(error) });
     }

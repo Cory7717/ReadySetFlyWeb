@@ -4936,10 +4936,16 @@ export default function AdminDashboard() {
                     return;
                   }
                   
+                  // Ensure imageUrl from state is included (fallback if form field is empty)
+                  const submissionData = {
+                    ...data,
+                    imageUrl: data.imageUrl || orderImageUrl
+                  };
+                  
                   if (editingOrder) {
-                    updateOrderMutation.mutate({ id: editingOrder.id, data });
+                    updateOrderMutation.mutate({ id: editingOrder.id, data: submissionData });
                   } else {
-                    createOrderMutation.mutate(data);
+                    createOrderMutation.mutate(submissionData);
                   }
                 })} 
                 className="flex flex-col flex-1 min-h-0"

@@ -2138,6 +2138,11 @@ export class DatabaseStorage implements IStorage {
       throw new Error('ALREADY_ACTIVATED');
     }
 
+    // Validate that order has required image
+    if (!order.imageUrl || order.imageUrl.trim() === '') {
+      throw new Error('IMAGE_REQUIRED');
+    }
+
     // Calculate proper end date based on tier duration
     const startDate = order.startDate || new Date();
     let endDate: Date = order.endDate || new Date(startDate);
@@ -2152,7 +2157,7 @@ export class DatabaseStorage implements IStorage {
       orderId: order.id,
       title: order.title,
       description: order.description,
-      imageUrl: order.imageUrl || '',
+      imageUrl: order.imageUrl,
       link: order.link,
       placements: order.placements,
       category: order.category,

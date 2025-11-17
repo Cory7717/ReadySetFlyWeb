@@ -887,6 +887,12 @@ export default function AdminDashboard() {
           description: "This order has an active banner ad.",
           variant: "destructive",
         });
+      } else if (error?.message?.includes('IMAGE_REQUIRED')) {
+        toast({
+          title: "Image required",
+          description: "Please upload a banner image before activating this order.",
+          variant: "destructive",
+        });
       } else {
         // Handle other errors
         toast({
@@ -3677,10 +3683,10 @@ export default function AdminDashboard() {
                               variant="ghost"
                               onClick={() => {
                                 setEditingBanner(banner);
-                                setBannerImageUrl(banner.imageUrl); // Populate image preview
+                                setBannerImageUrl(banner.imageUrl || ""); // Populate image preview
                                 bannerForm.reset({
                                   title: banner.title,
-                                  imageUrl: banner.imageUrl,
+                                  imageUrl: banner.imageUrl || "",
                                   link: banner.link ?? "",
                                   description: banner.description ?? "",
                                   placements: banner.placements || [],
@@ -4654,10 +4660,11 @@ export default function AdminDashboard() {
                   }
                   
                   // Admin can update ALL fields
+                  // Use bannerImageUrl state if available (from upload), otherwise use form data
                   const payload = {
                     title: data.title,
                     description: data.description,
-                    imageUrl: data.imageUrl,
+                    imageUrl: bannerImageUrl || data.imageUrl,
                     link: data.link,
                     placements: data.placements,
                     category: data.category,

@@ -1,3 +1,15 @@
+import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Loads ReadySetFly/server/.env no matter where you run from
+dotenv.config({ path: join(__dirname, ".env") });
+
+// TEMP: prove it loaded (remove after you see "true")
+console.log("DATABASE_URL loaded?", !!process.env.DATABASE_URL);
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";

@@ -9,9 +9,10 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 
-if (!process.env.REPLIT_DOMAINS) {
-  throw new Error("Environment variable REPLIT_DOMAINS not provided");
-}
+const IS_REPLIT = !!process.env.REPL_ID || !!process.env.REPLIT_DEPLOYMENT;
+
+// In local/dev (non-Replit), don't require Replit env vars
+const REPLIT_DOMAINS = process.env.REPLIT_DOMAINS ?? "localhost";
 
 const getOidcConfig = memoize(
   async () => {
@@ -78,6 +79,12 @@ async function upsertUser(
 }
 
 export async function setupAuth(app: Express) {
+  // 🔒 Skip Replit auth entirely when not running on Replit
+  if (!IS_REPLIT) {
+    console.log("[AUTH] Replit auth disabled (local/dev environment).");
+    return;
+  }
+
   app.set("trust proxy", 1);
   app.use(getSession());
   app.use(passport.initialize());
@@ -90,36 +97,37 @@ export async function setupAuth(app: Express) {
     verified: passport.AuthenticateCallback
   ) => {
     console.log("[AUTH] Verify function called with claims:", tokens.claims());
-    const user = {};
+
+    const user: any = {};
     updateUserSession(user, tokens);
+
     try {
       const upsertedUser = await upsertUser(tokens.claims());
-      console.log("[AUTH] User upserted successfully:", { id: upsertedUser.id, email: upsertedUser.email });
+      console.log("[AUTH] User upserted successfully:", {
+        id: upsertedUser.id,
+        email: upsertedUser.email,
+      });
     } catch (error) {
       console.error("[AUTH] Error upserting user:", error);
     }
+
     verified(null, user);
   };
 
-  // Get configured domains and add current Replit dev hostname if not included
-  const configuredDomains = process.env.REPLIT_DOMAINS!.split(",").map(d => d.trim());
-  
-  // Try to detect Replit dev hostname from environment
-  // REPLIT_DEV_DOMAIN is typically set by Replit for the dev environment
+  // Domains allowed for Replit OAuth
+  const configuredDomains = REPLIT_DOMAINS.split(",").map((d) => d.trim());
+
+  // Add Replit dev domain if present
   const replitDevDomain = process.env.REPLIT_DEV_DOMAIN;
-  
-  // Include all domains: configured custom domains + Replit dev domain if available
   const allDomainsSet = new Set(configuredDomains);
   if (replitDevDomain) {
     allDomainsSet.add(replitDevDomain);
   }
-  
-  // Convert Set to Array for iteration
+
   const allDomains = Array.from(allDomainsSet);
-  
+
   console.log("[AUTH] Registering Replit Auth strategies for domains:", allDomains);
-  
-  // Register a strategy for each domain
+
   for (const domain of allDomains) {
     const strategy = new Strategy(
       {
@@ -128,7 +136,7 @@ export async function setupAuth(app: Express) {
         scope: "openid email profile offline_access",
         callbackURL: `https://${domain}/api/callback`,
       },
-      verify,
+      verify
     );
     passport.use(strategy);
   }
@@ -143,13 +151,13 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/callback", (req, res, next) => {
     console.log("[AUTH] Callback received for hostname:", req.hostname);
-    console.log("[AUTH] Query params:", req.query);
-    
-    // Check if this is a mobile OAuth request
-    const isMobileRequest = req.query.mobile === 'true';
-    
+
+    const isMobileRequest = req.query.mobile === "true";
+
     passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: isMobileRequest ? "/api/auth/mobile-oauth-callback" : "/",
+      successReturnToOrRedirect: isMobileRequest
+        ? "/api/auth/mobile-oauth-callback"
+        : "/",
       failureRedirect: "/api/login",
     })(req, res, next);
   });
@@ -157,23 +165,36 @@ export async function setupAuth(app: Express) {
   app.get("/api/logout", (req, res) => {
     req.logout((err) => {
       if (err) {
-        console.error('[AUTH] Logout error:', err);
+        console.error("[AUTH] Logout error:", err);
       }
-      // Destroy the session
+
       req.session.destroy((destroyErr) => {
         if (destroyErr) {
-          console.error('[AUTH] Session destruction error:', destroyErr);
+          console.error("[AUTH] Session destruction error:", destroyErr);
         }
-        // Clear the session cookie
-        res.clearCookie('connect.sid');
-        // Redirect to home page
-        res.redirect('/');
+
+        // 🔧 Fix: clear cookie with the same attributes used when it was set
+        res.clearCookie("connect.sid", {
+          path: "/",
+          httpOnly: true,
+          sameSite: "lax",
+          secure: process.env.NODE_ENV === "production",
+        });
+
+        res.redirect("/");
       });
     });
   });
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  // If passport isn't initialized (e.g., local/dev with Replit auth disabled),
+  // req.isAuthenticated won't exist. In that case, allow the request through.
+  const hasPassport = typeof (req as any).isAuthenticated === "function";
+  if (!hasPassport) {
+    return next();
+  }
+
   const user = req.user as any;
 
   if (!req.isAuthenticated()) {
@@ -182,7 +203,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 
   // Check if this is an email/password session (no expires_at)
   // These sessions are managed by express-session with rolling expiration
-  if (!user.expires_at) {
+  if (!user?.expires_at) {
     return next();
   }
 
@@ -194,8 +215,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 
   const refreshToken = user.refresh_token;
   if (!refreshToken) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
+    return res.status(401).json({ message: "Unauthorized" });
   }
 
   try {
@@ -204,8 +224,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     updateUserSession(user, tokenResponse);
     return next();
   } catch (error) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
+    return res.status(401).json({ message: "Unauthorized" });
   }
 };
 

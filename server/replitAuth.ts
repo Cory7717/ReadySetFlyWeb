@@ -188,11 +188,16 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
-  // If passport isn't initialized (e.g., local/dev with Replit auth disabled),
-  // req.isAuthenticated won't exist. In that case, allow the request through.
+  // If passport isn't initialized, req.isAuthenticated won't exist.
+  // Only allow-through when Replit auth is disabled (local/dev).
   const hasPassport = typeof (req as any).isAuthenticated === "function";
+
   if (!hasPassport) {
-    return next();
+    // If you're NOT on Replit (local/dev), allow through
+    if (!IS_REPLIT) return next();
+
+    // If you ARE on Replit but passport isn't initialized, that's a misconfig
+    return res.status(500).json({ message: "Auth not initialized" });
   }
 
   const user = req.user as any;
@@ -201,8 +206,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
-  // Check if this is an email/password session (no expires_at)
-  // These sessions are managed by express-session with rolling expiration
+  // Non-OAuth sessions (no expires_at) use rolling session expiration
   if (!user?.expires_at) {
     return next();
   }

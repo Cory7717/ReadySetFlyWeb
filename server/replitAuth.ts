@@ -23,9 +23,9 @@ const HAS_GOOGLE =
   !!process.env.GOOGLE_CLIENT_ID &&
   !!process.env.GOOGLE_CLIENT_SECRET;
 
-// Helper to load Issuer from the explicit lib path to avoid export-map issues at runtime
+// Helper to load Issuer in a tolerant way across ESM/CJS export shapes
 async function loadIssuer() {
-  const mod = await import("openid-client/lib/index.js");
+  const mod = await import("openid-client");
   const Issuer = (mod as any)?.Issuer ?? (mod as any)?.default?.Issuer;
   if (!Issuer) throw new Error("Issuer not found in openid-client import");
   return Issuer;

@@ -117,9 +117,9 @@ export default function DeleteAccount() {
             <p className="text-center text-muted-foreground">
               You must be signed in to delete your account.
             </p>
-            <div className="flex justify-center pt-4">
+              <div className="flex justify-center pt-4">
               <Button 
-                onClick={() => window.location.href = '/api/auth/google'}
+                onClick={() => window.location.href = 'https://readysetfly.us/delete-account'}
                 data-testid="button-login-to-delete"
               >
                 Sign In to Continue

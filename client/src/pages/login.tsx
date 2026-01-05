@@ -181,7 +181,7 @@ export default function LoginPage() {
             type="button"
             variant="outline"
             className="w-full"
-            onClick={() => window.location.href = '/api/auth/google'}
+            onClick={() => window.location.href = 'https://readysetfly-api.onrender.com/api/auth/google'}
             data-testid="button-oauth-login"
           >
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">

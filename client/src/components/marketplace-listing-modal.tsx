@@ -822,7 +822,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
         <AlertDialogFooter>
           <AlertDialogCancel data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
           <AlertDialogAction
-            onClick={() => window.location.href = '/api/auth/google'}
+            onClick={() => window.location.href = 'https://readysetfly-api.onrender.com/api/auth/google'}
             data-testid="button-go-login"
           >
             Sign In / Create Account

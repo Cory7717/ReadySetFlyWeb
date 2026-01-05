@@ -156,7 +156,7 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               size="lg"
-              onClick={() => window.location.href = '/api/login'}
+              onClick={() => window.location.href = '/api/auth/google'}
               data-testid="button-cta-login"
             >
               Create Your Account
@@ -258,7 +258,7 @@ export default function Landing() {
           <Button 
             variant="ghost"
             size="sm"
-            onClick={() => window.location.href = '/api/login'}
+            onClick={() => window.location.href = '/api/auth/google'}
             data-testid="button-admin-login"
             className="text-muted-foreground hover:text-foreground"
           >

@@ -119,7 +119,7 @@ export default function DeleteAccount() {
             </p>
             <div className="flex justify-center pt-4">
               <Button 
-                onClick={() => window.location.href = '/api/login'}
+                onClick={() => window.location.href = '/api/auth/google'}
                 data-testid="button-login-to-delete"
               >
                 Sign In to Continue

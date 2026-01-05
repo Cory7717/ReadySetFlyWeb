@@ -1,7 +1,6 @@
 // Unified OAuth/session auth (Google OIDC + optional legacy Replit OIDC)
 // Keeps compatibility with existing code expecting req.user.claims.sub
 
-import * as openid from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
 
 import passport from "passport";
@@ -24,8 +23,13 @@ const HAS_GOOGLE =
   !!process.env.GOOGLE_CLIENT_ID &&
   !!process.env.GOOGLE_CLIENT_SECRET;
 
-// Grab Issuer from namespace import (openid-client is ESM with named exports)
-const Issuer = (openid as any)?.Issuer;
+// Helper to load Issuer from the explicit lib path to avoid export-map issues at runtime
+async function loadIssuer() {
+  const mod = await import("openid-client/lib/index.js");
+  const Issuer = (mod as any)?.Issuer ?? (mod as any)?.default?.Issuer;
+  if (!Issuer) throw new Error("Issuer not found in openid-client import");
+  return Issuer;
+}
 
 // Helpful base URL for callback construction
 function getApiBaseUrl(): string {
@@ -56,7 +60,7 @@ function getReplitCallbackUrl(): string {
 // OIDC discovery (memoized)
 const getGoogleOidcConfig = memoize(
   async () => {
-    if (!Issuer) throw new Error("Issuer not found in openid-client import");
+    const Issuer = await loadIssuer();
 
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
       throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set");
@@ -80,7 +84,7 @@ const getGoogleOidcConfig = memoize(
 
 const getReplitOidcConfig = memoize(
   async () => {
-    if (!Issuer) throw new Error("Issuer not found in openid-client import");
+    const Issuer = await loadIssuer();
     return await Issuer.discover(new URL(REPLIT_ISSUER_URL).toString());
   },
   { maxAge: 3600 * 1000 }

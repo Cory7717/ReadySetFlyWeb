@@ -52,7 +52,11 @@ function getReplitCallbackUrl(): string {
 // OIDC discovery (memoized)
 const getGoogleOidcConfig = memoize(
   async () => {
-    const { Issuer } = await import("openid-client");
+    const mod = await import("openid-client");
+    const Issuer = (mod as any).Issuer ?? (mod as any).default?.Issuer;
+    if (!Issuer) {
+      throw new Error("Issuer not found in openid-client import");
+    }
 
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
       throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set");
@@ -76,7 +80,11 @@ const getGoogleOidcConfig = memoize(
 
 const getReplitOidcConfig = memoize(
   async () => {
-    const { Issuer } = await import("openid-client");
+    const mod = await import("openid-client");
+    const Issuer = (mod as any).Issuer ?? (mod as any).default?.Issuer;
+    if (!Issuer) {
+      throw new Error("Issuer not found in openid-client import");
+    }
     return await Issuer.discover(new URL(REPLIT_ISSUER_URL).toString());
   },
   { maxAge: 3600 * 1000 }

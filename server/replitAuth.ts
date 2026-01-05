@@ -49,14 +49,25 @@ function getReplitCallbackUrl(): string {
   return `${getApiBaseUrl()}/api/auth/replit/callback`;
 }
 
+// Load Issuer in a way that tolerates different export shapes (named, default, path import)
+async function loadIssuer() {
+  // Try main entry
+  const mod = await import("openid-client").catch(() => undefined);
+  const fromMain = mod?.Issuer ?? (mod as any)?.default?.Issuer;
+  if (fromMain) return fromMain;
+
+  // Fallback to direct path import (some bundlers/export maps can differ)
+  const modLib = await import("openid-client/lib/index.js").catch(() => undefined);
+  const fromLib = modLib?.Issuer ?? (modLib as any)?.default?.Issuer;
+  if (fromLib) return fromLib;
+
+  throw new Error("Issuer not found in openid-client import");
+}
+
 // OIDC discovery (memoized)
 const getGoogleOidcConfig = memoize(
   async () => {
-    const mod = await import("openid-client");
-    const Issuer = (mod as any).Issuer ?? (mod as any).default?.Issuer;
-    if (!Issuer) {
-      throw new Error("Issuer not found in openid-client import");
-    }
+    const Issuer = await loadIssuer();
 
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
       throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set");
@@ -80,11 +91,7 @@ const getGoogleOidcConfig = memoize(
 
 const getReplitOidcConfig = memoize(
   async () => {
-    const mod = await import("openid-client");
-    const Issuer = (mod as any).Issuer ?? (mod as any).default?.Issuer;
-    if (!Issuer) {
-      throw new Error("Issuer not found in openid-client import");
-    }
+    const Issuer = await loadIssuer();
     return await Issuer.discover(new URL(REPLIT_ISSUER_URL).toString());
   },
   { maxAge: 3600 * 1000 }

@@ -54,6 +54,10 @@ const getGoogleOidcConfig = memoize(
   async () => {
     const { Issuer } = await import("openid-client");
 
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set");
+    }
+
     // Google issuer discovery
     const issuer = await Issuer.discover("https://accounts.google.com");
 
@@ -63,6 +67,8 @@ const getGoogleOidcConfig = memoize(
       client_secret: process.env.GOOGLE_CLIENT_SECRET!,
       redirect_uris: [getGoogleCallbackUrl()],
       response_types: ["code"],
+      // Be explicit so Google receives the secret in the token request
+      token_endpoint_auth_method: "client_secret_post",
     });
   },
   { maxAge: 3600 * 1000 }

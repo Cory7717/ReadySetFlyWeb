@@ -2,6 +2,8 @@
 // Keeps compatibility with existing code expecting req.user.claims.sub
 
 import { Strategy, type VerifyFunction } from "openid-client/passport";
+// Static import of Issuer for better bundling/runtime compatibility
+import { Issuer } from "openid-client";
 
 import passport from "passport";
 import session from "express-session";
@@ -22,14 +24,6 @@ const REPLIT_ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
 const HAS_GOOGLE =
   !!process.env.GOOGLE_CLIENT_ID &&
   !!process.env.GOOGLE_CLIENT_SECRET;
-
-// Helper to load Issuer in a tolerant way across ESM/CJS export shapes
-async function loadIssuer() {
-  const mod = await import("openid-client");
-  const Issuer = (mod as any)?.Issuer ?? (mod as any)?.default?.Issuer;
-  if (!Issuer) throw new Error("Issuer not found in openid-client import");
-  return Issuer;
-}
 
 // Helpful base URL for callback construction
 function getApiBaseUrl(): string {
@@ -60,8 +54,6 @@ function getReplitCallbackUrl(): string {
 // OIDC discovery (memoized)
 const getGoogleOidcConfig = memoize(
   async () => {
-    const Issuer = await loadIssuer();
-
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
       throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set");
     }
@@ -84,7 +76,6 @@ const getGoogleOidcConfig = memoize(
 
 const getReplitOidcConfig = memoize(
   async () => {
-    const Issuer = await loadIssuer();
     return await Issuer.discover(new URL(REPLIT_ISSUER_URL).toString());
   },
   { maxAge: 3600 * 1000 }

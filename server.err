@@ -1,0 +1,11 @@
+Error [ERR_HTTP_HEADERS_SENT]: Cannot set headers after they are sent to the client
+    at ServerResponse.setHeader (node:_http_outgoing:655:11)
+    at ServerResponse.header (C:\Users\carme\ReadySetFlyWeb\ReadySetFly\node_modules\express\lib\response.js:794:10)
+    at ServerResponse.json (C:\Users\carme\ReadySetFlyWeb\ReadySetFly\node_modules\express\lib\response.js:275:10)
+    at res.json (file:///C:/Users/carme/ReadySetFlyWeb/ReadySetFly/dist/index.js:8901:28)
+    at file:///C:/Users/carme/ReadySetFlyWeb/ReadySetFly/dist/index.js:8923:24
+    at Layer.handle_error (C:\Users\carme\ReadySetFlyWeb\ReadySetFly\node_modules\express\lib\router\layer.js:71:5)
+    at trim_prefix (C:\Users\carme\ReadySetFlyWeb\ReadySetFly\node_modules\express\lib\router\index.js:326:13)
+    at C:\Users\carme\ReadySetFlyWeb\ReadySetFly\node_modules\express\lib\router\index.js:286:9
+    at Function.process_params (C:\Users\carme\ReadySetFlyWeb\ReadySetFly\node_modules\express\lib\router\index.js:346:12)
+    at next (C:\Users\carme\ReadySetFlyWeb\ReadySetFly\node_modules\express\lib\router\index.js:280:10)

@@ -1,0 +1,9 @@
+[dotenv@17.2.3] injecting env (15) from dist\.env -- tip: ⚙️  enable debug logging with { debug: true }
+db.ts env loaded? true
+[dotenv@17.2.3] injecting env (0) from dist\.env -- tip: 👥 sync secrets across teammates & machines: https://dotenvx.com/ops
+DATABASE_URL loaded? true
+[AUTH] Google OIDC enabled. Callback: http://localhost:5000/api/auth/google/callback
+[AUTH] Legacy Replit OIDC disabled.
+11:06:01 AM [express] serving on port 5000
+11:06:11 AM [express] GET /api/auth/google 302 in 985ms
+11:06:17 AM [express] POST /api/marketplace 401 in 6ms :: {"message":"Unauthorized"}

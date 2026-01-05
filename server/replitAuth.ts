@@ -1,7 +1,7 @@
 // Unified OAuth/session auth (Google OIDC + optional legacy Replit OIDC)
 // Keeps compatibility with existing code expecting req.user.claims.sub
 
-import { Issuer } from "openid-client";
+import openid from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
 
 import passport from "passport";
@@ -23,6 +23,9 @@ const REPLIT_ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
 const HAS_GOOGLE =
   !!process.env.GOOGLE_CLIENT_ID &&
   !!process.env.GOOGLE_CLIENT_SECRET;
+
+// Handle default export shape of openid-client at runtime
+const Issuer = (openid as any)?.Issuer;
 
 // Helpful base URL for callback construction
 function getApiBaseUrl(): string {

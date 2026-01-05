@@ -290,13 +290,22 @@ return refreshed;
       (req, res, next) => {
         passport.authenticate("google", async (err, user, info) => {
           if (err) {
-            const detail = (err as any)?.response?.body || (err as any)?.error_description || String(err);
+            const rawBody = (err as any)?.response?.body;
             const statusCode = (err as any)?.response?.statusCode || 500;
+            const detail = rawBody
+              ? typeof rawBody === "string"
+                ? rawBody
+                : JSON.stringify(rawBody)
+              : (err as any)?.error_description || (err as any)?.message || String(err);
+
             console.error("[AUTH][google callback] token exchange error:", {
               statusCode,
-              body: (err as any)?.response?.body,
-              err: String(err),
+              body: rawBody,
+              error_description: (err as any)?.error_description,
+              message: (err as any)?.message,
+              stack: (err as any)?.stack,
             });
+
             return res.status(statusCode).json({ message: "OAuth exchange failed", detail });
           }
 

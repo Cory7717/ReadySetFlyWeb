@@ -9,7 +9,7 @@ import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
 import { storage } from "./storage";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema } from "@shared/schema";
-import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
+import { setupAuth, isAuthenticated, isAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
 import { sendContactFormEmail } from "./email-templates";
 import registerMobileAuthRoutes from "./mobile-auth-routes";

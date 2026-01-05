@@ -1,4 +1,6 @@
-// Replit Auth integration (from blueprint:javascript_log_in_with_replit)
+// Unified OAuth/session auth (Google OIDC + optional legacy Replit OIDC)
+// Keeps compatibility with existing code expecting req.user.claims.sub
+
 import * as client from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
 
@@ -9,250 +11,339 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 
-const IS_REPLIT = !!process.env.REPL_ID || !!process.env.REPLIT_DEPLOYMENT;
+// Flags / env
+const AUTH_DISABLED = String(process.env.AUTH_DISABLED ?? "").toLowerCase() === "true";
 
-// In local/dev (non-Replit), don't require Replit env vars
+// Legacy Replit (optional while migrating)
+const HAS_REPLIT = !!process.env.REPL_ID || !!process.env.REPLIT_DEPLOYMENT;
 const REPLIT_DOMAINS = process.env.REPLIT_DOMAINS ?? "localhost";
+const REPLIT_ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
 
-const getOidcConfig = memoize(
+// Google (new primary)
+const HAS_GOOGLE =
+  !!process.env.GOOGLE_CLIENT_ID &&
+  !!process.env.GOOGLE_CLIENT_SECRET;
+
+// Helpful base URL for callback construction
+function getApiBaseUrl(): string {
+  // Prefer explicit config
+  if (process.env.API_BASE_URL) return process.env.API_BASE_URL;
+
+  // Render often exposes an external URL env var depending on setup
+  if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL;
+
+  // Fallback local
+  const port = process.env.PORT || "5000";
+  return `http://localhost:${port}`;
+}
+
+function getGoogleCallbackUrl(): string {
+  // If you explicitly provide it, we use it.
+  if (process.env.GOOGLE_REDIRECT_URL) return process.env.GOOGLE_REDIRECT_URL;
+
+  // Otherwise derive it.
+  return `${getApiBaseUrl()}/api/auth/google/callback`;
+}
+
+function getReplitCallbackUrl(): string {
+  if (process.env.REPLIT_REDIRECT_URL) return process.env.REPLIT_REDIRECT_URL;
+  return `${getApiBaseUrl()}/api/auth/replit/callback`;
+}
+
+// OIDC discovery (memoized)
+const getGoogleOidcConfig = memoize(
+  async () => {
+    // Google issuer discovery
+    return await client.discovery(
+      new URL("https://accounts.google.com"),
+      process.env.GOOGLE_CLIENT_ID!
+    );
+  },
+  { maxAge: 3600 * 1000 }
+);
+
+const getReplitOidcConfig = memoize(
   async () => {
     return await client.discovery(
-      new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
+      new URL(REPLIT_ISSUER_URL),
       process.env.REPL_ID!
     );
   },
   { maxAge: 3600 * 1000 }
 );
 
+// Postgres-backed sessions (shared by Passport + your /api/auth/web-login routes)
 export function getSession() {
-  const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
+  const sessionTtlSeconds = 7 * 24 * 60 * 60; // 1 week
   const pgStore = connectPg(session);
+
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,
     createTableIfMissing: false,
-    ttl: sessionTtl,
+    ttl: sessionTtlSeconds,
     tableName: "sessions",
   });
+
   return session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
-    rolling: true, // Reset session expiration on every request (keeps users logged in while active)
+    rolling: true,
     cookie: {
       httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      maxAge: sessionTtl,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: sessionTtlSeconds * 1000,
     },
   });
 }
 
-function updateUserSession(
-  user: any,
-  tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers
-) {
-  user.claims = tokens.claims();
-  user.access_token = tokens.access_token;
-  user.refresh_token = tokens.refresh_token;
-  user.expires_at = user.claims?.exp;
+// Keep a consistent "shape" for req.user that your code already expects:
+// req.user.claims.sub = INTERNAL USER ID
+// req.user.claims.email, first_name, last_name, profile_image_url
+function makePassportUser(internalUserId: string, claims: any) {
+  return {
+    claims: {
+      sub: internalUserId,
+      email: claims?.email ?? null,
+      first_name: claims?.given_name ?? claims?.first_name ?? null,
+      last_name: claims?.family_name ?? claims?.last_name ?? null,
+      profile_image_url: claims?.picture ?? claims?.profile_image_url ?? null,
+    },
+  };
 }
 
-async function upsertUser(
-  claims: any,
-) {
-  const email = claims["email"];
-  
-  // Check if user should have admin privileges
-  const isAdmin = email === "coryarmer@gmail.com" || 
-                 (email && email.endsWith("@readysetfly.us"));
-  
-  return await storage.upsertUser({
-    id: claims["sub"],
-    email: email,
-    firstName: claims["first_name"],
-    lastName: claims["last_name"],
-    profileImageUrl: claims["profile_image_url"],
-    isAdmin: isAdmin,
-    emailVerified: true, // OAuth providers have already verified the email
-  });
+// Resolve user from OAuth claims WITHOUT changing existing IDs:
+// 1) If existing user by provider-sub (legacy Replit id), keep it
+// 2) Else if existing user by email, use that (keeps uuid ids)
+// 3) Else create user (uuid default via DB if you omit id)
+async function resolveUserFromOAuth(provider: "google" | "replit", claims: any) {
+  const email = claims?.email;
+  const providerSub = claims?.sub;
+
+  // Legacy Replit had users.id = claims.sub
+  if (provider === "replit" && providerSub) {
+    const bySub = await storage.getUser(String(providerSub));
+    if (bySub) {
+      // Update profile fields on login
+      await storage.updateUser(bySub.id, {
+        email: email ?? bySub.email,
+        firstName: claims?.first_name ?? bySub.firstName,
+        lastName: claims?.last_name ?? bySub.lastName,
+        profileImageUrl: claims?.profile_image_url ?? bySub.profileImageUrl,
+        emailVerified: true,
+      });
+    const refreshed = await storage.getUser(bySub.id);
+    if (!refreshed) throw new Error("User not found after update (replit sub match)");
+    return refreshed;
+    }
+  }
+
+  // Prefer stable email match (best for migration / prevents duplicate accounts)
+  if (email) {
+    const byEmail = await storage.getUserByEmail(String(email));
+    if (byEmail) {
+      await storage.updateUser(byEmail.id, {
+        // keep id stable; just refresh profile data
+        firstName:
+          claims?.given_name ?? claims?.first_name ?? byEmail.firstName,
+        lastName:
+          claims?.family_name ?? claims?.last_name ?? byEmail.lastName,
+        profileImageUrl:
+          claims?.picture ?? claims?.profile_image_url ?? byEmail.profileImageUrl,
+        emailVerified: true,
+      });
+      const refreshed = await storage.getUser(byEmail.id);
+if (!refreshed) throw new Error("User not found after update (email match)");
+return refreshed;
+    }
+  }
+
+  // Create new user (uuid default is handled by DB if InsertUser allows omitting id)
+  // If your InsertUser requires id, we can switch to storage.upsertUser with an internal uuid,
+  // but based on your schema default, this should be fine.
+  const created = await storage.createUser({
+    email: email ?? null,
+    firstName: claims?.given_name ?? claims?.first_name ?? null,
+    lastName: claims?.family_name ?? claims?.last_name ?? null,
+    profileImageUrl: claims?.picture ?? claims?.profile_image_url ?? null,
+    emailVerified: true,
+    // NOTE: hashedPassword remains null for OAuth-only accounts
+  } as any);
+
+  return created;
 }
 
-export async function setupAuth(app: Express) {
-  // 🔒 Skip Replit auth entirely when not running on Replit
-  if (!IS_REPLIT) {
-    console.log("[AUTH] Replit auth disabled (local/dev environment).");
+  // ✅ Unified auth guard:
+  // - Passport OAuth users: req.isAuthenticated() + req.user.claims.sub
+  // - Web email/password users: req.session.userId
+  export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
+    if (AUTH_DISABLED) return next();
+
+    // Passport session (Google/Replit OAuth)
+    if (typeof req.isAuthenticated === "function") {
+      if (req.isAuthenticated() && req.user?.claims?.sub) return next();
+    }
+
+    // Email/password web session (set in /api/auth/web-login)
+    if (req.session?.userId) return next();
+
+    return res.status(401).json({ message: "Unauthorized" });
+  };
+
+  export const isAdmin: RequestHandler = async (req: any, res, next) => {
+    if (AUTH_DISABLED) return next();
+
+    const userId = req.user?.claims?.sub || req.session?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const dbUser = await storage.getUser(String(userId));
+    if (!dbUser || !dbUser.isAdmin) {
+      return res.status(403).json({ message: "Forbidden - Admin access required" });
+    }
+
+    next();
+  };
+
+  export async function setupAuth(app: Express) {
+  // Always set trust proxy for secure cookies on Render/behind proxies
+  app.set("trust proxy", 1);
+
+  // Always attach sessions so /api/auth/web-login works (email/password)
+  app.use(getSession());
+
+  if (AUTH_DISABLED) {
+    console.log("[AUTH] AUTH_DISABLED=true (sessions enabled, passport disabled).");
     return;
   }
 
-  app.set("trust proxy", 1);
-  app.use(getSession());
+  // Passport init
   app.use(passport.initialize());
   app.use(passport.session());
 
-  const config = await getOidcConfig();
+  passport.serializeUser((user: any, done) => {
+    // store internal user id in session
+    const id = user?.claims?.sub;
+    done(null, id);
+  });
 
-  const verify: VerifyFunction = async (
-    tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers,
-    verified: passport.AuthenticateCallback
-  ) => {
-    console.log("[AUTH] Verify function called with claims:", tokens.claims());
-
-    const user: any = {};
-    updateUserSession(user, tokens);
-
+  passport.deserializeUser(async (id: any, done) => {
     try {
-      const upsertedUser = await upsertUser(tokens.claims());
-      console.log("[AUTH] User upserted successfully:", {
-        id: upsertedUser.id,
-        email: upsertedUser.email,
+      if (!id) return done(null, false);
+      const dbUser = await storage.getUser(String(id));
+      if (!dbUser) return done(null, false);
+
+      // Rehydrate into the same shape code expects
+      const passportUser = makePassportUser(dbUser.id, {
+        email: dbUser.email,
+        first_name: dbUser.firstName,
+        last_name: dbUser.lastName,
+        profile_image_url: dbUser.profileImageUrl,
       });
-    } catch (error) {
-      console.error("[AUTH] Error upserting user:", error);
+
+      done(null, passportUser);
+    } catch (e) {
+      done(e as any);
     }
-
-    verified(null, user);
-  };
-
-  // Domains allowed for Replit OAuth
-  const configuredDomains = REPLIT_DOMAINS.split(",").map((d) => d.trim());
-
-  // Add Replit dev domain if present
-  const replitDevDomain = process.env.REPLIT_DEV_DOMAIN;
-  const allDomainsSet = new Set(configuredDomains);
-  if (replitDevDomain) {
-    allDomainsSet.add(replitDevDomain);
-  }
-
-  const allDomains = Array.from(allDomainsSet);
-
-  console.log("[AUTH] Registering Replit Auth strategies for domains:", allDomains);
-
-  for (const domain of allDomains) {
-    const strategy = new Strategy(
-      {
-        name: `replitauth:${domain}`,
-        config,
-        scope: "openid email profile offline_access",
-        callbackURL: `https://${domain}/api/callback`,
-      },
-      verify
-    );
-    passport.use(strategy);
-  }
-
-  passport.serializeUser((user: Express.User, cb) => cb(null, user));
-  passport.deserializeUser((user: Express.User, cb) => cb(null, user));
-
-  app.get("/api/login", (req, res, next) => {
-    console.log("[AUTH] Login initiated for hostname:", req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`)(req, res, next);
   });
+  // -------------------------
+  // Google OIDC Strategy
+  // -------------------------
+  if (HAS_GOOGLE) {
+    const googleConfig = await getGoogleOidcConfig();
 
-  app.get("/api/callback", (req, res, next) => {
-    console.log("[AUTH] Callback received for hostname:", req.hostname);
+    const verifyGoogle: VerifyFunction = async (tokens, verified) => {
+      try {
+        const claims = tokens.claims();
+        const dbUser = await resolveUserFromOAuth("google", claims);
+        if (!dbUser) throw new Error("resolveUserFromOAuth returned undefined");
 
-    const isMobileRequest = req.query.mobile === "true";
-
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: isMobileRequest
-        ? "/api/auth/mobile-oauth-callback"
-        : "/",
-      failureRedirect: "/api/login",
-    })(req, res, next);
-  });
-
-  app.get("/api/logout", (req, res) => {
-    req.logout((err) => {
-      if (err) {
-        console.error("[AUTH] Logout error:", err);
+        const passportUser = makePassportUser(dbUser.id, claims);
+        verified(null, passportUser);
+      } catch (err) {
+        verified(err as any);
       }
+    };
 
-      req.session.destroy((destroyErr) => {
-        if (destroyErr) {
-          console.error("[AUTH] Session destruction error:", destroyErr);
-        }
+    passport.use(
+      "google",
+      new Strategy(
+        {
+          name: "google",
+          config: googleConfig,
+          scope: "openid email profile",
+          callbackURL: getGoogleCallbackUrl(),
+        },
+        verifyGoogle
+      )
+    );
 
-        // 🔧 Fix: clear cookie with the same attributes used when it was set
-        res.clearCookie("connect.sid", {
-          path: "/",
-          httpOnly: true,
-          sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
-        });
+    // Start Google auth
+    app.get("/api/auth/google", passport.authenticate("google"));
 
+    // Callback
+    app.get(
+      "/api/auth/google/callback",
+      passport.authenticate("google", { failureRedirect: "/" }),
+      (req: any, res: any) => {
+        const userId = req.user?.claims?.sub;
+        if (userId) req.session.userId = userId;
         res.redirect("/");
-      });
-    });
-  });
+      }
+    );
+
+    console.log("[AUTH] Google OIDC enabled. Callback:", getGoogleCallbackUrl());
+  } else {
+    console.log("[AUTH] Google OIDC NOT enabled (missing GOOGLE_CLIENT_ID/SECRET).");
+  }
+
+  // -------------------------
+  // Legacy Replit OIDC Strategy (optional during migration)
+  // -------------------------
+  if (HAS_REPLIT && process.env.REPL_ID) {
+    const replitConfig = await getReplitOidcConfig();
+
+    const verifyReplit: VerifyFunction = async (tokens, verified) => {
+      try {
+        const claims = tokens.claims();
+        const dbUser = await resolveUserFromOAuth("replit", claims);
+        if (!dbUser) throw new Error("resolveUserFromOAuth returned undefined");
+
+        const passportUser = makePassportUser(dbUser.id, claims);
+        verified(null, passportUser);
+      } catch (err) {
+        verified(err as any);
+      }
+    };
+
+    passport.use(
+      "replit",
+      new Strategy(
+        {
+          name: "replit",
+          config: replitConfig,
+          scope: "openid email profile",
+          callbackURL: getReplitCallbackUrl(),
+        },
+        verifyReplit
+      )
+    );
+
+    app.get("/api/auth/replit", passport.authenticate("replit"));
+
+    app.get(
+      "/api/auth/replit/callback",
+      passport.authenticate("replit", { failureRedirect: "/" }),
+      (req: any, res: any) => {
+        const userId = req.user?.claims?.sub;
+        if (userId) req.session.userId = userId;
+        res.redirect("/");
+      }
+    );
+
+    console.log("[AUTH] Legacy Replit OIDC enabled. Callback:", getReplitCallbackUrl());
+  } else {
+    console.log("[AUTH] Legacy Replit OIDC disabled.");
+  }
 }
-
-export const isAuthenticated: RequestHandler = async (req, res, next) => {
-  // If passport isn't initialized, req.isAuthenticated won't exist.
-  // Only allow-through when Replit auth is disabled (local/dev).
-  const hasPassport = typeof (req as any).isAuthenticated === "function";
-
-  if (!hasPassport) {
-    // If you're NOT on Replit (local/dev), allow through
-    if (!IS_REPLIT) return next();
-
-    // If you ARE on Replit but passport isn't initialized, that's a misconfig
-    return res.status(500).json({ message: "Auth not initialized" });
-  }
-
-  const user = req.user as any;
-
-  if (!req.isAuthenticated()) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
-  // Non-OAuth sessions (no expires_at) use rolling session expiration
-  if (!user?.expires_at) {
-    return next();
-  }
-
-  // OAuth sessions with token expiration
-  const now = Math.floor(Date.now() / 1000);
-  if (now <= user.expires_at) {
-    return next();
-  }
-
-  const refreshToken = user.refresh_token;
-  if (!refreshToken) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
-  try {
-    const config = await getOidcConfig();
-    const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
-    updateUserSession(user, tokenResponse);
-    return next();
-  } catch (error) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-};
-
-export const isAdmin: RequestHandler = async (req, res, next) => {
-  const user = req.user as any;
-  
-  if (!user?.claims?.sub) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
-  // Get user from database to check admin status
-  let dbUser = await storage.getUser(user.claims.sub);
-  
-  // Fallback to email lookup (for testing scenarios where sub may change)
-  if (!dbUser && user.claims.email) {
-    console.log("[isAdmin] User not found by sub, trying email lookup:", user.claims.email);
-    dbUser = await storage.getUserByEmail(user.claims.email);
-    console.log("[isAdmin] Email lookup result:", dbUser ? `Found user ${dbUser.id}, isAdmin: ${dbUser.isAdmin}` : "Not found");
-  }
-  
-  if (!dbUser || !dbUser.isAdmin) {
-    console.log("[isAdmin] Access denied. dbUser:", dbUser ? `exists (isAdmin: ${dbUser.isAdmin})` : "not found");
-    return res.status(403).json({ message: "Forbidden - Admin access required" });
-  }
-
-  next();
-};

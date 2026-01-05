@@ -71,7 +71,7 @@ export default function PrivacyPolicy() {
                 operating system, browser type, and IP address.
               </li>
               <li>
-                <strong>Authentication Data:</strong> When you use third-party authentication (Google, GitHub via Replit Auth), 
+                <strong>Authentication Data:</strong> When you use third-party authentication (Google Sign‑In; legacy Replit Auth may also be supported), 
                 we receive your name, email, and profile information from those services.
               </li>
             </ul>
@@ -121,8 +121,11 @@ export default function PrivacyPolicy() {
                 View their privacy policy at <a href="https://www.paypal.com/us/legalhub/privacy-full" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">paypal.com/us/legalhub/privacy-full</a>
               </li>
               <li>
-                <strong>Replit:</strong> Provides authentication services and hosting infrastructure. 
-                View their privacy policy at <a href="https://replit.com/site/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">replit.com/site/privacy</a>
+                <strong>Google (Identity):</strong> Provides authentication services when you sign in using Google. 
+                View their privacy policy at <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">policies.google.com/privacy</a>
+              </li>
+              <li>
+                <strong>Replit (Legacy):</strong> Previously used for authentication/hosting for some deployments. If applicable, we may continue to support legacy Replit-authenticated accounts. View their privacy policy at <a href="https://replit.com/site/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">replit.com/site/privacy</a>
               </li>
               <li>
                 <strong>Neon (PostgreSQL Database):</strong> Hosts our database. 

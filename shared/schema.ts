@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index, uniqueIndex, foreignKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -133,12 +133,19 @@ export const users = pgTable("users", {
   isSuspended: boolean("is_suspended").default(false),
   suspensionReason: text("suspension_reason"),
   suspendedAt: timestamp("suspended_at"),
-  suspendedBy: varchar("suspended_by").references(() => users.id), // admin who suspended
+  suspendedBy: varchar("suspended_by"), // admin who suspended
   
   // Timestamps (from blueprint)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+},
+  (t) => ({
+    usersSuspendedByFk: foreignKey({
+      columns: [t.suspendedBy],
+      foreignColumns: [t.id],
+    }),
+  })
+);
 
 // Aircraft Listings (for rent)
 export const aircraftListings = pgTable("aircraft_listings", {
@@ -329,7 +336,7 @@ export const marketplaceFlags = pgTable("marketplace_flags", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   // Unique constraint: one flag per user per listing
-  index("idx_marketplace_flags_unique").on(table.listingId, table.userId),
+  uniqueIndex("idx_marketplace_flags_unique").on(table.listingId, table.userId),
 ]);
 
 // Job Applications (for marketplace job listings)
@@ -1091,9 +1098,7 @@ export const insertBannerAdOrderSchema = createInsertSchema(bannerAdOrders).omit
   sponsorName: z.string().min(1, "Sponsor name is required"),
   sponsorEmail: z.string().email("Valid email is required"),
   title: z.string().min(1, "Title is required"),
-  link: z.string().optional().refine((val) => !val || val.trim() === '' || z.string().url().safeParse(val).success, {
-    message: "Please enter a valid URL (e.g., https://www.example.com)",
-  }),
+  link: z.string().url("Please enter a valid URL (e.g., https://www.example.com)"),
   placements: z.array(z.string()).min(1, "At least one page placement is required"),
   tier: z.enum(["1month", "3months", "6months", "12months"]),
 });
@@ -1107,9 +1112,7 @@ export const insertBannerAdSchema = createInsertSchema(bannerAds).omit({
 }).extend({
   placements: z.array(z.string()).min(1, "At least one page placement is required"),
   imageUrl: z.string().min(1, "Banner image is required"),
-  link: z.string().optional().refine((val) => !val || val.trim() === '' || z.string().url().safeParse(val).success, {
-    message: "Please enter a valid URL (e.g., https://www.example.com)",
-  }),
+  link: z.string().url("Please enter a valid URL (e.g., https://www.example.com)"),
   title: z.string().min(1, "Title is required"),
 });
 

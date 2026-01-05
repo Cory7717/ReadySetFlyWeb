@@ -286,12 +286,38 @@ return refreshed;
     // Callback
     app.get(
       "/api/auth/google/callback",
-      passport.authenticate("google", { failureRedirect: "/" }),
-      (req: any, res: any) => {
-        const userId = req.user?.claims?.sub;
-        if (userId) req.session.userId = userId;
-        const frontend = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
-        res.redirect(frontend);
+      (req, res, next) => {
+        passport.authenticate("google", async (err, user, info) => {
+          if (err) {
+            console.error("[AUTH][google callback] error exchanging code:", err);
+            return res.status(500).json({ message: "OAuth exchange failed", detail: String(err) });
+          }
+
+          if (!user) {
+            console.error("[AUTH][google callback] no user returned from verify", info);
+            return res.redirect("/");
+          }
+
+          req.logIn(user, (loginErr) => {
+            if (loginErr) {
+              console.error("[AUTH][google callback] logIn error:", loginErr);
+              return res.status(500).json({ message: "Session login failed", detail: String(loginErr) });
+            }
+
+            const userId = (user as any)?.claims?.sub;
+            if (userId) req.session.userId = userId;
+
+            req.session.save((saveErr: any) => {
+              if (saveErr) {
+                console.error("[AUTH][google callback] session save error:", saveErr);
+                return res.status(500).json({ message: "Session save failed", detail: String(saveErr) });
+              }
+
+              const frontend = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+              return res.redirect(frontend);
+            });
+          });
+        })(req, res, next);
       }
     );
 

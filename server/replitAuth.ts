@@ -1,7 +1,6 @@
 // Unified OAuth/session auth (Google OIDC + optional legacy Replit OIDC)
 // Keeps compatibility with existing code expecting req.user.claims.sub
 
-import { Issuer } from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
 
 import passport from "passport";
@@ -53,6 +52,8 @@ function getReplitCallbackUrl(): string {
 // OIDC discovery (memoized)
 const getGoogleOidcConfig = memoize(
   async () => {
+    const { Issuer } = await import("openid-client");
+
     // Google issuer discovery
     const issuer = await Issuer.discover("https://accounts.google.com");
 
@@ -69,10 +70,8 @@ const getGoogleOidcConfig = memoize(
 
 const getReplitOidcConfig = memoize(
   async () => {
-    return await client.discovery(
-      new URL(REPLIT_ISSUER_URL),
-      process.env.REPL_ID!
-    );
+    const { Issuer } = await import("openid-client");
+    return await Issuer.discover(new URL(REPLIT_ISSUER_URL).toString());
   },
   { maxAge: 3600 * 1000 }
 );
@@ -278,11 +277,12 @@ return refreshed;
       new Strategy(
         {
           name: "google",
-          client: googleConfig,
+          // The Strategy type definition does not surface `client`, so cast to any.
+          client: googleConfig as any,
           params: {
             scope: "openid email profile",
           },
-        },
+        } as any,
         verifyGoogle
       )
     );

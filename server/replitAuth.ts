@@ -93,7 +93,8 @@ export function getSession() {
     proxy: true,
     cookie: {
       httpOnly: true,
-      sameSite: "lax",
+      // Cross-site (frontend on readysetfly.us, API on readysetfly-api.onrender.com)
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       secure: process.env.NODE_ENV === "production" ? "auto" : false,
       maxAge: sessionTtlSeconds * 1000,
     },
@@ -289,8 +290,14 @@ return refreshed;
       (req, res, next) => {
         passport.authenticate("google", async (err, user, info) => {
           if (err) {
-            console.error("[AUTH][google callback] error exchanging code:", err);
-            return res.status(500).json({ message: "OAuth exchange failed", detail: String(err) });
+            const detail = (err as any)?.response?.body || (err as any)?.error_description || String(err);
+            const statusCode = (err as any)?.response?.statusCode || 500;
+            console.error("[AUTH][google callback] token exchange error:", {
+              statusCode,
+              body: (err as any)?.response?.body,
+              err: String(err),
+            });
+            return res.status(statusCode).json({ message: "OAuth exchange failed", detail });
           }
 
           if (!user) {

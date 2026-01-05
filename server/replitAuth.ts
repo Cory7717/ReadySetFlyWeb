@@ -1,7 +1,7 @@
 // Unified OAuth/session auth (Google OIDC + optional legacy Replit OIDC)
 // Keeps compatibility with existing code expecting req.user.claims.sub
 
-import * as client from "openid-client";
+import { Issuer } from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
 
 import passport from "passport";
@@ -54,7 +54,7 @@ function getReplitCallbackUrl(): string {
 const getGoogleOidcConfig = memoize(
   async () => {
     // Google issuer discovery
-    const issuer = await client.Issuer.discover("https://accounts.google.com");
+    const issuer = await Issuer.discover("https://accounts.google.com");
 
     // Create a confidential client so token exchange sends client_secret (Google requires it for web apps)
     return new issuer.Client({
@@ -294,7 +294,7 @@ return refreshed;
     app.get(
       "/api/auth/google/callback",
       (req, res, next) => {
-        passport.authenticate("google", async (err, user, info) => {
+        passport.authenticate("google", async (err: any, user: any, info: any) => {
           if (err) {
             const rawBody = (err as any)?.response?.body;
             const statusCode = (err as any)?.response?.statusCode || 500;
@@ -334,7 +334,7 @@ return refreshed;
             }
 
             const userId = (user as any)?.claims?.sub;
-            if (userId) req.session.userId = userId;
+            if (userId) (req.session as any).userId = userId;
 
             req.session.save((saveErr: any) => {
               if (saveErr) {

@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Plane } from 'lucide-react';
+import { apiFetch, apiUrl } from '@/lib/api';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -34,7 +35,7 @@ export default function LoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginForm) => {
-      const response = await fetch('/api/auth/web-login', {
+      const response = await apiFetch('/api/auth/web-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -181,7 +182,7 @@ export default function LoginPage() {
             type="button"
             variant="outline"
             className="w-full"
-            onClick={() => window.location.href = 'https://readysetfly-api.onrender.com/api/auth/google'}
+            onClick={() => window.location.href = apiUrl('/api/auth/google')}
             data-testid="button-oauth-login"
           >
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">

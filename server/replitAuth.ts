@@ -90,10 +90,11 @@ export function getSession() {
     resave: false,
     saveUninitialized: false,
     rolling: true,
+    proxy: true,
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production" ? "auto" : false,
       maxAge: sessionTtlSeconds * 1000,
     },
   });
@@ -289,7 +290,8 @@ return refreshed;
       (req: any, res: any) => {
         const userId = req.user?.claims?.sub;
         if (userId) req.session.userId = userId;
-        res.redirect("/");
+        const frontend = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+        res.redirect(frontend);
       }
     );
 

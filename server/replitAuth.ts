@@ -292,17 +292,24 @@ return refreshed;
           if (err) {
             const rawBody = (err as any)?.response?.body;
             const statusCode = (err as any)?.response?.statusCode || 500;
-            const detail = rawBody
-              ? typeof rawBody === "string"
-                ? rawBody
-                : JSON.stringify(rawBody)
-              : (err as any)?.error_description || (err as any)?.message || String(err);
 
+            // Provide a structured detail object to make browser debugging easier.
+            const detail: Record<string, any> = {
+              responseStatus: statusCode,
+              responseBody: rawBody ?? null,
+              error: (err as any)?.error ?? null,
+              error_description: (err as any)?.error_description ?? null,
+              message: (err as any)?.message ?? null,
+            };
+
+            // Add stack trace only to server logs to avoid leaking in responses.
             console.error("[AUTH][google callback] token exchange error:", {
               statusCode,
               body: rawBody,
+              error: (err as any)?.error,
               error_description: (err as any)?.error_description,
               message: (err as any)?.message,
+              info,
               stack: (err as any)?.stack,
             });
 

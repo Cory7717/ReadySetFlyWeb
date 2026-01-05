@@ -54,10 +54,15 @@ function getReplitCallbackUrl(): string {
 const getGoogleOidcConfig = memoize(
   async () => {
     // Google issuer discovery
-    return await client.discovery(
-      new URL("https://accounts.google.com"),
-      process.env.GOOGLE_CLIENT_ID!
-    );
+    const issuer = await client.Issuer.discover("https://accounts.google.com");
+
+    // Create a confidential client so token exchange sends client_secret (Google requires it for web apps)
+    return new issuer.Client({
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      redirect_uris: [getGoogleCallbackUrl()],
+      response_types: ["code"],
+    });
   },
   { maxAge: 3600 * 1000 }
 );
@@ -273,9 +278,10 @@ return refreshed;
       new Strategy(
         {
           name: "google",
-          config: googleConfig,
-          scope: "openid email profile",
-          callbackURL: getGoogleCallbackUrl(),
+          client: googleConfig,
+          params: {
+            scope: "openid email profile",
+          },
         },
         verifyGoogle
       )

@@ -1,6 +1,7 @@
 // Unified OAuth/session auth (Google OIDC + optional legacy Replit OIDC)
 // Keeps compatibility with existing code expecting req.user.claims.sub
 
+import { Issuer } from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
 
 import passport from "passport";
@@ -49,15 +50,10 @@ function getReplitCallbackUrl(): string {
   return `${getApiBaseUrl()}/api/auth/replit/callback`;
 }
 
-import * as openid from "openid-client";
-const Issuer = (openid as any).Issuer;
-
 // OIDC discovery (memoized)
 const getGoogleOidcConfig = memoize(
   async () => {
-    if (!Issuer) {
-      throw new Error("Issuer not found in openid-client import");
-    }
+    if (!Issuer) throw new Error("Issuer not found in openid-client import");
 
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
       throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set");
@@ -81,9 +77,7 @@ const getGoogleOidcConfig = memoize(
 
 const getReplitOidcConfig = memoize(
   async () => {
-    if (!Issuer) {
-      throw new Error("Issuer not found in openid-client import");
-    }
+    if (!Issuer) throw new Error("Issuer not found in openid-client import");
     return await Issuer.discover(new URL(REPLIT_ISSUER_URL).toString());
   },
   { maxAge: 3600 * 1000 }

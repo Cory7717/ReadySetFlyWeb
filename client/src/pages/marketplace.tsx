@@ -15,6 +15,7 @@ import { MarketplaceListingModal } from "@/components/marketplace-listing-modal"
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { Search, SlidersHorizontal, Gift, X } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
+import { apiUrl } from "@/lib/api";
 
 const categories = [
   { id: "aircraft-sale", label: "Aircraft For Sale", fee: "$25-100/mo" },
@@ -65,7 +66,7 @@ export default function Marketplace() {
   const { data: categoryListings = [], isLoading } = useQuery<MarketplaceListing[]>({
     queryKey: ["/api/marketplace", selectedCategory, cityFilter, minPrice, maxPrice, engineTypeFilter, keywordFilter, radiusFilter, cfiRatingFilter],
     queryFn: async () => {
-      const response = await fetch(`/api/marketplace?${queryString}`);
+      const response = await fetch(apiUrl(`/api/marketplace?${queryString}`));
       if (!response.ok) throw new Error('Failed to fetch listings');
       return response.json();
     },

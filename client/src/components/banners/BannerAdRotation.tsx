@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { apiRequest } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 
 interface BannerAd {
   id: string;
@@ -42,7 +43,7 @@ export function BannerAdRotation({
       if (placement) params.set('placement', placement);
       if (category) params.set('category', category);
       
-      const response = await fetch(`/api/banner-ads/active?${params.toString()}`);
+      const response = await fetch(apiUrl(`/api/banner-ads/active?${params.toString()}`));
       if (!response.ok) {
         throw new Error('Failed to fetch banner ads');
       }

@@ -231,9 +231,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get upload URL for listing images
   app.post('/api/objects/upload', isAuthenticated, async (req: any, res) => {
     try {
-      const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      res.json({ uploadURL });
+      // Use S3 for production, fallback to ObjectStorage for Replit
+      if (process.env.AWS_S3_BUCKET) {
+        const { S3StorageService } = await import('./s3Storage.js');
+        const s3Service = new S3StorageService();
+        const uploadURL = await s3Service.getPresignedUploadUrl();
+        res.json({ uploadURL });
+      } else {
+        const objectStorageService = new ObjectStorageService();
+        const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+        res.json({ uploadURL });
+      }
     } catch (error) {
       console.error('Error getting upload URL:', error);
       res.status(500).json({ error: 'Failed to get upload URL' });
@@ -248,16 +256,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const userId = req.user.claims.sub;
-      const objectStorageService = new ObjectStorageService();
-      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
-        req.body.imageURL,
-        {
-          owner: userId,
-          visibility: "public", // Listing images are public
-        },
-      );
-
-      res.status(200).json({ objectPath });
+      
+      // Use S3 for production, fallback to ObjectStorage for Replit
+      if (process.env.AWS_S3_BUCKET) {
+        const { S3StorageService } = await import('./s3Storage.js');
+        const s3Service = new S3StorageService();
+        await s3Service.setPublicRead(req.body.imageURL);
+        res.status(200).json({ objectPath: req.body.imageURL });
+      } else {
+        const objectStorageService = new ObjectStorageService();
+        const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+          req.body.imageURL,
+          {
+            owner: userId,
+            visibility: "public", // Listing images are public
+          },
+        );
+        res.status(200).json({ objectPath });
+      }
     } catch (error) {
       console.error('Error setting listing image ACL:', error);
       res.status(500).json({ error: 'Internal server error' });

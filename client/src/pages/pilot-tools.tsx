@@ -57,6 +57,40 @@ function formatTimeAgo(timestamp: number): string {
   return `${hours}h ${minutes % 60}m ago`;
 }
 
+function extractAtisIdentifier(metar: any): string | null {
+  if (!metar?.rawOb) return null;
+  // ATIS identifier appears after RMK in format like "RMK AO2 SLP123 T01234567 INFO A"
+  // or just "ATIS ALPHA" or single letter at end
+  const raw = metar.rawOb;
+  
+  // Try to find INFO X pattern
+  const infoMatch = raw.match(/\bINFO\s+([A-Z])\b/i);
+  if (infoMatch) {
+    return `Information ${infoMatch[1].toUpperCase()}`;
+  }
+  
+  // Try to find ATIS X pattern
+  const atisMatch = raw.match(/\bATIS\s+([A-Z])\b/i);
+  if (atisMatch) {
+    return `Information ${atisMatch[1].toUpperCase()}`;
+  }
+  
+  return null;
+}
+
+function extractRunwayInUse(metar: any): string | null {
+  if (!metar?.rawOb) return null;
+  const raw = metar.rawOb;
+  
+  // Look for RWY XX or RUNWAY XX patterns in remarks
+  const rwyMatch = raw.match(/\b(?:RWY|RUNWAY)\s+(\d{2}[LCR]?(?:\s*(?:AND|\/)\s*\d{2}[LCR]?)*)/i);
+  if (rwyMatch) {
+    return rwyMatch[1].replace(/\s+/g, ' ');
+  }
+  
+  return null;
+}
+
 export default function PilotTools() {
   const [icao, setIcao] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
@@ -80,6 +114,8 @@ export default function PilotTools() {
   };
 
   const flightCategory = parseFlightCategory(weather?.metar);
+  const atisInfo = extractAtisIdentifier(weather?.metar);
+  const runwayInUse = extractRunwayInUse(weather?.metar);
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-5xl">
@@ -137,24 +173,31 @@ export default function PilotTools() {
             {/* Flight Category & Quick Info */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle className="flex items-center gap-2">
                     <Cloud className="h-5 w-5" />
                     {weather.icao} - Current Conditions
                   </CardTitle>
-                  <Badge 
-                    variant="outline" 
-                    className={`text-white ${
-                      flightCategory.color === "green" ? "bg-green-600" :
-                      flightCategory.color === "blue" ? "bg-blue-600" :
-                      flightCategory.color === "red" ? "bg-red-600" :
-                      "bg-purple-600"
-                    }`}
-                  >
-                    {flightCategory.category}
-                  </Badge>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge 
+                      variant="outline" 
+                      className={`text-white ${
+                        flightCategory.color === "green" ? "bg-green-600" :
+                        flightCategory.color === "blue" ? "bg-blue-600" :
+                        flightCategory.color === "red" ? "bg-red-600" :
+                        "bg-purple-600"
+                      }`}
+                    >
+                      {flightCategory.category}
+                    </Badge>
+                    {atisInfo && (
+                      <Badge variant="outline" className="bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200">
+                        {atisInfo}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                <CardDescription className="flex items-center gap-2">
+                <CardDescription className="flex items-center gap-2 flex-wrap">
                   {weather.metar && (
                     <span className="text-xs">
                       Updated: {formatTimeAgo(new Date(weather.metar.obsTime).getTime())}
@@ -162,6 +205,11 @@ export default function PilotTools() {
                   )}
                   {weather.cached && (
                     <Badge variant="secondary" className="text-xs">Cached</Badge>
+                  )}
+                  {runwayInUse && (
+                    <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200">
+                      Runway {runwayInUse} in use
+                    </Badge>
                   )}
                 </CardDescription>
               </CardHeader>

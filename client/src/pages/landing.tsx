@@ -2,9 +2,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen } from "lucide-react";
+import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Landing() {
+  const { isAuthenticated } = useAuth();
+  
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -150,6 +153,108 @@ export default function Landing() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      </div>
+
+      {/* Free Pilot Tools Section */}
+      <div className="bg-gradient-to-br from-blue-50 to-background dark:from-blue-950/20 dark:to-background py-12 sm:py-16">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-8 sm:mb-12">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-4">
+              FREE Pilot Resources
+            </h2>
+            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+              Professional tools for pilots - completely free, no credit card required
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            {/* Digital Logbook Card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex flex-col items-center text-center space-y-4">
+                  <div className="h-16 w-16 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                    <ClipboardList className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold">Digital Logbook</h3>
+                  <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                    FREE Forever
+                  </Badge>
+                  <p className="text-muted-foreground">
+                    Track your flight hours, aircraft types, and build your professional flight log. 
+                    Export to CSV for your records or applications.
+                  </p>
+                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                      <span>Track PIC, SIC, dual, instrument time & more</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                      <span>Digital signatures with lock protection</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                      <span>CSV export for backup & reporting</span>
+                    </li>
+                  </ul>
+                  <Button 
+                    className="w-full"
+                    onClick={() => window.location.href = isAuthenticated ? '/logbook' : '/login'}
+                  >
+                    {isAuthenticated ? 'Open Logbook' : 'Sign In to Access'}
+                  </Button>
+                  {!isAuthenticated && (
+                    <p className="text-xs text-muted-foreground">
+                      Free account required - takes 30 seconds
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pilot Tools Card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex flex-col items-center text-center space-y-4">
+                  <div className="h-16 w-16 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                    <CloudSun className="h-8 w-8 text-sky-600 dark:text-sky-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold">Aviation Weather & Tools</h3>
+                  <Badge variant="secondary" className="bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-400">
+                    No Sign In Required
+                  </Badge>
+                  <p className="text-muted-foreground">
+                    Get current METAR, TAF, and quick access to essential aviation resources like NOTAMs, TFRs, and flight planning tools.
+                  </p>
+                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-sky-600 dark:text-sky-400 mt-0.5 flex-shrink-0" />
+                      <span>Live METAR & TAF for any airport</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-sky-600 dark:text-sky-400 mt-0.5 flex-shrink-0" />
+                      <span>Quick links to NOTAMs, TFRs & charts</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-sky-600 dark:text-sky-400 mt-0.5 flex-shrink-0" />
+                      <span>Flight planning & briefing resources</span>
+                    </li>
+                  </ul>
+                  <Button 
+                    className="w-full"
+                    variant="outline"
+                    onClick={() => window.location.href = '/pilot-tools'}
+                  >
+                    Open Pilot Tools
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Free for everyone - no account needed
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
 

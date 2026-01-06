@@ -76,6 +76,7 @@ export function ReviewDialog({ rentalId, revieweeId, revieweeName, trigger, onSu
             onMouseEnter={() => isInteractive && setHoveredRating(star)}
             onMouseLeave={() => isInteractive && setHoveredRating(0)}
             className={`${isInteractive ? "cursor-pointer hover:scale-110 transition-transform" : "cursor-default"}`}
+            aria-label={isInteractive ? `Set overall rating to ${star} star${star === 1 ? "" : "s"}` : `Overall rating ${star} star${star === 1 ? "" : "s"}`}
             data-testid={`rating-star-${star}`}
           >
             <Star
@@ -149,6 +150,7 @@ export function ReviewDialog({ rentalId, revieweeId, revieweeName, trigger, onSu
                           type="button"
                           onClick={() => field.onChange(star)}
                           className="cursor-pointer hover:scale-110 transition-transform"
+                          aria-label={`Set communication rating to ${star} star${star === 1 ? "" : "s"}`}
                           data-testid={`communication-star-${star}`}
                         >
                           <Star
@@ -181,6 +183,7 @@ export function ReviewDialog({ rentalId, revieweeId, revieweeName, trigger, onSu
                           type="button"
                           onClick={() => field.onChange(star)}
                           className="cursor-pointer hover:scale-110 transition-transform"
+                          aria-label={`Set aircraft condition rating to ${star} star${star === 1 ? "" : "s"}`}
                           data-testid={`cleanliness-star-${star}`}
                         >
                           <Star

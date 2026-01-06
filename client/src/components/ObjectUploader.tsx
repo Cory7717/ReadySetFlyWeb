@@ -18,6 +18,7 @@ interface ObjectUploaderProps {
   onComplete?: (
     result: UploadResult<Record<string, unknown>, Record<string, unknown>>
   ) => void;
+  onError?: (message: string) => void;
   buttonClassName?: string;
   buttonVariant?: "default" | "outline" | "ghost" | "secondary" | "destructive";
   buttonSize?: "default" | "sm" | "lg" | "icon";
@@ -59,6 +60,7 @@ export function ObjectUploader({
   maxFileSize = 10485760, // 10MB default
   onGetUploadParameters,
   onComplete,
+  onError,
   buttonClassName,
   buttonVariant = "default",
   buttonSize = "default",
@@ -88,6 +90,12 @@ export function ObjectUploader({
           zoomable: true,
           responsive: true,
         },
+      })
+      .on("error", (err) => {
+        if (onError) onError(err?.message || 'Upload error');
+      })
+      .on("upload-error", (_file, err) => {
+        if (onError) onError(err?.message || 'Upload error');
       })
       .on("complete", (result) => {
         onComplete?.(result);

@@ -110,6 +110,8 @@ export default function CreateMarketplaceListing() {
   const { toast} = useToast();
   const { user } = useAuth();
   const [imageFiles, setImageFiles] = useState<string[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [promoCode, setPromoCode] = useState("");
   const [promoCodeValid, setPromoCodeValid] = useState<boolean | null>(null);
   const [promoCodeChecking, setPromoCodeChecking] = useState(false);
@@ -281,6 +283,18 @@ export default function CreateMarketplaceListing() {
 
   const removeImage = (index: number) => {
     setImageFiles(imageFiles.filter((_, i) => i !== index));
+  };
+
+  // Drag & Drop reordering for images
+  const handleDragStart = (index: number) => setDragIndex(index);
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
+  const handleDrop = (index: number) => {
+    if (dragIndex === null || dragIndex === index) return;
+    const arr = [...imageFiles];
+    const [moved] = arr.splice(dragIndex, 1);
+    arr.splice(index, 0, moved);
+    setImageFiles(arr);
+    setDragIndex(null);
   };
 
   // Trim images when category or tier changes to enforce new limits
@@ -870,7 +884,15 @@ export default function CreateMarketplaceListing() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {imageFiles.map((url, index) => (
-                    <div key={index} className="relative aspect-square rounded-md border overflow-hidden group">
+                    <div
+                      key={index}
+                      className="relative aspect-square rounded-md border overflow-hidden group select-none"
+                      draggable
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={handleDragOver}
+                      onDrop={() => handleDrop(index)}
+                      title="Drag to reorder"
+                    >
                       <img src={url} alt={`Upload ${index + 1}`} className="w-full h-full object-cover" />
                       <Button
                         type="button"
@@ -890,6 +912,7 @@ export default function CreateMarketplaceListing() {
                       maxFileSize={10 * 1024 * 1024}
                       onGetUploadParameters={handleGetUploadParameters}
                       onComplete={handleUploadComplete}
+                      onError={(msg) => setUploadError(msg)}
                       buttonClassName="aspect-square rounded-md border-2 border-dashed flex flex-col items-center justify-center w-full h-full"
                       buttonVariant="ghost"
                     >
@@ -898,6 +921,9 @@ export default function CreateMarketplaceListing() {
                     </ObjectUploader>
                   )}
                 </div>
+                {uploadError && (
+                  <div className="text-xs text-destructive mt-2">{uploadError}</div>
+                )}
                 <p className="text-sm text-muted-foreground">
                   {imageFiles.length} of {maxImages} photos uploaded
                   {selectedCategory === 'aircraft-sale' && selectedTier && (
@@ -906,6 +932,7 @@ export default function CreateMarketplaceListing() {
                     </span>
                   )}
                 </p>
+                <p className="text-[11px] text-muted-foreground">Tip: drag photos to reorder. First photo appears as the primary.</p>
               </CardContent>
             </Card>
           )}

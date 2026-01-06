@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, CloudSun } from "lucide-react";
+import { apiUrl } from "@/lib/api";
 
 interface WeatherData {
   icao: string;
@@ -62,6 +63,13 @@ export default function PilotTools() {
 
   const { data: weather, isLoading, error, refetch } = useQuery<WeatherData>({
     queryKey: [`/api/aviation-weather/${searchIcao}`],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/aviation-weather/${searchIcao}`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch weather data");
+      return res.json();
+    },
     enabled: !!searchIcao,
   });
 

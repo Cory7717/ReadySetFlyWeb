@@ -464,7 +464,15 @@ function LogbookEntryForm({
   onSubmit: (data: InsertLogbookEntry) => void;
   isPending: boolean;
 }) {
-  const [formData, setFormData] = useState<Partial<InsertLogbookEntry>>(
+  // Form state allows strings for all numeric fields to handle empty inputs better
+  type FormData = Omit<InsertLogbookEntry, 'approaches' | 'landingsDay' | 'landingsNight' | 'holds'> & {
+    approaches: number | string;
+    landingsDay: number | string;
+    landingsNight: number | string;
+    holds: number | string;
+  };
+  
+  const [formData, setFormData] = useState<Partial<FormData>>(
     initialData ? {
       flightDate: typeof initialData.flightDate === 'string' 
         ? new Date(initialData.flightDate)
@@ -472,16 +480,16 @@ function LogbookEntryForm({
       tailNumber: initialData.tailNumber,
       aircraftType: initialData.aircraftType,
       route: initialData.route,
-      timeDay: initialData.timeDay?.toString() || "0",
-      timeNight: initialData.timeNight?.toString() || "0",
-      pic: initialData.pic?.toString() || "0",
-      sic: initialData.sic?.toString() || "0",
-      dual: initialData.dual?.toString() || "0",
-      instrumentActual: initialData.instrumentActual?.toString() || "0",
-      approaches: initialData.approaches || 0,
-      landingsDay: initialData.landingsDay || 0,
-      landingsNight: initialData.landingsNight || 0,
-      holds: initialData.holds || 0,
+      timeDay: initialData.timeDay?.toString() || "",
+      timeNight: initialData.timeNight?.toString() || "",
+      pic: initialData.pic?.toString() || "",
+      sic: initialData.sic?.toString() || "",
+      dual: initialData.dual?.toString() || "",
+      instrumentActual: initialData.instrumentActual?.toString() || "",
+      approaches: initialData.approaches ?? "",
+      landingsDay: initialData.landingsDay ?? "",
+      landingsNight: initialData.landingsNight ?? "",
+      holds: initialData.holds ?? "",
       remarks: initialData.remarks,
       hobbsStart: initialData.hobbsStart?.toString(),
       hobbsEnd: initialData.hobbsEnd?.toString(),
@@ -496,10 +504,10 @@ function LogbookEntryForm({
       sic: "",
       dual: "",
       instrumentActual: "",
-      approaches: 0,
-      landingsDay: 0,
-      landingsNight: 0,
-      holds: 0,
+      approaches: "",
+      landingsDay: "",
+      landingsNight: "",
+      holds: "",
       remarks: "",
       hobbsStart: "",
       hobbsEnd: "",
@@ -519,6 +527,11 @@ function LogbookEntryForm({
       sic: formData.sic?.trim() || undefined,
       dual: formData.dual?.trim() || undefined,
       instrumentActual: formData.instrumentActual?.trim() || undefined,
+      // Convert empty strings to undefined for number fields
+      approaches: formData.approaches === "" ? undefined : formData.approaches,
+      landingsDay: formData.landingsDay === "" ? undefined : formData.landingsDay,
+      landingsNight: formData.landingsNight === "" ? undefined : formData.landingsNight,
+      holds: formData.holds === "" ? undefined : formData.holds,
     };
     onSubmit(cleanedData as InsertLogbookEntry);
   };
@@ -618,8 +631,10 @@ function LogbookEntryForm({
           <Input
             id="landingsDay"
             type="number"
-            value={formData.landingsDay || 0}
-            onChange={(e) => setFormData({ ...formData, landingsDay: parseInt(e.target.value) })}
+            placeholder="0"
+            value={formData.landingsDay || ""}
+            onChange={(e) => setFormData({ ...formData, landingsDay: e.target.value === "" ? "" : parseInt(e.target.value) })}
+            onFocus={(e) => e.target.select()}
           />
         </div>
         <div>
@@ -627,8 +642,10 @@ function LogbookEntryForm({
           <Input
             id="landingsNight"
             type="number"
-            value={formData.landingsNight || 0}
-            onChange={(e) => setFormData({ ...formData, landingsNight: parseInt(e.target.value) })}
+            placeholder="0"
+            value={formData.landingsNight || ""}
+            onChange={(e) => setFormData({ ...formData, landingsNight: e.target.value === "" ? "" : parseInt(e.target.value) })}
+            onFocus={(e) => e.target.select()}
           />
         </div>
         <div>
@@ -636,8 +653,10 @@ function LogbookEntryForm({
           <Input
             id="approaches"
             type="number"
-            value={formData.approaches || 0}
-            onChange={(e) => setFormData({ ...formData, approaches: parseInt(e.target.value) })}
+            placeholder="0"
+            value={formData.approaches || ""}
+            onChange={(e) => setFormData({ ...formData, approaches: e.target.value === "" ? "" : parseInt(e.target.value) })}
+            onFocus={(e) => e.target.select()}
           />
         </div>
         <div>
@@ -645,8 +664,10 @@ function LogbookEntryForm({
           <Input
             id="holds"
             type="number"
-            value={formData.holds || 0}
-            onChange={(e) => setFormData({ ...formData, holds: parseInt(e.target.value) })}
+            placeholder="0"
+            value={formData.holds || ""}
+            onChange={(e) => setFormData({ ...formData, holds: e.target.value === "" ? "" : parseInt(e.target.value) })}
+            onFocus={(e) => e.target.select()}
           />
         </div>
         <div className="col-span-2">

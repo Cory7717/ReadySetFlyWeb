@@ -210,6 +210,7 @@ export default function PilotTools() {
                       href={`https://www.aviationweather.gov/metar/data?ids=${weather.icao}&format=decoded`}
                       target="_blank"
                       rel="noopener noreferrer"
+                      referrerPolicy="no-referrer"
                     >
                       <Cloud className="h-4 w-4 mr-2" />
                       View METAR/TAF

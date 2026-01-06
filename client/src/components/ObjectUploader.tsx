@@ -6,7 +6,7 @@ import AwsS3 from "@uppy/aws-s3";
 import ImageEditor from "@uppy/image-editor";
 import type { UploadResult } from "@uppy/core";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface ObjectUploaderProps {
   maxNumberOfFiles?: number;
@@ -118,6 +118,10 @@ export function ObjectUploader({
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="sm:max-w-2xl w-[95vw] p-0 max-h-[90vh] sm:h-[80vh] overflow-y-auto">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Upload images</DialogTitle>
+            <DialogDescription>Manage image uploads</DialogDescription>
+          </DialogHeader>
           <div className="p-4 sm:p-6">
             <Dashboard
               uppy={uppy}

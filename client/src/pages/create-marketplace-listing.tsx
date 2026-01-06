@@ -221,26 +221,32 @@ export default function CreateMarketplaceListing() {
   // Handle upload completion
   const handleUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
     try {
-      // Process each successful upload
+      const successfulFiles = ((result as any)?.successful ?? []) as any[];
+      const failedFiles = ((result as any)?.failed ?? []) as any[];
+
+      const extractUrl = (file: any): string | undefined => {
+        const candidates = [
+          file?.uploadURL,
+          file?.response?.uploadURL,
+          file?.response?.url,
+          file?.response?.location,
+          file?.response?.body?.uploadURL,
+          file?.response?.body?.url,
+          file?.response?.body?.location,
+          file?.response?.data?.uploadURL,
+          file?.response?.data?.url,
+          file?.response?.data?.location,
+        ].filter(Boolean) as string[];
+        const raw = candidates[0];
+        return raw ? raw.split('?')[0] : undefined;
+      };
+
       const uploadedUrls: string[] = [];
 
-      for (const file of (result.successful as any[]) || []) {
-        const possibleUrls = [
-          (file as any).uploadURL,
-          (file as any)?.response?.uploadURL,
-          (file as any)?.response?.data?.location,
-          (file as any)?.response?.data?.url,
-        ].filter(Boolean) as string[];
+      for (const file of successfulFiles) {
+        const imageUrl = extractUrl(file);
+        if (!imageUrl) continue;
 
-        const rawUrl = possibleUrls[0];
-        if (!rawUrl) {
-          continue; // Skip files without a resolvable URL
-        }
-
-        // Normalize to a public URL without query params
-        const imageUrl = rawUrl.split('?')[0];
-
-        // Best-effort: set ACL/policy server-side (idempotent)
         try {
           await fetch(apiUrl('/api/listing-images'), {
             method: 'PUT',
@@ -249,28 +255,40 @@ export default function CreateMarketplaceListing() {
             credentials: 'include',
           });
         } catch (e) {
-          // Non-fatal; continue
           console.warn('ACL update failed, continuing:', e);
         }
 
         uploadedUrls.push(imageUrl);
       }
-      
-      // Add uploaded images to the list
-      setImageFiles([...imageFiles, ...uploadedUrls]);
-      
+
+      // Avoid duplicates when re-opening the dialog and uploading again
       if (uploadedUrls.length > 0) {
+        const deduped = [...imageFiles, ...uploadedUrls].filter(
+          (url, idx, arr) => arr.indexOf(url) === idx
+        );
+        setImageFiles(deduped);
         toast({
           title: "Images Uploaded Successfully",
           description: `Added ${uploadedUrls.length} image(s) to your listing.`,
         });
-      } else {
+        return;
+      }
+
+      if (failedFiles.length > 0) {
+        const firstError = failedFiles[0]?.error || failedFiles[0]?.response?.error;
         toast({
-          title: "No Images Added",
-          description: "We couldn't detect any completed uploads. Please try again and ensure you click Upload.",
+          title: "Upload Error",
+          description: firstError?.message || "Some images failed to upload. Please try again.",
           variant: "destructive",
         });
+        return;
       }
+
+      toast({
+        title: "No Images Added",
+        description: "We couldn't detect any completed uploads. Please try again and ensure you click Upload.",
+        variant: "destructive",
+      });
     } catch (error) {
       console.error('Error processing uploads:', error);
       toast({

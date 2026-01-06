@@ -5,6 +5,7 @@ import { z } from "zod";
 import { useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
@@ -82,7 +83,7 @@ export default function ListAircraft() {
   // NOTE: These handlers are ONLY for public aircraft photos
   // Verification documents use separate FormData upload (lines 671-727) and remain private
   const handleGetUploadParameters = async () => {
-    const response = await fetch('/api/objects/upload', {
+    const response = await fetch(apiUrl('/api/objects/upload'), {
       method: 'POST',
       credentials: 'include',
     });
@@ -95,38 +96,76 @@ export default function ListAircraft() {
 
   const handleUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
     try {
+      const successfulFiles = ((result as any)?.successful ?? []) as any[];
+      const failedFiles = ((result as any)?.failed ?? []) as any[];
+
+      const extractUrl = (file: any): string | undefined => {
+        const candidates = [
+          file?.uploadURL,
+          file?.response?.uploadURL,
+          file?.response?.url,
+          file?.response?.location,
+          file?.response?.body?.uploadURL,
+          file?.response?.body?.url,
+          file?.response?.body?.location,
+          file?.response?.data?.uploadURL,
+          file?.response?.data?.url,
+          file?.response?.data?.location,
+        ].filter(Boolean) as string[];
+        const raw = candidates[0];
+        return raw ? raw.split('?')[0] : undefined;
+      };
+
       const uploadedUrls: string[] = [];
-      for (const file of result.successful || []) {
-        if (file.uploadURL) {
-          // Set ACL policy for public access - ONLY for aircraft photos
-          // This handler is explicitly for listing photos that need to be publicly visible
-          const parsedUrl = new URL(file.uploadURL);
-          const objectPath = parsedUrl.pathname.slice(1); // Remove leading slash
-          
-          await fetch('/api/objects/set-acl', {
+
+      for (const file of successfulFiles) {
+        const imageUrl = extractUrl(file);
+        if (!imageUrl) continue;
+
+        try {
+          const parsedUrl = new URL(imageUrl);
+          const objectPath = parsedUrl.pathname.slice(1);
+          await fetch(apiUrl('/api/objects/set-acl'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({
               path: objectPath,
-              access: 'publicRead', // PUBLIC: Aircraft listing photos must be visible to renters
+              access: 'publicRead',
             }),
           });
-          
-          // Store the uploaded URL
-          const imageUrl = file.uploadURL.split('?')[0]; // Remove query params
-          uploadedUrls.push(imageUrl);
+        } catch (e) {
+          console.warn('ACL update failed, continuing:', e);
         }
+
+        uploadedUrls.push(imageUrl);
       }
-      
+
       if (uploadedUrls.length > 0) {
-        // Add new uploaded URLs to existing images
-        setImageFiles([...imageFiles, ...uploadedUrls]);
-        toast({ 
+        const deduped = [...imageFiles, ...uploadedUrls].filter((url, idx, arr) => arr.indexOf(url) === idx);
+        setImageFiles(deduped);
+        toast({
           title: "Images uploaded successfully",
-          description: `${uploadedUrls.length} image(s) added to your listing`
+          description: `${uploadedUrls.length} image(s) added to your listing`,
         });
+        return;
       }
+
+      if (failedFiles.length > 0) {
+        const firstError = failedFiles[0]?.error || failedFiles[0]?.response?.error;
+        toast({
+          title: "Upload failed",
+          description: firstError?.message || "Some images failed to upload. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "No Images Added",
+        description: "We couldn't detect any completed uploads. Please try again and ensure you click Upload.",
+        variant: "destructive",
+      });
     } catch (error) {
       console.error('Error processing aircraft image upload:', error);
       toast({

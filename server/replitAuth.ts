@@ -1,24 +1,17 @@
-// Unified OAuth/session auth (Google OIDC + optional legacy Replit OIDC)
+// Unified OAuth/session auth (Google OAuth 2.0 + optional legacy Replit OIDC)
 // Keeps compatibility with existing code expecting req.user.claims.sub
 
-import { Strategy, type VerifyFunction } from "openid-client/passport";
-// Static import of Issuer for better bundling/runtime compatibility
-import { Issuer } from "openid-client";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import type { Profile as GoogleProfile } from "passport-google-oauth20";
 
 import passport from "passport";
 import session from "express-session";
 import type { Express, RequestHandler } from "express";
-import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 
 // Flags / env
 const AUTH_DISABLED = String(process.env.AUTH_DISABLED ?? "").toLowerCase() === "true";
-
-// Legacy Replit (optional while migrating)
-const HAS_REPLIT = !!process.env.REPL_ID || !!process.env.REPLIT_DEPLOYMENT;
-const REPLIT_DOMAINS = process.env.REPLIT_DOMAINS ?? "localhost";
-const REPLIT_ISSUER_URL = process.env.ISSUER_URL ?? "https://replit.com/oidc";
 
 // Google (new primary)
 const HAS_GOOGLE =
@@ -45,41 +38,6 @@ function getGoogleCallbackUrl(): string {
   // Otherwise derive it.
   return `${getApiBaseUrl()}/api/auth/google/callback`;
 }
-
-function getReplitCallbackUrl(): string {
-  if (process.env.REPLIT_REDIRECT_URL) return process.env.REPLIT_REDIRECT_URL;
-  return `${getApiBaseUrl()}/api/auth/replit/callback`;
-}
-
-// OIDC discovery (memoized)
-const getGoogleOidcConfig = memoize(
-  async () => {
-    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-      throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not set");
-    }
-
-    // Google issuer discovery
-    const issuer = await Issuer.discover("https://accounts.google.com");
-
-    // Create a confidential client so token exchange sends client_secret (Google requires it for web apps)
-    return new issuer.Client({
-      client_id: process.env.GOOGLE_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-      redirect_uris: [getGoogleCallbackUrl()],
-      response_types: ["code"],
-      // Be explicit so Google receives the secret in the token request
-      token_endpoint_auth_method: "client_secret_post",
-    });
-  },
-  { maxAge: 3600 * 1000 }
-);
-
-const getReplitOidcConfig = memoize(
-  async () => {
-    return await Issuer.discover(new URL(REPLIT_ISSUER_URL).toString());
-  },
-  { maxAge: 3600 * 1000 }
-);
 
 // Postgres-backed sessions (shared by Passport + your /api/auth/web-login routes)
 export function getSession() {
@@ -113,43 +71,23 @@ export function getSession() {
 // Keep a consistent "shape" for req.user that your code already expects:
 // req.user.claims.sub = INTERNAL USER ID
 // req.user.claims.email, first_name, last_name, profile_image_url
-function makePassportUser(internalUserId: string, claims: any) {
+function makePassportUser(internalUserId: string, profile: GoogleProfile) {
   return {
     claims: {
       sub: internalUserId,
-      email: claims?.email ?? null,
-      first_name: claims?.given_name ?? claims?.first_name ?? null,
-      last_name: claims?.family_name ?? claims?.last_name ?? null,
-      profile_image_url: claims?.picture ?? claims?.profile_image_url ?? null,
+      email: profile.emails?.[0]?.value ?? null,
+      first_name: profile.name?.givenName ?? null,
+      last_name: profile.name?.familyName ?? null,
+      profile_image_url: profile.photos?.[0]?.value ?? null,
     },
   };
 }
 
-// Resolve user from OAuth claims WITHOUT changing existing IDs:
-// 1) If existing user by provider-sub (legacy Replit id), keep it
-// 2) Else if existing user by email, use that (keeps uuid ids)
-// 3) Else create user (uuid default via DB if you omit id)
-async function resolveUserFromOAuth(provider: "google" | "replit", claims: any) {
-  const email = claims?.email;
-  const providerSub = claims?.sub;
-
-  // Legacy Replit had users.id = claims.sub
-  if (provider === "replit" && providerSub) {
-    const bySub = await storage.getUser(String(providerSub));
-    if (bySub) {
-      // Update profile fields on login
-      await storage.updateUser(bySub.id, {
-        email: email ?? bySub.email,
-        firstName: claims?.first_name ?? bySub.firstName,
-        lastName: claims?.last_name ?? bySub.lastName,
-        profileImageUrl: claims?.profile_image_url ?? bySub.profileImageUrl,
-        emailVerified: true,
-      });
-    const refreshed = await storage.getUser(bySub.id);
-    if (!refreshed) throw new Error("User not found after update (replit sub match)");
-    return refreshed;
-    }
-  }
+// Resolve user from OAuth profile WITHOUT changing existing IDs:
+// 1) If existing user by email, use that (keeps uuid ids)
+// 2) Else create user (uuid default via DB if you omit id)
+async function resolveUserFromGoogle(profile: GoogleProfile) {
+  const email = profile.emails?.[0]?.value;
 
   // Prefer stable email match (best for migration / prevents duplicate accounts)
   if (email) {
@@ -157,28 +95,23 @@ async function resolveUserFromOAuth(provider: "google" | "replit", claims: any) 
     if (byEmail) {
       await storage.updateUser(byEmail.id, {
         // keep id stable; just refresh profile data
-        firstName:
-          claims?.given_name ?? claims?.first_name ?? byEmail.firstName,
-        lastName:
-          claims?.family_name ?? claims?.last_name ?? byEmail.lastName,
-        profileImageUrl:
-          claims?.picture ?? claims?.profile_image_url ?? byEmail.profileImageUrl,
+        firstName: profile.name?.givenName ?? byEmail.firstName,
+        lastName: profile.name?.familyName ?? byEmail.lastName,
+        profileImageUrl: profile.photos?.[0]?.value ?? byEmail.profileImageUrl,
         emailVerified: true,
       });
       const refreshed = await storage.getUser(byEmail.id);
-if (!refreshed) throw new Error("User not found after update (email match)");
-return refreshed;
+      if (!refreshed) throw new Error("User not found after update (email match)");
+      return refreshed;
     }
   }
 
   // Create new user (uuid default is handled by DB if InsertUser allows omitting id)
-  // If your InsertUser requires id, we can switch to storage.upsertUser with an internal uuid,
-  // but based on your schema default, this should be fine.
   const created = await storage.createUser({
     email: email ?? null,
-    firstName: claims?.given_name ?? claims?.first_name ?? null,
-    lastName: claims?.family_name ?? claims?.last_name ?? null,
-    profileImageUrl: claims?.picture ?? claims?.profile_image_url ?? null,
+    firstName: profile.name?.givenName ?? null,
+    lastName: profile.name?.familyName ?? null,
+    profileImageUrl: profile.photos?.[0]?.value ?? null,
     emailVerified: true,
     // NOTE: hashedPassword remains null for OAuth-only accounts
   } as any);
@@ -246,166 +179,75 @@ return refreshed;
       if (!dbUser) return done(null, false);
 
       // Rehydrate into the same shape code expects
-      const passportUser = makePassportUser(dbUser.id, {
-        email: dbUser.email,
-        first_name: dbUser.firstName,
-        last_name: dbUser.lastName,
-        profile_image_url: dbUser.profileImageUrl,
-      });
+      const passportUser = {
+        claims: {
+          sub: dbUser.id,
+          email: dbUser.email,
+          first_name: dbUser.firstName,
+          last_name: dbUser.lastName,
+          profile_image_url: dbUser.profileImageUrl,
+        },
+      };
 
       done(null, passportUser);
     } catch (e) {
       done(e as any);
     }
   });
+
   // -------------------------
-  // Google OIDC Strategy
+  // Google OAuth 2.0 Strategy
   // -------------------------
   if (HAS_GOOGLE) {
-    const googleConfig = await getGoogleOidcConfig();
-
-    const verifyGoogle: VerifyFunction = async (tokens, verified) => {
-      try {
-        const claims = tokens.claims();
-        const dbUser = await resolveUserFromOAuth("google", claims);
-        if (!dbUser) throw new Error("resolveUserFromOAuth returned undefined");
-
-        const passportUser = makePassportUser(dbUser.id, claims);
-        verified(null, passportUser);
-      } catch (err) {
-        verified(err as any);
-      }
-    };
-
     passport.use(
-      "google",
-      new Strategy(
+      new GoogleStrategy(
         {
-          name: "google",
-          // The Strategy type definition does not surface `client`, so cast to any.
-          client: googleConfig as any,
-          params: {
-            scope: "openid email profile",
-          },
-        } as any,
-        verifyGoogle
+          clientID: process.env.GOOGLE_CLIENT_ID!,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+          callbackURL: getGoogleCallbackUrl(),
+        },
+        async (_accessToken, _refreshToken, profile, done) => {
+          try {
+            const dbUser = await resolveUserFromGoogle(profile);
+            if (!dbUser) throw new Error("resolveUserFromGoogle returned undefined");
+
+            const passportUser = makePassportUser(dbUser.id, profile);
+            done(null, passportUser);
+          } catch (err) {
+            done(err as any);
+          }
+        }
       )
     );
 
     // Start Google auth
-    app.get("/api/auth/google", passport.authenticate("google"));
+    app.get(
+      "/api/auth/google",
+      passport.authenticate("google", { scope: ["profile", "email"] })
+    );
 
     // Callback
     app.get(
       "/api/auth/google/callback",
-      (req, res, next) => {
-        passport.authenticate("google", async (err: any, user: any, info: any) => {
-          if (err) {
-            const rawBody = (err as any)?.response?.body;
-            const statusCode = (err as any)?.response?.statusCode || 500;
-
-            // Provide a structured detail object to make browser debugging easier.
-            const detail: Record<string, any> = {
-              responseStatus: statusCode,
-              responseBody: rawBody ?? null,
-              error: (err as any)?.error ?? null,
-              error_description: (err as any)?.error_description ?? null,
-              message: (err as any)?.message ?? null,
-            };
-
-            // Add stack trace only to server logs to avoid leaking in responses.
-            console.error("[AUTH][google callback] token exchange error:", {
-              statusCode,
-              body: rawBody,
-              error: (err as any)?.error,
-              error_description: (err as any)?.error_description,
-              message: (err as any)?.message,
-              info,
-              stack: (err as any)?.stack,
-            });
-
-            return res.status(statusCode).json({ message: "OAuth exchange failed", detail });
-          }
-
-          if (!user) {
-            console.error("[AUTH][google callback] no user returned from verify", info);
-            return res.redirect("/");
-          }
-
-          req.logIn(user, (loginErr) => {
-            if (loginErr) {
-              console.error("[AUTH][google callback] logIn error:", loginErr);
-              return res.status(500).json({ message: "Session login failed", detail: String(loginErr) });
-            }
-
-            const userId = (user as any)?.claims?.sub;
-            if (userId) (req.session as any).userId = userId;
-
-            req.session.save((saveErr: any) => {
-              if (saveErr) {
-                console.error("[AUTH][google callback] session save error:", saveErr);
-                return res.status(500).json({ message: "Session save failed", detail: String(saveErr) });
-              }
-
-              const frontend = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
-              return res.redirect(frontend);
-            });
-          });
-        })(req, res, next);
-      }
-    );
-
-    console.log("[AUTH] Google OIDC enabled. Callback:", getGoogleCallbackUrl());
-  } else {
-    console.log("[AUTH] Google OIDC NOT enabled (missing GOOGLE_CLIENT_ID/SECRET).");
-  }
-
-  // -------------------------
-  // Legacy Replit OIDC Strategy (optional during migration)
-  // -------------------------
-  if (HAS_REPLIT && process.env.REPL_ID) {
-    const replitConfig = await getReplitOidcConfig();
-
-    const verifyReplit: VerifyFunction = async (tokens, verified) => {
-      try {
-        const claims = tokens.claims();
-        const dbUser = await resolveUserFromOAuth("replit", claims);
-        if (!dbUser) throw new Error("resolveUserFromOAuth returned undefined");
-
-        const passportUser = makePassportUser(dbUser.id, claims);
-        verified(null, passportUser);
-      } catch (err) {
-        verified(err as any);
-      }
-    };
-
-    passport.use(
-      "replit",
-      new Strategy(
-        {
-          name: "replit",
-          config: replitConfig,
-          scope: "openid email profile",
-          callbackURL: getReplitCallbackUrl(),
-        },
-        verifyReplit
-      )
-    );
-
-    app.get("/api/auth/replit", passport.authenticate("replit"));
-
-    app.get(
-      "/api/auth/replit/callback",
-      passport.authenticate("replit", { failureRedirect: "/" }),
+      passport.authenticate("google", { failureRedirect: "/" }),
       (req: any, res: any) => {
         const userId = req.user?.claims?.sub;
         if (userId) req.session.userId = userId;
-        res.redirect("/");
+
+        req.session.save((saveErr: any) => {
+          if (saveErr) {
+            console.error("[AUTH][google callback] session save error:", saveErr);
+            return res.status(500).json({ message: "Session save failed", detail: String(saveErr) });
+          }
+
+          const frontend = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+          return res.redirect(frontend);
+        });
       }
     );
 
-    console.log("[AUTH] Legacy Replit OIDC enabled. Callback:", getReplitCallbackUrl());
+    console.log("[AUTH] Google OAuth 2.0 enabled. Callback:", getGoogleCallbackUrl());
   } else {
-    console.log("[AUTH] Legacy Replit OIDC disabled.");
+    console.log("[AUTH] Google OAuth 2.0 NOT enabled (missing GOOGLE_CLIENT_ID/SECRET).");
   }
 }

@@ -1,5 +1,6 @@
 import pg from 'pg';
 import fs from 'fs';
+import path from 'path';
 
 const { Client } = pg;
 
@@ -7,17 +8,59 @@ const client = new Client({
   connectionString: process.env.DATABASE_URL,
 });
 
-async function runMigration() {
+async function ensureMigrationsTable() {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS app_migrations (
+      name text PRIMARY KEY,
+      applied_at timestamp NOT NULL DEFAULT now()
+    )
+  `);
+}
+
+async function tableExists(schema, table) {
+  const { rows } = await client.query(
+    `SELECT to_regclass($1) AS oid`,
+    [`${schema}.${table}`]
+  );
+  return !!rows[0]?.oid;
+}
+
+async function runMigrationsFolder() {
   try {
     await client.connect();
     console.log('Connected to database');
-    
-    const sql = fs.readFileSync('./migrations/0001_add_logbook_entries.sql', 'utf8');
-    console.log('Running migration...');
-    
-    await client.query(sql);
-    console.log('✓ Migration completed successfully!');
-    console.log('✓ logbook_entries table created');
+    await ensureMigrationsTable();
+
+    // Seed migration record for 0001 if table already exists
+    const hasLogbook = await tableExists('public', 'logbook_entries');
+    if (hasLogbook) {
+      await client.query(
+        `INSERT INTO app_migrations(name) VALUES($1) ON CONFLICT(name) DO NOTHING`,
+        ['0001_add_logbook_entries.sql']
+      );
+    }
+
+    const dir = path.resolve('./migrations');
+    const files = fs
+      .readdirSync(dir)
+      .filter(f => f.endsWith('.sql'))
+      .sort();
+
+    const { rows: appliedRows } = await client.query('SELECT name FROM app_migrations');
+    const applied = new Set(appliedRows.map(r => r.name));
+
+    for (const file of files) {
+      if (applied.has(file)) {
+        console.log(`- Skipping already applied migration: ${file}`);
+        continue;
+      }
+      const sql = fs.readFileSync(path.join(dir, file), 'utf8');
+      console.log(`Running migration: ${file}`);
+      await client.query(sql);
+      await client.query(`INSERT INTO app_migrations(name) VALUES($1)`, [file]);
+      console.log(`✓ Applied ${file}`);
+    }
+    console.log('✓ All migrations up to date.');
     
   } catch (error) {
     console.error('Migration failed:', error.message);
@@ -26,5 +69,4 @@ async function runMigration() {
     await client.end();
   }
 }
-
-runMigration();
+runMigrationsFolder();

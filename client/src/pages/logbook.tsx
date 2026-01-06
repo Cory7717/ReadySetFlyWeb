@@ -508,7 +508,19 @@ function LogbookEntryForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData as InsertLogbookEntry);
+    // Clean up empty strings before submission
+    const cleanedData = {
+      ...formData,
+      hobbsStart: formData.hobbsStart?.trim() || undefined,
+      hobbsEnd: formData.hobbsEnd?.trim() || undefined,
+      timeDay: formData.timeDay?.trim() || undefined,
+      timeNight: formData.timeNight?.trim() || undefined,
+      pic: formData.pic?.trim() || undefined,
+      sic: formData.sic?.trim() || undefined,
+      dual: formData.dual?.trim() || undefined,
+      instrumentActual: formData.instrumentActual?.trim() || undefined,
+    };
+    onSubmit(cleanedData as InsertLogbookEntry);
   };
 
   return (

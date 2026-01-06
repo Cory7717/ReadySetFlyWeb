@@ -993,6 +993,7 @@ export const logbookEntries = pgTable("logbook_entries", {
 
 export const insertLogbookEntrySchema = createInsertSchema(logbookEntries).omit({
   id: true,
+  userId: true,
   createdAt: true,
   updatedAt: true,
   isLocked: true,
@@ -1001,18 +1002,18 @@ export const insertLogbookEntrySchema = createInsertSchema(logbookEntries).omit(
   signedByName: true,
 }).extend({
   flightDate: z.coerce.date(),
-  timeDay: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
-  timeNight: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
-  pic: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
-  sic: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
-  dual: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
-  instrumentActual: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  timeDay: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  timeNight: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  pic: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  sic: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  dual: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  instrumentActual: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   approaches: z.number().min(0).optional(),
   landingsDay: z.number().min(0).optional(),
   landingsNight: z.number().min(0).optional(),
   holds: z.number().min(0).optional(),
-  hobbsStart: z.string().regex(/^\d+(\.\d)?$/).optional(),
-  hobbsEnd: z.string().regex(/^\d+(\.\d)?$/).optional(),
+  hobbsStart: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  hobbsEnd: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
 });
 
 export const insertMarketplaceFlagSchema = createInsertSchema(marketplaceFlags).omit({

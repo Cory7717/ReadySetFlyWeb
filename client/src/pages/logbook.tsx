@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -675,46 +675,170 @@ function SignatureDialog({
   isPending: boolean;
 }) {
   const [signedByName, setSignedByName] = useState("");
-  const [signatureDataUrl, setSignatureDataUrl] = useState("");
+  const [mode, setMode] = useState<"draw" | "type">("draw");
+  const [typedSignature, setTypedSignature] = useState("");
+  const [hasDrawn, setHasDrawn] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDrawing = useRef(false);
+
+  // Resize canvas to container width for crisp signature
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resize = () => {
+      const width = canvas.parentElement?.clientWidth || 600;
+      canvas.width = width;
+      canvas.height = 220;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    isDrawing.current = true;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    const rect = canvas.getBoundingClientRect();
+    ctx.beginPath();
+    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+  };
+
+  const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawing.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+    ctx.stroke();
+    setHasDrawn(true);
+  };
+
+  const endDrawing = () => {
+    isDrawing.current = false;
+  };
+
+  const clearSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawn(false);
+  };
+
+  const getDrawnDataUrl = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return "";
+    return canvas.toDataURL("image/png");
+  };
+
+  const getTypedDataUrl = () => {
+    if (!typedSignature.trim()) return "";
+    const temp = document.createElement("canvas");
+    temp.width = 800;
+    temp.height = 200;
+    const ctx = temp.getContext("2d");
+    if (!ctx) return "";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, temp.width, temp.height);
+    ctx.fillStyle = "#111827";
+    ctx.font = "48px 'Segoe Script', 'Pacifico', cursive";
+    ctx.textBaseline = "middle";
+    ctx.fillText(typedSignature.trim(), 40, temp.height / 2);
+    return temp.toDataURL("image/png");
+  };
 
   const handleSign = () => {
-    if (!signedByName || !signatureDataUrl) {
-      alert("Please provide your name and signature");
+    if (!signedByName.trim()) {
+      alert("Please enter the signer name/title");
       return;
     }
-    onSign(signatureDataUrl, signedByName);
+
+    const dataUrl = mode === "draw" ? getDrawnDataUrl() : getTypedDataUrl();
+    if (!dataUrl || (mode === "draw" && !hasDrawn)) {
+      alert("Please add a signature first");
+      return;
+    }
+
+    onSign(dataUrl, signedByName.trim());
   };
 
   return (
     <>
       <DialogHeader>
         <DialogTitle>Sign and Lock Entry</DialogTitle>
-        <DialogDescription>Once signed, this entry cannot be edited.</DialogDescription>
+        <DialogDescription>Draw on phone/tablet or type a signature from desktop.</DialogDescription>
       </DialogHeader>
+
       <div className="space-y-4 py-4">
-        <div>
-          <Label htmlFor="signedByName">Your Name</Label>
+        <div className="grid gap-2">
+          <Label htmlFor="signedByName">Signer name & title</Label>
           <Input
             id="signedByName"
             value={signedByName}
             onChange={(e) => setSignedByName(e.target.value)}
-            placeholder="e.g. John Doe, CFI"
+            placeholder="e.g. Jane Smith, CFI"
           />
         </div>
-        <div>
-          <Label htmlFor="signature">Signature (base64 data URL)</Label>
-          <Textarea
-            id="signature"
-            value={signatureDataUrl}
-            onChange={(e) => setSignatureDataUrl(e.target.value)}
-            placeholder="Paste signature data URL here (future: signature pad)"
-            rows={3}
-          />
-          <p className="text-xs text-muted-foreground mt-1">
-            For now, paste a base64 data URL. Future: signature canvas.
-          </p>
+
+        <div className="flex gap-2 text-sm">
+          <Button
+            type="button"
+            variant={mode === "draw" ? "default" : "outline"}
+            onClick={() => setMode("draw")}
+          >
+            Draw Signature
+          </Button>
+          <Button
+            type="button"
+            variant={mode === "type" ? "default" : "outline"}
+            onClick={() => setMode("type")}
+          >
+            Type Signature
+          </Button>
         </div>
+
+        {mode === "draw" ? (
+          <div className="space-y-2">
+            <div className="border rounded-md overflow-hidden touch-none">
+              <canvas
+                ref={canvasRef}
+                className="w-full h-52 bg-white"
+                onPointerDown={startDrawing}
+                onPointerMove={draw}
+                onPointerUp={endDrawing}
+                onPointerLeave={endDrawing}
+              />
+            </div>
+            <div className="flex gap-2 text-sm">
+              <Button type="button" variant="outline" size="sm" onClick={clearSignature}>
+                Clear
+              </Button>
+              <p className="text-xs text-muted-foreground self-center">Use finger/stylus on mobile or mouse on desktop.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="typedSignature">Type your name</Label>
+            <Input
+              id="typedSignature"
+              value={typedSignature}
+              onChange={(e) => setTypedSignature(e.target.value)}
+              placeholder="e.g. Jane Smith"
+            />
+            <p className="text-xs text-muted-foreground">A styled signature image will be generated.</p>
+          </div>
+        )}
       </div>
+
       <DialogFooter>
         <Button onClick={handleSign} disabled={isPending}>
           {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

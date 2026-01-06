@@ -18,10 +18,14 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { getUpgradeDelta, calculateTotalWithTax, isValidUpgrade, VALID_TIERS } from "@shared/config/listingPricing";
 
-// Initialize OpenAI client with Replit AI Integrations
+// Initialize OpenAI client with fallback to standard OpenAI if Replit integration vars are missing
+const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+const openaiBaseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL;
+
 const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: openaiApiKey,
+  // Only set baseURL if provided to avoid malformed URL issues
+  ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
 });
 
 // Initialize PayPal SDK
@@ -1967,6 +1971,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/generate-description", isAuthenticated, async (req, res) => {
     try {
       const { listingType, details } = req.body;
+
+      if (!openaiApiKey) {
+        return res.status(503).json({ error: "AI service unavailable", details: "Missing OpenAI API key" });
+      }
       
       if (!listingType || !details) {
         return res.status(400).json({ error: "Missing required fields: listingType and details" });

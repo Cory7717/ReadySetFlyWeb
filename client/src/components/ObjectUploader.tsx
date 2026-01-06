@@ -97,11 +97,17 @@ export function ObjectUploader({
       </Button>
 
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="max-w-2xl">
-          <Dashboard
-            uppy={uppy}
-            proudlyDisplayPoweredByUppy={false}
-          />
+        <DialogContent className="sm:max-w-2xl w-[95vw] p-0 max-h-[90vh] sm:h-[80vh] overflow-y-auto">
+          <div className="p-4 sm:p-6">
+            <Dashboard
+              uppy={uppy}
+              proudlyDisplayPoweredByUppy={false}
+              width="100%"
+              height={480}
+              hideUploadButton={false}
+              showProgressDetails
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>

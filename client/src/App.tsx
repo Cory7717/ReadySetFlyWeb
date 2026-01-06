@@ -35,6 +35,7 @@ import Register from "@/pages/register";
 import VerifyEmail from "@/pages/verify-email";
 import Logbook from "@/pages/logbook";
 import PilotTools from "@/pages/pilot-tools";
+import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
 
 // Router component - allows anonymous browsing for rentals/marketplace
 function Router() {
@@ -51,6 +52,7 @@ function Router() {
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/aircraft/:id" component={AircraftDetail} />
       <Route path="/pilot-tools" component={PilotTools} />
+      <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
       <Route path="/delete-account" component={DeleteAccount} />

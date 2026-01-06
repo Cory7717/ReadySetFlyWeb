@@ -480,34 +480,35 @@ export function getBannerAdExpirationReminderHtml(
 
 export function getBannerAdExpirationReminderText(
   sponsorName: string,
-  orderDetails: {
+  adDetails: {
     title: string;
     company: string;
     tier: string;
     endDate: string;
     startDate: string;
+    leadDays?: number;
   }
 ): string {
-  const tierDisplay = orderDetails.tier === "1month" ? "1 Month" :
-                     orderDetails.tier === "3months" ? "3 Months" :
-                     orderDetails.tier === "6months" ? "6 Months" :
+  const tierDisplay = adDetails.tier === "1month" ? "1 Month" :
+                     adDetails.tier === "3months" ? "3 Months" :
+                     adDetails.tier === "6months" ? "6 Months" :
                      "12 Months";
+  const leadDays = adDetails.leadDays ?? 2;
   
   return `
-  const leadDays = adDetails.leadDays ?? 2;
-  return `
-  ACTION REQUIRED: Your Ready Set Fly banner campaign ends in ${leadDays} days
+ACTION REQUIRED: Your Ready Set Fly banner campaign ends in ${leadDays} days
+
 Hi ${sponsorName},
 
-  Your banner ad will be automatically deactivated at midnight on ${new Date(adDetails.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} and will no longer appear on Ready Set Fly.
+Your banner ad will be automatically deactivated at midnight on ${new Date(adDetails.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} and will no longer appear on Ready Set Fly.
 
 CAMPAIGN SUMMARY
 ----------------
-Company: ${orderDetails.company}
-Title: ${orderDetails.title}
+Company: ${adDetails.company}
+Title: ${adDetails.title}
 Tier: ${tierDisplay}
-Started: ${new Date(orderDetails.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-Ends: ${new Date(orderDetails.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+Started: ${new Date(adDetails.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+Ends: ${new Date(adDetails.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
 
 WHAT HAPPENS AT EXPIRATION?
 At expiration, your banner ad will:

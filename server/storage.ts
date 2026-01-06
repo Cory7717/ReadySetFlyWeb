@@ -863,7 +863,12 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(marketplaceListings)
-      .where(eq(marketplaceListings.isActive, true));
+      .where(
+        and(
+          eq(marketplaceListings.isActive, true),
+          eq(marketplaceListings.isExample, false)
+        )
+      );
   }
 
   async getMarketplaceListingsByCategory(category: string): Promise<MarketplaceListing[]> {
@@ -873,7 +878,8 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(marketplaceListings.category, category),
-          eq(marketplaceListings.isActive, true)
+          eq(marketplaceListings.isActive, true),
+          eq(marketplaceListings.isExample, false)
         )
       );
   }
@@ -900,7 +906,10 @@ export class DatabaseStorage implements IStorage {
     radius?: number;
     cfiRating?: string;
   }): Promise<MarketplaceListing[]> {
-    const conditions: any[] = [eq(marketplaceListings.isActive, true)];
+    const conditions: any[] = [
+      eq(marketplaceListings.isActive, true),
+      eq(marketplaceListings.isExample, false)
+    ];
 
     // Category filter
     if (filters.category) {

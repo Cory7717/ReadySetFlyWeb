@@ -232,8 +232,11 @@ export default function CreateMarketplaceListing() {
             credentials: 'include',
           });
           
-          const data = await response.json();
-          uploadedUrls.push(data.objectPath);
+          await response.json(); // Still call the API to set ACL
+          
+          // Store the full uploaded URL (not objectPath)
+          const imageUrl = file.uploadURL.split('?')[0]; // Remove query params
+          uploadedUrls.push(imageUrl);
         }
       }
       

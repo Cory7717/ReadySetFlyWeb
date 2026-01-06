@@ -2382,13 +2382,19 @@ var DatabaseStorage = class {
     return result[0];
   }
   async getAllMarketplaceListings() {
-    return await db.select().from(marketplaceListings).where(eq(marketplaceListings.isActive, true));
+    return await db.select().from(marketplaceListings).where(
+      and(
+        eq(marketplaceListings.isActive, true),
+        eq(marketplaceListings.isExample, false)
+      )
+    );
   }
   async getMarketplaceListingsByCategory(category) {
     return await db.select().from(marketplaceListings).where(
       and(
         eq(marketplaceListings.category, category),
-        eq(marketplaceListings.isActive, true)
+        eq(marketplaceListings.isActive, true),
+        eq(marketplaceListings.isExample, false)
       )
     );
   }
@@ -2401,7 +2407,10 @@ var DatabaseStorage = class {
     );
   }
   async getFilteredMarketplaceListings(filters) {
-    const conditions = [eq(marketplaceListings.isActive, true)];
+    const conditions = [
+      eq(marketplaceListings.isActive, true),
+      eq(marketplaceListings.isExample, false)
+    ];
     if (filters.category) {
       conditions.push(eq(marketplaceListings.category, filters.category));
     }

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { Link } from "wouter";
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
@@ -29,19 +30,21 @@ export default function Landing() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
               <Button 
                 size="lg" 
-                onClick={() => window.location.href = '/rentals'}
+                asChild
                 data-testid="button-browse-listings"
               >
-                Browse Listings
+                <Link href="/rentals">Browse Listings</Link>
               </Button>
               <Button 
                 size="lg" 
                 variant="outline"
-                onClick={() => window.location.href = '/pilot-tools'}
+                asChild
                 data-testid="button-pilot-tools"
               >
-                <BookOpen className="h-4 w-4 mr-2" />
-                Pilot Tools
+                <Link href="/pilot-tools">
+                  <BookOpen className="h-4 w-4 mr-2" />
+                  Pilot Tools
+                </Link>
               </Button>
               <Button 
                 size="lg" 
@@ -200,9 +203,11 @@ export default function Landing() {
                   </ul>
                   <Button 
                     className="w-full"
-                    onClick={() => window.location.href = isAuthenticated ? '/logbook' : '/login'}
+                    asChild
                   >
-                    {isAuthenticated ? 'Open Logbook' : 'Sign In to Access'}
+                    <Link href={isAuthenticated ? '/logbook' : '/login'}>
+                      {isAuthenticated ? 'Open Logbook' : 'Sign In to Access'}
+                    </Link>
                   </Button>
                   {!isAuthenticated && (
                     <p className="text-xs text-muted-foreground">
@@ -244,9 +249,11 @@ export default function Landing() {
                   <Button 
                     className="w-full"
                     variant="outline"
-                    onClick={() => window.location.href = '/pilot-tools'}
+                    asChild
                   >
-                    Open Pilot Tools
+                    <Link href="/pilot-tools">
+                      Open Pilot Tools
+                    </Link>
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     Free for everyone - no account needed

@@ -20,11 +20,16 @@ import { getUpgradeDelta, calculateTotalWithTax, isValidUpgrade, VALID_TIERS } f
 
 // Initialize OpenAI client with fallback to standard OpenAI if Replit integration vars are missing
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
-const openaiBaseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL;
+// Prefer AI_INTEGRATIONS_OPENAI_BASE_URL if valid, otherwise OPENAI_BASE_URL, and only apply when it looks like a URL
+const configuredBaseUrl = (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || "").trim();
+const openaiBaseUrl = configuredBaseUrl && configuredBaseUrl.startsWith("http") ? configuredBaseUrl : undefined;
+
+if (configuredBaseUrl && !openaiBaseUrl) {
+  console.warn("OpenAI base URL ignored because it is not a valid http(s) URL", configuredBaseUrl);
+}
 
 const openai = new OpenAI({
   apiKey: openaiApiKey,
-  // Only set baseURL if provided to avoid malformed URL issues
   ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
 });
 
@@ -2039,10 +2044,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ description });
     } catch (error: any) {
-      console.error("AI description generation error:", error);
+      console.error("AI description generation error:", {
+        message: error?.message,
+        status: error?.status,
+        response: error?.response?.data,
+        baseURL: openaiBaseUrl || "default",
+      });
       res.status(500).json({ 
         error: "Failed to generate description",
-        details: error.message 
+        details: error?.message || "Unexpected error",
       });
     }
   });

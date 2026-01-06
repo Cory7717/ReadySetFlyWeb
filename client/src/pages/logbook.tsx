@@ -106,6 +106,7 @@ export default function Logbook() {
   const [editingEntry, setEditingEntry] = useState<LogbookEntry | null>(null);
   const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [signRole, setSignRole] = useState<"pilot" | "cfi">("pilot");
 
   const { data: entries = [], isLoading } = useQuery<LogbookEntry[]>({
     queryKey: ["/api/logbook"],
@@ -171,11 +172,33 @@ export default function Logbook() {
     },
   });
 
+  const countersignMutation = useMutation({
+    mutationFn: async ({ id, signatureDataUrl, signedByName }: { id: string; signatureDataUrl: string; signedByName: string }) => {
+      const res = await apiRequest("POST", `/api/logbook/${id}/countersign`, { signatureDataUrl, signedByName });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/logbook"] });
+      setIsSignDialogOpen(false);
+      setSelectedEntryId(null);
+      toast({ title: "Entry countersigned" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to countersign", description: error.message, variant: "destructive" });
+    },
+  });
+
   const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.pic || "0") + parseFloat(e.sic || "0"), 0).toFixed(1);
   const totals = calculateTotals(entries);
 
   return (
     <div className="container mx-auto py-8 px-4">
+      {/* Signing requirement callout */}
+      {entries.some(e => !e.isLocked) && (
+        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Unsigned entries are drafts. Click <span className="font-semibold">Sign</span> to lock and finalize.
+        </div>
+      )}
       {/* FREE FOREVER Badge */}
       <div className="text-center mb-6">
         <Badge variant="outline" className="text-sm px-4 py-2 bg-green-50 border-green-200">
@@ -331,14 +354,19 @@ export default function Logbook() {
                     <TableCell>{entry.instrumentActual || "0"}</TableCell>
                     <TableCell>{(entry.landingsDay || 0) + (entry.landingsNight || 0)}</TableCell>
                     <TableCell>
-                      {entry.isLocked ? (
-                        <span className="flex items-center gap-1 text-xs text-green-600">
-                          <Lock className="h-3 w-3" />
-                          Signed
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Draft</span>
-                      )}
+                      <div className="flex flex-col gap-1">
+                        {entry.isLocked ? (
+                          <span className="flex items-center gap-1 text-xs text-green-700">
+                            <Lock className="h-3 w-3" />
+                            {entry.signedByName ? `Signed by ${entry.signedByName}` : "Signed"}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Draft – needs signature</span>
+                        )}
+                        {entry.cfiSignedAt && (
+                          <span className="text-[11px] text-blue-700">CFI: {entry.cfiSignedByName || "Signed"}</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
@@ -348,14 +376,15 @@ export default function Logbook() {
                               <Edit className="h-4 w-4" />
                             </Button>
                             <Button
-                              variant="ghost"
+                              variant="default"
                               size="sm"
                               onClick={() => {
                                 setSelectedEntryId(entry.id);
+                                setSignRole("pilot");
                                 setIsSignDialogOpen(true);
                               }}
                             >
-                              <Lock className="h-4 w-4" />
+                              <Lock className="h-4 w-4 mr-1" /> Sign
                             </Button>
                             <Button
                               variant="ghost"
@@ -367,6 +396,19 @@ export default function Logbook() {
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </>
+                        )}
+                        {entry.isLocked && !entry.cfiSignedAt && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedEntryId(entry.id);
+                              setSignRole("cfi");
+                              setIsSignDialogOpen(true);
+                            }}
+                          >
+                            CFI Sign
+                          </Button>
                         )}
                       </div>
                     </TableCell>
@@ -444,9 +486,13 @@ export default function Logbook() {
           <DialogContent>
             <SignatureDialog
               onSign={(signatureDataUrl, signedByName) => {
-                lockMutation.mutate({ id: selectedEntryId, signatureDataUrl, signedByName });
+                if (signRole === "pilot") {
+                  lockMutation.mutate({ id: selectedEntryId, signatureDataUrl, signedByName });
+                } else {
+                  countersignMutation.mutate({ id: selectedEntryId, signatureDataUrl, signedByName });
+                }
               }}
-              isPending={lockMutation.isPending}
+              isPending={lockMutation.isPending || countersignMutation.isPending}
             />
           </DialogContent>
         </Dialog>

@@ -2485,7 +2485,7 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
-  async lockLogbookEntry(id: string, signatureDataUrl: string, signedByName: string): Promise<LogbookEntry | undefined> {
+  async lockLogbookEntry(id: string, signatureDataUrl: string, signedByName: string, signatureIp?: string): Promise<LogbookEntry | undefined> {
     const existing = await this.getLogbookEntryById(id);
     if (!existing) {
       throw new Error("Logbook entry not found");
@@ -2498,6 +2498,23 @@ export class DatabaseStorage implements IStorage {
       signatureDataUrl,
       signedByName,
       signedAt: new Date(),
+      signatureIp,
+      updatedAt: new Date(),
+    }).where(eq(logbookEntries.id, id)).returning();
+    return entry;
+  }
+
+  async countersignLogbookEntry(id: string, signatureDataUrl: string, signedByName: string, signatureIp?: string): Promise<LogbookEntry | undefined> {
+    const existing = await this.getLogbookEntryById(id);
+    if (!existing) {
+      throw new Error("Logbook entry not found");
+    }
+    // Allow countersign on locked entry; do not change flight data
+    const [entry] = await db.update(logbookEntries).set({
+      cfiSignatureDataUrl: signatureDataUrl,
+      cfiSignedByName: signedByName,
+      cfiSignedAt: new Date(),
+      cfiSignatureIp: signatureIp,
       updatedAt: new Date(),
     }).where(eq(logbookEntries.id, id)).returning();
     return entry;

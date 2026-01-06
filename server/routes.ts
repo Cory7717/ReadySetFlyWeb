@@ -5360,12 +5360,40 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!signatureDataUrl || !signedByName) {
         return res.status(400).json({ error: "signatureDataUrl and signedByName are required" });
       }
-      const entry = await storage.lockLogbookEntry(req.params.id, signatureDataUrl, signedByName);
+      const forwarded = (req.headers["x-forwarded-for"] as string) || "";
+      const ip = forwarded.split(",")[0].trim() || req.ip;
+      const entry = await storage.lockLogbookEntry(req.params.id, signatureDataUrl, signedByName, ip);
       res.json(entry);
     } catch (error: any) {
       console.error("Failed to lock logbook entry:", error);
       res.status(error.message?.includes("locked") || error.message?.includes("not found") ? 400 : 500).json({ 
         error: error.message || "Failed to lock logbook entry" 
+      });
+    }
+  });
+
+  app.post("/api/logbook/:id/countersign", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const existing = await storage.getLogbookEntryById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Logbook entry not found" });
+      }
+      if (existing.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const { signatureDataUrl, signedByName } = req.body;
+      if (!signatureDataUrl || !signedByName) {
+        return res.status(400).json({ error: "signatureDataUrl and signedByName are required" });
+      }
+      const forwarded = (req.headers["x-forwarded-for"] as string) || "";
+      const ip = forwarded.split(",")[0].trim() || req.ip;
+      const entry = await storage.countersignLogbookEntry(req.params.id, signatureDataUrl, signedByName, ip);
+      res.json(entry);
+    } catch (error: any) {
+      console.error("Failed to countersign logbook entry:", error);
+      res.status(error.message?.includes("not found") ? 404 : 500).json({ 
+        error: error.message || "Failed to countersign logbook entry" 
       });
     }
   });

@@ -87,7 +87,14 @@ export default function ListAircraft() {
       method: 'POST',
       credentials: 'include',
     });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Upload init failed (${response.status})`);
+    }
     const data = await response.json();
+    if (!data?.uploadURL) {
+      throw new Error('Upload init failed: missing upload URL');
+    }
     return {
       method: 'PUT' as const,
       url: data.uploadURL,

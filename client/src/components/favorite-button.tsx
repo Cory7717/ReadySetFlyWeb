@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 
 interface FavoriteButtonProps {
   listingId: string;
@@ -29,9 +30,10 @@ export function FavoriteButton({
   const { data: favoriteStatus } = useQuery<{ isFavorited: boolean }>({
     queryKey: ["/api/favorites/check", listingType, listingId],
     queryFn: async () => {
-      const response = await fetch(`/api/favorites/check/${listingType}/${listingId}`, {
+      const response = await fetch(apiUrl(`/api/favorites/check/${listingType}/${listingId}`), {
         credentials: "include",
       });
+      if (response.status === 404) return { isFavorited: false }; // treat missing endpoint/listing as not favorited
       if (!response.ok) throw new Error("Failed to check favorite status");
       return response.json();
     },

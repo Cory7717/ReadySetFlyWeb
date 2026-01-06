@@ -34,6 +34,7 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import VerifyEmail from "@/pages/verify-email";
 import Logbook from "@/pages/logbook";
+import PilotTools from "@/pages/pilot-tools";
 
 // Router component - allows anonymous browsing for rentals/marketplace
 function Router() {
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/rentals" component={Home} />
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/aircraft/:id" component={AircraftDetail} />
+      <Route path="/pilot-tools" component={PilotTools} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
       <Route path="/delete-account" component={DeleteAccount} />

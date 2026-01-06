@@ -5173,6 +5173,73 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  // Aviation Weather API (public access with caching)
+  const weatherCache = new Map<string, { data: any; timestamp: number }>();
+  const WEATHER_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+
+  app.get("/api/aviation-weather/:icao", async (req, res) => {
+    try {
+      const icao = req.params.icao.toUpperCase();
+      
+      // Validate ICAO format (3-4 letter code)
+      if (!/^[A-Z]{3,4}$/.test(icao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const now = Date.now();
+      const cached = weatherCache.get(icao);
+
+      // Return cached data if fresh
+      if (cached && (now - cached.timestamp) < WEATHER_CACHE_TTL) {
+        return res.json({ ...cached.data, cached: true });
+      }
+
+      // Fetch METAR and TAF from Aviation Weather Center API
+      const metarUrl = `https://aviationweather.gov/api/data/metar?ids=${icao}&format=json`;
+      const tafUrl = `https://aviationweather.gov/api/data/taf?ids=${icao}&format=json`;
+
+      const [metarRes, tafRes] = await Promise.all([
+        fetch(metarUrl, { headers: { 'User-Agent': 'ReadySetFly/1.0' } }),
+        fetch(tafUrl, { headers: { 'User-Agent': 'ReadySetFly/1.0' } })
+      ]);
+
+      let metar = null;
+      let taf = null;
+
+      if (metarRes.ok) {
+        const metarData = await metarRes.json();
+        metar = metarData.length > 0 ? metarData[0] : null;
+      }
+
+      if (tafRes.ok) {
+        const tafData = await tafRes.json();
+        taf = tafData.length > 0 ? tafData[0] : null;
+      }
+
+      const responseData = {
+        icao,
+        metar,
+        taf,
+        timestamp: now,
+        cached: false
+      };
+
+      // Cache the result
+      weatherCache.set(icao, { data: responseData, timestamp: now });
+
+      // Cleanup old cache entries (keep cache size manageable)
+      if (weatherCache.size > 100) {
+        const oldestKey = weatherCache.keys().next().value;
+        weatherCache.delete(oldestKey);
+      }
+
+      res.json(responseData);
+    } catch (error) {
+      console.error("Aviation weather fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch aviation weather data" });
+    }
+  });
+
   // Pilot Logbook Routes (authenticated users only)
   app.get("/api/logbook", isAuthenticated, async (req: any, res) => {
     try {

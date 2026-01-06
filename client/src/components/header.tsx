@@ -141,6 +141,9 @@ export function Header() {
                     <DropdownMenuItem asChild>
                       <Link href="/logbook" data-testid="link-logbook">Pilot Logbook</Link>
                     </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/pilot-tools" data-testid="link-pilot-tools">Pilot Tools</Link>
+                    </DropdownMenuItem>
                     {user?.isAdmin && (
                       <>
                         <DropdownMenuSeparator />

@@ -34,11 +34,11 @@ export default function Landing() {
               <Button 
                 size="lg" 
                 variant="outline"
-                onClick={() => window.location.href = '/logbook'}
-                data-testid="button-pilot-logbook"
+                onClick={() => window.location.href = '/pilot-tools'}
+                data-testid="button-pilot-tools"
               >
                 <BookOpen className="h-4 w-4 mr-2" />
-                Pilot Logbook
+                Pilot Tools
               </Button>
               <Button 
                 size="lg" 

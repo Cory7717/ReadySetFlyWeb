@@ -61,8 +61,11 @@ export function getSession() {
     cookie: {
       httpOnly: true,
       // Cross-site (frontend on readysetfly.us, API on readysetfly-api.onrender.com)
+      // In production we must use SameSite=None and Secure so cookies survive cross-site in incognito.
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      secure: process.env.NODE_ENV === "production" ? "auto" : false,
+      secure: process.env.NODE_ENV === "production" ? true : false,
+      // If you have both app + api on the same apex, you can set domain to .readysetfly.us
+      // Leave undefined to let the browser scope it to the API host.
       maxAge: sessionTtlSeconds * 1000,
     },
   });

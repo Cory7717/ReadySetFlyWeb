@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import express from "express";
+import cors from "cors";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import multer from "multer";
@@ -203,6 +204,17 @@ const isVerified = async (req: any, res: any, next: any) => {
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // CORS: allow frontend origins and send credentials for session cookies
+  app.use(cors({
+    origin: process.env.WEB_ORIGIN ? process.env.WEB_ORIGIN.split(',') : [
+      "https://readysetfly.us",
+      "https://www.readysetfly.us",
+      "http://localhost:5173",
+      "http://localhost:4173"
+    ],
+    credentials: true,
+  }));
+
   // Auth middleware (from blueprint:javascript_log_in_with_replit)
   await setupAuth(app);
 

@@ -494,11 +494,12 @@ export function getBannerAdExpirationReminderText(
                      "12 Months";
   
   return `
-ACTION REQUIRED: Your Ready Set Fly banner campaign ends in 2 days
-
+  const leadDays = adDetails.leadDays ?? 2;
+  return `
+  ACTION REQUIRED: Your Ready Set Fly banner campaign ends in ${leadDays} days
 Hi ${sponsorName},
 
-Your banner ad will be automatically deactivated at midnight on ${new Date(orderDetails.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} and will no longer appear on Ready Set Fly.
+  Your banner ad will be automatically deactivated at midnight on ${new Date(adDetails.endDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} and will no longer appear on Ready Set Fly.
 
 CAMPAIGN SUMMARY
 ----------------
@@ -651,6 +652,7 @@ export function getMarketplaceListingExpirationReminderText(
     category: string;
     tier: string;
     expiresAt: string;
+    leadDays?: number;
   }
 ): string {
   const categoryDisplay = listingDetails.category === "aircraft-sale" ? "Aircraft for Sale" :
@@ -664,12 +666,14 @@ export function getMarketplaceListingExpirationReminderText(
                      listingDetails.tier === "standard" ? "Standard" :
                      "Premium";
   
+  const leadDays = listingDetails.leadDays ?? 2;
+
   return `
-RENEW YOUR LISTING – 2 DAYS LEFT
+RENEW YOUR LISTING – ${leadDays} DAYS LEFT
 
 Hi ${userName},
 
-Your ${categoryDisplay} listing expires in 2 days. Your listing will be automatically hidden from search results and removed from your active listings at midnight on ${new Date(listingDetails.expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
+Your ${categoryDisplay} listing expires in ${leadDays} days. Your listing will be automatically hidden from search results and removed from your active listings at midnight on ${new Date(listingDetails.expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
 
 LISTING DETAILS
 ---------------

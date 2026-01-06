@@ -1827,7 +1827,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Cron endpoint: Send 2-day expiration reminders for banner ads and marketplace listings
+  // Cron endpoint: Send expiration reminders for banner ads and marketplace listings
   // SECURITY: Requires CRON_SECRET header to prevent unauthorized access
   app.post("/api/cron/send-expiration-reminders", async (req, res) => {
     try {
@@ -1847,11 +1847,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let listingsProcessed = 0;
       let errors: string[] = [];
       
-      // Find banner ads expiring in 2 days that haven't been reminded
-      const expiringBanners = await storage.getExpiringBannerAdOrders(2);
+      // Find banner ads expiring soon (configurable lead time, default 3 days)
+      const leadDays = Number(process.env.EXPIRATION_REMINDER_DAYS ?? 3);
+      const expiringBanners = await storage.getExpiringBannerAdOrders(leadDays);
       
-      // Find marketplace listings expiring in 2 days that haven't been reminded
-      const expiringListings = await storage.getExpiringMarketplaceListings(2);
+      // Find marketplace listings expiring soon with same lead time
+      const expiringListings = await storage.getExpiringMarketplaceListings(leadDays);
       
       // Send banner ad expiration reminders
       for (const banner of expiringBanners) {
@@ -1870,12 +1871,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             tier: banner.tier,
             endDate: banner.endDate?.toISOString() || new Date().toISOString(),
             startDate: banner.startDate?.toISOString() || new Date().toISOString(),
+            leadDays,
           });
           
           await client.emails.send({
             from: fromEmail,
             to: banner.sponsorEmail,
-            subject: 'Action Required: Your Ready Set Fly banner campaign ends in 2 days',
+            subject: `Action Required: Your Ready Set Fly banner campaign ends in ${leadDays} days`,
             html: htmlBody,
             text: textBody,
           });
@@ -1920,12 +1922,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             category: listing.category,
             tier: listing.tier || 'basic',
             expiresAt: listing.expiresAt?.toISOString() || new Date().toISOString(),
+            leadDays,
           });
           
           await client.emails.send({
             from: fromEmail,
             to: user.email,
-            subject: `Renew your ${listing.category} listing – 2 days left on Ready Set Fly`,
+            subject: `Renew your ${listing.category} listing – ${leadDays} days left on Ready Set Fly`,
             html: htmlBody,
             text: textBody,
           });

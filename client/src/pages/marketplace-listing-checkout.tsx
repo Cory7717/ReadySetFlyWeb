@@ -372,6 +372,7 @@ export default function MarketplaceListingCheckout() {
   const [discountAmount, setDiscountAmount] = useState(0);
   const [finalAmount, setFinalAmount] = useState(0);
   const [completionToken, setCompletionToken] = useState<string | null>(null);
+  const [autoAppliedFromListing, setAutoAppliedFromListing] = useState(false);
 
   useEffect(() => {
     // Check if this is upgrade mode
@@ -415,6 +416,14 @@ export default function MarketplaceListingCheckout() {
       setListingData(data);
     }
   }, [navigate, toast]);
+
+  // Auto-apply promo code captured during listing creation so users don't re-enter it
+  useEffect(() => {
+    if (listingData?.promoCode && !appliedPromo && !autoAppliedFromListing) {
+      handleApplyPromo(listingData.promoCode);
+      setAutoAppliedFromListing(true);
+    }
+  }, [listingData?.promoCode, appliedPromo, autoAppliedFromListing]);
 
   const handlePaymentSuccess = async (transactionId: string) => {
     // UPGRADE MODE: Complete the upgrade
@@ -502,9 +511,23 @@ export default function MarketplaceListingCheckout() {
     }
   };
 
-  const handleApplyPromo = async () => {
+  const handleApplyPromo = async (codeOverride?: string) => {
     setIsApplyingPromo(true);
     setPromoError("");
+    if (!listingData && !upgradeContext) {
+      setPromoError("Listing details not loaded yet");
+      setIsApplyingPromo(false);
+      return;
+    }
+    const codeToValidate = (codeOverride ?? promoCode).trim();
+    if (!codeToValidate) {
+      setPromoError("Please enter a promo code");
+      setIsApplyingPromo(false);
+      return;
+    }
+    // Normalize casing to avoid server-side mismatches
+    const normalizedCode = codeToValidate.toUpperCase();
+    setPromoCode(normalizedCode);
     
     try {
       // Calculate amounts first
@@ -517,7 +540,7 @@ export default function MarketplaceListingCheckout() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          code: promoCode,
+          code: normalizedCode,
           context: "marketplace",
           amount: totalAmount,
         }),

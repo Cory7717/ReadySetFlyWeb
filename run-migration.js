@@ -17,6 +17,15 @@ async function ensureMigrationsTable() {
   `);
 }
 
+async function seedMigrationIfTableExists({ fileName, schema, table }) {
+  const exists = await tableExists(schema, table);
+  if (!exists) return;
+  await client.query(
+    `INSERT INTO app_migrations(name) VALUES($1) ON CONFLICT(name) DO NOTHING`,
+    [fileName]
+  );
+}
+
 async function tableExists(schema, table) {
   const { rows } = await client.query(
     `SELECT to_regclass($1) AS oid`,
@@ -31,14 +40,18 @@ async function runMigrationsFolder() {
     console.log('Connected to database');
     await ensureMigrationsTable();
 
-    // Seed migration record for 0001 if table already exists
-    const hasLogbook = await tableExists('public', 'logbook_entries');
-    if (hasLogbook) {
-      await client.query(
-        `INSERT INTO app_migrations(name) VALUES($1) ON CONFLICT(name) DO NOTHING`,
-        ['0001_add_logbook_entries.sql']
-      );
-    }
+    // Seed migration records when core tables already exist to avoid reapplying base migrations
+    await seedMigrationIfTableExists({
+      fileName: '0000_lame_naoko.sql',
+      schema: 'public',
+      table: 'admin_notifications',
+    });
+
+    await seedMigrationIfTableExists({
+      fileName: '0001_add_logbook_entries.sql',
+      schema: 'public',
+      table: 'logbook_entries',
+    });
 
     const dir = path.resolve('./migrations');
     const files = fs

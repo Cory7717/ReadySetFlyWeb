@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import Uppy from "@uppy/core";
 import Dashboard from "@uppy/react/dashboard";
 import AwsS3 from "@uppy/aws-s3";
+import ImageEditor from "@uppy/image-editor";
 import type { UploadResult } from "@uppy/core";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -77,6 +78,17 @@ export function ObjectUploader({
         shouldUseMultipart: false,
         getUploadParameters: onGetUploadParameters,
       })
+      .use(ImageEditor, {
+        quality: 0.9,
+        cropperOptions: {
+          viewMode: 1,
+          background: false,
+          autoCropArea: 1,
+          movable: true,
+          zoomable: true,
+          responsive: true,
+        },
+      })
       .on("complete", (result) => {
         onComplete?.(result);
         setShowModal(false);
@@ -106,6 +118,7 @@ export function ObjectUploader({
               height={480}
               hideUploadButton={false}
               showProgressDetails
+              plugins={["ImageEditor"]}
             />
           </div>
         </DialogContent>

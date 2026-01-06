@@ -221,32 +221,54 @@ export default function CreateMarketplaceListing() {
     try {
       // Process each successful upload
       const uploadedUrls: string[] = [];
-      
-      for (const file of result.successful || []) {
-        if (file.uploadURL) {
-          // Set ACL policy for the uploaded image
-          const response = await fetch(apiUrl('/api/listing-images'), {
+
+      for (const file of (result.successful as any[]) || []) {
+        const possibleUrls = [
+          (file as any).uploadURL,
+          (file as any)?.response?.uploadURL,
+          (file as any)?.response?.data?.location,
+          (file as any)?.response?.data?.url,
+        ].filter(Boolean) as string[];
+
+        const rawUrl = possibleUrls[0];
+        if (!rawUrl) {
+          continue; // Skip files without a resolvable URL
+        }
+
+        // Normalize to a public URL without query params
+        const imageUrl = rawUrl.split('?')[0];
+
+        // Best-effort: set ACL/policy server-side (idempotent)
+        try {
+          await fetch(apiUrl('/api/listing-images'), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageURL: file.uploadURL }),
+            body: JSON.stringify({ imageURL: imageUrl }),
             credentials: 'include',
           });
-          
-          await response.json(); // Still call the API to set ACL
-          
-          // Store the full uploaded URL (not objectPath)
-          const imageUrl = file.uploadURL.split('?')[0]; // Remove query params
-          uploadedUrls.push(imageUrl);
+        } catch (e) {
+          // Non-fatal; continue
+          console.warn('ACL update failed, continuing:', e);
         }
+
+        uploadedUrls.push(imageUrl);
       }
       
       // Add uploaded images to the list
       setImageFiles([...imageFiles, ...uploadedUrls]);
       
-      toast({
-        title: "Images Uploaded Successfully",
-        description: `Added ${uploadedUrls.length} image(s) to your listing.`,
-      });
+      if (uploadedUrls.length > 0) {
+        toast({
+          title: "Images Uploaded Successfully",
+          description: `Added ${uploadedUrls.length} image(s) to your listing.`,
+        });
+      } else {
+        toast({
+          title: "No Images Added",
+          description: "We couldn't detect any completed uploads. Please try again and ensure you click Upload.",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       console.error('Error processing uploads:', error);
       toast({

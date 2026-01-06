@@ -54,6 +54,7 @@
     "@uppy/aws-s3": "^5.0.2",
     "@uppy/core": "^5.1.1",
     "@uppy/dashboard": "^5.0.3",
+    "@uppy/image-editor": "^3.0.4",
     "@uppy/react": "^5.1.1",
     "babel-preset-expo": "^54.0.6",
     "bcrypt": "^6.0.0",

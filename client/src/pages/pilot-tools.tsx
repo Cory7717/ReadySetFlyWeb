@@ -205,14 +205,16 @@ export default function PilotTools() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={() => window.open(`https://aviationweather.gov/metar/data?ids=${weather.icao}&format=decoded`, '_blank')}
-                  >
-                    <Cloud className="h-4 w-4 mr-2" />
-                    View METAR/TAF
-                    <ExternalLink className="h-3 w-3 ml-auto" />
+                  <Button variant="outline" className="justify-start" asChild>
+                    <a
+                      href={`https://www.aviationweather.gov/metar/data?ids=${weather.icao}&format=decoded`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Cloud className="h-4 w-4 mr-2" />
+                      View METAR/TAF
+                      <ExternalLink className="h-3 w-3 ml-auto" />
+                    </a>
                   </Button>
 
                   <Button

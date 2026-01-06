@@ -12,6 +12,7 @@ import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award }
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { LogbookEntry, InsertLogbookEntry } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
 
 // Helper function to calculate totals from entries
 function calculateTotals(entries: LogbookEntry[]) {
@@ -112,13 +113,7 @@ export default function Logbook() {
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertLogbookEntry) => {
-      const res = await fetch("/api/logbook", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      const res = await apiRequest("POST", "/api/logbook", data);
       return res.json();
     },
     onSuccess: () => {
@@ -133,13 +128,7 @@ export default function Logbook() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<InsertLogbookEntry> }) => {
-      const res = await fetch(`/api/logbook/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      const res = await apiRequest("PATCH", `/api/logbook/${id}`, data);
       return res.json();
     },
     onSuccess: () => {
@@ -154,8 +143,7 @@ export default function Logbook() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/logbook/${id}`, { method: "DELETE", credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
+      const res = await apiRequest("DELETE", `/api/logbook/${id}`);
       return res.json();
     },
     onSuccess: () => {
@@ -169,13 +157,7 @@ export default function Logbook() {
 
   const lockMutation = useMutation({
     mutationFn: async ({ id, signatureDataUrl, signedByName }: { id: string; signatureDataUrl: string; signedByName: string }) => {
-      const res = await fetch(`/api/logbook/${id}/lock`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ signatureDataUrl, signedByName }),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      const res = await apiRequest("POST", `/api/logbook/${id}/lock`, { signatureDataUrl, signedByName });
       return res.json();
     },
     onSuccess: () => {

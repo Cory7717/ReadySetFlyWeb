@@ -490,12 +490,12 @@ function LogbookEntryForm({
       tailNumber: "",
       aircraftType: "",
       route: "",
-      timeDay: "0",
-      timeNight: "0",
-      pic: "0",
-      sic: "0",
-      dual: "0",
-      instrumentActual: "0",
+      timeDay: "",
+      timeNight: "",
+      pic: "",
+      sic: "",
+      dual: "",
+      instrumentActual: "",
       approaches: 0,
       landingsDay: 0,
       landingsNight: 0,
@@ -571,8 +571,10 @@ function LogbookEntryForm({
             id="pic"
             type="number"
             step="0.1"
-            value={formData.pic || "0"}
+            placeholder="0.0"
+            value={formData.pic || ""}
             onChange={(e) => setFormData({ ...formData, pic: e.target.value })}
+            onFocus={(e) => e.target.select()}
           />
         </div>
         <div>
@@ -581,8 +583,10 @@ function LogbookEntryForm({
             id="sic"
             type="number"
             step="0.1"
-            value={formData.sic || "0"}
+            placeholder="0.0"
+            value={formData.sic || ""}
             onChange={(e) => setFormData({ ...formData, sic: e.target.value })}
+            onFocus={(e) => e.target.select()}
           />
         </div>
         <div>
@@ -591,8 +595,10 @@ function LogbookEntryForm({
             id="dual"
             type="number"
             step="0.1"
-            value={formData.dual || "0"}
+            placeholder="0.0"
+            value={formData.dual || ""}
             onChange={(e) => setFormData({ ...formData, dual: e.target.value })}
+            onFocus={(e) => e.target.select()}
           />
         </div>
         <div>
@@ -601,8 +607,10 @@ function LogbookEntryForm({
             id="instrumentActual"
             type="number"
             step="0.1"
-            value={formData.instrumentActual || "0"}
+            placeholder="0.0"
+            value={formData.instrumentActual || ""}
             onChange={(e) => setFormData({ ...formData, instrumentActual: e.target.value })}
+            onFocus={(e) => e.target.select()}
           />
         </div>
         <div>

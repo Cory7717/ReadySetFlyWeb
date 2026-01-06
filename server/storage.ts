@@ -2122,8 +2122,21 @@ export class DatabaseStorage implements IStorage {
 
   async activateBannerAdOrder(orderId: string): Promise<BannerAd | undefined> {
     const order = await this.getBannerAdOrder(orderId);
-    if (!order || order.paymentStatus !== 'paid') {
+    if (!order) {
       return undefined;
+    }
+
+    // Require paid status, captured PayPal order ID, and approval before activation
+    if (order.paymentStatus !== 'paid') {
+      throw new Error('UNPAID_ORDER');
+    }
+
+    if (!order.paypalOrderId || order.paypalOrderId.trim() === '') {
+      throw new Error('MISSING_PAYMENT_REFERENCE');
+    }
+
+    if (order.approvalStatus !== 'approved') {
+      throw new Error('NOT_APPROVED');
     }
 
     // Check if this order has already been activated

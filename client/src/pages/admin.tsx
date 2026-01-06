@@ -908,6 +908,24 @@ export default function AdminDashboard() {
           description: "This order has an active banner ad.",
           variant: "destructive",
         });
+      } else if (error?.status === 402 || error?.error === 'Payment required') {
+        toast({
+          title: "Payment required",
+          description: "Order must be paid (and captured) before activation.",
+          variant: "destructive",
+        });
+      } else if (error?.error === 'Payment reference missing') {
+        toast({
+          title: "Missing PayPal reference",
+          description: "Capture must complete and record a PayPal order ID before activation.",
+          variant: "destructive",
+        });
+      } else if (error?.error === 'Approval required') {
+        toast({
+          title: "Approval required",
+          description: "Approve the order before activating the banner.",
+          variant: "destructive",
+        });
       } else if (error?.errorCode === 'IMAGE_REQUIRED' || error?.message?.includes('IMAGE_REQUIRED')) {
         toast({
           title: "Image required",
@@ -3384,6 +3402,11 @@ export default function AdminDashboard() {
               </Button>
             </CardHeader>
             <CardContent>
+              {bannerOrders.some(o => o.paymentStatus !== 'paid') && (
+                <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" data-testid="alert-unpaid-banner-orders">
+                  Some banner orders are unpaid. Capture payment (PayPal) before approval and activation.
+                </div>
+              )}
               {ordersLoading ? (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground">Loading orders...</p>

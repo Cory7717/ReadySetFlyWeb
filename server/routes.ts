@@ -4550,6 +4550,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof Error && error.message === 'ALREADY_ACTIVATED') {
         return res.status(409).json({ error: "This order has already been activated." });
       }
+      // Enforce payment and approval guards
+      if (error instanceof Error && error.message === 'UNPAID_ORDER') {
+        return res.status(402).json({ error: "Payment required", details: "Order must be paid before activation." });
+      }
+      if (error instanceof Error && error.message === 'MISSING_PAYMENT_REFERENCE') {
+        return res.status(400).json({ error: "Payment reference missing", details: "PayPal order ID is missing; capture must complete before activation." });
+      }
+      if (error instanceof Error && error.message === 'NOT_APPROVED') {
+        return res.status(400).json({ error: "Approval required", details: "Order must be approved before activation." });
+      }
       // Handle missing image
       if (error instanceof Error && error.message === 'IMAGE_REQUIRED') {
         return res.status(400).json({ errorCode: "IMAGE_REQUIRED", error: "Banner image is required. Please upload an image before activating this order." });

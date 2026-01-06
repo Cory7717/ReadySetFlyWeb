@@ -40,14 +40,14 @@ import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
 function AnalyticsTracker() {
   const [path] = useLocation();
   // Fire GA page_view on route change
-  if (typeof window !== "undefined" && (window as any).gtag) {
-    try {
+  try {
+    if (typeof window !== "undefined" && (window as any).gtag) {
       (window as any).gtag('event', 'page_view', {
         page_path: path,
         page_title: document.title,
       });
-    } catch {}
-  }
+    }
+  } catch {}
   return null;
 }
 

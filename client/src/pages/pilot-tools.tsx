@@ -63,7 +63,7 @@ function extractAtisIdentifier(metar: any): string | null {
   // or just "ATIS ALPHA" or single letter at end
   const raw = metar.rawOb;
   
-  // Try to find INFO X pattern
+  // Try to find INFO X pattern (most common)
   const infoMatch = raw.match(/\bINFO\s+([A-Z])\b/i);
   if (infoMatch) {
     return `Information ${infoMatch[1].toUpperCase()}`;
@@ -75,6 +75,17 @@ function extractAtisIdentifier(metar: any): string | null {
     return `Information ${atisMatch[1].toUpperCase()}`;
   }
   
+  // Try to find single letter at the very end after RMK
+  const rmkIndex = raw.indexOf('RMK');
+  if (rmkIndex !== -1) {
+    const afterRmk = raw.substring(rmkIndex);
+    // Look for pattern like ending with single letter
+    const endMatch = afterRmk.match(/\s([A-Z])\s*$/);
+    if (endMatch) {
+      return `Information ${endMatch[1]}`;
+    }
+  }
+  
   return null;
 }
 
@@ -83,9 +94,20 @@ function extractRunwayInUse(metar: any): string | null {
   const raw = metar.rawOb;
   
   // Look for RWY XX or RUNWAY XX patterns in remarks
-  const rwyMatch = raw.match(/\b(?:RWY|RUNWAY)\s+(\d{2}[LCR]?(?:\s*(?:AND|\/)\s*\d{2}[LCR]?)*)/i);
+  const rwyMatch = raw.match(/\b(?:RWY|RUNWAY)\s+(\d{2}[LCR]?(?:\s*(?:AND|\/|&)\s*\d{2}[LCR]?)*)/i);
   if (rwyMatch) {
-    return rwyMatch[1].replace(/\s+/g, ' ');
+    return rwyMatch[1].replace(/\s+/g, ' ').trim();
+  }
+  
+  // Also try to find arrival/departure runway info
+  const arrRwyMatch = raw.match(/\bARR\s+(?:RWY|RUNWAY)\s+(\d{2}[LCR]?)/i);
+  const depRwyMatch = raw.match(/\bDEP\s+(?:RWY|RUNWAY)\s+(\d{2}[LCR]?)/i);
+  
+  if (arrRwyMatch || depRwyMatch) {
+    const runways = [];
+    if (arrRwyMatch) runways.push(`${arrRwyMatch[1]} (arr)`);
+    if (depRwyMatch) runways.push(`${depRwyMatch[1]} (dep)`);
+    return runways.join(', ');
   }
   
   return null;
@@ -163,7 +185,9 @@ export default function PilotTools() {
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              Failed to fetch weather data. Please check the ICAO code and try again.
+              {error instanceof Error && error.message.includes("404") 
+                ? `No weather data available for this airport. ${searchIcao} may not report METAR/TAF.`
+                : "Failed to fetch weather data. Please check the ICAO code and try again."}
             </AlertDescription>
           </Alert>
         )}

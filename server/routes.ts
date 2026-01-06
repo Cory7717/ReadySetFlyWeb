@@ -5209,15 +5209,41 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       let metar = null;
       let taf = null;
+      let metarError = null;
+      let tafError = null;
 
       if (metarRes.ok) {
-        const metarData = await metarRes.json();
-        metar = metarData.length > 0 ? metarData[0] : null;
+        try {
+          const metarData = await metarRes.json();
+          metar = metarData.length > 0 ? metarData[0] : null;
+        } catch (e) {
+          metarError = "Failed to parse METAR response";
+          console.error(`METAR parse error for ${icao}:`, e);
+        }
+      } else {
+        metarError = `METAR unavailable (${metarRes.status})`;
+        console.log(`METAR fetch failed for ${icao}: ${metarRes.status}`);
       }
 
       if (tafRes.ok) {
-        const tafData = await tafRes.json();
-        taf = tafData.length > 0 ? tafData[0] : null;
+        try {
+          const tafData = await tafRes.json();
+          taf = tafData.length > 0 ? tafData[0] : null;
+        } catch (e) {
+          tafError = "Failed to parse TAF response";
+          console.error(`TAF parse error for ${icao}:`, e);
+        }
+      } else {
+        tafError = `TAF unavailable (${tafRes.status})`;
+        console.log(`TAF fetch failed for ${icao}: ${tafRes.status}`);
+      }
+
+      // If both failed, return an error with details
+      if (!metar && !taf && metarError && tafError) {
+        return res.status(404).json({ 
+          error: `No weather data available for ${icao}. This airport may not report METAR/TAF data.`,
+          details: { metarError, tafError }
+        });
       }
 
       const responseData = {
@@ -5228,7 +5254,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         cached: false
       };
 
-      // Cache the result
+      // Cache the result (even if partial)
       weatherCache.set(icao, { data: responseData, timestamp: now });
 
       // Cleanup old cache entries (keep cache size manageable)

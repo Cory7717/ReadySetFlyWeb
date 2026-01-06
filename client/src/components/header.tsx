@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "./theme-toggle";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { apiUrl } from "@/lib/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -159,7 +160,7 @@ export function Header() {
                       <Link href="/settings" data-testid="link-settings">Settings</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <a href="/api/logout" data-testid="button-logout">
+                      <a href={apiUrl('/api/logout')} data-testid="button-logout">
                         <LogOut className="mr-2 h-4 w-4" />
                         Log out
                       </a>

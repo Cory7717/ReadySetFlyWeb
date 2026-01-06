@@ -1,0 +1,4589 @@
+{
+  "id": "a27ea05c-d679-4289-a387-ee4909984f01",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.admin_notifications": {
+      "name": "admin_notifications",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_read": {
+          "name": "is_read",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_actionable": {
+          "name": "is_actionable",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "listing_count": {
+          "name": "listing_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "threshold": {
+          "name": "threshold",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.aircraft_listings": {
+      "name": "aircraft_listings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "make": {
+          "name": "make",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "year": {
+          "name": "year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registration": {
+          "name": "registration",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total_time": {
+          "name": "total_time",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "engine": {
+          "name": "engine",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avionics_suite": {
+          "name": "avionics_suite",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "required_certifications": {
+          "name": "required_certifications",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "min_flight_hours": {
+          "name": "min_flight_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "hourly_rate": {
+          "name": "hourly_rate",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "insurance_included": {
+          "name": "insurance_included",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "wet_rate": {
+          "name": "wet_rate",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "images": {
+          "name": "images",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "city": {
+          "name": "city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zip_code": {
+          "name": "zip_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "numeric(10, 7)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "numeric(10, 7)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "airport_code": {
+          "name": "airport_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "engine_type": {
+          "name": "engine_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "engine_count": {
+          "name": "engine_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "seating_capacity": {
+          "name": "seating_capacity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_listed": {
+          "name": "is_listed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "admin_notes": {
+          "name": "admin_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_featured": {
+          "name": "is_featured",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "response_time_hours": {
+          "name": "response_time_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 24
+        },
+        "acceptance_rate": {
+          "name": "acceptance_rate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 100
+        },
+        "serial_number": {
+          "name": "serial_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "registration_doc_url": {
+          "name": "registration_doc_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "llc_authorization_url": {
+          "name": "llc_authorization_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ownership_verified": {
+          "name": "ownership_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "ownership_verified_at": {
+          "name": "ownership_verified_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "registry_checked_at": {
+          "name": "registry_checked_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owner_name_match": {
+          "name": "owner_name_match",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "annual_inspection_doc_url": {
+          "name": "annual_inspection_doc_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "annual_inspection_date": {
+          "name": "annual_inspection_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "annual_due_date": {
+          "name": "annual_due_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "annual_signer_name": {
+          "name": "annual_signer_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "annual_signer_cert_number": {
+          "name": "annual_signer_cert_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "annual_signer_ia_number": {
+          "name": "annual_signer_ia_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "annual_ap_verified": {
+          "name": "annual_ap_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "requires_100_hour": {
+          "name": "requires_100_hour",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "hour_100_inspection_doc_url": {
+          "name": "hour_100_inspection_doc_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hour_100_inspection_tach": {
+          "name": "hour_100_inspection_tach",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_tach": {
+          "name": "current_tach",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hour_100_remaining": {
+          "name": "hour_100_remaining",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "maintenance_tracking_provider": {
+          "name": "maintenance_tracking_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "maintenance_tracking_doc_url": {
+          "name": "maintenance_tracking_doc_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_maintenance_tracking": {
+          "name": "has_maintenance_tracking",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "maintenance_verified": {
+          "name": "maintenance_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "maintenance_verified_at": {
+          "name": "maintenance_verified_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_refreshed_at": {
+          "name": "last_refreshed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_aircraft_city": {
+          "name": "idx_aircraft_city",
+          "columns": [
+            {
+              "expression": "city",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_aircraft_is_listed": {
+          "name": "idx_aircraft_is_listed",
+          "columns": [
+            {
+              "expression": "is_listed",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_aircraft_category": {
+          "name": "idx_aircraft_category",
+          "columns": [
+            {
+              "expression": "category",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_aircraft_engine_type": {
+          "name": "idx_aircraft_engine_type",
+          "columns": [
+            {
+              "expression": "engine_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_aircraft_city_engine_type": {
+          "name": "idx_aircraft_city_engine_type",
+          "columns": [
+            {
+              "expression": "city",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "engine_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_aircraft_category_city": {
+          "name": "idx_aircraft_category_city",
+          "columns": [
+            {
+              "expression": "category",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "city",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "aircraft_listings_owner_id_users_id_fk": {
+          "name": "aircraft_listings_owner_id_users_id_fk",
+          "tableFrom": "aircraft_listings",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.banner_ad_orders": {
+      "name": "banner_ad_orders",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "sponsor_name": {
+          "name": "sponsor_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sponsor_email": {
+          "name": "sponsor_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sponsor_company": {
+          "name": "sponsor_company",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "image_url": {
+          "name": "image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "link": {
+          "name": "link",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "placements": {
+          "name": "placements",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "ARRAY[]::text[]"
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tier": {
+          "name": "tier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "monthly_rate": {
+          "name": "monthly_rate",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total_amount": {
+          "name": "total_amount",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creation_fee": {
+          "name": "creation_fee",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'40.00'"
+        },
+        "grand_total": {
+          "name": "grand_total",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "promo_code": {
+          "name": "promo_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "discount_amount": {
+          "name": "discount_amount",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0.00'"
+        },
+        "approval_status": {
+          "name": "approval_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "payment_status": {
+          "name": "payment_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "paypal_order_id": {
+          "name": "paypal_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paypal_payment_date": {
+          "name": "paypal_payment_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expiration_reminder_sent": {
+          "name": "expiration_reminder_sent",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "expiration_reminder_sent_at": {
+          "name": "expiration_reminder_sent_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "admin_notes": {
+          "name": "admin_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_banner_orders_status": {
+          "name": "idx_banner_orders_status",
+          "columns": [
+            {
+              "expression": "approval_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "payment_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_banner_orders_email": {
+          "name": "idx_banner_orders_email",
+          "columns": [
+            {
+              "expression": "sponsor_email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.banner_ads": {
+      "name": "banner_ads",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "image_url": {
+          "name": "image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "link": {
+          "name": "link",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "placements": {
+          "name": "placements",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "ARRAY[]::text[]"
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "listing_id": {
+          "name": "listing_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "listing_type": {
+          "name": "listing_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "impressions": {
+          "name": "impressions",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "clicks": {
+          "name": "clicks",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_banner_ads_placements": {
+          "name": "idx_banner_ads_placements",
+          "columns": [
+            {
+              "expression": "placements",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_banner_ads_active": {
+          "name": "idx_banner_ads_active",
+          "columns": [
+            {
+              "expression": "is_active",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_banner_ads_dates": {
+          "name": "idx_banner_ads_dates",
+          "columns": [
+            {
+              "expression": "start_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "end_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_banner_ads_order": {
+          "name": "idx_banner_ads_order",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "banner_ads_order_id_banner_ad_orders_id_fk": {
+          "name": "banner_ads_order_id_banner_ad_orders_id_fk",
+          "tableFrom": "banner_ads",
+          "tableTo": "banner_ad_orders",
+          "columnsFrom": [
+            "order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.contact_submissions": {
+      "name": "contact_submissions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ip_address": {
+          "name": "ip_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_sent": {
+          "name": "email_sent",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "email_sent_at": {
+          "name": "email_sent_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_contact_email": {
+          "name": "idx_contact_email",
+          "columns": [
+            {
+              "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_contact_created": {
+          "name": "idx_contact_created",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_contact_ip": {
+          "name": "idx_contact_ip",
+          "columns": [
+            {
+              "expression": "ip_address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.crm_activities": {
+      "name": "crm_activities",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lead_id": {
+          "name": "lead_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact_id": {
+          "name": "contact_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deal_id": {
+          "name": "deal_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "assigned_to": {
+          "name": "assigned_to",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "due_date": {
+          "name": "due_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_completed": {
+          "name": "is_completed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "crm_activities_lead_id_crm_leads_id_fk": {
+          "name": "crm_activities_lead_id_crm_leads_id_fk",
+          "tableFrom": "crm_activities",
+          "tableTo": "crm_leads",
+          "columnsFrom": [
+            "lead_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "crm_activities_contact_id_crm_contacts_id_fk": {
+          "name": "crm_activities_contact_id_crm_contacts_id_fk",
+          "tableFrom": "crm_activities",
+          "tableTo": "crm_contacts",
+          "columnsFrom": [
+            "contact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "crm_activities_deal_id_crm_deals_id_fk": {
+          "name": "crm_activities_deal_id_crm_deals_id_fk",
+          "tableFrom": "crm_activities",
+          "tableTo": "crm_deals",
+          "columnsFrom": [
+            "deal_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "crm_activities_created_by_users_id_fk": {
+          "name": "crm_activities_created_by_users_id_fk",
+          "tableFrom": "crm_activities",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "crm_activities_assigned_to_users_id_fk": {
+          "name": "crm_activities_assigned_to_users_id_fk",
+          "tableFrom": "crm_activities",
+          "tableTo": "users",
+          "columnsFrom": [
+            "assigned_to"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.crm_contacts": {
+      "name": "crm_contacts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "company": {
+          "name": "company",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assigned_to": {
+          "name": "assigned_to",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tags": {
+          "name": "tags",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "crm_contacts_user_id_users_id_fk": {
+          "name": "crm_contacts_user_id_users_id_fk",
+          "tableFrom": "crm_contacts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "crm_contacts_assigned_to_users_id_fk": {
+          "name": "crm_contacts_assigned_to_users_id_fk",
+          "tableFrom": "crm_contacts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "assigned_to"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.crm_deals": {
+      "name": "crm_deals",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stage": {
+          "name": "stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'lead'"
+        },
+        "value": {
+          "name": "value",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "probability": {
+          "name": "probability",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 50
+        },
+        "contact_id": {
+          "name": "contact_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assigned_to": {
+          "name": "assigned_to",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expected_close_date": {
+          "name": "expected_close_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closed_date": {
+          "name": "closed_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tags": {
+          "name": "tags",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "crm_deals_contact_id_crm_contacts_id_fk": {
+          "name": "crm_deals_contact_id_crm_contacts_id_fk",
+          "tableFrom": "crm_deals",
+          "tableTo": "crm_contacts",
+          "columnsFrom": [
+            "contact_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "crm_deals_assigned_to_users_id_fk": {
+          "name": "crm_deals_assigned_to_users_id_fk",
+          "tableFrom": "crm_deals",
+          "tableTo": "users",
+          "columnsFrom": [
+            "assigned_to"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.crm_leads": {
+      "name": "crm_leads",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "company": {
+          "name": "company",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'new'"
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "value": {
+          "name": "value",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assigned_to": {
+          "name": "assigned_to",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tags": {
+          "name": "tags",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "converted_to_contact_id": {
+          "name": "converted_to_contact_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "converted_to_deal_id": {
+          "name": "converted_to_deal_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "converted_at": {
+          "name": "converted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "crm_leads_assigned_to_users_id_fk": {
+          "name": "crm_leads_assigned_to_users_id_fk",
+          "tableFrom": "crm_leads",
+          "tableTo": "users",
+          "columnsFrom": [
+            "assigned_to"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.expenses": {
+      "name": "expenses",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "invoice_url": {
+          "name": "invoice_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expense_date": {
+          "name": "expense_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.favorites": {
+      "name": "favorites",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "listing_type": {
+          "name": "listing_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "listing_id": {
+          "name": "listing_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_favorites_user": {
+          "name": "idx_favorites_user",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_favorites_listing": {
+          "name": "idx_favorites_listing",
+          "columns": [
+            {
+              "expression": "listing_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "listing_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_favorites_user_listing_unique": {
+          "name": "idx_favorites_user_listing_unique",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "listing_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "listing_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "favorites_user_id_users_id_fk": {
+          "name": "favorites_user_id_users_id_fk",
+          "tableFrom": "favorites",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.job_applications": {
+      "name": "job_applications",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "listing_id": {
+          "name": "listing_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "applicant_id": {
+          "name": "applicant_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "current_job_title": {
+          "name": "current_job_title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "years_of_experience": {
+          "name": "years_of_experience",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cover_letter": {
+          "name": "cover_letter",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resume_url": {
+          "name": "resume_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'new'"
+        },
+        "employer_notes": {
+          "name": "employer_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_job_applications_listing": {
+          "name": "idx_job_applications_listing",
+          "columns": [
+            {
+              "expression": "listing_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_job_applications_applicant": {
+          "name": "idx_job_applications_applicant",
+          "columns": [
+            {
+              "expression": "applicant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_job_applications_status": {
+          "name": "idx_job_applications_status",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "job_applications_listing_id_marketplace_listings_id_fk": {
+          "name": "job_applications_listing_id_marketplace_listings_id_fk",
+          "tableFrom": "job_applications",
+          "tableTo": "marketplace_listings",
+          "columnsFrom": [
+            "listing_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "job_applications_applicant_id_users_id_fk": {
+          "name": "job_applications_applicant_id_users_id_fk",
+          "tableFrom": "job_applications",
+          "tableTo": "users",
+          "columnsFrom": [
+            "applicant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.logbook_entries": {
+      "name": "logbook_entries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "flight_date": {
+          "name": "flight_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tail_number": {
+          "name": "tail_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "aircraft_type": {
+          "name": "aircraft_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "route": {
+          "name": "route",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "time_day": {
+          "name": "time_day",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "time_night": {
+          "name": "time_night",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "pic": {
+          "name": "pic",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "sic": {
+          "name": "sic",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "dual": {
+          "name": "dual",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "instrument_actual": {
+          "name": "instrument_actual",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "0"
+        },
+        "approaches": {
+          "name": "approaches",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "landings_day": {
+          "name": "landings_day",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "landings_night": {
+          "name": "landings_night",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "holds": {
+          "name": "holds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "remarks": {
+          "name": "remarks",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "maneuvers": {
+          "name": "maneuvers",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hobbs_start": {
+          "name": "hobbs_start",
+          "type": "numeric(8, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hobbs_end": {
+          "name": "hobbs_end",
+          "type": "numeric(8, 1)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signature_data_url": {
+          "name": "signature_data_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signed_by_name": {
+          "name": "signed_by_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "signed_at": {
+          "name": "signed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_locked": {
+          "name": "is_locked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_logbook_user": {
+          "name": "idx_logbook_user",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_logbook_date": {
+          "name": "idx_logbook_date",
+          "columns": [
+            {
+              "expression": "flight_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "logbook_entries_user_id_users_id_fk": {
+          "name": "logbook_entries_user_id_users_id_fk",
+          "tableFrom": "logbook_entries",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.marketplace_flags": {
+      "name": "marketplace_flags",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "listing_id": {
+          "name": "listing_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_marketplace_flags_unique": {
+          "name": "idx_marketplace_flags_unique",
+          "columns": [
+            {
+              "expression": "listing_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "marketplace_flags_listing_id_marketplace_listings_id_fk": {
+          "name": "marketplace_flags_listing_id_marketplace_listings_id_fk",
+          "tableFrom": "marketplace_flags",
+          "tableTo": "marketplace_listings",
+          "columnsFrom": [
+            "listing_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "marketplace_flags_user_id_users_id_fk": {
+          "name": "marketplace_flags_user_id_users_id_fk",
+          "tableFrom": "marketplace_flags",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.marketplace_listings": {
+      "name": "marketplace_listings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tier": {
+          "name": "tier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "images": {
+          "name": "images",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "city": {
+          "name": "city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "zip_code": {
+          "name": "zip_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "numeric(10, 7)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "numeric(10, 7)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact_email": {
+          "name": "contact_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact_phone": {
+          "name": "contact_phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "details": {
+          "name": "details",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "price": {
+          "name": "price",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expiration_reminder_sent": {
+          "name": "expiration_reminder_sent",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "expiration_reminder_sent_at": {
+          "name": "expiration_reminder_sent_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "admin_notes": {
+          "name": "admin_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_featured": {
+          "name": "is_featured",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_example": {
+          "name": "is_example",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "flag_count": {
+          "name": "flag_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "view_count": {
+          "name": "view_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "is_paid": {
+          "name": "is_paid",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "monthly_fee": {
+          "name": "monthly_fee",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "upgrade_transactions": {
+          "name": "upgrade_transactions",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "promo_free_until": {
+          "name": "promo_free_until",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "promo_granted_by": {
+          "name": "promo_granted_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "promo_granted_at": {
+          "name": "promo_granted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_refreshed_at": {
+          "name": "last_refreshed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_marketplace_category": {
+          "name": "idx_marketplace_category",
+          "columns": [
+            {
+              "expression": "category",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_marketplace_city": {
+          "name": "idx_marketplace_city",
+          "columns": [
+            {
+              "expression": "city",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_marketplace_is_active": {
+          "name": "idx_marketplace_is_active",
+          "columns": [
+            {
+              "expression": "is_active",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_marketplace_category_city": {
+          "name": "idx_marketplace_category_city",
+          "columns": [
+            {
+              "expression": "category",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "city",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_marketplace_category_active": {
+          "name": "idx_marketplace_category_active",
+          "columns": [
+            {
+              "expression": "category",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "is_active",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_marketplace_flag_count": {
+          "name": "idx_marketplace_flag_count",
+          "columns": [
+            {
+              "expression": "flag_count",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "marketplace_listings_user_id_users_id_fk": {
+          "name": "marketplace_listings_user_id_users_id_fk",
+          "tableFrom": "marketplace_listings",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "marketplace_listings_promo_granted_by_users_id_fk": {
+          "name": "marketplace_listings_promo_granted_by_users_id_fk",
+          "tableFrom": "marketplace_listings",
+          "tableTo": "users",
+          "columnsFrom": [
+            "promo_granted_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.messages": {
+      "name": "messages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "rental_id": {
+          "name": "rental_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sender_id": {
+          "name": "sender_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "receiver_id": {
+          "name": "receiver_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "is_read": {
+          "name": "is_read",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "messages_rental_id_rentals_id_fk": {
+          "name": "messages_rental_id_rentals_id_fk",
+          "tableFrom": "messages",
+          "tableTo": "rentals",
+          "columnsFrom": [
+            "rental_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "messages_sender_id_users_id_fk": {
+          "name": "messages_sender_id_users_id_fk",
+          "tableFrom": "messages",
+          "tableTo": "users",
+          "columnsFrom": [
+            "sender_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "messages_receiver_id_users_id_fk": {
+          "name": "messages_receiver_id_users_id_fk",
+          "tableFrom": "messages",
+          "tableTo": "users",
+          "columnsFrom": [
+            "receiver_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.oauth_exchange_tokens": {
+      "name": "oauth_exchange_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_oauth_exchange_tokens_token": {
+          "name": "idx_oauth_exchange_tokens_token",
+          "columns": [
+            {
+              "expression": "token",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_oauth_exchange_tokens_expires": {
+          "name": "idx_oauth_exchange_tokens_expires",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "oauth_exchange_tokens_user_id_users_id_fk": {
+          "name": "oauth_exchange_tokens_user_id_users_id_fk",
+          "tableFrom": "oauth_exchange_tokens",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "oauth_exchange_tokens_token_unique": {
+          "name": "oauth_exchange_tokens_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.promo_alerts": {
+      "name": "promo_alerts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "promo_code": {
+          "name": "promo_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_enabled": {
+          "name": "is_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "show_on_main_page": {
+          "name": "show_on_main_page",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "show_on_category_pages": {
+          "name": "show_on_category_pages",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "target_categories": {
+          "name": "target_categories",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "variant": {
+          "name": "variant",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'info'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.promo_code_usages": {
+      "name": "promo_code_usages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "promo_code_id": {
+          "name": "promo_code_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "marketplace_listing_id": {
+          "name": "marketplace_listing_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "banner_ad_order_id": {
+          "name": "banner_ad_order_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "promo_code_usages_promo_code_id_promo_codes_id_fk": {
+          "name": "promo_code_usages_promo_code_id_promo_codes_id_fk",
+          "tableFrom": "promo_code_usages",
+          "tableTo": "promo_codes",
+          "columnsFrom": [
+            "promo_code_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "promo_code_usages_user_id_users_id_fk": {
+          "name": "promo_code_usages_user_id_users_id_fk",
+          "tableFrom": "promo_code_usages",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "promo_code_usages_marketplace_listing_id_marketplace_listings_id_fk": {
+          "name": "promo_code_usages_marketplace_listing_id_marketplace_listings_id_fk",
+          "tableFrom": "promo_code_usages",
+          "tableTo": "marketplace_listings",
+          "columnsFrom": [
+            "marketplace_listing_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "promo_code_usages_banner_ad_order_id_banner_ad_orders_id_fk": {
+          "name": "promo_code_usages_banner_ad_order_id_banner_ad_orders_id_fk",
+          "tableFrom": "promo_code_usages",
+          "tableTo": "banner_ad_orders",
+          "columnsFrom": [
+            "banner_ad_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.promo_codes": {
+      "name": "promo_codes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "discount_type": {
+          "name": "discount_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "discount_value": {
+          "name": "discount_value",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_uses": {
+          "name": "max_uses",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "used_count": {
+          "name": "used_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "valid_from": {
+          "name": "valid_from",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "valid_until": {
+          "name": "valid_until",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "applicable_to_marketplace": {
+          "name": "applicable_to_marketplace",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": true
+        },
+        "applicable_to_banner_ads": {
+          "name": "applicable_to_banner_ads",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "applicable_categories": {
+          "name": "applicable_categories",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "promo_codes_code_unique": {
+          "name": "promo_codes_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.refresh_tokens": {
+      "name": "refresh_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "device_info": {
+          "name": "device_info",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ip_address": {
+          "name": "ip_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "idx_refresh_tokens_user": {
+          "name": "idx_refresh_tokens_user",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_refresh_tokens_expires": {
+          "name": "idx_refresh_tokens_expires",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "refresh_tokens_user_id_users_id_fk": {
+          "name": "refresh_tokens_user_id_users_id_fk",
+          "tableFrom": "refresh_tokens",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "refresh_tokens_token_unique": {
+          "name": "refresh_tokens_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.rentals": {
+      "name": "rentals",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "aircraft_id": {
+          "name": "aircraft_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "renter_id": {
+          "name": "renter_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_id": {
+          "name": "owner_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estimated_hours": {
+          "name": "estimated_hours",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actual_hours": {
+          "name": "actual_hours",
+          "type": "numeric(6, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "hourly_rate": {
+          "name": "hourly_rate",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "base_cost": {
+          "name": "base_cost",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sales_tax": {
+          "name": "sales_tax",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "platform_fee_renter": {
+          "name": "platform_fee_renter",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "platform_fee_owner": {
+          "name": "platform_fee_owner",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "processing_fee": {
+          "name": "processing_fee",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total_cost_renter": {
+          "name": "total_cost_renter",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_payout": {
+          "name": "owner_payout",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "is_paid": {
+          "name": "is_paid",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "payout_completed": {
+          "name": "payout_completed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rentals_aircraft_id_aircraft_listings_id_fk": {
+          "name": "rentals_aircraft_id_aircraft_listings_id_fk",
+          "tableFrom": "rentals",
+          "tableTo": "aircraft_listings",
+          "columnsFrom": [
+            "aircraft_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "rentals_renter_id_users_id_fk": {
+          "name": "rentals_renter_id_users_id_fk",
+          "tableFrom": "rentals",
+          "tableTo": "users",
+          "columnsFrom": [
+            "renter_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "rentals_owner_id_users_id_fk": {
+          "name": "rentals_owner_id_users_id_fk",
+          "tableFrom": "rentals",
+          "tableTo": "users",
+          "columnsFrom": [
+            "owner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.reviews": {
+      "name": "reviews",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "rental_id": {
+          "name": "rental_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reviewer_id": {
+          "name": "reviewer_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reviewee_id": {
+          "name": "reviewee_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rating": {
+          "name": "rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comment": {
+          "name": "comment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "communication_rating": {
+          "name": "communication_rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cleanliness_rating": {
+          "name": "cleanliness_rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accuracy_rating": {
+          "name": "accuracy_rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "reviews_rental_id_rentals_id_fk": {
+          "name": "reviews_rental_id_rentals_id_fk",
+          "tableFrom": "reviews",
+          "tableTo": "rentals",
+          "columnsFrom": [
+            "rental_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "reviews_reviewer_id_users_id_fk": {
+          "name": "reviews_reviewer_id_users_id_fk",
+          "tableFrom": "reviews",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewer_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "reviews_reviewee_id_users_id_fk": {
+          "name": "reviews_reviewee_id_users_id_fk",
+          "tableFrom": "reviews",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewee_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.sessions": {
+      "name": "sessions",
+      "schema": "",
+      "columns": {
+        "sid": {
+          "name": "sid",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "sess": {
+          "name": "sess",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expire": {
+          "name": "expire",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "IDX_session_expire": {
+          "name": "IDX_session_expire",
+          "columns": [
+            {
+              "expression": "expire",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.transactions": {
+      "name": "transactions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rental_id": {
+          "name": "rental_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "marketplace_listing_id": {
+          "name": "marketplace_listing_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "deposited_to_bank_at": {
+          "name": "deposited_to_bank_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "transactions_user_id_users_id_fk": {
+          "name": "transactions_user_id_users_id_fk",
+          "tableFrom": "transactions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_rental_id_rentals_id_fk": {
+          "name": "transactions_rental_id_rentals_id_fk",
+          "tableFrom": "transactions",
+          "tableTo": "rentals",
+          "columnsFrom": [
+            "rental_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "transactions_marketplace_listing_id_marketplace_listings_id_fk": {
+          "name": "transactions_marketplace_listing_id_marketplace_listings_id_fk",
+          "tableFrom": "transactions",
+          "tableTo": "marketplace_listings",
+          "columnsFrom": [
+            "marketplace_listing_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "profile_image_url": {
+          "name": "profile_image_url",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "certifications": {
+          "name": "certifications",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "ARRAY[]::text[]"
+        },
+        "total_flight_hours": {
+          "name": "total_flight_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "aircraft_types_flown": {
+          "name": "aircraft_types_flown",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "pilot_license_url": {
+          "name": "pilot_license_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "insurance_url": {
+          "name": "insurance_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_verified": {
+          "name": "is_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "license_verified": {
+          "name": "license_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "background_check_completed": {
+          "name": "background_check_completed",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_admin": {
+          "name": "is_admin",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "is_super_admin": {
+          "name": "is_super_admin",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "legal_first_name": {
+          "name": "legal_first_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "legal_last_name": {
+          "name": "legal_last_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "date_of_birth": {
+          "name": "date_of_birth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "phone_verified": {
+          "name": "phone_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "email_verified": {
+          "name": "email_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "government_id_front_url": {
+          "name": "government_id_front_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "government_id_back_url": {
+          "name": "government_id_back_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "selfie_url": {
+          "name": "selfie_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "identity_verified": {
+          "name": "identity_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "identity_verified_at": {
+          "name": "identity_verified_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_method_on_file": {
+          "name": "payment_method_on_file",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "payment_verified": {
+          "name": "payment_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "payment_verified_at": {
+          "name": "payment_verified_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "faa_certificate_number": {
+          "name": "faa_certificate_number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pilot_certificate_name": {
+          "name": "pilot_certificate_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pilot_certificate_photo_url": {
+          "name": "pilot_certificate_photo_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "faa_verified": {
+          "name": "faa_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "faa_verified_month": {
+          "name": "faa_verified_month",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "faa_verified_at": {
+          "name": "faa_verified_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bank_account_connected": {
+          "name": "bank_account_connected",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "stripe_account_id": {
+          "name": "stripe_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "paypal_email": {
+          "name": "paypal_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "balance": {
+          "name": "balance",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0.00'"
+        },
+        "hashed_password": {
+          "name": "hashed_password",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "password_created_at": {
+          "name": "password_created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_verification_token": {
+          "name": "email_verification_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_verification_expires": {
+          "name": "email_verification_expires",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "average_rating": {
+          "name": "average_rating",
+          "type": "numeric(3, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "total_reviews": {
+          "name": "total_reviews",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "is_suspended": {
+          "name": "is_suspended",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "suspension_reason": {
+          "name": "suspension_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "suspended_at": {
+          "name": "suspended_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "suspended_by": {
+          "name": "suspended_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "users_suspended_by_users_id_fk": {
+          "name": "users_suspended_by_users_id_fk",
+          "tableFrom": "users",
+          "tableTo": "users",
+          "columnsFrom": [
+            "suspended_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.verification_submissions": {
+      "name": "verification_submissions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "aircraft_id": {
+          "name": "aircraft_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submission_data": {
+          "name": "submission_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "document_urls": {
+          "name": "document_urls",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "reviewed_by": {
+          "name": "reviewed_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_at": {
+          "name": "reviewed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "review_notes": {
+          "name": "review_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rejection_reason": {
+          "name": "rejection_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "faa_registry_checked": {
+          "name": "faa_registry_checked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "faa_registry_match": {
+          "name": "faa_registry_match",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "faa_registry_data": {
+          "name": "faa_registry_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sources": {
+          "name": "sources",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "file_hashes": {
+          "name": "file_hashes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "ARRAY[]::text[]"
+        },
+        "pilot_license_expires_at": {
+          "name": "pilot_license_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "medical_cert_expires_at": {
+          "name": "medical_cert_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "insurance_expires_at": {
+          "name": "insurance_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "government_id_expires_at": {
+          "name": "government_id_expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "expiration_notification_sent": {
+          "name": "expiration_notification_sent",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "last_notification_sent_at": {
+          "name": "last_notification_sent_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "verification_submissions_user_id_users_id_fk": {
+          "name": "verification_submissions_user_id_users_id_fk",
+          "tableFrom": "verification_submissions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "verification_submissions_aircraft_id_aircraft_listings_id_fk": {
+          "name": "verification_submissions_aircraft_id_aircraft_listings_id_fk",
+          "tableFrom": "verification_submissions",
+          "tableTo": "aircraft_listings",
+          "columnsFrom": [
+            "aircraft_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "verification_submissions_reviewed_by_users_id_fk": {
+          "name": "verification_submissions_reviewed_by_users_id_fk",
+          "tableFrom": "verification_submissions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.withdrawal_requests": {
+      "name": "withdrawal_requests",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(10, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "paypal_email": {
+          "name": "paypal_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "payout_batch_id": {
+          "name": "payout_batch_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_item_id": {
+          "name": "payout_item_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transaction_id": {
+          "name": "transaction_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "processed_by": {
+          "name": "processed_by",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_reason": {
+          "name": "failure_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "admin_notes": {
+          "name": "admin_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_withdrawal_user": {
+          "name": "idx_withdrawal_user",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_withdrawal_status": {
+          "name": "idx_withdrawal_status",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "withdrawal_requests_user_id_users_id_fk": {
+          "name": "withdrawal_requests_user_id_users_id_fk",
+          "tableFrom": "withdrawal_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "withdrawal_requests_processed_by_users_id_fk": {
+          "name": "withdrawal_requests_processed_by_users_id_fk",
+          "tableFrom": "withdrawal_requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "processed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

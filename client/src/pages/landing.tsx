@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone } from "lucide-react";
+import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen } from "lucide-react";
 
 export default function Landing() {
   return (
@@ -30,6 +30,15 @@ export default function Landing() {
                 data-testid="button-browse-listings"
               >
                 Browse Listings
+              </Button>
+              <Button 
+                size="lg" 
+                variant="outline"
+                onClick={() => window.location.href = '/logbook'}
+                data-testid="button-pilot-logbook"
+              >
+                <BookOpen className="h-4 w-4 mr-2" />
+                Pilot Logbook
               </Button>
               <Button 
                 size="lg" 

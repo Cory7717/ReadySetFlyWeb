@@ -33,6 +33,7 @@ import DeleteAccount from "@/pages/delete-account";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import VerifyEmail from "@/pages/verify-email";
+import Logbook from "@/pages/logbook";
 
 // Router component - allows anonymous browsing for rentals/marketplace
 function Router() {
@@ -72,6 +73,7 @@ function Router() {
           <Route path="/admin" component={AdminDashboard} />
           <Route path="/verify-identity" component={VerifyIdentity} />
           <Route path="/settings" component={Settings} />
+          <Route path="/logbook" component={Logbook} />
         </>
       ) : (
         <>
@@ -92,6 +94,7 @@ function Router() {
           <Route path="/admin" component={RequireAuth} />
           <Route path="/verify-identity" component={RequireAuth} />
           <Route path="/settings" component={RequireAuth} />
+          <Route path="/logbook" component={RequireAuth} />
         </>
       )}
       

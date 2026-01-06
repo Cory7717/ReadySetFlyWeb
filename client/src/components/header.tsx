@@ -138,6 +138,9 @@ export function Header() {
                     <DropdownMenuItem asChild>
                       <Link href="/messages" data-testid="link-messages">Messages</Link>
                     </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/logbook" data-testid="link-logbook">Pilot Logbook</Link>
+                    </DropdownMenuItem>
                     {user?.isAdmin && (
                       <>
                         <DropdownMenuSeparator />

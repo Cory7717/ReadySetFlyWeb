@@ -9,7 +9,7 @@ import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
 import { storage } from "./storage";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
 import { sendContactFormEmail } from "./email-templates";
@@ -5170,6 +5170,122 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.json(user);
     } catch (error) {
       res.status(500).json({ error: "Failed to update user" });
+    }
+  });
+
+  // Pilot Logbook Routes (authenticated users only)
+  app.get("/api/logbook", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const entries = await storage.getLogbookEntriesByUser(userId);
+      res.json(entries);
+    } catch (error) {
+      console.error("Failed to fetch logbook entries:", error);
+      res.status(500).json({ error: "Failed to fetch logbook entries" });
+    }
+  });
+
+  app.post("/api/logbook", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = insertLogbookEntrySchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const entry = await storage.createLogbookEntry({ ...result.data, userId });
+      res.status(201).json(entry);
+    } catch (error) {
+      console.error("Failed to create logbook entry:", error);
+      res.status(500).json({ error: "Failed to create logbook entry" });
+    }
+  });
+
+  app.get("/api/logbook/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const entry = await storage.getLogbookEntryById(req.params.id);
+      if (!entry) {
+        return res.status(404).json({ error: "Logbook entry not found" });
+      }
+      // Ensure user owns this entry
+      if (entry.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      res.json(entry);
+    } catch (error) {
+      console.error("Failed to fetch logbook entry:", error);
+      res.status(500).json({ error: "Failed to fetch logbook entry" });
+    }
+  });
+
+  app.patch("/api/logbook/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const existing = await storage.getLogbookEntryById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Logbook entry not found" });
+      }
+      if (existing.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const result = insertLogbookEntrySchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const entry = await storage.updateLogbookEntry(req.params.id, result.data);
+      res.json(entry);
+    } catch (error: any) {
+      console.error("Failed to update logbook entry:", error);
+      res.status(error.message?.includes("locked") ? 403 : 500).json({ 
+        error: error.message || "Failed to update logbook entry" 
+      });
+    }
+  });
+
+  app.post("/api/logbook/:id/lock", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const existing = await storage.getLogbookEntryById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Logbook entry not found" });
+      }
+      if (existing.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const { signatureDataUrl, signedByName } = req.body;
+      if (!signatureDataUrl || !signedByName) {
+        return res.status(400).json({ error: "signatureDataUrl and signedByName are required" });
+      }
+      const entry = await storage.lockLogbookEntry(req.params.id, signatureDataUrl, signedByName);
+      res.json(entry);
+    } catch (error: any) {
+      console.error("Failed to lock logbook entry:", error);
+      res.status(error.message?.includes("locked") || error.message?.includes("not found") ? 400 : 500).json({ 
+        error: error.message || "Failed to lock logbook entry" 
+      });
+    }
+  });
+
+  app.delete("/api/logbook/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const existing = await storage.getLogbookEntryById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Logbook entry not found" });
+      }
+      if (existing.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const success = await storage.deleteLogbookEntry(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Logbook entry not found" });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Failed to delete logbook entry:", error);
+      res.status(error.message?.includes("locked") ? 403 : 500).json({ 
+        error: error.message || "Failed to delete logbook entry" 
+      });
     }
   });
 

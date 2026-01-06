@@ -49,6 +49,8 @@ import {
   type InsertPromoCode,
   type PromoCodeUsage,
   type InsertPromoCodeUsage,
+  type LogbookEntry,
+  type InsertLogbookEntry,
   users,
   aircraftListings,
   marketplaceListings,
@@ -75,6 +77,7 @@ import {
   refreshTokens,
   oauthExchangeTokens,
   contactSubmissions,
+  logbookEntries,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray, isNull, arrayOverlaps } from "drizzle-orm";
@@ -2440,6 +2443,59 @@ export class DatabaseStorage implements IStorage {
       .where(eq(withdrawalRequests.id, id))
       .returning();
     return request;
+  }
+
+  // Pilot Logbook Entries
+  async createLogbookEntry(insertEntry: InsertLogbookEntry): Promise<LogbookEntry> {
+    const [entry] = await db.insert(logbookEntries).values(insertEntry).returning();
+    return entry;
+  }
+
+  async getLogbookEntryById(id: string): Promise<LogbookEntry | undefined> {
+    const [entry] = await db.select().from(logbookEntries).where(eq(logbookEntries.id, id));
+    return entry;
+  }
+
+  async getLogbookEntriesByUser(userId: string): Promise<LogbookEntry[]> {
+    return await db.select().from(logbookEntries).where(eq(logbookEntries.userId, userId)).orderBy(desc(logbookEntries.flightDate));
+  }
+
+  async updateLogbookEntry(id: string, updates: Partial<LogbookEntry>): Promise<LogbookEntry | undefined> {
+    // Prevent editing locked entries
+    const existing = await this.getLogbookEntryById(id);
+    if (existing?.isLocked) {
+      throw new Error("Cannot edit a locked logbook entry");
+    }
+    const [entry] = await db.update(logbookEntries).set({ ...updates, updatedAt: new Date() }).where(eq(logbookEntries.id, id)).returning();
+    return entry;
+  }
+
+  async lockLogbookEntry(id: string, signatureDataUrl: string, signedByName: string): Promise<LogbookEntry | undefined> {
+    const existing = await this.getLogbookEntryById(id);
+    if (!existing) {
+      throw new Error("Logbook entry not found");
+    }
+    if (existing.isLocked) {
+      throw new Error("Entry is already locked");
+    }
+    const [entry] = await db.update(logbookEntries).set({
+      isLocked: true,
+      signatureDataUrl,
+      signedByName,
+      signedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(logbookEntries.id, id)).returning();
+    return entry;
+  }
+
+  async deleteLogbookEntry(id: string): Promise<boolean> {
+    // Prevent deletion of locked entries
+    const existing = await this.getLogbookEntryById(id);
+    if (existing?.isLocked) {
+      throw new Error("Cannot delete a locked logbook entry");
+    }
+    const result = await db.delete(logbookEntries).where(eq(logbookEntries.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 }
 

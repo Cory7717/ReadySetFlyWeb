@@ -959,6 +959,62 @@ export const insertMarketplaceListingSchema = createInsertSchema(marketplaceList
   longitude: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
 });
 
+export const logbookEntries = pgTable("logbook_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  flightDate: date("flight_date").notNull(),
+  tailNumber: text("tail_number"),
+  aircraftType: text("aircraft_type"),
+  route: text("route"),
+  timeDay: decimal("time_day", { precision: 6, scale: 2 }).default(sql`0`).notNull(),
+  timeNight: decimal("time_night", { precision: 6, scale: 2 }).default(sql`0`).notNull(),
+  pic: decimal("pic", { precision: 6, scale: 2 }).default(sql`0`).notNull(),
+  sic: decimal("sic", { precision: 6, scale: 2 }).default(sql`0`).notNull(),
+  dual: decimal("dual", { precision: 6, scale: 2 }).default(sql`0`).notNull(),
+  instrumentActual: decimal("instrument_actual", { precision: 6, scale: 2 }).default(sql`0`).notNull(),
+  approaches: integer("approaches").default(0).notNull(),
+  landingsDay: integer("landings_day").default(0).notNull(),
+  landingsNight: integer("landings_night").default(0).notNull(),
+  holds: integer("holds").default(0).notNull(),
+  remarks: text("remarks"),
+  maneuvers: jsonb("maneuvers"),
+  hobbsStart: decimal("hobbs_start", { precision: 8, scale: 1 }),
+  hobbsEnd: decimal("hobbs_end", { precision: 8, scale: 1 }),
+  signatureDataUrl: text("signature_data_url"),
+  signedByName: text("signed_by_name"),
+  signedAt: timestamp("signed_at"),
+  isLocked: boolean("is_locked").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_logbook_user").on(table.userId),
+  index("idx_logbook_date").on(table.flightDate),
+]);
+
+export const insertLogbookEntrySchema = createInsertSchema(logbookEntries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  isLocked: true,
+  signatureDataUrl: true,
+  signedAt: true,
+  signedByName: true,
+}).extend({
+  flightDate: z.coerce.date(),
+  timeDay: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  timeNight: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  pic: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  sic: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  dual: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  instrumentActual: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  approaches: z.number().min(0).optional(),
+  landingsDay: z.number().min(0).optional(),
+  landingsNight: z.number().min(0).optional(),
+  holds: z.number().min(0).optional(),
+  hobbsStart: z.string().regex(/^\d+(\.\d)?$/).optional(),
+  hobbsEnd: z.string().regex(/^\d+(\.\d)?$/).optional(),
+});
+
 export const insertMarketplaceFlagSchema = createInsertSchema(marketplaceFlags).omit({
   id: true,
   createdAt: true,
@@ -1231,6 +1287,8 @@ export type InsertPromoAlert = z.infer<typeof insertPromoAlertSchema>;
 
 export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
 export type InsertWithdrawalRequest = z.infer<typeof insertWithdrawalRequestSchema>;
+export type LogbookEntry = typeof logbookEntries.$inferSelect;
+export type InsertLogbookEntry = z.infer<typeof insertLogbookEntrySchema>;
 
 // Enum types
 export type CertificationType = typeof certificationTypes[number];

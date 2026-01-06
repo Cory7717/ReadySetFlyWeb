@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -36,6 +36,20 @@ import VerifyEmail from "@/pages/verify-email";
 import Logbook from "@/pages/logbook";
 import PilotTools from "@/pages/pilot-tools";
 import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
+
+function AnalyticsTracker() {
+  const [path] = useLocation();
+  // Fire GA page_view on route change
+  if (typeof window !== "undefined" && (window as any).gtag) {
+    try {
+      (window as any).gtag('event', 'page_view', {
+        page_path: path,
+        page_title: document.title,
+      });
+    } catch {}
+  }
+  return null;
+}
 
 // Router component - allows anonymous browsing for rentals/marketplace
 function Router() {
@@ -116,6 +130,7 @@ function App() {
             {/* Show Header for all users (authenticated and anonymous) */}
             <Header />
             <div className="flex-1">
+              <AnalyticsTracker />
               <Router />
             </div>
             <Footer />

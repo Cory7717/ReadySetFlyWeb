@@ -760,7 +760,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 flex-wrap">
-                  <Link href={`/dashboard/marketplace/${listing.id}/edit`}>
+                  <Link href={`/edit-marketplace-listing/${listing.id}`}>
                     <Button variant="outline" data-testid="button-edit-listing">
                       <Edit className="h-4 w-4 mr-2" />
                       Edit Listing

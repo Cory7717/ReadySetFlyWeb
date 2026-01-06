@@ -123,7 +123,7 @@ export default function CreateMarketplaceListing() {
   const { data: existingListing, isLoading: loadingListing } = useQuery<MarketplaceListing>({
     queryKey: ["/api/marketplace", listingId],
     queryFn: async () => {
-      const response = await fetch(`/api/marketplace/${listingId}`);
+      const response = await fetch(apiUrl(`/api/marketplace/${listingId}`));
       if (!response.ok) throw new Error("Failed to fetch listing");
       return response.json();
     },
@@ -205,7 +205,7 @@ export default function CreateMarketplaceListing() {
 
   // Get upload URL from server
   const handleGetUploadParameters = async () => {
-    const response = await fetch('/api/objects/upload', {
+    const response = await fetch(apiUrl('/api/objects/upload'), {
       method: 'POST',
       credentials: 'include',
     });
@@ -225,7 +225,7 @@ export default function CreateMarketplaceListing() {
       for (const file of result.successful || []) {
         if (file.uploadURL) {
           // Set ACL policy for the uploaded image
-          const response = await fetch('/api/listing-images', {
+          const response = await fetch(apiUrl('/api/listing-images'), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ imageURL: file.uploadURL }),
@@ -275,7 +275,7 @@ export default function CreateMarketplaceListing() {
 
   const isVerified = user?.isVerified || false;
   // Check promo code validity
-  const checkPromoCode = async () => {
+    const checkPromoCode = async () => {
     if (!promoCode.trim()) {
       setPromoCodeValid(null);
       return;
@@ -283,7 +283,7 @@ export default function CreateMarketplaceListing() {
     
     setPromoCodeChecking(true);
     try {
-      const response = await fetch(`/api/promo-codes/validate`, {
+      const response = await fetch(apiUrl(`/api/promo-codes/validate`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: promoCode, category: selectedCategory }),

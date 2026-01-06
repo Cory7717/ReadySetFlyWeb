@@ -8,8 +8,95 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Plane, Lock, Edit, Trash2 } from "lucide-react";
+import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import type { LogbookEntry, InsertLogbookEntry } from "@shared/schema";
+
+// Helper function to calculate totals from entries
+function calculateTotals(entries: LogbookEntry[]) {
+  const totals = {
+    totalTime: 0,
+    pic: 0,
+    sic: 0,
+    dual: 0,
+    night: 0,
+    day: 0,
+    instrumentActual: 0,
+    crossCountry: 0, // Will need XC field in schema later
+    approaches: 0,
+    landings: 0,
+  };
+
+  entries.forEach((entry) => {
+    const pic = parseFloat(entry.pic || "0");
+    const sic = parseFloat(entry.sic || "0");
+    const dual = parseFloat(entry.dual || "0");
+    const night = parseFloat(entry.timeNight || "0");
+    const day = parseFloat(entry.timeDay || "0");
+    const inst = parseFloat(entry.instrumentActual || "0");
+
+    totals.totalTime += pic + sic;
+    totals.pic += pic;
+    totals.sic += sic;
+    totals.dual += dual;
+    totals.night += night;
+    totals.day += day;
+    totals.instrumentActual += inst;
+    totals.approaches += entry.approaches || 0;
+    totals.landings += (entry.landingsDay || 0) + (entry.landingsNight || 0);
+  });
+
+  return totals;
+}
+
+// Export to CSV
+function exportToCSV(entries: LogbookEntry[]) {
+  const headers = [
+    "Date",
+    "Tail Number",
+    "Aircraft Type",
+    "Route",
+    "Time Day",
+    "Time Night",
+    "PIC",
+    "SIC",
+    "Dual",
+    "Instrument",
+    "Approaches",
+    "Landings Day",
+    "Landings Night",
+    "Holds",
+    "Remarks",
+  ];
+
+  const rows = entries.map((e) => [
+    e.flightDate,
+    e.tailNumber || "",
+    e.aircraftType || "",
+    e.route || "",
+    e.timeDay || "0",
+    e.timeNight || "0",
+    e.pic || "0",
+    e.sic || "0",
+    e.dual || "0",
+    e.instrumentActual || "0",
+    e.approaches || "0",
+    e.landingsDay || "0",
+    e.landingsNight || "0",
+    e.holds || "0",
+    e.remarks || "",
+  ]);
+
+  const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `logbook-${new Date().toISOString().split("T")[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function Logbook() {
   const { toast } = useToast();
@@ -103,43 +190,127 @@ export default function Logbook() {
   });
 
   const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.pic || "0") + parseFloat(e.sic || "0"), 0).toFixed(1);
+  const totals = calculateTotals(entries);
 
   return (
     <div className="container mx-auto py-8 px-4">
+      {/* FREE FOREVER Badge */}
+      <div className="text-center mb-6">
+        <Badge variant="outline" className="text-sm px-4 py-2 bg-green-50 border-green-200">
+          ✈️ FREE Digital Logbook - No Credit Card Required
+        </Badge>
+        <p className="text-xs text-muted-foreground mt-2">
+          Your data, always accessible. Export anytime.
+        </p>
+      </div>
+
+      {/* Totals Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-primary">{totals.totalTime.toFixed(1)}</p>
+              <p className="text-xs text-muted-foreground">Total Time</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-primary">{totals.pic.toFixed(1)}</p>
+              <p className="text-xs text-muted-foreground">PIC</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-primary">{totals.night.toFixed(1)}</p>
+              <p className="text-xs text-muted-foreground">Night</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-primary">{totals.instrumentActual.toFixed(1)}</p>
+              <p className="text-xs text-muted-foreground">Instrument</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Additional Totals */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-lg">Flight Time Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <p className="text-muted-foreground">SIC</p>
+              <p className="font-semibold">{totals.sic.toFixed(1)} hrs</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Dual Received</p>
+              <p className="font-semibold">{totals.dual.toFixed(1)} hrs</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Day</p>
+              <p className="font-semibold">{totals.day.toFixed(1)} hrs</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Approaches</p>
+              <p className="font-semibold">{totals.approaches}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Landings</p>
+              <p className="font-semibold">{totals.landings}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Plane className="h-6 w-6" />
-                My Pilot Logbook
+                Flight Entries
               </CardTitle>
               <CardDescription>
-                Track your flight hours and progress
+                Track your flights and build your experience
               </CardDescription>
             </div>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Entry
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <LogbookEntryForm
-                  onSubmit={(data) => createMutation.mutate(data)}
-                  isPending={createMutation.isPending}
-                />
-              </DialogContent>
-            </Dialog>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportToCSV(entries)}
+                disabled={entries.length === 0}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Entry
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <LogbookEntryForm
+                    onSubmit={(data) => createMutation.mutate(data)}
+                    isPending={createMutation.isPending}
+                  />
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="mb-4">
-            <p className="text-sm text-muted-foreground">
-              Total Hours (PIC + SIC): <strong>{totalHours}</strong>
-            </p>
-          </div>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -225,6 +396,55 @@ export default function Logbook() {
         </CardContent>
       </Card>
 
+      {/* Premium Features Teaser - Future Paid Tier */}
+      <Card className="mt-6 border-primary/20 bg-primary/5">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Award className="h-5 w-5 text-primary" />
+            Coming Soon: Pro Features
+          </CardTitle>
+          <CardDescription>
+            Enhanced tools to advance your aviation career
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            <div className="flex items-start gap-2">
+              <TrendingUp className="h-4 w-4 text-primary mt-0.5" />
+              <div>
+                <p className="font-semibold">Currency Tracking</p>
+                <p className="text-xs text-muted-foreground">90-day landings, night, IFR alerts</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Award className="h-4 w-4 text-primary mt-0.5" />
+              <div>
+                <p className="font-semibold">Endorsement Tracking</p>
+                <p className="text-xs text-muted-foreground">Instructor sign-offs & CFI workflows</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <TrendingUp className="h-4 w-4 text-primary mt-0.5" />
+              <div>
+                <p className="font-semibold">Expiration Alerts</p>
+                <p className="text-xs text-muted-foreground">Medical, BFR, IPC reminders</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Award className="h-4 w-4 text-primary mt-0.5" />
+              <div>
+                <p className="font-semibold">ATP/Airline Reports</p>
+                <p className="text-xs text-muted-foreground">Export to airline application formats</p>
+              </div>
+            </div>
+          </div>
+          <Separator className="my-4" />
+          <p className="text-xs text-muted-foreground text-center">
+            💡 <strong>Your logbook data will always be free and exportable.</strong> Premium features add intelligence and automation.
+          </p>
+        </CardContent>
+      </Card>
+
       {editingEntry && (
         <Dialog open={!!editingEntry} onOpenChange={() => setEditingEntry(null)}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -263,8 +483,28 @@ function LogbookEntryForm({
   isPending: boolean;
 }) {
   const [formData, setFormData] = useState<Partial<InsertLogbookEntry>>(
-    initialData || {
-      flightDate: new Date().toISOString().split("T")[0],
+    initialData ? {
+      flightDate: typeof initialData.flightDate === 'string' 
+        ? new Date(initialData.flightDate)
+        : initialData.flightDate,
+      tailNumber: initialData.tailNumber,
+      aircraftType: initialData.aircraftType,
+      route: initialData.route,
+      timeDay: initialData.timeDay?.toString() || "0",
+      timeNight: initialData.timeNight?.toString() || "0",
+      pic: initialData.pic?.toString() || "0",
+      sic: initialData.sic?.toString() || "0",
+      dual: initialData.dual?.toString() || "0",
+      instrumentActual: initialData.instrumentActual?.toString() || "0",
+      approaches: initialData.approaches || 0,
+      landingsDay: initialData.landingsDay || 0,
+      landingsNight: initialData.landingsNight || 0,
+      holds: initialData.holds || 0,
+      remarks: initialData.remarks,
+      hobbsStart: initialData.hobbsStart?.toString(),
+      hobbsEnd: initialData.hobbsEnd?.toString(),
+    } : {
+      flightDate: new Date(),
       tailNumber: "",
       aircraftType: "",
       route: "",
@@ -301,8 +541,8 @@ function LogbookEntryForm({
           <Input
             id="flightDate"
             type="date"
-            value={formData.flightDate as string}
-            onChange={(e) => setFormData({ ...formData, flightDate: e.target.value })}
+            value={formData.flightDate instanceof Date ? formData.flightDate.toISOString().split("T")[0] : ""}
+            onChange={(e) => setFormData({ ...formData, flightDate: new Date(e.target.value) })}
             required
           />
         </div>

@@ -1486,9 +1486,9 @@ export class DatabaseStorage implements IStorage {
       .map(f => f.listingId);
 
     // Fetch marketplace listings
-    let marketplaceListings: MarketplaceListing[] = [];
+    let marketplaceListingsList: MarketplaceListing[] = [];
     if (marketplaceFavoriteIds.length > 0) {
-      marketplaceListings = await db
+      marketplaceListingsList = await db
         .select()
         .from(marketplaceListings)
         .where(inArray(marketplaceListings.id, marketplaceFavoriteIds));
@@ -1504,7 +1504,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     return {
-      marketplace: marketplaceListings,
+      marketplace: marketplaceListingsList,
       aircraft: aircraftListingsList,
     };
   }
@@ -1980,7 +1980,7 @@ export class DatabaseStorage implements IStorage {
     if (promoCode.validUntil && promoCode.validUntil < now) return null;
 
     // Check usage limits
-    if (promoCode.maxUses !== null && promoCode.usedCount >= promoCode.maxUses) {
+    if (promoCode.maxUses !== null && (promoCode.usedCount ?? 0) >= promoCode.maxUses) {
       return null;
     }
 
@@ -2447,7 +2447,13 @@ export class DatabaseStorage implements IStorage {
 
   // Pilot Logbook Entries
   async createLogbookEntry(insertEntry: InsertLogbookEntry): Promise<LogbookEntry> {
-    const [entry] = await db.insert(logbookEntries).values(insertEntry).returning();
+    const dataToInsert = {
+      ...insertEntry,
+      flightDate: insertEntry.flightDate instanceof Date 
+        ? insertEntry.flightDate.toISOString().split('T')[0]
+        : insertEntry.flightDate,
+    };
+    const [entry] = await db.insert(logbookEntries).values(dataToInsert as any).returning();
     return entry;
   }
 

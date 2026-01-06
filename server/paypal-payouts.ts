@@ -1,3 +1,4 @@
+// @ts-ignore - paypal-payouts-sdk doesn't have TypeScript definitions
 import paypal from "@paypal/payouts-sdk";
 
 // Initialize PayPal environment

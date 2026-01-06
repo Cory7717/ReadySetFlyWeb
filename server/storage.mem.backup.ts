@@ -90,7 +90,7 @@ export class MemStorage implements IStorage {
     const user: User = {
       ...insertUser,
       id,
-      avatarUrl: insertUser.avatarUrl || null,
+      profileImageUrl: insertUser.profileImageUrl || null,
       phone: insertUser.phone || null,
       aircraftTypesFlown: insertUser.aircraftTypesFlown || [],
       isVerified: insertUser.isVerified || false,

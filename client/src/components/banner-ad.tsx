@@ -52,11 +52,11 @@ export function BannerAd({ banner, className = "" }: BannerAdProps) {
     }
 
     // Navigate to target URL
-    if (banner.targetUrl) {
-      if (banner.targetUrl.startsWith('http')) {
-        window.open(banner.targetUrl, '_blank', 'noopener,noreferrer');
+    if (banner.link) {
+      if (banner.link.startsWith('http')) {
+        window.open(banner.link, '_blank', 'noopener,noreferrer');
       } else {
-        setLocation(banner.targetUrl);
+        setLocation(banner.link);
       }
     }
   };

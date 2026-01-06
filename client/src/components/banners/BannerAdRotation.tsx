@@ -54,17 +54,13 @@ export function BannerAdRotation({
 
   const trackImpressionMutation = useMutation({
     mutationFn: async (bannerId: string) => {
-      return apiRequest(`/api/banner-ads/${bannerId}/impression`, {
-        method: "POST",
-      });
+      return apiRequest("POST", `/api/banner-ads/${bannerId}/impression`, {});
     },
   });
 
   const trackClickMutation = useMutation({
     mutationFn: async (bannerId: string) => {
-      return apiRequest(`/api/banner-ads/${bannerId}/click`, {
-        method: "POST",
-      });
+      return apiRequest("POST", `/api/banner-ads/${bannerId}/click`, {});
     },
   });
 

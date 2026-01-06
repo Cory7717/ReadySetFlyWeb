@@ -785,7 +785,7 @@ export default function MarketplaceListingCheckout() {
                 </Button>
               ) : (
                 <Button
-                  onClick={handleApplyPromo}
+                  onClick={() => handleApplyPromo()}
                   disabled={!promoCode || isApplyingPromo}
                   data-testid="button-apply-promo"
                 >

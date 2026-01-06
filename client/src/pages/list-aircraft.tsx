@@ -759,7 +759,6 @@ export default function ListAircraft() {
                         <ObjectUploader
                           onGetUploadParameters={handleGetUploadParameters}
                           onComplete={handleUploadComplete}
-                          allowedFileTypes={['image/*']}
                           maxNumberOfFiles={15 - imageFiles.length}
                           buttonClassName="w-full h-full flex flex-col items-center justify-center gap-2"
                           buttonVariant="ghost"

@@ -159,19 +159,19 @@ export default function CreateMarketplaceListing() {
     if (existingListing && isEditMode) {
       form.reset({
         category: existingListing.category,
-        title: existingListing.title,
-        description: existingListing.description,
+        title: existingListing.title || "",
+        description: existingListing.description || undefined,
         location: existingListing.location || undefined,
         city: existingListing.city || undefined,
         state: existingListing.state || undefined,
         zipCode: existingListing.zipCode || undefined,
-        contactEmail: existingListing.contactEmail,
+        contactEmail: existingListing.contactEmail || undefined,
         contactPhone: existingListing.contactPhone || undefined,
         price: existingListing.price || undefined,
         tier: (existingListing.tier as "basic" | "standard" | "premium") || "basic",
         details: existingListing.details || {},
         images: existingListing.images || [],
-        isActive: existingListing.isActive,
+        isActive: existingListing.isActive === null ? undefined : existingListing.isActive,
       });
       
       // Set image files from existing listing

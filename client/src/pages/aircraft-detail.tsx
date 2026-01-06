@@ -465,6 +465,18 @@ export default function AircraftDetail() {
                   {createRentalMutation.isPending ? "Sending request..." : "Request to Book"}
                 </Button>
 
+                {/* Logbook Integration Hint */}
+                {isAuthenticated && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-900 font-semibold mb-1">
+                      ✈️ Don't forget to log your flight!
+                    </p>
+                    <p className="text-xs text-blue-700">
+                      After your rental, visit your <a href="/logbook" className="underline font-semibold">digital logbook</a> to record flight time.
+                    </p>
+                  </div>
+                )}
+
                 <p className="text-xs text-muted-foreground text-center">
                   You won't be charged yet
                 </p>

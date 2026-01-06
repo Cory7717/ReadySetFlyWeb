@@ -5,11 +5,8 @@
   <title>Redirecting...</title>
   <script>
     // GitHub Pages SPA redirect
-    // When a user navigates directly to /pilot-tools or /logbook,
-    // GitHub Pages returns 404. This script redirects to index.html
-    // with the path preserved so the React router can handle it.
-    const path = window.location.pathname + window.location.search + window.location.hash;
-    window.location.replace(window.location.origin + '/#!' + path);
+    // Just send users back to the root so the client router can render.
+    window.location.replace(window.location.origin + '/');
   </script>
 </head>
 <body>

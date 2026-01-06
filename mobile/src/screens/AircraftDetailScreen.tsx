@@ -4,6 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { apiEndpoints } from '../services/api';
+import { StarRating } from '../components/StarRating';
+import { FavoriteButton } from '../components/FavoriteButton';
+import { format, isValid } from 'date-fns';
 
 type Props = NativeStackScreenProps<RentalsStackParamList, 'AircraftDetail'>;
 
@@ -16,6 +19,21 @@ export default function AircraftDetailScreen({ route, navigation }: Props) {
       const response = await apiEndpoints.aircraft.getById(aircraftId);
       return response.data;
     },
+  });
+
+  // Fetch reviews for the aircraft owner
+  const { data: reviews } = useQuery({
+    queryKey: ['/api/reviews/aircraft', aircraftId],
+    queryFn: async () => {
+      const response = await apiEndpoints.aircraft.getById(aircraftId);
+      const ownerId = response.data.ownerId;
+      if (ownerId) {
+        const reviewsResponse = await apiEndpoints.reviews.getByUser(ownerId);
+        return reviewsResponse.data;
+      }
+      return [];
+    },
+    enabled: !!aircraftId,
   });
 
   if (isLoading) {
@@ -40,15 +58,22 @@ export default function AircraftDetailScreen({ route, navigation }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View>
+          <View style={styles.headerTopLeft}>
             <Text style={styles.type}>{aircraft.type}</Text>
             <Text style={styles.nNumber}>{aircraft.nNumber}</Text>
           </View>
-          {aircraft.available && (
-            <View style={styles.availableBadge}>
-              <Text style={styles.availableText}>Available</Text>
-            </View>
-          )}
+          <View style={styles.headerTopRight}>
+            {aircraft.available && (
+              <View style={styles.availableBadge}>
+                <Text style={styles.availableText}>Available</Text>
+              </View>
+            )}
+            <FavoriteButton
+              listingType="aircraft"
+              listingId={aircraftId}
+              size={28}
+            />
+          </View>
         </View>
         <View style={styles.rateContainer}>
           <Text style={styles.rateAmount}>${aircraft.hourlyRate}</Text>
@@ -102,6 +127,38 @@ export default function AircraftDetailScreen({ route, navigation }: Props) {
         </View>
       )}
 
+      {/* Reviews Section */}
+      {reviews && reviews.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Reviews</Text>
+          {reviews.slice(0, 3).map((review: any) => (
+            <View key={review.id} style={styles.reviewCard}>
+              <View style={styles.reviewHeader}>
+                <View style={styles.reviewerInfo}>
+                  <Text style={styles.reviewerName}>
+                    {review.reviewer?.firstName} {review.reviewer?.lastName}
+                  </Text>
+                  <StarRating rating={review.rating} readonly size={16} />
+                </View>
+                <Text style={styles.reviewDate}>
+                  {review.createdAt && isValid(new Date(review.createdAt))
+                    ? format(new Date(review.createdAt), 'MMM dd, yyyy')
+                    : ''}
+                </Text>
+              </View>
+              {review.comment && (
+                <Text style={styles.reviewComment}>{review.comment}</Text>
+              )}
+            </View>
+          ))}
+          {reviews.length > 3 && (
+            <Text style={styles.moreReviews}>
+              +{reviews.length - 3} more reviews
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* Book Button */}
       {aircraft.available && (
         <View style={styles.buttonContainer}>
@@ -144,6 +201,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 16,
+  },
+  headerTopLeft: {
+    flex: 1,
+  },
+  headerTopRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   type: {
     fontSize: 24,
@@ -236,6 +301,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#4b5563',
     lineHeight: 24,
+  },
+  reviewCard: {
+    backgroundColor: '#f9fafb',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  reviewerInfo: {
+    flex: 1,
+  },
+  reviewerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 4,
+  },
+  reviewDate: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+  reviewComment: {
+    fontSize: 14,
+    color: '#4b5563',
+    lineHeight: 20,
+  },
+  moreReviews: {
+    fontSize: 14,
+    color: '#1e40af',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   buttonContainer: {
     padding: 20,

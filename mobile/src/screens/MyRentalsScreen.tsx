@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
@@ -5,9 +6,12 @@ import { apiEndpoints } from '../services/api';
 import type { Rental } from '@shared/schema';
 import { format, isValid } from 'date-fns';
 import { useIsAuthenticated } from '../utils/auth';
+import { ReviewDialog } from '../components/ReviewDialog';
 
 export default function MyRentalsScreen({ navigation }: any) {
   const { isAuthenticated, isLoading: authLoading } = useIsAuthenticated();
+  const [reviewDialogVisible, setReviewDialogVisible] = useState(false);
+  const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
   
   const { data: rentals, isLoading, error } = useQuery({
     queryKey: ['/api/user/rentals'],
@@ -71,9 +75,27 @@ export default function MyRentalsScreen({ navigation }: any) {
 
         {item.status === 'approved' && (
           <View style={styles.cardFooter}>
-            <TouchableOpacity style={styles.messageButton}>
+            <TouchableOpacity 
+              style={styles.messageButton}
+              onPress={() => navigation.navigate('Messages')}
+            >
               <Ionicons name="chatbubble-outline" size={16} color="#1e40af" />
               <Text style={styles.messageButtonText}>Message Owner</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {item.status === 'completed' && (
+          <View style={styles.cardFooter}>
+            <TouchableOpacity 
+              style={styles.reviewButton}
+              onPress={() => {
+                setSelectedRental(item);
+                setReviewDialogVisible(true);
+              }}
+            >
+              <Ionicons name="star-outline" size={16} color="#1e40af" />
+              <Text style={styles.reviewButtonText}>Leave a Review</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -130,6 +152,19 @@ export default function MyRentalsScreen({ navigation }: any) {
           </View>
         }
       />
+
+      {selectedRental && (
+        <ReviewDialog
+          visible={reviewDialogVisible}
+          onClose={() => {
+            setReviewDialogVisible(false);
+            setSelectedRental(null);
+          }}
+          rentalId={selectedRental.id}
+          revieweeId={selectedRental.ownerId}
+          revieweeName="Aircraft Owner"
+        />
+      )}
     </View>
   );
 }
@@ -212,6 +247,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   messageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e40af',
+    marginLeft: 8,
+  },
+  reviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  reviewButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1e40af',

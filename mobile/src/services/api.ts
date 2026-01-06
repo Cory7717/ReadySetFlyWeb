@@ -171,6 +171,8 @@ export const apiEndpoints = {
     approve: (id: string): ApiResponse<Rental> => api.patch(`/api/rentals/${id}/approve`),
     completePayment: (id: string, data: { transactionId: string }): ApiResponse<Rental> => 
       api.post(`/api/rentals/${id}/complete-payment`, data),
+    getMessages: (id: string): ApiResponse<Message[]> => 
+      api.get(`/api/rentals/${id}/messages`),
   },
   
   // Marketplace
@@ -224,6 +226,23 @@ export const apiEndpoints = {
   // Promo Alerts (Public - for displaying active promotions)
   promoAlerts: {
     getActive: (): ApiResponse<any[]> => api.get('/api/promo-alerts'),
+  },
+
+  // Reviews
+  reviews: {
+    create: (data: { rentalId: string; revieweeId: string; rating: number; comment: string }): ApiResponse<any> =>
+      api.post('/api/reviews', data),
+    getByUser: (userId: string): ApiResponse<any[]> => api.get(`/api/reviews/user/${userId}`),
+    getByRental: (rentalId: string): ApiResponse<any[]> => api.get(`/api/reviews/rental/${rentalId}`),
+  },
+
+  // Favorites
+  favorites: {
+    getAll: (): ApiResponse<{ marketplace: any[]; aircraft: any[] }> => api.get('/api/favorites'),
+    check: (listingType: string, listingId: string): ApiResponse<{ isFavorited: boolean }> =>
+      api.get(`/api/favorites/check/${listingType}/${listingId}`),
+    toggle: (data: { listingType: string; listingId: string }): ApiResponse<{ action: string }> =>
+      api.post('/api/favorites', data),
   },
 };
 

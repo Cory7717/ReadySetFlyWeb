@@ -142,6 +142,16 @@ export default function ProfileScreen({ navigation }: any) {
               <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
             </TouchableOpacity>
 
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('Favorites')}
+              data-testid="button-favorites"
+            >
+              <Ionicons name="heart-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Favorites</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.menuItem} data-testid="button-my-listings">
               <Ionicons name="list-outline" size={24} color="#1e40af" />
               <Text style={styles.menuText}>My Listings</Text>

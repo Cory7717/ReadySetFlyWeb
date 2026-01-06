@@ -271,8 +271,6 @@ export default function CreateMarketplaceListing() {
   }, [selectedCategory, selectedTier, maxImages, imageFiles, toast]);
 
   const isVerified = user?.isVerified || false;
-  const isSuperAdmin = user?.isSuperAdmin || false;
-
   // Check promo code validity
   const checkPromoCode = async () => {
     if (!promoCode.trim()) {
@@ -510,19 +508,7 @@ export default function CreateMarketplaceListing() {
       return;
     }
 
-    // Super admins bypass payment and create listing directly
-    if (isSuperAdmin) {
-      console.log("Super admin creating listing directly...");
-      createListingMutation.mutate({
-        ...data,
-        price: data.price || undefined,
-        images: imageFiles.length > 0 ? imageFiles : [],
-        promoCode: promoCodeValid ? promoCode : undefined,
-      });
-      return;
-    }
-
-    // Regular users creating new listing: redirect to payment
+    // New listings always go through checkout to ensure payment/promo validation
     const listingPayload = {
       ...data,
       price: data.price || undefined,

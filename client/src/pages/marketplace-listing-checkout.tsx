@@ -373,6 +373,7 @@ export default function MarketplaceListingCheckout() {
   const [finalAmount, setFinalAmount] = useState(0);
   const [completionToken, setCompletionToken] = useState<string | null>(null);
   const [autoAppliedFromListing, setAutoAppliedFromListing] = useState(false);
+  const [adminGrant, setAdminGrant] = useState<{ token: string; durationDays?: number } | null>(null);
 
   useEffect(() => {
     // Check if this is upgrade mode
@@ -416,6 +417,36 @@ export default function MarketplaceListingCheckout() {
       setListingData(data);
     }
   }, [navigate, toast]);
+
+  // Auto-apply admin free grant token (admin starts flow from dashboard)
+  useEffect(() => {
+    if (isUpgradeMode || !listingData) return;
+    const storedGrant = localStorage.getItem('adminFreeListingGrant');
+    if (!storedGrant) return;
+    try {
+      const grant = JSON.parse(storedGrant);
+      if (!grant?.token) return;
+
+      const baseAmount = getBasePrice(listingData.category, listingData.tier);
+      const taxAmount = baseAmount * TAX_RATE;
+      const totalAmount = baseAmount + taxAmount;
+
+      setAdminGrant(grant);
+      setCompletionToken(grant.token);
+      setAppliedPromo({
+        code: 'ADMIN-FREE',
+        description: `Admin free listing (${grant.durationDays || 30} days)`,
+        discountType: 'fixed',
+        discountValue: totalAmount.toString(),
+      });
+      setPromoCode('ADMIN-FREE');
+      setDiscountAmount(totalAmount);
+      setFinalAmount(0);
+      setAutoAppliedFromListing(true);
+    } catch (error) {
+      console.error('Failed to apply admin free grant:', error);
+    }
+  }, [isUpgradeMode, listingData]);
 
   // Auto-apply promo code captured during listing creation so users don't re-enter it
   useEffect(() => {
@@ -464,6 +495,8 @@ export default function MarketplaceListingCheckout() {
     if (transactionId === "FREE-ORDER") {
       // Clear pending data
       localStorage.removeItem('pendingListingData');
+      localStorage.removeItem('adminFreeListingGrant');
+      setAdminGrant(null);
       
       // Invalidate marketplace cache
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
@@ -514,6 +547,11 @@ export default function MarketplaceListingCheckout() {
   const handleApplyPromo = async (codeOverride?: string) => {
     setIsApplyingPromo(true);
     setPromoError("");
+    if (adminGrant) {
+      setPromoError("Admin free grant is applied. Remove it before adding another code.");
+      setIsApplyingPromo(false);
+      return;
+    }
     if (!listingData && !upgradeContext) {
       setPromoError("Listing details not loaded yet");
       setIsApplyingPromo(false);
@@ -584,10 +622,15 @@ export default function MarketplaceListingCheckout() {
     setFinalAmount(0);
     setPromoError("");
     setCompletionToken(null);
+    if (adminGrant) {
+      setAdminGrant(null);
+      localStorage.removeItem('adminFreeListingGrant');
+    }
   };
   
   // Generate completion token when promo makes order free
   useEffect(() => {
+    if (adminGrant) return;
     if (appliedPromo && finalAmount === 0 && listingData) {
       // Generate signed token for free order completion
       const baseAmount = getBasePrice(listingData.category, listingData.tier);
@@ -729,7 +772,7 @@ export default function MarketplaceListingCheckout() {
                 placeholder="Enter promo code"
                 value={promoCode}
                 onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                disabled={appliedPromo !== null}
+                disabled={appliedPromo !== null || adminGrant !== null}
                 data-testid="input-promo-code"
               />
               {appliedPromo ? (
@@ -753,6 +796,11 @@ export default function MarketplaceListingCheckout() {
             {appliedPromo && (
               <div className="text-sm text-green-600 dark:text-green-400">
                 Promo code "{appliedPromo.code}" applied! {appliedPromo.description}
+              </div>
+            )}
+            {adminGrant && (
+              <div className="text-sm text-green-600 dark:text-green-400">
+                Admin free grant active ({adminGrant.durationDays || 30} days). Checkout will publish without payment.
               </div>
             )}
             {promoError && (

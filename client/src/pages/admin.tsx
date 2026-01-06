@@ -539,6 +539,27 @@ export default function AdminDashboard() {
     },
   });
 
+  const adminFreeListingTokenMutation = useMutation({
+    mutationFn: async (payload?: { userId?: string; durationDays?: number }) => {
+      return await apiRequest("POST", "/api/admin/marketplace/free-listing-token", payload || {});
+    },
+    onSuccess: (data: { token: string; durationDays: number }) => {
+      localStorage.setItem('adminFreeListingGrant', JSON.stringify({ token: data.token, durationDays: data.durationDays }));
+      toast({
+        title: "Admin free listing enabled",
+        description: `Grant ready for ${data.durationDays}-day listing. Complete the form to publish.`,
+      });
+      window.location.href = "/create-marketplace-listing?adminFree=1";
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to start free listing",
+        description: error.message || "Could not issue admin grant",
+        variant: "destructive",
+      });
+    },
+  });
+
   const togglePromoAlertMutation = useMutation({
     mutationFn: async ({ id, isEnabled }: { id: string; isEnabled: boolean }) => {
       return await apiRequest("PATCH", `/api/promo-alerts/${id}`, { isEnabled });
@@ -2437,9 +2458,21 @@ export default function AdminDashboard() {
           )}
 
           <Card>
-            <CardHeader>
-              <CardTitle>All Marketplace Listings</CardTitle>
-              <CardDescription>View and manage all marketplace listings</CardDescription>
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle>All Marketplace Listings</CardTitle>
+                <CardDescription>View and manage all marketplace listings</CardDescription>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => adminFreeListingTokenMutation.mutate()}
+                disabled={adminFreeListingTokenMutation.isPending}
+                data-testid="button-admin-free-listing"
+              >
+                <Gift className="h-4 w-4 mr-2" />
+                {adminFreeListingTokenMutation.isPending ? "Preparing..." : "Create Free Listing"}
+              </Button>
             </CardHeader>
             <CardContent>
               {marketplaceLoading && (

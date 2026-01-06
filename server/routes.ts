@@ -979,24 +979,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Invalid or expired security token" });
       }
       
-      // SECURITY: Verify token type is for free order completion
-      if (tokenData.type !== 'free-marketplace-listing') {
-        console.error(`❌ Wrong token type for free marketplace listing: ${tokenData.type}`);
-        return res.status(403).json({ error: "Invalid security token" });
-      }
-      
       // SECURITY: Verify user ID from token matches authenticated user
       if (tokenData.userId !== userId) {
         console.error(`❌ Token user ID mismatch. Expected ${userId}, token says ${tokenData.userId}`);
         return res.status(403).json({ error: "Invalid security token" });
       }
-      
+
       // Calculate final amount (must be $0 for free orders)
       const originalAmount = parseFloat(tokenData.originalAmount);
       const discountAmount = parseFloat(tokenData.discountAmount);
       const finalAmount = Math.max(0, originalAmount - discountAmount);
-      
-      // CRITICAL: Verify this is actually a free order
+
       if (finalAmount > 0) {
         console.error(`❌ Free listing validation failed: final amount is $${finalAmount.toFixed(2)}, not $0.00`);
         return res.status(400).json({ 
@@ -1004,77 +997,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
           details: `Listing total is $${finalAmount.toFixed(2)}. Payment is required.`
         });
       }
-      
-      // SECURITY: Re-validate promo code is still active and valid
-      if (tokenData.promoCode) {
-        const validPromo = await storage.validatePromoCodeForContext(tokenData.promoCode, 'marketplace');
-        if (!validPromo) {
-          console.error(`❌ Promo code ${tokenData.promoCode} is no longer valid for marketplace listing`);
-          return res.status(400).json({ 
-            error: "Promo code is no longer valid",
-            details: "Please refresh the page and try again"
+
+      // Branch by token type
+      if (tokenData.type === 'free-marketplace-listing') {
+        // SECURITY: Re-validate promo code is still active and valid
+        if (tokenData.promoCode) {
+          const validPromo = await storage.validatePromoCodeForContext(tokenData.promoCode, 'marketplace');
+          if (!validPromo) {
+            console.error(`❌ Promo code ${tokenData.promoCode} is no longer valid for marketplace listing`);
+            return res.status(400).json({ 
+              error: "Promo code is no longer valid",
+              details: "Please refresh the page and try again"
+            });
+          }
+          
+          // Validate the base listing data
+          const validatedData = insertMarketplaceListingSchema.parse({ 
+            ...listingData, 
+            userId,
+            monthlyFee: "0",
           });
+          
+          // Create listing with free promo benefits
+          const listing = await storage.createMarketplaceListing({
+            ...validatedData,
+            isPaid: true, // Mark as paid since it's free with promo
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+          });
+          
+          // Record promo code usage
+          try {
+            await storage.recordPromoCodeUsage({
+              promoCodeCode: tokenData.promoCode,
+              userId: userId,
+              marketplaceListingId: listing.id,
+              discountAmount: discountAmount.toString(),
+            });
+            console.log(`✅ Promo code ${tokenData.promoCode} usage recorded for FREE marketplace listing ${listing.id}`);
+          } catch (error) {
+            console.error(`⚠️ Failed to record promo code usage for ${tokenData.promoCode}:`, error);
+            // Don't fail the listing creation - just log the error
+          }
+          
+          // Create threshold notification if needed
+          try {
+            const categoryListings = await storage.getMarketplaceListingsByCategory(listing.category);
+            const activeCount = categoryListings.filter((l: any) => l.isActive).length;
+            
+            if (activeCount === 25 || activeCount === 30) {
+              await storage.createAdminNotification({
+                type: "listing_threshold",
+                category: listing.category,
+                title: `${listing.category.replace('-', ' ').toUpperCase()} Listings Threshold Reached`,
+                message: `The ${listing.category.replace('-', ' ')} category now has ${activeCount} active listings.`,
+                isRead: false,
+                isActionable: true,
+                listingCount: activeCount,
+                threshold: activeCount,
+              });
+            }
+          } catch (notifError) {
+            console.error("Failed to create threshold notification:", notifError);
+          }
+          
+          console.log(`✅ FREE marketplace listing ${listing.id} completed with promo code ${tokenData.promoCode} by user ${userId}`);
+          
+          return res.status(201).json({ 
+            status: 'COMPLETED',
+            message: 'Free listing created successfully',
+            listing
+          });
+        } else {
+          return res.status(400).json({ error: "No promo code provided for free listing" });
         }
-        
-        // Validate the base listing data
+      }
+
+      if (tokenData.type === 'admin-free-marketplace-listing') {
+        const durationDays = Math.min(Math.max(Number(tokenData.durationDays) || 30, 1), 90);
         const validatedData = insertMarketplaceListingSchema.parse({ 
           ...listingData, 
           userId,
           monthlyFee: "0",
         });
         
-        // Create listing with free promo benefits
+        const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
         const listing = await storage.createMarketplaceListing({
           ...validatedData,
-          isPaid: true, // Mark as paid since it's free with promo
-          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+          isPaid: true,
+          monthlyFee: "0",
+          expiresAt,
+          promoFreeUntil: expiresAt,
+          promoGrantedBy: tokenData.issuedBy || userId,
+          promoGrantedAt: new Date(),
+          adminNotes: `Admin free listing grant (${durationDays}d) by ${tokenData.issuedBy || 'admin'}`,
         });
-        
-        // Record promo code usage
-        try {
-          await storage.recordPromoCodeUsage({
-            promoCodeCode: tokenData.promoCode,
-            userId: userId,
-            marketplaceListingId: listing.id,
-            discountAmount: discountAmount.toString(),
-          });
-          console.log(`✅ Promo code ${tokenData.promoCode} usage recorded for FREE marketplace listing ${listing.id}`);
-        } catch (error) {
-          console.error(`⚠️ Failed to record promo code usage for ${tokenData.promoCode}:`, error);
-          // Don't fail the listing creation - just log the error
-        }
-        
-        // Create threshold notification if needed
-        try {
-          const categoryListings = await storage.getMarketplaceListingsByCategory(listing.category);
-          const activeCount = categoryListings.filter((l: any) => l.isActive).length;
-          
-          if (activeCount === 25 || activeCount === 30) {
-            await storage.createAdminNotification({
-              type: "listing_threshold",
-              category: listing.category,
-              title: `${listing.category.replace('-', ' ').toUpperCase()} Listings Threshold Reached`,
-              message: `The ${listing.category.replace('-', ' ')} category now has ${activeCount} active listings.`,
-              isRead: false,
-              isActionable: true,
-              listingCount: activeCount,
-              threshold: activeCount,
-            });
-          }
-        } catch (notifError) {
-          console.error("Failed to create threshold notification:", notifError);
-        }
-        
-        console.log(`✅ FREE marketplace listing ${listing.id} completed with promo code ${tokenData.promoCode} by user ${userId}`);
-        
-        res.status(201).json({ 
+
+        console.log(`✅ Admin free marketplace listing ${listing.id} created for user ${userId} by ${tokenData.issuedBy || 'admin'}`);
+
+        return res.status(201).json({
           status: 'COMPLETED',
-          message: 'Free listing created successfully',
-          listing
+          message: 'Admin free listing created successfully',
+          listing,
         });
-      } else {
-        return res.status(400).json({ error: "No promo code provided for free listing" });
       }
+
+      console.error(`❌ Wrong token type for free marketplace listing: ${tokenData.type}`);
+      return res.status(403).json({ error: "Invalid security token" });
     } catch (error: any) {
       console.error("Free marketplace listing completion error:", error);
       res.status(500).json({ error: error.message || "Failed to complete free listing" });
@@ -2494,31 +2522,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const { promoCode, paymentIntentId, ...listingData } = req.body;
-      
-      // Check if user is a Super Admin
-      const user = await storage.getUser(userId);
-      const email = req.user.claims.email;
-      const isSuperAdmin = 
-        email?.endsWith('@readysetfly.us') || 
-        email === 'coryarmer@gmail.com';
-      
+
       let monthlyFee = 25; // Default fee
       let isPaid = false;
       let expiresAt: Date | null = null;
       
-      // Super Admins get free listings for testing (no expiration)
-      if (isSuperAdmin) {
-        monthlyFee = 0;
-        isPaid = true; // Mark as paid since it's free for testing
-        expiresAt = null; // No expiration for Super Admin test listings
-      }
       // Check if promo code is LAUNCH2025 for free 7-day listing
-      else if (promoCode && promoCode.toUpperCase() === "LAUNCH2025") {
+      if (promoCode && promoCode.toUpperCase() === "LAUNCH2025") {
         monthlyFee = 0;
         isPaid = true; // Mark as paid since it's free
         expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
       }
-      // Regular users must have a paid transaction
+      // All other cases require a paid transaction
       else if (paymentIntentId) {
         // Verify payment was successful with Braintree
         const transaction = await gateway.transaction.find(paymentIntentId);
@@ -3613,6 +3628,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(listings);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch marketplace listings" });
+    }
+  });
+
+  // Issue an admin-only free listing token (used to create free listings for content/testing)
+  app.post("/api/admin/marketplace/free-listing-token", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const requesterId = req.user.claims.sub;
+      const targetUserId = req.body?.userId || requesterId;
+      const durationDays = Math.min(Math.max(Number(req.body?.durationDays) || 30, 1), 90);
+
+      const token = jwt.sign({
+        type: 'admin-free-marketplace-listing',
+        userId: targetUserId,
+        issuedBy: requesterId,
+        durationDays,
+        originalAmount: '0',
+        discountAmount: '0',
+        issuedAt: Date.now(),
+      }, process.env.SESSION_SECRET || 'dev-secret', { expiresIn: '2h' });
+
+      res.json({ token, durationDays });
+    } catch (error: any) {
+      console.error('Failed to issue admin free listing token:', error);
+      res.status(500).json({ error: error.message || 'Failed to issue token' });
     }
   });
 

@@ -26,8 +26,10 @@ The mobile app (Expo/React Native) implements **MOST** core features but is miss
 1. **Favorites/Wishlist** - Users can't save aircraft or marketplace listings
 2. **Reviews System** - No review creation or display
 3. **Messaging** - Placeholder only (not functional)
-4. **My Listings** - Profile link exists but no screen implementation
-5. **Personal Info Editor** - Profile link exists but no screen implementation
+4. **Pilot Tools** - Weather, logbook, and aviation resources
+5. **Ownership Cost Calculator** - Aircraft ownership financial analysis
+6. **My Listings** - Profile link exists but no screen implementation
+7. **Personal Info Editor** - Profile link exists but no screen implementation
 
 ---
 
@@ -74,6 +76,15 @@ The mobile app (Expo/React Native) implements **MOST** core features but is miss
 | Help & Support | ❌ Link only | ❌ Link only | ✅ PARITY | - |
 | Privacy Policy | ✅ External link | ✅ External link | ✅ PARITY | - |
 | Terms of Service | ✅ External link | ✅ External link | ✅ PARITY | - |
+| **Pilot Tools** |
+| Weather/METAR/TAF | ✅ Integrated dashboard | ❌ None | ❌ MISSING | **MEDIUM** |
+| Digital Logbook | ✅ Create/edit/sign entries | ❌ None | ❌ MISSING | **HIGH** |
+| Logbook CSV Export | ✅ Export for FAA | ❌ None | ❌ MISSING | **HIGH** |
+| Dual Signatures (Pilot + CFI) | ✅ With IP audit trail | ❌ None | ❌ MISSING | **HIGH** |
+| Aviation Resources | ✅ NOTAM/TFR/links | ❌ None | ❌ MISSING | **MEDIUM** |
+| **Financial Tools** |
+| Ownership Cost Calculator | ✅ Full analysis | ❌ None | ❌ MISSING | **MEDIUM** |
+| Cost Scenario Modeling | ✅ Own vs rent comparison | ❌ None | ❌ MISSING | **MEDIUM** |
 | **Admin** |
 | Admin Dashboard | ✅ | ❌ Intentionally excluded | ✅ EXPECTED | - |
 
@@ -479,7 +490,115 @@ After implementing missing features, test:
 
 ---
 
+## Additional Missing Features (Newly Added to Web App)
+
+### 4. ❌ Pilot Tools Suite (MEDIUM PRIORITY)
+
+**Web Implementation:**
+- Page: `client/src/pages/pilot-tools.tsx`
+- Includes three sub-features:
+  1. **Weather Integration** - Real-time METAR/TAF lookup
+  2. **Logbook Management** - Digital flight logging with signatures
+  3. **Aviation Resources** - Quick links to NOTAMs, TFRs, flight planning tools
+
+**Mobile Status:** ❌ **NOT IMPLEMENTED**
+- No pilot tools screen
+- No weather integration
+- No logbook functionality
+
+**Details:**
+- **Weather:** Integrates with aviationweather.gov, displays METAR/TAF for any US airport
+- **Logbook:** Create digital flight logs with dual signature support (pilot + CFI), CSV export for FAA compliance
+- **Resources:** Buttons linking to FAA NOTAM search, TFR monitoring, and other critical tools
+
+**Impact:**
+- Pilots can't access essential weather for flight planning
+- No digital logbook (must use paper or other apps)
+- Missing quick access to aviation resources
+
+**Recommendation:**
+- **Priority: MEDIUM-HIGH**
+- Logbook feature most valuable (pilots want digital solution)
+- Weather lookups less critical (can use weather app separately)
+- Start with logbook implementation
+
+---
+
+### 5. ❌ Ownership Cost Calculator (LOW-MEDIUM PRIORITY)
+
+**Web Implementation:**
+- Page: `client/src/pages/ownership-cost-calculator.tsx`
+- Standalone tool for evaluating aircraft ownership economics
+
+**Mobile Status:** ❌ **NOT IMPLEMENTED**
+- No calculator screen
+- No scenario modeling
+
+**Features:**
+- Calculate cost per flight hour
+- Estimate annual ownership costs
+- Compare ownership vs rental scenarios
+- Factor in: fuel, insurance, maintenance, hangar, loan, etc.
+- 5-10 year projections
+
+**Impact:**
+- Users interested in aircraft ownership can't evaluate costs on mobile
+- Reduces conversion for potential aircraft buyers/renters
+
+**Recommendation:**
+- **Priority: LOW-MEDIUM**
+- Good value-add feature but not critical for core functions
+- Can be added after core features (messaging, reviews, favorites)
+- Relatively easy to port (pure frontend calculations)
+
+---
+
 ## Conclusion
+
+### Updated Summary
+The mobile app has **excellent foundation** but needs **7 features** to achieve full parity:
+
+**CRITICAL (Blocking launch):**
+1. ❌ **Messaging** - Real-time rental communication
+2. ❌ **Reviews** - Trust/credibility signals
+
+**HIGH (Should have before launch):**
+3. ❌ **Favorites** - User engagement & bookmarking
+4. ❌ **Pilot Tools (Logbook)** - Digital flight logging
+
+**MEDIUM (Nice to have):**
+5. ❌ **Pilot Tools (Weather)** - Flight planning assistance
+6. ⚠️ **My Listings** - Management screen
+7. ⚠️ **Personal Info** - Profile editing
+
+**LOW (Enhancement):**
+8. ❌ **Ownership Cost Calculator** - Financial analysis tool
+
+### Timeline
+- **Phase 1 (Critical):** 2 weeks (messaging, reviews)
+- **Phase 2 (High):** 1-2 weeks (favorites, logbook)
+- **Phase 3 (Medium):** 1 week (weather, listings)
+- **Phase 4 (Low):** <1 week (calculator, personal info)
+- **Total:** 4-5 weeks to full parity
+
+### Recommendation
+✅ **CONDITIONAL APPROVE** mobile app for limited beta **AFTER** Phase 1 completion
+
+Core rental and marketplace flows are solid. Messaging and reviews are essential for production launch.
+
+### Priority Implementation Order
+1. **Messaging** (Highest impact - enables rental communication)
+2. **Reviews** (Trust signals - critical for credibility)
+3. **Favorites** (Engagement - improves retention)
+4. **Logbook** (Specialized tool - serves pilot niche well)
+5. **Weather** (Nice to have - complements logbook)
+6. **My Listings** (Management - table stakes)
+7. **Calculator** (Engagement - secondary monetization)
+8. **Personal Info** (Profile completeness)
+
+---
+
+## Conclusion (Original)
 
 ### Summary
 The mobile app has **excellent foundation** but needs **5 features** to achieve full parity:

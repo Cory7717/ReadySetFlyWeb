@@ -217,6 +217,85 @@ POST /api/paypal/capture-order/:orderID  → Capture payment after approval
 
 ---
 
+## PART 3.5: PILOT TOOLS & LOGBOOK FEATURES
+
+### Digital Logbook ✅ IMPLEMENTED
+**Purpose:** FAA-compliant digital flight logging with dual signature support  
+**Key Features:**
+- Create/edit flight entries (date, aircraft, flight time, remarks)
+- Dual signature system:
+  - Pilot signature + date lock
+  - CFI instructor countersign (optional)
+  - IP address capture for security audit trail
+- Server-controlled userId injection (prevents tampering)
+- CSV export for FAA compliance
+- Immutable entries after signing
+
+**API Endpoints:**
+- `POST /api/logbook` - Create entry (userId server-injected)
+- `GET /api/logbook` - List user entries
+- `PATCH /api/logbook/:id` - Edit entry
+- `POST /api/logbook/:id/lock` - Pilot signature + lock
+- `POST /api/logbook/:id/countersign` - CFI countersign + IP capture
+
+**Security:**
+- ✅ Server controls userId (client cannot spoof)
+- ✅ IP address logging for audit trail
+- ✅ Signature locks prevent tampering
+- ✅ Database migration: `migrations/0002_add_logbook_signatures.sql`
+
+**Database Schema:**
+- pilotSignature: text (SVG drawing or typed text)
+- pilotSignatureDate: timestamp
+- cfiSignature: text (optional)
+- cfiSignatureDate: timestamp
+- cfiIpAddress: string (for audit)
+
+### Pilot Tools Dashboard ✅ IMPLEMENTED
+**Purpose:** Central hub for aviation resources and planning  
+**Features:**
+- **Weather Integration**
+  - Real-time METAR/TAF lookup
+  - Integrated airport weather display
+  - ATIS and runway-in-use parsing
+  - External links to aviationweather.gov
+- **Aviation Resources**
+  - NOTAM search (FAA)
+  - TFR monitoring (Flight Service)
+  - Quick access buttons with external links
+- **Logbook Quick Access**
+  - Navigate to logbook from tools page
+
+**API Endpoint:**
+- `GET /api/weather/:icaoCode` - Fetch METAR/TAF for airport
+
+### Ownership Cost Calculator ✅ IMPLEMENTED
+**Purpose:** Help evaluate aircraft ownership economics  
+**Calculations:**
+- Acquisition cost estimation
+- Hourly fuel burn & cost
+- Engine overhaul reserves
+- Annual inspection & maintenance
+- Insurance premiums
+- Hangar/tie-down storage
+- Loan amortization
+- **Total cost per flight hour**
+- Break-even analysis (ownership vs rental)
+- 5-10 year projections
+
+**Features:**
+- Real-time calculation updates
+- Scenario comparison
+- Downloadable summary
+- Mobile-responsive design
+
+**Implementation:**
+- Standalone page: `client/src/pages/ownership-cost-calculator.tsx`
+- No backend requirements (pure frontend calculations)
+- Navigation link in header
+
+---
+
 ## PART 4: TESTING CHECKLIST
 
 ### TEST SCENARIO A: Rental Booking Flow

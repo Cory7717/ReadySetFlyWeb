@@ -215,6 +215,46 @@ Cron job that at end of rental date:
 - Post-rental only
 - Prevents double-reviewing same rental
 
+### ✅ Pilot Tools Suite
+- **Weather Integration** - Real-time METAR/TAF data
+  - Integrated airport weather display
+  - Direct links to aviationweather.gov
+  - Parses ATIS and runway-in-use information
+  - Covers all US airport codes
+- **Logbook Management** - Digital flight logging
+  - Create, edit, and delete flight entries
+  - Dual signature support (pilot + CFI)
+  - IP address capture for security audit trail
+  - CSV export for FAA compliance
+  - Signature drawing/typing support
+  - Server-controlled userId injection (prevents tampering)
+- **Aviation Resources** - Quick links to critical tools
+  - METAR/TAF lookup
+  - NOTAM search (FAA)
+  - TFR monitoring (Flight Service)
+  - Integrated access from one dashboard
+
+### ✅ Ownership Cost Calculator
+- **Comprehensive Cost Analysis**
+  - Acquisition cost estimation
+  - Fuel consumption calculations (hourly burn rate)
+  - Engine overhaul reserve calculations
+  - Annual inspection & maintenance reserves
+  - Insurance premium estimation
+  - Hangar/tie-down storage costs
+  - Loan amortization (with interest)
+  - Useful life tracking (1000+ hours typical)
+- **Financial Metrics**
+  - Total cost per flight hour
+  - Monthly cost breakdown
+  - Yearly cost projections
+  - Profit/loss analysis for rental scenarios
+- **Scenario Modeling**
+  - Compare ownership vs. rental costs
+  - Evaluate different aircraft types
+  - Break-even analysis
+  - 5-10 year projections
+
 ### ✅ Real-time Features
 - WebSocket connection for messaging
 - Message persistence in database

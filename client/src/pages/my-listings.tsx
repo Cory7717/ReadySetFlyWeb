@@ -288,6 +288,7 @@ export default function MyListings() {
                         variant="outline"
                         size="sm"
                         className="flex-1"
+                        onClick={() => navigate(`/edit-aircraft/${aircraft.id}`)}
                         data-testid={`button-edit-aircraft-${aircraft.id}`}
                       >
                         Edit

@@ -462,54 +462,21 @@ export default function Dashboard() {
 
           <TabsContent value="listings">
             <Card>
-              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <CardHeader>
                 <CardTitle>My Listings</CardTitle>
-                <Button className="w-full sm:w-auto" data-testid="button-add-listing">Add New Listing</Button>
+                <CardDescription>Manage your aircraft and marketplace listings</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex flex-col sm:flex-row gap-4 p-4 border rounded-lg hover-elevate" data-testid={`listing-${i}`}>
-                      <div className="flex items-center gap-4 flex-1">
-                        <img
-                          src="https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=200"
-                          alt="Aircraft"
-                          className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
-                        />
-                        <div>
-                          <h4 className="font-semibold mb-1">2018 Cessna 172 Skyhawk</h4>
-                          <p className="text-sm text-muted-foreground">
-                            Santa Monica, CA (SMO)
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-row sm:items-center gap-3 justify-between sm:justify-end">
-                        <div className="flex flex-col items-start sm:items-end">
-                          <p className="font-bold">$145/hr</p>
-                          <Badge variant="outline" className="bg-chart-2/10 text-chart-2 border-chart-2 mt-1">
-                            Listed
-                          </Badge>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            data-testid={`button-toggle-listing-${i}`}
-                          >
-                            Unlist
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            data-testid={`button-edit-listing-${i}`}
-                          >
-                            Edit
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <CardContent className="text-center py-12">
+                <p className="text-muted-foreground mb-6">
+                  View and manage all your listings in one place
+                </p>
+                <Button 
+                  onClick={() => navigate("/my-listings")} 
+                  className="w-full sm:w-auto"
+                  data-testid="button-view-my-listings"
+                >
+                  Go to My Listings
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>

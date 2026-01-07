@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useLocation, useRoute } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +12,7 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 import { Upload, X, ShieldAlert, Sparkles } from "lucide-react";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
+import type { AircraftListing } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -66,6 +67,25 @@ const listingSchema = z.object({
 type ListingFormData = z.infer<typeof listingSchema>;
 
 export default function ListAircraft() {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  // Check if we're in edit mode
+  const [isEditMode, params] = useRoute("/edit-aircraft/:id");
+  const aircraftId = isEditMode ? params?.id : null;
+
+  // Fetch existing aircraft if in edit mode
+  const { data: existingAircraft, isLoading: loadingAircraft } = useQuery<AircraftListing>({
+    queryKey: ["/api/aircraft", aircraftId],
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/aircraft/${aircraftId}`));
+      if (!response.ok) throw new Error("Failed to fetch aircraft");
+      return response.json();
+    },
+    enabled: !!aircraftId && isEditMode,
+  });
+
   const [imageFiles, setImageFiles] = useState<string[]>([]);
   const [selectedCertifications, setSelectedCertifications] = useState<string[]>(["PPL"]);
   const [verificationDocs, setVerificationDocs] = useState<{
@@ -75,9 +95,6 @@ export default function ListAircraft() {
     insuranceDoc: null,
     annualInspectionDoc: null,
   });
-  const [, navigate] = useLocation();
-  const { toast } = useToast();
-  const { user} = useAuth();
 
   // Aircraft image upload handlers
   // NOTE: These handlers are ONLY for public aircraft photos
@@ -193,12 +210,61 @@ export default function ListAircraft() {
     },
   });
 
+  // Pre-populate form with existing aircraft data when editing
+  useEffect(() => {
+    if (existingAircraft && isEditMode) {
+      form.reset({
+        make: existingAircraft.make,
+        model: existingAircraft.model,
+        year: existingAircraft.year,
+        registration: existingAircraft.registration,
+        category: existingAircraft.category || "",
+        totalTime: existingAircraft.totalTime || 0,
+        engine: existingAircraft.engine || "",
+        avionics: existingAircraft.avionics || "",
+        hourlyRate: String(existingAircraft.hourlyRate),
+        location: existingAircraft.location,
+        airportCode: existingAircraft.airportCode || "",
+        description: existingAircraft.description,
+        insuranceIncluded: existingAircraft.insuranceIncluded ?? true,
+        wetRate: existingAircraft.wetRate ?? true,
+        minFlightHours: existingAircraft.minFlightHours ?? 0,
+        serialNumber: existingAircraft.serialNumber || "",
+        annualInspectionDate: existingAircraft.annualInspectionDate || "",
+        annualSignerName: existingAircraft.annualSignerName || "",
+        annualSignerCertNumber: existingAircraft.annualSignerCertNumber || "",
+        requires100Hour: existingAircraft.requires100Hour ?? false,
+        currentTach: existingAircraft.currentTach,
+        hour100InspectionTach: existingAircraft.hour100InspectionTach,
+        maintenanceTrackingProvider: existingAircraft.maintenanceTrackingProvider || "",
+      });
+
+      // Set image files from existing listing
+      if (existingAircraft.imageUrls) {
+        setImageFiles(existingAircraft.imageUrls);
+      }
+
+      // Set certifications if they exist
+      if (existingAircraft.requiredCertifications) {
+        setSelectedCertifications(existingAircraft.requiredCertifications);
+      }
+    }
+  }, [existingAircraft, isEditMode, form]);
+
   const createListingMutation = useMutation({
     mutationFn: async ({ formData, hasFiles }: { formData: any; hasFiles: boolean }) => {
-      if (hasFiles) {
-        // Use fetch for FormData (multipart/form-data)
-        const response = await fetch("/api/aircraft", {
-          method: "POST",
+      const method = isEditMode ? "PATCH" : "POST";
+      const endpoint = isEditMode ? `/api/aircraft/${aircraftId}` : "/api/aircraft";
+
+      // In edit mode, always use JSON (no file uploads for now)
+      // In create mode, use FormData if there are files, otherwise JSON
+      if (isEditMode || !hasFiles) {
+        // Use apiRequest for JSON
+        return { data: await apiRequest(method, endpoint, formData), hasVerificationDocs: false };
+      } else {
+        // Use fetch for FormData (multipart/form-data) - create mode only
+        const response = await fetch(endpoint, {
+          method,
           body: formData,
           credentials: "include",
         });
@@ -207,16 +273,21 @@ export default function ListAircraft() {
           throw new Error(error.error || "Submission failed");
         }
         return { data: await response.json(), hasVerificationDocs: hasFiles };
-      } else {
-        // Use apiRequest for JSON
-        return { data: await apiRequest("POST", "/api/aircraft", formData), hasVerificationDocs: false };
       }
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/aircraft"] });
+      if (aircraftId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/aircraft", aircraftId] });
+      }
       
       // Show different message based on whether verification docs were uploaded
-      if (result.hasVerificationDocs) {
+      if (isEditMode) {
+        toast({
+          title: "Aircraft Updated",
+          description: "Your aircraft listing has been successfully updated.",
+        });
+      } else if (result.hasVerificationDocs) {
         toast({
           title: "Listing Submitted",
           description: "Your aircraft listing is pending admin review. It will be visible in the marketplace once approved.",
@@ -228,7 +299,7 @@ export default function ListAircraft() {
         });
       }
       
-      navigate("/dashboard");
+      navigate("/my-listings");
     },
     onError: (error: any) => {
       if (isUnauthorizedError(error)) {
@@ -357,6 +428,18 @@ export default function ListAircraft() {
 
   const isVerified = user?.isVerified || false;
 
+  // Show loading state when fetching existing aircraft
+  if (isEditMode && loadingAircraft) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading aircraft details...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -372,10 +455,12 @@ export default function ListAircraft() {
         )}
         <div className="mb-8">
           <h1 className="font-display text-4xl font-bold mb-2" data-testid="text-list-aircraft-title">
-            List Your Aircraft
+            {isEditMode ? "Edit Aircraft Listing" : "List Your Aircraft"}
           </h1>
           <p className="text-muted-foreground">
-            Share your aircraft with the pilot community and earn income when you're not flying
+            {isEditMode 
+              ? "Update your aircraft listing details" 
+              : "Share your aircraft with the pilot community and earn income when you're not flying"}
           </p>
         </div>
 
@@ -828,17 +913,19 @@ export default function ListAircraft() {
                 type="submit" 
                 size="lg" 
                 className="flex-1 bg-accent text-accent-foreground hover:bg-accent" 
-                disabled={createListingMutation.isPending}
+                disabled={createListingMutation.isPending || (isEditMode && loadingAircraft)}
                 data-testid="button-submit-listing"
               >
-                {createListingMutation.isPending ? "Listing..." : "List Aircraft"}
+                {createListingMutation.isPending 
+                  ? (isEditMode ? "Updating..." : "Listing...") 
+                  : (isEditMode ? "Update Aircraft" : "List Aircraft")}
               </Button>
               <Button 
                 type="button" 
                 variant="outline" 
                 size="lg" 
                 data-testid="button-cancel-listing"
-                onClick={() => navigate("/dashboard")}
+                onClick={() => navigate("/my-listings")}
               >
                 Cancel
               </Button>

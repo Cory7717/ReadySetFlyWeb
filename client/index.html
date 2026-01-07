@@ -12,7 +12,12 @@
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
-      gtag('config', 'G-QTSNM1J659');
+      gtag('config', 'G-QTSNM1J659', {
+        'debug_mode': true,
+        'send_page_view': true
+      });
+      // Log to console for debugging
+      console.log('Google Analytics initialized with ID: G-QTSNM1J659');
     </script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">

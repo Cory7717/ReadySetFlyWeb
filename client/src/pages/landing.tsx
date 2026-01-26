@@ -5,6 +5,7 @@ import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun, Calculator } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
+import { apiUrl } from "@/lib/api";
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
@@ -321,7 +322,7 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               size="lg"
-              onClick={() => window.location.href = 'https://readysetfly-api.onrender.com/api/auth/google'}
+              onClick={() => window.location.href = apiUrl('/api/auth/google')}
               data-testid="button-cta-login"
             >
               Create Your Account
@@ -423,7 +424,7 @@ export default function Landing() {
           <Button 
             variant="ghost"
             size="sm"
-            onClick={() => window.location.href = 'https://readysetfly-api.onrender.com/api/auth/google'}
+            onClick={() => window.location.href = apiUrl('/api/auth/google')}
             data-testid="button-admin-login"
             className="text-muted-foreground hover:text-foreground"
           >

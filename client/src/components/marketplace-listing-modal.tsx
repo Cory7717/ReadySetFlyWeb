@@ -16,6 +16,7 @@ import { formatPrice, formatPhoneNumber } from "@/lib/formatters";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 import { Link } from "wouter";
 import { JobApplicationModal } from "./job-application-modal";
 import { FavoriteButton } from "./favorite-button";
@@ -826,7 +827,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
         <AlertDialogFooter>
           <AlertDialogCancel data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
           <AlertDialogAction
-            onClick={() => window.location.href = 'https://readysetfly-api.onrender.com/api/auth/google'}
+            onClick={() => window.location.href = apiUrl('/api/auth/google')}
             data-testid="button-go-login"
           >
             Sign In / Create Account

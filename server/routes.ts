@@ -2352,7 +2352,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Cron endpoint: Sync FAA approach plates into storage
   app.post("/api/cron/approach-plates/sync", async (req, res) => {
     try {
-      const cronSecret = req.headers['x-cron-secret'];
+      const cronSecretHeader = req.headers['x-cron-secret'];
+      const cronSecretQuery = typeof req.query?.secret === "string" ? req.query.secret : "";
+      const cronSecret = cronSecretHeader || cronSecretQuery;
       const expectedSecret = process.env.CRON_SECRET || process.env.SESSION_SECRET;
       if (!cronSecret || cronSecret !== expectedSecret) {
         console.warn('Unauthorized cron attempt from IP:', req.ip);

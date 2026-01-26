@@ -13,6 +13,7 @@ import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 import type { AircraftListing } from "@shared/schema";
 import { VerificationBadges } from "./verification-badges";
 import { Link } from "wouter";
@@ -509,7 +510,7 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
         <AlertDialogFooter>
           <AlertDialogCancel data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
           <AlertDialogAction
-            onClick={() => window.location.href = 'https://readysetfly-api.onrender.com/api/auth/google'}
+            onClick={() => window.location.href = apiUrl('/api/auth/google')}
             data-testid="button-go-login"
           >
             Sign In / Create Account

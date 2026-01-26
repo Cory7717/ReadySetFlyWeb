@@ -2,8 +2,10 @@
 // In dev, the Vite proxy handles relative `/api` calls, so keep base empty on localhost.
 
 const DEFAULT_API_BASE =
-  typeof window !== "undefined" && window.location.hostname.includes("localhost")
-    ? ""
+  typeof window !== "undefined"
+    ? window.location.hostname.includes("localhost")
+      ? ""
+      : window.location.origin
     : "https://readysetfly-api.onrender.com";
 
 const API_BASE =

@@ -76,7 +76,9 @@ export default function ApproachPlates() {
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading plates...</div>
           ) : plates.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No plates found. Try another airport code.</div>
+            <div className="text-sm text-muted-foreground">
+              No plates found. Try another airport code, or run the sync if this is a new cycle.
+            </div>
           ) : (
             plates.map((plate) => (
               <div key={plate.id} className="rounded-lg border p-4 space-y-2">

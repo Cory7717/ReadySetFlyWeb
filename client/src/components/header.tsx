@@ -22,6 +22,7 @@ export function Header() {
   
   const isRentals = location === "/rentals" || location.startsWith("/aircraft");
   const isMarketplace = location.startsWith("/marketplace");
+  const isFaq = location === "/faq";
   
   const displayName = user?.firstName && user?.lastName 
     ? `${user.firstName} ${user.lastName}`
@@ -59,6 +60,15 @@ export function Header() {
                 className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isMarketplace ? "bg-background shadow-sm" : ""}`}
               >
                 Marketplace
+              </Button>
+            </Link>
+            <Link href="/faq" data-testid="link-faq">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isFaq ? "bg-background shadow-sm" : ""}`}
+              >
+                FAQ
               </Button>
             </Link>
           </nav>

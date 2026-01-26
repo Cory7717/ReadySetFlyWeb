@@ -166,11 +166,11 @@ export default function PilotTools() {
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
             <Button asChild>
-              <Link href={user?.logbookProStatus === "active" ? "/flight-planner" : "/logbook/pro"}>
-                {user?.logbookProStatus === "active" ? "Open Flight Planner" : "Upgrade to Logbook Pro"}
+              <Link href="/flight-planner">
+                {user?.logbookProStatus === "active" ? "Open Flight Planner" : "Preview Flight Planner"}
               </Link>
             </Button>
-            <Badge variant="outline">{user?.logbookProStatus === "active" ? "Active" : "Pro feature"}</Badge>
+            <Badge variant="outline">{user?.logbookProStatus === "active" ? "Active" : "Preview available"}</Badge>
           </CardContent>
         </Card>
 

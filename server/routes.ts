@@ -5643,7 +5643,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const query = String(req.query.q || "").trim();
       const limit = Number(req.query.limit || 50);
       const cycle = process.env.FAA_DTPP_CYCLE;
-      const plates = await storage.searchApproachPlates(query, limit, cycle);
+      let plates = await storage.searchApproachPlates(query, limit, cycle);
+      if (cycle && plates.length === 0) {
+        plates = await storage.searchApproachPlates(query, limit);
+      }
       res.json({ plates, cycle });
     } catch (error) {
       console.error("Approach plate search error:", error);

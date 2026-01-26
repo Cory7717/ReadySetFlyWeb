@@ -507,7 +507,11 @@ export default function AdminDashboard() {
 
   const syncApproachPlatesMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/approach-plates/sync", {});
+      const res = await apiRequest("POST", "/api/admin/approach-plates/sync", {
+        mode: "incremental",
+        limit: 800,
+        maxMs: 45000,
+      });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Failed to sync approach plates");

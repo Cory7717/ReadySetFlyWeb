@@ -369,6 +369,7 @@ export interface IStorage {
   searchApproachPlates(query: string, limit?: number, cycle?: string): Promise<ApproachPlate[]>;
   getApproachPlateById(id: string): Promise<ApproachPlate | undefined>;
   replaceApproachPlatesForCycle(cycle: string, plates: InsertApproachPlate[]): Promise<number>;
+  insertApproachPlates(plates: InsertApproachPlate[]): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2477,6 +2478,12 @@ export class DatabaseStorage implements IStorage {
 
   async replaceApproachPlatesForCycle(cycle: string, plates: InsertApproachPlate[]): Promise<number> {
     await db.delete(approachPlates).where(eq(approachPlates.cycle, cycle));
+    if (!plates.length) return 0;
+    const inserted = await db.insert(approachPlates).values(plates).returning({ id: approachPlates.id });
+    return inserted.length;
+  }
+
+  async insertApproachPlates(plates: InsertApproachPlate[]): Promise<number> {
     if (!plates.length) return 0;
     const inserted = await db.insert(approachPlates).values(plates).returning({ id: approachPlates.id });
     return inserted.length;

@@ -163,13 +163,22 @@ function parseApproachPlateFile(filePath: string) {
   };
 }
 
-async function syncApproachPlatesFromFaa(cycleOverride?: string) {
+async function syncApproachPlatesFromFaa(options?: {
+  cycleOverride?: string;
+  maxFiles?: number;
+  maxMs?: number;
+  replace?: boolean;
+}) {
   const zipUrl = process.env.FAA_DTPP_ZIP_URL;
   if (!zipUrl) {
     throw new Error("FAA_DTPP_ZIP_URL is not configured");
   }
 
-  const cycle = cycleOverride || process.env.FAA_DTPP_CYCLE || new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const cycle = options?.cycleOverride || process.env.FAA_DTPP_CYCLE || new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const maxFiles = typeof options?.maxFiles === "number" ? options?.maxFiles : undefined;
+  const maxMs = typeof options?.maxMs === "number" ? options?.maxMs : undefined;
+  const replace = options?.replace !== false;
+  const startTime = Date.now();
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "dtpp-"));
 
   const zipUrls = zipUrl.split(",").map((entry) => entry.trim()).filter(Boolean);
@@ -216,7 +225,10 @@ async function syncApproachPlatesFromFaa(cycleOverride?: string) {
     s3Service = new mod.S3StorageService();
   }
 
+  let processedFiles = 0;
   for (const filePath of files) {
+    if (maxFiles && processedFiles >= maxFiles) break;
+    if (maxMs && Date.now() - startTime > maxMs) break;
     const meta = parseApproachPlateFile(filePath);
     let storagePath = "";
     if (useS3) {
@@ -237,14 +249,20 @@ async function syncApproachPlatesFromFaa(cycleOverride?: string) {
       storagePath,
       cycle,
     });
+
+    processedFiles += 1;
   }
 
-  const insertedCount = await storage.replaceApproachPlatesForCycle(cycle, plates);
+  const insertedCount = replace
+    ? await storage.replaceApproachPlatesForCycle(cycle, plates)
+    : await storage.insertApproachPlates(plates);
   return {
     cycle,
     totalFiles: files.length,
+    processedFiles,
     insertedCount,
     storage: useS3 ? "s3" : "local",
+    partial: !!maxFiles || !!maxMs || !replace,
   };
 }
 
@@ -2361,7 +2379,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const result = await syncApproachPlatesFromFaa();
+      const maxFiles = req.query?.limit ? Number(req.query.limit) : undefined;
+      const maxMs = req.query?.maxMs ? Number(req.query.maxMs) : undefined;
+      const replace = req.query?.mode === "incremental" ? false : true;
+      const result = await syncApproachPlatesFromFaa({ maxFiles, maxMs, replace });
       res.json(result);
     } catch (error: any) {
       console.error("Approach plate sync error:", error);
@@ -2372,7 +2393,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/approach-plates/sync", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const cycleOverride = req.body?.cycle;
-      const result = await syncApproachPlatesFromFaa(cycleOverride);
+      const maxFiles = typeof req.body?.limit === "number" ? req.body.limit : undefined;
+      const maxMs = typeof req.body?.maxMs === "number" ? req.body.maxMs : undefined;
+      const replace = req.body?.mode === "incremental" ? false : true;
+      const result = await syncApproachPlatesFromFaa({ cycleOverride, maxFiles, maxMs, replace });
       res.json(result);
     } catch (error: any) {
       console.error("Admin approach plate sync error:", error);

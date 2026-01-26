@@ -1571,7 +1571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Set 30-second timeout
       processingTimeout = setTimeout(() => {
-        resetProcessing('Payment timed out after 30 seconds. Please try again or contact support@readysetfly.us');
+        resetProcessing('Payment timed out after 30 seconds. Please try again or contact coryarmer@gmail.com');
       }, 30000);
     }
     
@@ -1697,11 +1697,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               window.location.href = '/';
             }, 5000);
           } else {
-            resetProcessing(result.error || 'Failed to claim free order. Please contact support@readysetfly.us');
+            resetProcessing(result.error || 'Failed to claim free order. Please contact coryarmer@gmail.com');
           }
         } catch (error) {
           console.error('Free order claim error:', error);
-          resetProcessing('Failed to claim free order. Please try again or contact support@readysetfly.us');
+          resetProcessing('Failed to claim free order. Please try again or contact coryarmer@gmail.com');
         }
       });
     } else {
@@ -1794,7 +1794,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           } catch (error) {
             console.error('Payment capture error:', error);
-            resetProcessing('Payment capture failed. Please contact support@readysetfly.us with order ID: ${orderId}');
+            resetProcessing('Payment capture failed. Please contact coryarmer@gmail.com with order ID: ${orderId}');
           }
         },
         onError: (error) => {
@@ -1823,7 +1823,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         });
       } else {
-        errorDiv.innerHTML = '<div class="error">Card payments are not available. Please contact support@readysetfly.us.</div>';
+        errorDiv.innerHTML = '<div class="error">Card payments are not available. Please contact coryarmer@gmail.com.</div>';
       }
     }
   </script>
@@ -5077,7 +5077,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         console.error(`CRITICAL: Failed to send job application email to ${recipientEmail}:`, emailError);
         // Email send failed, so don't create application (prevents orphaned records)
         return res.status(500).json({ 
-          error: "Failed to send notification to job poster. Please try again or contact support@readysetfly.us" 
+          error: "Failed to send notification to job poster. Please try again or contact coryarmer@gmail.com" 
         });
       }
     } catch (error: any) {
@@ -5494,3 +5494,4 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   return httpServer;
 }
+

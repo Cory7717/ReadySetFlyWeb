@@ -211,7 +211,7 @@ export function getBannerAdOrderEmailHtml(
         <li><strong>Monthly Renewals</strong> - Your campaign continues monthly until you choose to cancel</li>
       </ol>
       
-      <p style="margin-top: 20px;">If you have any questions or need to make changes to your order, please contact us at <a href="mailto:support@readysetfly.us">support@readysetfly.us</a>.</p>
+      <p style="margin-top: 20px;">If you have any questions or need to make changes to your order, please contact us at <a href="mailto:coryarmer@gmail.com">coryarmer@gmail.com</a>.</p>
       
       <p style="font-weight: 600;">Thank you for choosing Ready Set Fly!</p>
     </div>
@@ -281,7 +281,7 @@ WHAT HAPPENS NEXT?
 3. Campaign Launch - Your banner ad goes live on Ready Set Fly once approved
 4. Monthly Renewals - Your campaign continues monthly until you choose to cancel
 
-If you have any questions or need to make changes to your order, please contact us at support@readysetfly.us.
+If you have any questions or need to make changes to your order, please contact us at coryarmer@gmail.com.
 
 Thank you for choosing Ready Set Fly!
 
@@ -371,7 +371,7 @@ Ready Set Fly - Connecting Pilots with Aircraft
   try {
     await resend.emails.send({
       from: fromEmail,
-      to: 'support@readysetfly.us',
+      to: 'coryarmer@gmail.com',
       subject: `Contact Form: ${data.subject}`,
       html: htmlBody,
       text: textBody,
@@ -454,7 +454,7 @@ export function getBannerAdExpirationReminderHtml(
       </ul>
       
       <div style="text-align: center; margin: 20px 0;">
-        <a href="mailto:support@readysetfly.us?subject=Renewal Request for ${encodeURIComponent(orderDetails.title)}" class="button">
+        <a href="mailto:coryarmer@gmail.com?subject=Renewal Request for ${encodeURIComponent(orderDetails.title)}" class="button">
           Request Renewal Quote
         </a>
       </div>
@@ -470,7 +470,7 @@ export function getBannerAdExpirationReminderHtml(
     
     <div class="footer">
       <p>Ready Set Fly - Aviation Marketplace</p>
-      <p style="font-size: 12px;">Questions? Contact support@readysetfly.us</p>
+      <p style="font-size: 12px;">Questions? Contact coryarmer@gmail.com</p>
     </div>
   </div>
 </body>
@@ -522,14 +522,14 @@ We currently handle banner ad renewals manually. To continue your campaign:
 - Our team will send you a new checkout link within 1 business day
 - You can choose the same tier or upgrade to a longer duration
 
-Request renewal: support@readysetfly.us
+Request renewal: coryarmer@gmail.com
 
 Note: Auto-renewal is not currently available. Please contact us before your expiration date to ensure uninterrupted ad visibility.
 
 POLICY REMINDER: Ready Set Fly operates on a strict no-refunds policy for all banner ad campaigns. Services are available to US residents only. All fees and sales tax apply to renewed campaigns.
 
 Ready Set Fly - Aviation Marketplace
-Questions? Contact support@readysetfly.us
+Questions? Contact coryarmer@gmail.com
   `.trim();
 }
 
@@ -627,7 +627,7 @@ export function getMarketplaceListingExpirationReminderHtml(
       </div>
       
       <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
-        <strong>Need Help?</strong> Reply to this email or contact support@readysetfly.us for assistance with renewing your listing.
+        <strong>Need Help?</strong> Reply to this email or contact coryarmer@gmail.com for assistance with renewing your listing.
       </p>
       
       <div style="background: #f3f4f6; border-radius: 8px; padding: 15px; margin: 20px 0; font-size: 12px; color: #6b7280;">
@@ -637,7 +637,7 @@ export function getMarketplaceListingExpirationReminderHtml(
     
     <div class="footer">
       <p>Ready Set Fly - Aviation Marketplace</p>
-      <p style="font-size: 12px;">Questions? Contact support@readysetfly.us</p>
+      <p style="font-size: 12px;">Questions? Contact coryarmer@gmail.com</p>
     </div>
   </div>
 </body>
@@ -706,11 +706,12 @@ To renew your listing, visit your dashboard and create a new listing:
 
 View your listings: ${process.env.REPLIT_DEV_DOMAIN || 'https://readysetfly.us'}/dashboard
 
-Need Help? Reply to this email or contact support@readysetfly.us for assistance with renewing your listing.
+Need Help? Reply to this email or contact coryarmer@gmail.com for assistance with renewing your listing.
 
 POLICY REMINDER: Ready Set Fly operates on a strict no-refunds policy. All marketplace fees and 8.25% sales tax apply to renewed listings. Services are available to US residents only.
 
 Ready Set Fly - Aviation Marketplace
-Questions? Contact support@readysetfly.us
+Questions? Contact coryarmer@gmail.com
   `.trim();
 }
+

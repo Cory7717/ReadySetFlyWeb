@@ -345,7 +345,7 @@ export default function TermsOfService() {
             
             <h3 className="text-lg font-semibold mt-4 mb-2">11.1 Informal Resolution</h3>
             <p>
-              If you have a dispute with Ready Set Fly, you agree to first contact us at support@readysetfly.us 
+              If you have a dispute with Ready Set Fly, you agree to first contact us at coryarmer@gmail.com 
               to attempt to resolve the dispute informally.
             </p>
 
@@ -376,7 +376,7 @@ export default function TermsOfService() {
             <h3 className="text-lg font-semibold mt-4 mb-2">12.1 Termination by You</h3>
             <p>
               You may delete your account at any time by visiting your account settings or by contacting us at 
-              support@readysetfly.us. You can also submit a deletion request at 
+              coryarmer@gmail.com. You can also submit a deletion request at 
               <a href="/delete-account" className="text-primary hover:underline"> readysetfly.us/delete-account</a>.
             </p>
 
@@ -463,7 +463,7 @@ export default function TermsOfService() {
             </p>
             <div className="bg-muted p-4 rounded-md mt-3">
               <p><strong>Email:</strong> legal@readysetfly.us</p>
-              <p><strong>Support:</strong> support@readysetfly.us</p>
+              <p><strong>Support:</strong> coryarmer@gmail.com</p>
               <p><strong>Website:</strong> <a href="https://readysetfly.us" className="text-primary hover:underline">readysetfly.us</a></p>
               <p><strong>Mail:</strong> Ready Set Fly, LLC (Address to be provided)</p>
             </div>
@@ -484,3 +484,4 @@ export default function TermsOfService() {
     </div>
   );
 }
+

@@ -163,6 +163,91 @@ function parseApproachPlateFile(filePath: string) {
   };
 }
 
+async function syncApproachPlatesFromFaa(cycleOverride?: string) {
+  const zipUrl = process.env.FAA_DTPP_ZIP_URL;
+  if (!zipUrl) {
+    throw new Error("FAA_DTPP_ZIP_URL is not configured");
+  }
+
+  const cycle = cycleOverride || process.env.FAA_DTPP_CYCLE || new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "dtpp-"));
+
+  const zipUrls = zipUrl.split(",").map((entry) => entry.trim()).filter(Boolean);
+  if (!zipUrls.length) {
+    throw new Error("FAA_DTPP_ZIP_URL is empty");
+  }
+
+  for (let i = 0; i < zipUrls.length; i += 1) {
+    const url = zipUrls[i];
+    const zipPath = path.join(tmpDir, `dtpp-${i}.zip`);
+    const response = await fetch(url);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Failed to download FAA dataset: ${response.status} ${body}`);
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    await fs.promises.writeFile(zipPath, buffer);
+
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo(tmpDir, true);
+  }
+
+  const files = (await walkDir(tmpDir)).filter((file) => file.toLowerCase().endsWith(".pdf"));
+  const plates: Array<{
+    icao: string | null;
+    airportName?: string | null;
+    procedureName: string;
+    plateType?: ApproachPlateType;
+    fileName: string;
+    storagePath: string;
+    cycle: string;
+  }> = [];
+
+  const useS3 = !!process.env.AWS_S3_BUCKET;
+  let storageDir = "";
+  if (!useS3) {
+    storageDir = path.join(process.cwd(), "uploads", "approach-plates", cycle);
+    await fs.promises.mkdir(storageDir, { recursive: true });
+  }
+
+  let s3Service: any = null;
+  if (useS3) {
+    const mod = await import("./s3Storage.js");
+    s3Service = new mod.S3StorageService();
+  }
+
+  for (const filePath of files) {
+    const meta = parseApproachPlateFile(filePath);
+    let storagePath = "";
+    if (useS3) {
+      const key = `approach-plates/${cycle}/${meta.fileName}`;
+      await s3Service.uploadFile({ key, filePath, contentType: "application/pdf" });
+      storagePath = `s3:${key}`;
+    } else {
+      const destPath = path.join(storageDir, meta.fileName);
+      await fs.promises.copyFile(filePath, destPath);
+      storagePath = destPath;
+    }
+
+    plates.push({
+      icao: meta.icao,
+      procedureName: meta.procedureName,
+      plateType: meta.plateType,
+      fileName: meta.fileName,
+      storagePath,
+      cycle,
+    });
+  }
+
+  const insertedCount = await storage.replaceApproachPlatesForCycle(cycle, plates);
+  return {
+    cycle,
+    totalFiles: files.length,
+    insertedCount,
+    storage: useS3 ? "s3" : "local",
+  };
+}
+
 // Multer setup for file uploads with disk storage
 const storage_config = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -2268,82 +2353,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const zipUrl = process.env.FAA_DTPP_ZIP_URL;
-      if (!zipUrl) {
-        return res.status(400).json({ error: "FAA_DTPP_ZIP_URL is not configured" });
-      }
-
-      const cycle = process.env.FAA_DTPP_CYCLE || new Date().toISOString().slice(0, 10).replace(/-/g, "");
-      const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "dtpp-"));
-      const zipPath = path.join(tmpDir, "dtpp.zip");
-
-      const response = await fetch(zipUrl);
-      if (!response.ok) {
-        const body = await response.text();
-        return res.status(500).json({ error: "Failed to download FAA dataset", details: body });
-      }
-      const buffer = Buffer.from(await response.arrayBuffer());
-      await fs.promises.writeFile(zipPath, buffer);
-
-      const zip = new AdmZip(zipPath);
-      zip.extractAllTo(tmpDir, true);
-
-      const files = (await walkDir(tmpDir)).filter((file) => file.toLowerCase().endsWith(".pdf"));
-      const plates: Array<{
-        icao: string | null;
-        airportName?: string | null;
-        procedureName: string;
-        plateType?: ApproachPlateType;
-        fileName: string;
-        storagePath: string;
-        cycle: string;
-      }> = [];
-
-      const useS3 = !!process.env.AWS_S3_BUCKET;
-      let storageDir = "";
-      if (!useS3) {
-        storageDir = path.join(process.cwd(), "uploads", "approach-plates", cycle);
-        await fs.promises.mkdir(storageDir, { recursive: true });
-      }
-
-      let s3Service: any = null;
-      if (useS3) {
-        const mod = await import("./s3Storage.js");
-        s3Service = new mod.S3StorageService();
-      }
-
-      for (const filePath of files) {
-        const meta = parseApproachPlateFile(filePath);
-        let storagePath = "";
-        if (useS3) {
-          const key = `approach-plates/${cycle}/${meta.fileName}`;
-          await s3Service.uploadFile({ key, filePath, contentType: "application/pdf" });
-          storagePath = `s3:${key}`;
-        } else {
-          const destPath = path.join(storageDir, meta.fileName);
-          await fs.promises.copyFile(filePath, destPath);
-          storagePath = destPath;
-        }
-
-        plates.push({
-          icao: meta.icao,
-          procedureName: meta.procedureName,
-          plateType: meta.plateType,
-          fileName: meta.fileName,
-          storagePath,
-          cycle,
-        });
-      }
-
-      const insertedCount = await storage.replaceApproachPlatesForCycle(cycle, plates);
-      res.json({
-        cycle,
-        totalFiles: files.length,
-        insertedCount,
-        storage: useS3 ? "s3" : "local",
-      });
+      const result = await syncApproachPlatesFromFaa();
+      res.json(result);
     } catch (error: any) {
       console.error("Approach plate sync error:", error);
+      res.status(500).json({ error: "Failed to sync approach plates", details: error.message || String(error) });
+    }
+  });
+
+  app.post("/api/admin/approach-plates/sync", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const cycleOverride = req.body?.cycle;
+      const result = await syncApproachPlatesFromFaa(cycleOverride);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Admin approach plate sync error:", error);
       res.status(500).json({ error: "Failed to sync approach plates", details: error.message || String(error) });
     }
   });

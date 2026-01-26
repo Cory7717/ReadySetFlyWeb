@@ -505,6 +505,26 @@ export default function AdminDashboard() {
     },
   });
 
+  const syncApproachPlatesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/approach-plates/sync", {});
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to sync approach plates");
+      }
+      return data;
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: "Approach plates synced",
+        description: `Cycle ${data.cycle} • ${data.insertedCount} plates`,
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Sync failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   // Aircraft listing mutations
   const toggleAircraftMutation = useMutation({
     mutationFn: async ({ id, isListed }: { id: string; isListed: boolean }) => {
@@ -3301,6 +3321,24 @@ export default function AdminDashboard() {
 
         {/* Notifications Tab */}
         <TabsContent value="notifications" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>System Tools</CardTitle>
+              <CardDescription>Run maintenance tasks without leaving the dashboard.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => syncApproachPlatesMutation.mutate()}
+                disabled={syncApproachPlatesMutation.isPending}
+                data-testid="button-sync-approach-plates"
+              >
+                {syncApproachPlatesMutation.isPending ? "Syncing plates..." : "Sync Approach Plates Now"}
+              </Button>
+              <Badge variant="outline">FAA d-TPP</Badge>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle data-testid="heading-notifications">Admin Notifications</CardTitle>

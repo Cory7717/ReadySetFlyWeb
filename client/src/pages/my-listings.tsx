@@ -274,6 +274,10 @@ export default function MyListings() {
                       <Plane className="w-4 h-4" />
                       <span>{aircraft.category || "Single Engine"}</span>
                     </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Eye className="w-4 h-4" />
+                      <span>{aircraft.viewCount || 0} views</span>
+                    </div>
                     <div className="flex gap-2 mt-4">
                       <Button
                         variant="outline"

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { AircraftListing, User } from "@shared/schema";
-import { MapPin, Gauge, Shield, Calendar, Heart, Share2, Star, Info } from "lucide-react";
+import { MapPin, Gauge, Shield, Calendar, Heart, Share2, Star, Info, Eye } from "lucide-react";
 import { RentalMessaging } from "@/components/rental-messaging";
 import { StarRating } from "@/components/star-rating";
 import { FavoriteButton } from "@/components/favorite-button";
@@ -62,6 +62,14 @@ export default function AircraftDetail() {
       navigate("/404");
     }
   }, [isLoading, error, aircraft, navigate]);
+
+  // Track aircraft detail view
+  useEffect(() => {
+    if (!aircraft?.id) return;
+    apiRequest("POST", `/api/aircraft/${aircraft.id}/view`, {}).catch(() => {
+      // Silent fail
+    });
+  }, [aircraft?.id]);
 
   // Rental request mutation
   const createRentalMutation = useMutation({
@@ -222,6 +230,10 @@ export default function AircraftDetail() {
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
                 <span>{aircraft.location}{aircraft.airportCode ? ` (${aircraft.airportCode})` : ""}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                <span>{aircraft.viewCount || 0} views</span>
               </div>
               <div className="flex items-center gap-2">
                 <Star className="h-4 w-4 fill-current text-accent" />

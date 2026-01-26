@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2, Star, Edit, Flag } from "lucide-react";
+import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2, Star, Edit, Flag, Eye } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -238,6 +238,10 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                       <span>{listing.location}</span>
                     </div>
                   )}
+                  <div className="flex items-center gap-2 text-muted-foreground mt-2">
+                    <Eye className="h-4 w-4" />
+                    <span>{listing.viewCount || 0} views</span>
+                  </div>
                 </div>
                 <div className="flex items-start gap-2">
                   <FavoriteButton 

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { MarketplaceListing, AircraftListing } from "@shared/schema";
-import { Heart, MapPin, DollarSign, Plane, Calendar } from "lucide-react";
+import { Heart, MapPin, DollarSign, Plane, Calendar, Eye } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
 import { useLocation } from "wouter";
 import { useState } from "react";
@@ -124,6 +124,10 @@ export default function Favorites() {
                         <span>Listed {new Date(listing.createdAt).toLocaleDateString()}</span>
                       </div>
                     )}
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Eye className="w-4 h-4" />
+                      <span>{listing.viewCount || 0} views</span>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -179,6 +183,10 @@ export default function Favorites() {
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Plane className="w-4 h-4" />
                       <span>{aircraft.category || "Single Engine"}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Eye className="w-4 h-4" />
+                      <span>{aircraft.viewCount || 0} views</span>
                     </div>
                   </CardContent>
                 </Card>

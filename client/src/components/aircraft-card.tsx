@@ -17,6 +17,7 @@ interface AircraftCardProps {
   insuranceIncluded: boolean;
   responseTime: number;
   acceptanceRate: number;
+  viewCount?: number;
   onCardClick?: () => void;
 }
 
@@ -34,6 +35,7 @@ export function AircraftCard({
   insuranceIncluded,
   responseTime,
   acceptanceRate,
+  viewCount = 0,
   onCardClick,
 }: AircraftCardProps) {
   return (
@@ -97,6 +99,7 @@ export function AircraftCard({
         </div>
 
         <div className="flex items-center justify-between pt-4 border-t text-xs text-muted-foreground">
+          <span>{viewCount} views</span>
           <span>Response: {responseTime}h</span>
           <span>Acceptance: {acceptanceRate}%</span>
         </div>

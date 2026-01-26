@@ -398,13 +398,19 @@ const isVerified = async (req: any, res: any, next: any) => {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // CORS: allow frontend origins and send credentials for session cookies
+  const defaultOrigins = [
+    "https://readysetfly.us",
+    "https://www.readysetfly.us",
+    "http://localhost:5173",
+    "http://localhost:4173",
+  ];
+  const envOrigins = process.env.WEB_ORIGIN ? process.env.WEB_ORIGIN.split(",") : [];
+  const allowedOrigins = Array.from(
+    new Set([...envOrigins.map((o) => o.trim()).filter(Boolean), ...defaultOrigins]),
+  );
+
   app.use(cors({
-    origin: process.env.WEB_ORIGIN ? process.env.WEB_ORIGIN.split(',') : [
-      "https://readysetfly.us",
-      "https://www.readysetfly.us",
-      "http://localhost:5173",
-      "http://localhost:4173"
-    ],
+    origin: allowedOrigins,
     credentials: true,
   }));
 
@@ -2476,6 +2482,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(listing);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch aircraft" });
+    }
+  });
+
+  // Increment aircraft listing view count
+  app.post("/api/aircraft/:id/view", async (req, res) => {
+    try {
+      const listing = await storage.getAircraftListing(req.params.id);
+      if (!listing) {
+        return res.status(404).json({ error: "Aircraft not found" });
+      }
+      await storage.incrementAircraftViewCount(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to increment aircraft view count:", error);
+      res.status(500).json({ error: "Failed to track view" });
     }
   });
 

@@ -490,6 +490,7 @@ export default function Marketplace() {
                   images={listing.images?.length || 0}
                   tier={listing.tier || undefined}
                   isExample={(listing as any).isExample || false}
+                  viewCount={listing.viewCount || 0}
                 />
               </div>
             ))}

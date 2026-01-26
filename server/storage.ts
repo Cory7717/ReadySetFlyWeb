@@ -167,6 +167,7 @@ export interface IStorage {
   
   // Marketplace Analytics
   incrementMarketplaceViewCount(id: string): Promise<void>;
+  incrementAircraftViewCount(id: string): Promise<void>;
   
   // Marketplace Flags
   flagMarketplaceListing(listingId: string, userId: string, reason?: string): Promise<{ success: boolean; flagCount: number }>;
@@ -1082,6 +1083,15 @@ export class DatabaseStorage implements IStorage {
         viewCount: sql`${marketplaceListings.viewCount} + 1`,
       })
       .where(eq(marketplaceListings.id, id));
+  }
+
+  async incrementAircraftViewCount(id: string): Promise<void> {
+    await db
+      .update(aircraftListings)
+      .set({
+        viewCount: sql`${aircraftListings.viewCount} + 1`,
+      })
+      .where(eq(aircraftListings.id, id));
   }
 
   // Marketplace Flags

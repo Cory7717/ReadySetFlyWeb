@@ -58,6 +58,14 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
     }
   }, [open, isLoading, error, aircraft, onOpenChange]);
 
+  // Track aircraft detail view (public)
+  useEffect(() => {
+    if (!aircraft || !open) return;
+    apiRequest("POST", `/api/aircraft/${aircraft.id}/view`, {}).catch(() => {
+      // Silent fail
+    });
+  }, [aircraft?.id, open]);
+
   const requestRentalMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       if (!aircraft) return;
@@ -201,17 +209,18 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
             </div>
 
             {/* Price & Quick Info */}
-            <div className="flex items-center justify-between border-t border-b py-4">
-              <div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-bold">${aircraft.hourlyRate}</span>
-                  <span className="text-muted-foreground">/hour</span>
-                </div>
-                <div className="flex gap-2 mt-2">
-                  <Badge variant="outline">{aircraft.location}</Badge>
-                  {aircraft.airportCode && <Badge variant="outline">{aircraft.airportCode}</Badge>}
-                </div>
-              </div>
+                <div className="flex items-center justify-between border-t border-b py-4">
+                  <div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-bold">${aircraft.hourlyRate}</span>
+                      <span className="text-muted-foreground">/hour</span>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <Badge variant="outline">{aircraft.location}</Badge>
+                      {aircraft.airportCode && <Badge variant="outline">{aircraft.airportCode}</Badge>}
+                      <Badge variant="secondary">{aircraft.viewCount || 0} views</Badge>
+                    </div>
+                  </div>
               
               {!showRequestForm && (
                 <Button

@@ -240,6 +240,7 @@ export default function Home() {
                     insuranceIncluded={listing.insuranceIncluded || false}
                     responseTime={listing.responseTime || 24}
                     acceptanceRate={listing.acceptanceRate || 95}
+                    viewCount={listing.viewCount || 0}
                     onCardClick={() => setSelectedAircraftId(listing.id)}
                   />
                 ))}

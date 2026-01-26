@@ -13,6 +13,7 @@ interface MarketplaceCardProps {
   images: number;
   tier?: string;
   isExample?: boolean;
+  viewCount?: number;
 }
 
 const categoryColors: Record<string, string> = {
@@ -44,6 +45,7 @@ export function MarketplaceCard({
   images,
   tier,
   isExample,
+  viewCount = 0,
 }: MarketplaceCardProps) {
   return (
     <Card className="overflow-hidden hover-elevate transition-all duration-200 hover:scale-[1.02]" data-testid={`card-marketplace-${id}`}>
@@ -108,6 +110,9 @@ export function MarketplaceCard({
           {price && (
             <span className="font-bold text-lg" data-testid={`text-price-${id}`}>{price}</span>
           )}
+        </div>
+        <div className="mt-3 text-xs text-muted-foreground">
+          {viewCount} views
         </div>
       </CardContent>
     </Card>

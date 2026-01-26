@@ -203,6 +203,7 @@ export const aircraftListings = pgTable("aircraft_listings", {
   // Listing details
   description: text("description"),
   isListed: boolean("is_listed").default(true),
+  viewCount: integer("view_count").default(0).notNull(),
   
   // Admin management
   adminNotes: text("admin_notes"),
@@ -941,6 +942,7 @@ export const insertAircraftListingSchema = createInsertSchema(aircraftListings).
   id: true,
   createdAt: true,
   updatedAt: true,
+  viewCount: true,
 }).extend({
   year: z.number().min(1900).max(new Date().getFullYear() + 1),
   totalTime: z.number().min(0),

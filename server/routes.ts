@@ -1,5 +1,8 @@
 import type { Express } from "express";
 import express from "express";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import cors from "cors";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -18,6 +21,7 @@ import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { getUpgradeDelta, calculateTotalWithTax, isValidUpgrade, VALID_TIERS } from "@shared/config/listingPricing";
+import AdmZip from "adm-zip";
 
 // Initialize OpenAI client with fallback to standard OpenAI if Replit integration vars are missing
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
@@ -115,6 +119,48 @@ async function paypalRequest(path: string, options: RequestInit = {}) {
     throw new Error(data?.message || `PayPal API error ${res.status}`);
   }
   return data;
+}
+
+async function walkDir(dir: string): Promise<string[]> {
+  const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await walkDir(fullPath));
+    } else {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
+type ApproachPlateType = "IAP" | "SID" | "STAR" | "AIRPORT" | "OTHER";
+
+function inferPlateType(name: string): ApproachPlateType {
+  const upper = name.toUpperCase();
+  if (upper.includes("STAR")) return "STAR";
+  if (upper.includes("SID")) return "SID";
+  if (upper.includes("DP")) return "SID";
+  if (upper.includes("IAP")) return "IAP";
+  if (upper.includes("AIRPORT")) return "AIRPORT";
+  return "OTHER";
+}
+
+function parseApproachPlateFile(filePath: string) {
+  const fileName = path.basename(filePath);
+  const base = fileName.replace(/\\.pdf$/i, "");
+  const upper = base.toUpperCase();
+  const icaoMatch = upper.match(/^[A-Z0-9]{3,4}/);
+  const icao = icaoMatch ? icaoMatch[0] : null;
+  let procedureName = base.replace(/^[A-Z0-9]{3,4}[_-]?/i, "").replace(/[_-]+/g, " ").trim();
+  if (!procedureName) procedureName = base.replace(/[_-]+/g, " ").trim();
+  return {
+    fileName,
+    icao,
+    procedureName,
+    plateType: inferPlateType(base),
+  };
 }
 
 // Multer setup for file uploads with disk storage
@@ -2209,6 +2255,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error: "Failed to send expiration reminders",
         details: error.message 
       });
+    }
+  });
+
+  // Cron endpoint: Sync FAA approach plates into storage
+  app.post("/api/cron/approach-plates/sync", async (req, res) => {
+    try {
+      const cronSecret = req.headers['x-cron-secret'];
+      const expectedSecret = process.env.CRON_SECRET || process.env.SESSION_SECRET;
+      if (!cronSecret || cronSecret !== expectedSecret) {
+        console.warn('Unauthorized cron attempt from IP:', req.ip);
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const zipUrl = process.env.FAA_DTPP_ZIP_URL;
+      if (!zipUrl) {
+        return res.status(400).json({ error: "FAA_DTPP_ZIP_URL is not configured" });
+      }
+
+      const cycle = process.env.FAA_DTPP_CYCLE || new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "dtpp-"));
+      const zipPath = path.join(tmpDir, "dtpp.zip");
+
+      const response = await fetch(zipUrl);
+      if (!response.ok) {
+        const body = await response.text();
+        return res.status(500).json({ error: "Failed to download FAA dataset", details: body });
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      await fs.promises.writeFile(zipPath, buffer);
+
+      const zip = new AdmZip(zipPath);
+      zip.extractAllTo(tmpDir, true);
+
+      const files = (await walkDir(tmpDir)).filter((file) => file.toLowerCase().endsWith(".pdf"));
+      const plates: Array<{
+        icao: string | null;
+        airportName?: string | null;
+        procedureName: string;
+        plateType?: ApproachPlateType;
+        fileName: string;
+        storagePath: string;
+        cycle: string;
+      }> = [];
+
+      const useS3 = !!process.env.AWS_S3_BUCKET;
+      let storageDir = "";
+      if (!useS3) {
+        storageDir = path.join(process.cwd(), "uploads", "approach-plates", cycle);
+        await fs.promises.mkdir(storageDir, { recursive: true });
+      }
+
+      let s3Service: any = null;
+      if (useS3) {
+        const mod = await import("./s3Storage.js");
+        s3Service = new mod.S3StorageService();
+      }
+
+      for (const filePath of files) {
+        const meta = parseApproachPlateFile(filePath);
+        let storagePath = "";
+        if (useS3) {
+          const key = `approach-plates/${cycle}/${meta.fileName}`;
+          await s3Service.uploadFile({ key, filePath, contentType: "application/pdf" });
+          storagePath = `s3:${key}`;
+        } else {
+          const destPath = path.join(storageDir, meta.fileName);
+          await fs.promises.copyFile(filePath, destPath);
+          storagePath = destPath;
+        }
+
+        plates.push({
+          icao: meta.icao,
+          procedureName: meta.procedureName,
+          plateType: meta.plateType,
+          fileName: meta.fileName,
+          storagePath,
+          cycle,
+        });
+      }
+
+      const insertedCount = await storage.replaceApproachPlatesForCycle(cycle, plates);
+      res.json({
+        cycle,
+        totalFiles: files.length,
+        insertedCount,
+        storage: useS3 ? "s3" : "local",
+      });
+    } catch (error: any) {
+      console.error("Approach plate sync error:", error);
+      res.status(500).json({ error: "Failed to sync approach plates", details: error.message || String(error) });
     }
   });
 
@@ -4628,16 +4764,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           await client.emails.send({
             from: fromEmail,
-            to: order.sponsorEmail || "noreply@readysetfly.com",
+            to: order.sponsorEmail ?? "noreply@readysetfly.com",
             subject: `Banner Ad Order Confirmation - ${order.title}`,
             html: getBannerAdOrderEmailHtml(order.sponsorName || "Sponsor", {
               orderId: order.id,
               title: order.title,
               tier: order.tier,
               monthlyRate: order.monthlyRate,
-              creationFee: order.creationFee,
-              totalAmount: order.totalAmount,
-              grandTotal: order.grandTotal,
+              creationFee: order.creationFee ?? "0.00",
+              totalAmount: order.totalAmount ?? "0.00",
+              grandTotal: order.grandTotal ?? "0.00",
               // @ts-ignore
               promoCode: (order.promoCode || "") as string,
               // @ts-ignore
@@ -4648,9 +4784,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
               title: order.title,
               tier: order.tier,
               monthlyRate: order.monthlyRate,
-              creationFee: order.creationFee,
-              totalAmount: order.totalAmount,
-              grandTotal: order.grandTotal,
+              creationFee: order.creationFee ?? "0.00",
+              totalAmount: order.totalAmount ?? "0.00",
+              grandTotal: order.grandTotal ?? "0.00",
               // @ts-ignore
               promoCode: (order.promoCode || "") as string,
               // @ts-ignore
@@ -4658,7 +4794,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }),
           });
           
-          console.log(`✅ Banner ad order confirmation email sent to ${order.sponsorEmail || "admin"}`);
+          console.log(`✅ Banner ad order confirmation email sent to ${order.sponsorEmail ?? "admin"}`);
         } catch (emailError) {
           console.error('❌ Failed to send banner ad order email:', emailError);
         }
@@ -5477,6 +5613,59 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  // Approach Plates (FAA d-TPP, hosted by ReadySetFly)
+  app.get("/api/approach-plates/search", async (req, res) => {
+    try {
+      const query = String(req.query.q || "").trim();
+      const limit = Number(req.query.limit || 50);
+      const cycle = process.env.FAA_DTPP_CYCLE;
+      const plates = await storage.searchApproachPlates(query, limit, cycle);
+      res.json({ plates, cycle });
+    } catch (error) {
+      console.error("Approach plate search error:", error);
+      res.status(500).json({ error: "Failed to search approach plates" });
+    }
+  });
+
+  app.get("/api/approach-plates/:id/file", async (req, res) => {
+    try {
+      const plate = await storage.getApproachPlateById(req.params.id);
+      if (!plate) {
+        return res.status(404).json({ error: "Approach plate not found" });
+      }
+
+      if (plate.storagePath.startsWith("s3:")) {
+        const key = plate.storagePath.slice(3);
+        const mod = await import("./s3Storage.js");
+        const s3Service = new mod.S3StorageService();
+        const { stream, contentType, contentLength } = await s3Service.getObjectStream({ key });
+        res.set({
+          "Content-Type": contentType || "application/pdf",
+          "Content-Length": contentLength?.toString() || undefined,
+          "Cache-Control": "public, max-age=3600",
+        });
+        stream.on("error", (err: any) => {
+          console.error("S3 stream error:", err);
+          if (!res.headersSent) {
+            res.status(500).end();
+          }
+        });
+        stream.pipe(res);
+        return;
+      }
+
+      const filePath = path.resolve(plate.storagePath);
+      res.set({
+        "Content-Type": "application/pdf",
+        "Cache-Control": "public, max-age=3600",
+      });
+      res.sendFile(filePath);
+    } catch (error) {
+      console.error("Approach plate fetch error:", error);
+      res.status(500).json({ error: "Failed to load approach plate" });
+    }
+  });
+
   const requireLogbookPro = async (req: any, res: any, next: any) => {
     try {
       const userId = req.user?.claims?.sub;
@@ -5517,7 +5706,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
       }
-      const entry = await storage.createLogbookEntry({ ...result.data, userId });
+      const entry = await storage.createLogbookEntry({ ...(result.data as any), userId });
       res.status(201).json(entry);
     } catch (error) {
       console.error("Failed to create logbook entry:", error);
@@ -5716,15 +5905,22 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const entriesLast90 = entries.filter((entry) => entry.flightDate && new Date(entry.flightDate) >= last90);
       const entriesLast6 = entries.filter((entry) => entry.flightDate && new Date(entry.flightDate) >= last6);
 
-      const sum = (vals: Array<number | null | undefined>) =>
-        vals.reduce((acc, val) => acc + (typeof val === "number" ? val : 0), 0);
+      const sum = (vals: Array<number | null | undefined>) => {
+        let total = 0;
+        for (const val of vals) {
+          if (typeof val === "number") {
+            total += val;
+          }
+        }
+        return total;
+      };
 
-      const landingsDay = sum(entriesLast90.map((e) => e.landingsDay));
-      const landingsNight = sum(entriesLast90.map((e) => e.landingsNight));
+      const landingsDay = sum(entriesLast90.map((e) => e.landingsDay ?? 0));
+      const landingsNight = sum(entriesLast90.map((e) => e.landingsNight ?? 0));
       const totalLandings = landingsDay + landingsNight;
 
-      const lastLandingEntry = entriesLast90.find((e) => (e.landingsDay || 0) + (e.landingsNight || 0) > 0);
-      const lastNightLandingEntry = entriesLast90.find((e) => (e.landingsNight || 0) > 0);
+      const lastLandingEntry = entriesLast90.find((e) => (e.landingsDay ?? 0) + (e.landingsNight ?? 0) > 0);
+      const lastNightLandingEntry = entriesLast90.find((e) => (e.landingsNight ?? 0) > 0);
 
       const addDays = (date: Date, days: number) => {
         const next = new Date(date);
@@ -5740,10 +5936,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const dayCurrencyDueAt = lastLandingEntry?.flightDate ? addDays(new Date(lastLandingEntry.flightDate), 90) : null;
       const nightCurrencyDueAt = lastNightLandingEntry?.flightDate ? addDays(new Date(lastNightLandingEntry.flightDate), 90) : null;
 
-      const approaches = sum(entriesLast6.map((e) => e.approaches));
-      const holds = sum(entriesLast6.map((e) => e.holds));
+      const approaches = sum(entriesLast6.map((e) => e.approaches ?? 0));
+      const holds = sum(entriesLast6.map((e) => e.holds ?? 0));
       const instrumentTotal = approaches + holds;
-      const lastInstrumentEntry = entriesLast6.find((e) => (e.approaches || 0) + (e.holds || 0) > 0);
+      const lastInstrumentEntry = entriesLast6.find((e) => (e.approaches ?? 0) + (e.holds ?? 0) > 0);
       const instrumentDueAt = lastInstrumentEntry?.flightDate ? addMonths(new Date(lastInstrumentEntry.flightDate), 6) : null;
 
       const flightReviewDueAt = settings?.flightReviewDate ? addMonths(new Date(settings.flightReviewDate), 24) : null;

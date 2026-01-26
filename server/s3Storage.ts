@@ -1,5 +1,7 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createReadStream } from "fs";
+import { Readable } from "stream";
 import { randomUUID } from "crypto";
 
 // AWS S3 storage service for production deployment
@@ -42,6 +44,33 @@ export class S3StorageService {
     });
 
     return uploadURL;
+  }
+
+  async uploadFile(params: { key: string; filePath: string; contentType?: string }): Promise<void> {
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: params.key,
+      Body: createReadStream(params.filePath),
+      ContentType: params.contentType || "application/octet-stream",
+    });
+    await this.client.send(command);
+  }
+
+  async getObjectStream(params: { key: string }): Promise<{ stream: Readable; contentType?: string; contentLength?: number }> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: params.key,
+    });
+    const response = await this.client.send(command);
+    const body = response.Body;
+    if (!body || !(body instanceof Readable)) {
+      throw new Error("Unable to read S3 object stream");
+    }
+    return {
+      stream: body,
+      contentType: response.ContentType,
+      contentLength: response.ContentLength,
+    };
   }
 
   /**

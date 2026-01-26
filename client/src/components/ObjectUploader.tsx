@@ -129,7 +129,7 @@ export function ObjectUploader({
               width="100%"
               height={480}
               hideUploadButton={false}
-              showProgressDetails
+              hideProgressDetails={false}
               plugins={["ImageEditor"]}
             />
           </div>

@@ -16,6 +16,7 @@ export const activityTypes = ["call", "email", "meeting", "note", "task"] as con
 export const leadSources = ["website", "referral", "social_media", "advertising", "cold_outreach", "event", "other"] as const;
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
 export const withdrawalStatuses = ["pending", "processing", "completed", "failed", "cancelled"] as const;
+export const approachPlateTypes = ["IAP", "SID", "STAR", "AIRPORT", "OTHER"] as const;
 
 // Session storage table (REQUIRED for Replit Auth - from blueprint:javascript_log_in_with_replit)
 export const sessions = pgTable(
@@ -1021,6 +1022,23 @@ export const logbookProSettings = pgTable("logbook_pro_settings", {
   index("idx_logbook_pro_settings_user").on(table.userId),
 ]);
 
+export const approachPlates = pgTable("approach_plates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  icao: text("icao"),
+  airportName: text("airport_name"),
+  procedureName: text("procedure_name").notNull(),
+  plateType: text("plate_type").default("IAP"),
+  fileName: text("file_name").notNull(),
+  storagePath: text("storage_path").notNull(),
+  cycle: text("cycle").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_approach_plates_icao").on(table.icao),
+  index("idx_approach_plates_cycle").on(table.cycle),
+  index("idx_approach_plates_procedure").on(table.procedureName),
+]);
+
 export const flightPlans = pgTable("flight_plans", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -1079,10 +1097,10 @@ export const insertLogbookProSettingsSchema = createInsertSchema(logbookProSetti
   createdAt: true,
   updatedAt: true,
 }).extend({
-  medicalIssuedAt: z.coerce.date().optional().nullable(),
-  medicalExpiresAt: z.coerce.date().optional().nullable(),
-  flightReviewDate: z.coerce.date().optional().nullable(),
-  ipcDate: z.coerce.date().optional().nullable(),
+  medicalIssuedAt: z.string().optional().nullable(),
+  medicalExpiresAt: z.string().optional().nullable(),
+  flightReviewDate: z.string().optional().nullable(),
+  ipcDate: z.string().optional().nullable(),
 });
 
 export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
@@ -1095,6 +1113,14 @@ export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   plannedArrivalAt: z.coerce.date().optional().nullable(),
   fuelOnBoard: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   fuelRequired: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+});
+
+export const insertApproachPlateSchema = createInsertSchema(approachPlates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  plateType: z.enum(approachPlateTypes).optional(),
 });
 
 export const insertMarketplaceFlagSchema = createInsertSchema(marketplaceFlags).omit({
@@ -1375,6 +1401,8 @@ export type LogbookProSettings = typeof logbookProSettings.$inferSelect;
 export type InsertLogbookProSettings = z.infer<typeof insertLogbookProSettingsSchema>;
 export type FlightPlan = typeof flightPlans.$inferSelect;
 export type InsertFlightPlan = z.infer<typeof insertFlightPlanSchema>;
+export type ApproachPlate = typeof approachPlates.$inferSelect;
+export type InsertApproachPlate = z.infer<typeof insertApproachPlateSchema>;
 
 // Enum types
 export type CertificationType = typeof certificationTypes[number];

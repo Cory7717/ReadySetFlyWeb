@@ -55,6 +55,8 @@ import {
   type InsertLogbookProSettings,
   type FlightPlan,
   type InsertFlightPlan,
+  type ApproachPlate,
+  type InsertApproachPlate,
   users,
   aircraftListings,
   marketplaceListings,
@@ -84,6 +86,7 @@ import {
   logbookEntries,
   logbookProSettings,
   flightPlans,
+  approachPlates,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray, isNull, arrayOverlaps } from "drizzle-orm";
@@ -357,9 +360,14 @@ export interface IStorage {
   // Flight Planner
   getFlightPlansByUser(userId: string): Promise<FlightPlan[]>;
   getFlightPlanById(id: string): Promise<FlightPlan | undefined>;
-  createFlightPlan(plan: InsertFlightPlan): Promise<FlightPlan>;
+  createFlightPlan(plan: InsertFlightPlan & { userId: string }): Promise<FlightPlan>;
   updateFlightPlan(id: string, updates: Partial<FlightPlan>): Promise<FlightPlan | undefined>;
   deleteFlightPlan(id: string): Promise<boolean>;
+
+  // Approach Plates
+  searchApproachPlates(query: string, limit?: number, cycle?: string): Promise<ApproachPlate[]>;
+  getApproachPlateById(id: string): Promise<ApproachPlate | undefined>;
+  replaceApproachPlatesForCycle(cycle: string, plates: InsertApproachPlate[]): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2399,7 +2407,7 @@ export class DatabaseStorage implements IStorage {
     return plan;
   }
 
-  async createFlightPlan(plan: InsertFlightPlan): Promise<FlightPlan> {
+  async createFlightPlan(plan: InsertFlightPlan & { userId: string }): Promise<FlightPlan> {
     const [created] = await db.insert(flightPlans).values(plan).returning();
     return created;
   }
@@ -2416,6 +2424,52 @@ export class DatabaseStorage implements IStorage {
   async deleteFlightPlan(id: string): Promise<boolean> {
     const result = await db.delete(flightPlans).where(eq(flightPlans.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Approach Plates
+  async searchApproachPlates(query: string, limit: number = 50, cycle?: string): Promise<ApproachPlate[]> {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      if (cycle) {
+        return await db
+          .select()
+          .from(approachPlates)
+          .where(eq(approachPlates.cycle, cycle))
+          .orderBy(desc(approachPlates.createdAt))
+          .limit(limit);
+      }
+      return await db
+        .select()
+        .from(approachPlates)
+        .orderBy(desc(approachPlates.createdAt))
+        .limit(limit);
+    }
+
+    const like = `%${trimmed.toUpperCase()}%`;
+    const searchCondition = or(
+      ilike(approachPlates.icao, like),
+      ilike(approachPlates.procedureName, like),
+      ilike(approachPlates.fileName, like),
+      ilike(approachPlates.airportName, like),
+    );
+    return await db
+      .select()
+      .from(approachPlates)
+      .where(cycle ? and(searchCondition, eq(approachPlates.cycle, cycle)) : searchCondition)
+      .orderBy(desc(approachPlates.createdAt))
+      .limit(limit);
+  }
+
+  async getApproachPlateById(id: string): Promise<ApproachPlate | undefined> {
+    const [plate] = await db.select().from(approachPlates).where(eq(approachPlates.id, id));
+    return plate;
+  }
+
+  async replaceApproachPlatesForCycle(cycle: string, plates: InsertApproachPlate[]): Promise<number> {
+    await db.delete(approachPlates).where(eq(approachPlates.cycle, cycle));
+    if (!plates.length) return 0;
+    const inserted = await db.insert(approachPlates).values(plates).returning({ id: approachPlates.id });
+    return inserted.length;
   }
 
   // Marketplace Listing Promotional Free Time
@@ -2525,7 +2579,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Pilot Logbook Entries
-  async createLogbookEntry(insertEntry: InsertLogbookEntry): Promise<LogbookEntry> {
+  async createLogbookEntry(insertEntry: InsertLogbookEntry & { userId: string }): Promise<LogbookEntry> {
     const dataToInsert = {
       ...insertEntry,
       flightDate: insertEntry.flightDate instanceof Date 

@@ -2995,7 +2995,7 @@ export default function AdminDashboard() {
                       code.description?.toLowerCase().includes(promoCodeSearch.toLowerCase())
                     )
                     .map((code) => {
-                      const isExpired = code.validUntil && new Date(code.validUntil) < new Date();
+                      const isExpired = !!(code.validUntil && new Date(code.validUntil) < new Date());
                       const usage = code.usedCount || 0;
                       const maxUsage = code.maxUses || "∞";
                       
@@ -3050,7 +3050,7 @@ export default function AdminDashboard() {
                                         // @ts-ignore
                                         isActive: !((code.isActive ?? false) as boolean)
                                       })}
-                                      disabled={togglePromoCodeMutation.isPending || isExpired}
+                                      disabled={!!togglePromoCodeMutation.isPending || !!isExpired}
                                       data-testid={`button-toggle-promo-code-${code.id}`}
                                     >
                                       {code.isActive ? "Disable" : "Enable"}
@@ -3069,8 +3069,7 @@ export default function AdminDashboard() {
                                           maxUses: code.maxUses || undefined,
                                           validFrom: code.validFrom ? new Date(code.validFrom) : new Date(),
                                           validUntil: code.validUntil ? new Date(code.validUntil) : undefined,
-                                          // @ts-ignore - Type coercion for form reset
-                                          isActive: code.isActive === null ? undefined : code.isActive,
+                                          isActive: code.isActive ?? undefined,
                                           applicableToBannerAds: code.applicableToBannerAds ? true : false,
                                           applicableToMarketplace: code.applicableToMarketplace ? true : false,
                                         } as any);

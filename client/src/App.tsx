@@ -40,6 +40,7 @@ import LogbookPro from "@/pages/logbook-pro";
 import LogbookProSuccess from "@/pages/logbook-pro-success";
 import LogbookProCancel from "@/pages/logbook-pro-cancel";
 import FlightPlanner from "@/pages/flight-planner";
+import ApproachPlates from "@/pages/approach-plates";
 
 function AnalyticsTracker() {
   const [path] = useLocation();
@@ -70,6 +71,7 @@ function Router() {
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/aircraft/:id" component={AircraftDetail} />
       <Route path="/pilot-tools" component={PilotTools} />
+      <Route path="/approach-plates" component={ApproachPlates} />
       <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />

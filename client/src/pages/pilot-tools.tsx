@@ -174,6 +174,22 @@ export default function PilotTools() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              IFR Approach Plates
+            </CardTitle>
+            <CardDescription>Search and download current FAA approach plates.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button asChild>
+              <Link href="/approach-plates">Open Approach Plates</Link>
+            </Button>
+            <Badge variant="outline">Hosted by ReadySetFly</Badge>
+          </CardContent>
+        </Card>
+
         {/* Search */}
         <Card>
           <CardHeader>

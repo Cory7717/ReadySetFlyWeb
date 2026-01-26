@@ -155,27 +155,6 @@ export default function FlightPlanner() {
     },
   });
 
-  if (!isPro) {
-    return (
-      <div className="container mx-auto py-10 px-4 max-w-4xl">
-        <Card>
-          <CardHeader>
-            <CardTitle>Flight Planner (Logbook Pro)</CardTitle>
-            <CardDescription>Upgrade to Logbook Pro to unlock saved flight plans.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Logbook Pro unlocks currency tracking, expirations, and a simple flight planner for saved routes.
-            </p>
-            <Button asChild>
-              <Link href="/logbook/pro">Upgrade to Logbook Pro</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="container mx-auto py-10 px-4 max-w-5xl space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -183,7 +162,10 @@ export default function FlightPlanner() {
           <h1 className="text-3xl font-bold">Flight Planner</h1>
           <p className="text-muted-foreground">Create and manage saved flight plans for quick reference.</p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)}>New Flight Plan</Button>
+        <div className="flex items-center gap-2">
+          {!isPro && <Badge variant="outline">Preview mode</Badge>}
+          <Button onClick={() => setIsDialogOpen(true)}>New Flight Plan</Button>
+        </div>
       </div>
 
       <Card>
@@ -192,6 +174,11 @@ export default function FlightPlanner() {
           <CardDescription>Quick access to your planned routes and fuel notes.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!isPro && (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              Save and sync flight plans with Logbook Pro. Build a plan below and subscribe when you are ready.
+            </div>
+          )}
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading flight plans...</div>
           ) : plans.length === 0 ? (
@@ -327,7 +314,21 @@ export default function FlightPlanner() {
               <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={4} />
             </div>
             <Button
-              onClick={() => (editingPlan ? updateMutation.mutate() : createMutation.mutate())}
+              onClick={() => {
+                if (!isPro) {
+                  toast({
+                    title: "Upgrade to save",
+                    description: "Subscribe to Logbook Pro to save flight plans.",
+                  });
+                  window.location.href = "/logbook/pro";
+                  return;
+                }
+                if (editingPlan) {
+                  updateMutation.mutate();
+                } else {
+                  createMutation.mutate();
+                }
+              }}
               disabled={createMutation.isPending || updateMutation.isPending}
             >
               {editingPlan ? "Save Changes" : "Save Flight Plan"}

@@ -2,7 +2,7 @@ import { DollarSign, TrendingUp, Plane, Calendar, CreditCard, AlertCircle, Check
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import type { AircraftListing, Transaction, Rental, User } from "@shared/schema";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

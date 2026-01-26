@@ -221,27 +221,27 @@ export default function ListAircraft() {
         category: existingAircraft.category || "",
         totalTime: existingAircraft.totalTime || 0,
         engine: existingAircraft.engine || "",
-        avionics: existingAircraft.avionics || "",
+        avionics: existingAircraft.avionicsSuite || "",
         hourlyRate: String(existingAircraft.hourlyRate),
         location: existingAircraft.location,
         airportCode: existingAircraft.airportCode || "",
-        description: existingAircraft.description,
+        description: existingAircraft.description ?? "",
         insuranceIncluded: existingAircraft.insuranceIncluded ?? true,
         wetRate: existingAircraft.wetRate ?? true,
         minFlightHours: existingAircraft.minFlightHours ?? 0,
         serialNumber: existingAircraft.serialNumber || "",
-        annualInspectionDate: existingAircraft.annualInspectionDate || "",
-        annualSignerName: existingAircraft.annualSignerName || "",
-        annualSignerCertNumber: existingAircraft.annualSignerCertNumber || "",
+        annualInspectionDate: existingAircraft.annualInspectionDate ?? "",
+        annualSignerName: existingAircraft.annualSignerName ?? "",
+        annualSignerCertNumber: existingAircraft.annualSignerCertNumber ?? "",
         requires100Hour: existingAircraft.requires100Hour ?? false,
-        currentTach: existingAircraft.currentTach,
-        hour100InspectionTach: existingAircraft.hour100InspectionTach,
-        maintenanceTrackingProvider: existingAircraft.maintenanceTrackingProvider || "",
+        currentTach: existingAircraft.currentTach ?? undefined,
+        hour100InspectionTach: existingAircraft.hour100InspectionTach ?? undefined,
+        maintenanceTrackingProvider: existingAircraft.maintenanceTrackingProvider ?? "",
       });
 
       // Set image files from existing listing
-      if (existingAircraft.imageUrls) {
-        setImageFiles(existingAircraft.imageUrls);
+      if (existingAircraft.images) {
+        setImageFiles(existingAircraft.images);
       }
 
       // Set certifications if they exist
@@ -398,8 +398,10 @@ export default function ListAircraft() {
     const hasVerificationDocs = Object.values(verificationDocs).some(doc => doc !== null);
     
     // Use actual uploaded image URLs from cloud storage
+    const { avionics, ...rest } = data;
     const listingPayload = {
-      ...data,
+      ...rest,
+      avionicsSuite: avionics || null,
       requiredCertifications: selectedCertifications,
       images: imageFiles.length > 0 ? imageFiles : [],
     };

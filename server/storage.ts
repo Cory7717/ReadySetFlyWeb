@@ -51,6 +51,10 @@ import {
   type InsertPromoCodeUsage,
   type LogbookEntry,
   type InsertLogbookEntry,
+  type LogbookProSettings,
+  type InsertLogbookProSettings,
+  type FlightPlan,
+  type InsertFlightPlan,
   users,
   aircraftListings,
   marketplaceListings,
@@ -78,6 +82,8 @@ import {
   oauthExchangeTokens,
   contactSubmissions,
   logbookEntries,
+  logbookProSettings,
+  flightPlans,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray, isNull, arrayOverlaps } from "drizzle-orm";
@@ -343,6 +349,17 @@ export interface IStorage {
   getPendingWithdrawalRequests(): Promise<WithdrawalRequest[]>;
   getAllWithdrawalRequests(): Promise<WithdrawalRequest[]>;
   updateWithdrawalRequest(id: string, updates: Partial<WithdrawalRequest>): Promise<WithdrawalRequest | undefined>;
+
+  // Logbook Pro Settings
+  getLogbookProSettings(userId: string): Promise<LogbookProSettings | undefined>;
+  upsertLogbookProSettings(userId: string, updates: InsertLogbookProSettings): Promise<LogbookProSettings>;
+
+  // Flight Planner
+  getFlightPlansByUser(userId: string): Promise<FlightPlan[]>;
+  getFlightPlanById(id: string): Promise<FlightPlan | undefined>;
+  createFlightPlan(plan: InsertFlightPlan): Promise<FlightPlan>;
+  updateFlightPlan(id: string, updates: Partial<FlightPlan>): Promise<FlightPlan | undefined>;
+  deleteFlightPlan(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2345,6 +2362,59 @@ export class DatabaseStorage implements IStorage {
 
   async deletePromoAlert(id: string): Promise<boolean> {
     const result = await db.delete(promoAlerts).where(eq(promoAlerts.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Logbook Pro Settings
+  async getLogbookProSettings(userId: string): Promise<LogbookProSettings | undefined> {
+    const [settings] = await db.select().from(logbookProSettings).where(eq(logbookProSettings.userId, userId));
+    return settings;
+  }
+
+  async upsertLogbookProSettings(userId: string, updates: InsertLogbookProSettings): Promise<LogbookProSettings> {
+    const existing = await this.getLogbookProSettings(userId);
+    if (existing) {
+      const [settings] = await db
+        .update(logbookProSettings)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(logbookProSettings.userId, userId))
+        .returning();
+      return settings;
+    }
+    const [settings] = await db.insert(logbookProSettings).values({ ...updates, userId }).returning();
+    return settings;
+  }
+
+  // Flight Planner
+  async getFlightPlansByUser(userId: string): Promise<FlightPlan[]> {
+    return await db
+      .select()
+      .from(flightPlans)
+      .where(eq(flightPlans.userId, userId))
+      .orderBy(desc(flightPlans.plannedDepartureAt), desc(flightPlans.createdAt));
+  }
+
+  async getFlightPlanById(id: string): Promise<FlightPlan | undefined> {
+    const [plan] = await db.select().from(flightPlans).where(eq(flightPlans.id, id));
+    return plan;
+  }
+
+  async createFlightPlan(plan: InsertFlightPlan): Promise<FlightPlan> {
+    const [created] = await db.insert(flightPlans).values(plan).returning();
+    return created;
+  }
+
+  async updateFlightPlan(id: string, updates: Partial<FlightPlan>): Promise<FlightPlan | undefined> {
+    const [updated] = await db
+      .update(flightPlans)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(flightPlans.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteFlightPlan(id: string): Promise<boolean> {
+    const result = await db.delete(flightPlans).where(eq(flightPlans.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
   }
 

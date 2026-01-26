@@ -9,7 +9,7 @@ import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
 import { storage } from "./storage";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
 import { sendContactFormEmail } from "./email-templates";
@@ -5477,6 +5477,27 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  const requireLogbookPro = async (req: any, res: any, next: any) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      if (user.logbookProStatus !== "active") {
+        return res.status(403).json({ error: "Logbook Pro subscription required" });
+      }
+      req.logbookProUser = user;
+      next();
+    } catch (error) {
+      console.error("Logbook Pro guard error:", error);
+      res.status(500).json({ error: "Failed to validate subscription" });
+    }
+  };
+
   // Pilot Logbook Routes (authenticated users only)
   app.get("/api/logbook", isAuthenticated, async (req: any, res) => {
     try {
@@ -5641,6 +5662,207 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.status(error.message?.includes("locked") ? 403 : 500).json({ 
         error: error.message || "Failed to delete logbook entry" 
       });
+    }
+  });
+
+  // Logbook Pro - Settings & Currency Summary
+  app.get("/api/logbook/pro/settings", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const settings = await storage.getLogbookProSettings(userId);
+      res.json(settings || null);
+    } catch (error) {
+      console.error("Failed to fetch logbook pro settings:", error);
+      res.status(500).json({ error: "Failed to fetch logbook pro settings" });
+    }
+  });
+
+  app.put("/api/logbook/pro/settings", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const payload = { ...req.body };
+      const dateFields = ["medicalIssuedAt", "medicalExpiresAt", "flightReviewDate", "ipcDate"];
+      dateFields.forEach((field) => {
+        if (payload[field] === "") {
+          payload[field] = null;
+        }
+      });
+      const result = insertLogbookProSettingsSchema.partial().safeParse(payload);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const settings = await storage.upsertLogbookProSettings(userId, result.data as any);
+      res.json(settings);
+    } catch (error) {
+      console.error("Failed to update logbook pro settings:", error);
+      res.status(500).json({ error: "Failed to update logbook pro settings" });
+    }
+  });
+
+  app.get("/api/logbook/pro/summary", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [settings, entries] = await Promise.all([
+        storage.getLogbookProSettings(userId),
+        storage.getLogbookEntriesByUser(userId),
+      ]);
+
+      const now = new Date();
+      const last90 = new Date(now);
+      last90.setDate(last90.getDate() - 90);
+      const last6 = new Date(now);
+      last6.setMonth(last6.getMonth() - 6);
+
+      const entriesLast90 = entries.filter((entry) => entry.flightDate && new Date(entry.flightDate) >= last90);
+      const entriesLast6 = entries.filter((entry) => entry.flightDate && new Date(entry.flightDate) >= last6);
+
+      const sum = (vals: Array<number | null | undefined>) =>
+        vals.reduce((acc, val) => acc + (typeof val === "number" ? val : 0), 0);
+
+      const landingsDay = sum(entriesLast90.map((e) => e.landingsDay));
+      const landingsNight = sum(entriesLast90.map((e) => e.landingsNight));
+      const totalLandings = landingsDay + landingsNight;
+
+      const lastLandingEntry = entriesLast90.find((e) => (e.landingsDay || 0) + (e.landingsNight || 0) > 0);
+      const lastNightLandingEntry = entriesLast90.find((e) => (e.landingsNight || 0) > 0);
+
+      const addDays = (date: Date, days: number) => {
+        const next = new Date(date);
+        next.setDate(next.getDate() + days);
+        return next;
+      };
+      const addMonths = (date: Date, months: number) => {
+        const next = new Date(date);
+        next.setMonth(next.getMonth() + months);
+        return next;
+      };
+
+      const dayCurrencyDueAt = lastLandingEntry?.flightDate ? addDays(new Date(lastLandingEntry.flightDate), 90) : null;
+      const nightCurrencyDueAt = lastNightLandingEntry?.flightDate ? addDays(new Date(lastNightLandingEntry.flightDate), 90) : null;
+
+      const approaches = sum(entriesLast6.map((e) => e.approaches));
+      const holds = sum(entriesLast6.map((e) => e.holds));
+      const instrumentTotal = approaches + holds;
+      const lastInstrumentEntry = entriesLast6.find((e) => (e.approaches || 0) + (e.holds || 0) > 0);
+      const instrumentDueAt = lastInstrumentEntry?.flightDate ? addMonths(new Date(lastInstrumentEntry.flightDate), 6) : null;
+
+      const flightReviewDueAt = settings?.flightReviewDate ? addMonths(new Date(settings.flightReviewDate), 24) : null;
+
+      res.json({
+        settings: settings || null,
+        currency: {
+          landingsDay,
+          landingsNight,
+          totalLandings,
+          dayCurrent: totalLandings >= 3,
+          nightCurrent: landingsNight >= 3,
+          dayCurrencyDueAt,
+          nightCurrencyDueAt,
+          approaches,
+          holds,
+          instrumentTotal,
+          instrumentCurrent: instrumentTotal >= 6,
+          instrumentDueAt,
+        },
+        expirations: {
+          medicalExpiresAt: settings?.medicalExpiresAt || null,
+          flightReviewDueAt,
+          ipcDate: settings?.ipcDate || null,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch logbook pro summary:", error);
+      res.status(500).json({ error: "Failed to fetch logbook pro summary" });
+    }
+  });
+
+  // Flight Planner (Logbook Pro)
+  app.get("/api/flight-plans", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const plans = await storage.getFlightPlansByUser(userId);
+      res.json(plans);
+    } catch (error) {
+      console.error("Failed to fetch flight plans:", error);
+      res.status(500).json({ error: "Failed to fetch flight plans" });
+    }
+  });
+
+  app.post("/api/flight-plans", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const payload = { ...req.body };
+      if (payload.fuelOnBoard === "") payload.fuelOnBoard = null;
+      if (payload.fuelRequired === "") payload.fuelRequired = null;
+      const result = insertFlightPlanSchema.safeParse(payload);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const plan = await storage.createFlightPlan({ ...result.data, userId } as any);
+      res.status(201).json(plan);
+    } catch (error) {
+      console.error("Failed to create flight plan:", error);
+      res.status(500).json({ error: "Failed to create flight plan" });
+    }
+  });
+
+  app.get("/api/flight-plans/:id", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const plan = await storage.getFlightPlanById(req.params.id);
+      if (!plan) {
+        return res.status(404).json({ error: "Flight plan not found" });
+      }
+      if (plan.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      res.json(plan);
+    } catch (error) {
+      console.error("Failed to fetch flight plan:", error);
+      res.status(500).json({ error: "Failed to fetch flight plan" });
+    }
+  });
+
+  app.patch("/api/flight-plans/:id", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const plan = await storage.getFlightPlanById(req.params.id);
+      if (!plan) {
+        return res.status(404).json({ error: "Flight plan not found" });
+      }
+      if (plan.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const payload = { ...req.body };
+      if (payload.fuelOnBoard === "") payload.fuelOnBoard = null;
+      if (payload.fuelRequired === "") payload.fuelRequired = null;
+      const result = insertFlightPlanSchema.partial().safeParse(payload);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updated = await storage.updateFlightPlan(req.params.id, result.data as any);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update flight plan:", error);
+      res.status(500).json({ error: "Failed to update flight plan" });
+    }
+  });
+
+  app.delete("/api/flight-plans/:id", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const plan = await storage.getFlightPlanById(req.params.id);
+      if (!plan) {
+        return res.status(404).json({ error: "Flight plan not found" });
+      }
+      if (plan.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const success = await storage.deleteFlightPlan(req.params.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete flight plan:", error);
+      res.status(500).json({ error: "Failed to delete flight plan" });
     }
   });
 

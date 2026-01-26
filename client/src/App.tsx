@@ -39,6 +39,7 @@ import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
 import LogbookPro from "@/pages/logbook-pro";
 import LogbookProSuccess from "@/pages/logbook-pro-success";
 import LogbookProCancel from "@/pages/logbook-pro-cancel";
+import FlightPlanner from "@/pages/flight-planner";
 
 function AnalyticsTracker() {
   const [path] = useLocation();
@@ -98,6 +99,7 @@ function Router() {
           <Route path="/logbook/pro" component={LogbookPro} />
           <Route path="/logbook/pro/success" component={LogbookProSuccess} />
           <Route path="/logbook/pro/cancel" component={LogbookProCancel} />
+          <Route path="/flight-planner" component={FlightPlanner} />
         </>
       ) : (
         <>
@@ -122,6 +124,7 @@ function Router() {
           <Route path="/logbook/pro" component={RequireAuth} />
           <Route path="/logbook/pro/success" component={RequireAuth} />
           <Route path="/logbook/pro/cancel" component={RequireAuth} />
+          <Route path="/flight-planner" component={RequireAuth} />
         </>
       )}
       

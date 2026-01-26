@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, CloudSun } from "lucide-react";
+import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, CloudSun, Plane } from "lucide-react";
 import { apiUrl } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 
 interface WeatherData {
   icao: string;
@@ -114,6 +116,7 @@ function extractRunwayInUse(metar: any): string | null {
 }
 
 export default function PilotTools() {
+  const { user } = useAuth();
   const [icao, setIcao] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
 
@@ -152,6 +155,24 @@ export default function PilotTools() {
             Aviation weather, NOTAMs, and airport information
           </p>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plane className="h-5 w-5" />
+              Flight Planner (Logbook Pro)
+            </CardTitle>
+            <CardDescription>Save common routes, fuel notes, and timing.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button asChild>
+              <Link href={user?.logbookProStatus === "active" ? "/flight-planner" : "/logbook/pro"}>
+                {user?.logbookProStatus === "active" ? "Open Flight Planner" : "Upgrade to Logbook Pro"}
+              </Link>
+            </Button>
+            <Badge variant="outline">{user?.logbookProStatus === "active" ? "Active" : "Pro feature"}</Badge>
+          </CardContent>
+        </Card>
 
         {/* Search */}
         <Card>

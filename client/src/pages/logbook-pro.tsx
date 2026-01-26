@@ -10,9 +10,9 @@ import { useToast } from "@/hooks/use-toast";
 const SALES_TAX_RATE = 0.0825;
 
 const PLANS = [
-  { key: "MONTHLY", label: "Monthly", price: 9.99 },
-  { key: "BIANNUAL", label: "6 Months", price: 49.99 },
-  { key: "YEARLY", label: "Yearly", price: 99.99 },
+  { key: "MONTHLY", label: "Monthly", price: 5.99 },
+  { key: "BIANNUAL", label: "6 Months", price: 34.99 },
+  { key: "YEARLY", label: "Yearly", price: 49.99 },
 ] as const;
 
 function formatMoney(value: number) {

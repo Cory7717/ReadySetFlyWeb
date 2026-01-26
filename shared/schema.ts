@@ -1006,6 +1006,43 @@ export const logbookEntries = pgTable("logbook_entries", {
   index("idx_logbook_date").on(table.flightDate),
 ]);
 
+export const logbookProSettings = pgTable("logbook_pro_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  medicalClass: text("medical_class"),
+  medicalIssuedAt: date("medical_issued_at"),
+  medicalExpiresAt: date("medical_expires_at"),
+  flightReviewDate: date("flight_review_date"),
+  ipcDate: date("ipc_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_logbook_pro_settings_user").on(table.userId),
+  index("idx_logbook_pro_settings_user").on(table.userId),
+]);
+
+export const flightPlans = pgTable("flight_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  departure: text("departure").notNull(),
+  destination: text("destination").notNull(),
+  route: text("route"),
+  alternate: text("alternate"),
+  plannedDepartureAt: timestamp("planned_departure_at"),
+  plannedArrivalAt: timestamp("planned_arrival_at"),
+  aircraftType: text("aircraft_type"),
+  tailNumber: text("tail_number"),
+  fuelOnBoard: decimal("fuel_on_board", { precision: 8, scale: 2 }),
+  fuelRequired: decimal("fuel_required", { precision: 8, scale: 2 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_flight_plans_user").on(table.userId),
+  index("idx_flight_plans_departure").on(table.plannedDepartureAt),
+]);
+
 export const insertLogbookEntrySchema = createInsertSchema(logbookEntries).omit({
   id: true,
   userId: true,
@@ -1034,6 +1071,30 @@ export const insertLogbookEntrySchema = createInsertSchema(logbookEntries).omit(
   holds: z.number().min(0).optional(),
   hobbsStart: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   hobbsEnd: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+});
+
+export const insertLogbookProSettingsSchema = createInsertSchema(logbookProSettings).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  medicalIssuedAt: z.coerce.date().optional().nullable(),
+  medicalExpiresAt: z.coerce.date().optional().nullable(),
+  flightReviewDate: z.coerce.date().optional().nullable(),
+  ipcDate: z.coerce.date().optional().nullable(),
+});
+
+export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  plannedDepartureAt: z.coerce.date().optional().nullable(),
+  plannedArrivalAt: z.coerce.date().optional().nullable(),
+  fuelOnBoard: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  fuelRequired: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
 });
 
 export const insertMarketplaceFlagSchema = createInsertSchema(marketplaceFlags).omit({
@@ -1310,6 +1371,10 @@ export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
 export type InsertWithdrawalRequest = z.infer<typeof insertWithdrawalRequestSchema>;
 export type LogbookEntry = typeof logbookEntries.$inferSelect;
 export type InsertLogbookEntry = z.infer<typeof insertLogbookEntrySchema>;
+export type LogbookProSettings = typeof logbookProSettings.$inferSelect;
+export type InsertLogbookProSettings = z.infer<typeof insertLogbookProSettingsSchema>;
+export type FlightPlan = typeof flightPlans.$inferSelect;
+export type InsertFlightPlan = z.infer<typeof insertFlightPlanSchema>;
 
 // Enum types
 export type CertificationType = typeof certificationTypes[number];

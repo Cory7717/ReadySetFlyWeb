@@ -101,6 +101,20 @@ function exportToCSV(entries: LogbookEntry[]) {
   URL.revokeObjectURL(url);
 }
 
+function formatDateInput(value?: string | Date | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().split("T")[0];
+}
+
+function formatDisplayDate(value?: string | Date | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString();
+}
+
 export default function Logbook() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -111,10 +125,35 @@ export default function Logbook() {
   const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [signRole, setSignRole] = useState<"pilot" | "cfi">("pilot");
+  const isPro = user?.logbookProStatus === "active";
+  const [proForm, setProForm] = useState({
+    medicalClass: "",
+    medicalIssuedAt: "",
+    medicalExpiresAt: "",
+    flightReviewDate: "",
+    ipcDate: "",
+  });
 
   const { data: entries = [], isLoading } = useQuery<LogbookEntry[]>({
     queryKey: ["/api/logbook"],
   });
+
+  const { data: proSummary, isLoading: proSummaryLoading } = useQuery<any>({
+    queryKey: ["/api/logbook/pro/summary"],
+    enabled: isPro,
+  });
+
+  useEffect(() => {
+    if (proSummary?.settings) {
+      setProForm({
+        medicalClass: proSummary.settings.medicalClass || "",
+        medicalIssuedAt: formatDateInput(proSummary.settings.medicalIssuedAt),
+        medicalExpiresAt: formatDateInput(proSummary.settings.medicalExpiresAt),
+        flightReviewDate: formatDateInput(proSummary.settings.flightReviewDate),
+        ipcDate: formatDateInput(proSummary.settings.ipcDate),
+      });
+    }
+  }, [proSummary]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertLogbookEntry) => {
@@ -173,6 +212,31 @@ export default function Logbook() {
     },
     onError: (error: any) => {
       toast({ title: "Failed to lock entry", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const saveProSettingsMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        medicalClass: proForm.medicalClass || null,
+        medicalIssuedAt: proForm.medicalIssuedAt ? proForm.medicalIssuedAt : null,
+        medicalExpiresAt: proForm.medicalExpiresAt ? proForm.medicalExpiresAt : null,
+        flightReviewDate: proForm.flightReviewDate ? proForm.flightReviewDate : null,
+        ipcDate: proForm.ipcDate ? proForm.ipcDate : null,
+      };
+      const res = await apiRequest("PUT", "/api/logbook/pro/settings", payload);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update Logbook Pro settings");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/logbook/pro/summary"] });
+      toast({ title: "Logbook Pro updated", description: "Your currency settings were saved." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -451,7 +515,133 @@ export default function Logbook() {
         </CardContent>
       </Card>
 
-      {/* Premium Features Teaser - Future Paid Tier */}
+      {isPro && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              Logbook Pro Dashboard
+            </CardTitle>
+            <CardDescription>Currency tracking, expirations, and quick actions.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {proSummaryLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading Logbook Pro summary...
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-lg border p-3 space-y-1">
+                  <div className="text-sm font-semibold">90-Day Currency</div>
+                  <div className="text-xs text-muted-foreground">Total landings: {proSummary?.currency?.totalLandings ?? 0}</div>
+                  <Badge variant={proSummary?.currency?.dayCurrent ? "default" : "outline"}>
+                    {proSummary?.currency?.dayCurrent ? "Current" : "Not current"}
+                  </Badge>
+                  <div className="text-xs text-muted-foreground">
+                    Due: {formatDisplayDate(proSummary?.currency?.dayCurrencyDueAt)}
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3 space-y-1">
+                  <div className="text-sm font-semibold">Night Currency</div>
+                  <div className="text-xs text-muted-foreground">Night landings: {proSummary?.currency?.landingsNight ?? 0}</div>
+                  <Badge variant={proSummary?.currency?.nightCurrent ? "default" : "outline"}>
+                    {proSummary?.currency?.nightCurrent ? "Current" : "Not current"}
+                  </Badge>
+                  <div className="text-xs text-muted-foreground">
+                    Due: {formatDisplayDate(proSummary?.currency?.nightCurrencyDueAt)}
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3 space-y-1">
+                  <div className="text-sm font-semibold">IFR Currency</div>
+                  <div className="text-xs text-muted-foreground">
+                    Approaches + holds: {proSummary?.currency?.instrumentTotal ?? 0}
+                  </div>
+                  <Badge variant={proSummary?.currency?.instrumentCurrent ? "default" : "outline"}>
+                    {proSummary?.currency?.instrumentCurrent ? "Current" : "Not current"}
+                  </Badge>
+                  <div className="text-xs text-muted-foreground">
+                    Due: {formatDisplayDate(proSummary?.currency?.instrumentDueAt)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <div className="text-sm font-semibold">Expiration Tracking</div>
+                <div className="text-xs text-muted-foreground">
+                  Medical expires: {formatDisplayDate(proSummary?.expirations?.medicalExpiresAt)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Flight review due: {formatDisplayDate(proSummary?.expirations?.flightReviewDueAt)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  IPC date: {formatDisplayDate(proSummary?.expirations?.ipcDate)}
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/flight-planner">Open Flight Planner</Link>
+                </Button>
+              </div>
+              <div className="space-y-3">
+                <div className="text-sm font-semibold">Update Logbook Pro dates</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Medical Class</Label>
+                    <Input
+                      value={proForm.medicalClass}
+                      onChange={(e) => setProForm({ ...proForm, medicalClass: e.target.value })}
+                      placeholder="Class 1/2/3"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Medical Issued</Label>
+                    <Input
+                      type="date"
+                      value={proForm.medicalIssuedAt}
+                      onChange={(e) => setProForm({ ...proForm, medicalIssuedAt: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Medical Expires</Label>
+                    <Input
+                      type="date"
+                      value={proForm.medicalExpiresAt}
+                      onChange={(e) => setProForm({ ...proForm, medicalExpiresAt: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Flight Review</Label>
+                    <Input
+                      type="date"
+                      value={proForm.flightReviewDate}
+                      onChange={(e) => setProForm({ ...proForm, flightReviewDate: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>IPC Date</Label>
+                    <Input
+                      type="date"
+                      value={proForm.ipcDate}
+                      onChange={(e) => setProForm({ ...proForm, ipcDate: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <Button
+                  onClick={() => saveProSettingsMutation.mutate()}
+                  disabled={saveProSettingsMutation.isPending}
+                >
+                  {saveProSettingsMutation.isPending ? "Saving..." : "Save Logbook Pro Settings"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Logbook Pro CTA */}
       <Card className="mt-6 border-primary/20 bg-primary/5">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -459,7 +649,7 @@ export default function Logbook() {
             Upgrade to Logbook Pro
           </CardTitle>
           <CardDescription>
-            Unlock advanced automation and analytics for your logbook.
+            Unlock advanced automation, currency tracking, and pro tools.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -482,14 +672,14 @@ export default function Logbook() {
               <TrendingUp className="h-4 w-4 text-primary mt-0.5" />
               <div>
                 <p className="font-semibold">Expiration Alerts</p>
-                <p className="text-xs text-muted-foreground">Medical, BFR, IPC reminders</p>
+                <p className="text-xs text-muted-foreground">Medical, flight review, IPC reminders</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
               <Award className="h-4 w-4 text-primary mt-0.5" />
               <div>
-                <p className="font-semibold">ATP/Airline Reports</p>
-                <p className="text-xs text-muted-foreground">Export to airline application formats</p>
+                <p className="font-semibold">Flight Planner</p>
+                <p className="text-xs text-muted-foreground">Build and save routes with fuel notes</p>
               </div>
             </div>
           </div>
@@ -499,7 +689,7 @@ export default function Logbook() {
               <Badge variant="default">Logbook Pro Active</Badge>
             )}
             <p className="text-xs text-muted-foreground text-center">
-              💡 <strong>Your logbook data will always be free and exportable.</strong> Pro adds intelligence and automation.
+              Tip: <strong>Your logbook data will always be free and exportable.</strong> Pro adds intelligence and automation.
             </p>
             <Button variant="default" asChild>
               <Link href="/logbook/pro">{user?.logbookProStatus === "active" ? "Manage Logbook Pro" : "Upgrade to Logbook Pro"}</Link>

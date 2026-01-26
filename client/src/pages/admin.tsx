@@ -2302,7 +2302,15 @@ export default function AdminDashboard() {
                             </div>
                             <div className="text-sm text-muted-foreground">{user.email}</div>
                             <div className="text-xs text-muted-foreground mt-1">
-                              ID: {user.id} • Flight Hours: {user.totalFlightHours}
+                              ID: {user.id} • Joined: {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"} • Flight Hours: {user.totalFlightHours}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Verified:{" "}
+                              {user.emailVerified ? "Email ✓" : "Email —"} •{" "}
+                              {user.phoneVerified ? "Phone ✓" : "Phone —"} •{" "}
+                              {user.identityVerified ? "Identity ✓" : "Identity —"} •{" "}
+                              {user.paymentVerified ? "Payment ✓" : "Payment —"} •{" "}
+                              {user.isVerified ? "Approved ✓" : "Approved —"}
                             </div>
                           </div>
                         </div>

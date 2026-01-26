@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { LogbookEntry, InsertLogbookEntry } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
 
 // Helper function to calculate totals from entries
 function calculateTotals(entries: LogbookEntry[]) {
@@ -102,8 +104,10 @@ function exportToCSV(entries: LogbookEntry[]) {
 export default function Logbook() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<LogbookEntry | null>(null);
+  const [viewingEntry, setViewingEntry] = useState<LogbookEntry | null>(null);
   const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [signRole, setSignRole] = useState<"pilot" | "cfi">("pilot");
@@ -169,6 +173,19 @@ export default function Logbook() {
     },
     onError: (error: any) => {
       toast({ title: "Failed to lock entry", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const unlockMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/logbook/${id}/unlock`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/logbook"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to unlock entry", description: error.message, variant: "destructive" });
     },
   });
 
@@ -343,7 +360,11 @@ export default function Logbook() {
               </TableHeader>
               <TableBody>
                 {entries.map((entry) => (
-                  <TableRow key={entry.id}>
+                  <TableRow
+                    key={entry.id}
+                    className="cursor-pointer hover:bg-muted/40"
+                    onClick={() => setViewingEntry(entry)}
+                  >
                     <TableCell>{new Date(entry.flightDate).toLocaleDateString()}</TableCell>
                     <TableCell>{entry.tailNumber || "-"}</TableCell>
                     <TableCell>{entry.aircraftType || "-"}</TableCell>
@@ -372,13 +393,21 @@ export default function Logbook() {
                       <div className="flex gap-2">
                         {!entry.isLocked && (
                           <>
-                            <Button variant="ghost" size="sm" onClick={() => setEditingEntry(entry)}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingEntry(entry);
+                              }}
+                            >
                               <Edit className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="default"
                               size="sm"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedEntryId(entry.id);
                                 setSignRole("pilot");
                                 setIsSignDialogOpen(true);
@@ -389,7 +418,8 @@ export default function Logbook() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 if (confirm("Delete this entry?")) deleteMutation.mutate(entry.id);
                               }}
                             >
@@ -401,7 +431,8 @@ export default function Logbook() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setSelectedEntryId(entry.id);
                               setSignRole("cfi");
                               setIsSignDialogOpen(true);
@@ -425,10 +456,10 @@ export default function Logbook() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Award className="h-5 w-5 text-primary" />
-            Coming Soon: Pro Features
+            Upgrade to Logbook Pro
           </CardTitle>
           <CardDescription>
-            Enhanced tools to advance your aviation career
+            Unlock advanced automation and analytics for your logbook.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -463,9 +494,20 @@ export default function Logbook() {
             </div>
           </div>
           <Separator className="my-4" />
-          <p className="text-xs text-muted-foreground text-center">
-            💡 <strong>Your logbook data will always be free and exportable.</strong> Premium features add intelligence and automation.
-          </p>
+          <div className="flex flex-col items-center gap-3">
+            {user?.logbookProStatus === "active" && (
+              <Badge variant="default">Logbook Pro Active</Badge>
+            )}
+            <p className="text-xs text-muted-foreground text-center">
+              💡 <strong>Your logbook data will always be free and exportable.</strong> Pro adds intelligence and automation.
+            </p>
+            <Button variant="default" asChild>
+              <Link href="/logbook/pro">{user?.logbookProStatus === "active" ? "Manage Logbook Pro" : "Upgrade to Logbook Pro"}</Link>
+            </Button>
+            <p className="text-[11px] text-muted-foreground text-center">
+              Cancel anytime. Free logbook access stays available.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -494,6 +536,104 @@ export default function Logbook() {
               }}
               isPending={lockMutation.isPending || countersignMutation.isPending}
             />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {viewingEntry && (
+        <Dialog open={!!viewingEntry} onOpenChange={() => setViewingEntry(null)}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Logbook Entry Details</DialogTitle>
+              <DialogDescription>Review flight details and remarks.</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <div className="text-muted-foreground">Date</div>
+                <div>{new Date(viewingEntry.flightDate).toLocaleDateString()}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Tail Number</div>
+                <div>{viewingEntry.tailNumber || "—"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Aircraft Type</div>
+                <div>{viewingEntry.aircraftType || "—"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Route</div>
+                <div>{viewingEntry.route || "—"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">PIC</div>
+                <div>{viewingEntry.pic || "0"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">SIC</div>
+                <div>{viewingEntry.sic || "0"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Dual</div>
+                <div>{viewingEntry.dual || "0"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Instrument</div>
+                <div>{viewingEntry.instrumentActual || "0"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Landings (Day/Night)</div>
+                <div>
+                  {(viewingEntry.landingsDay || 0)} / {(viewingEntry.landingsNight || 0)}
+                </div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Approaches / Holds</div>
+                <div>
+                  {viewingEntry.approaches || 0} / {viewingEntry.holds || 0}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 text-sm">
+              <div className="text-muted-foreground">Remarks</div>
+              <div className="rounded-md border border-border bg-muted/40 p-3 min-h-[80px] whitespace-pre-wrap">
+                {viewingEntry.remarks || "—"}
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+              <div>
+                Status: {viewingEntry.isLocked ? "Locked (signed)" : "Draft"}
+                {viewingEntry.cfiSignedAt ? " • CFI signed" : ""}
+              </div>
+            </div>
+            <DialogFooter className="mt-4">
+              <Button
+                variant="outline"
+                onClick={() => setViewingEntry(null)}
+              >
+                Close
+              </Button>
+              <Button
+                onClick={() => {
+                  if (viewingEntry.isLocked) {
+                    if (!confirm("Editing will unlock this entry and clear signatures. You'll need to re-sign. Continue?")) {
+                      return;
+                    }
+                    unlockMutation.mutate(viewingEntry.id, {
+                      onSuccess: () => {
+                        setViewingEntry(null);
+                        setEditingEntry({ ...viewingEntry, isLocked: false });
+                      },
+                    });
+                  } else {
+                    setViewingEntry(null);
+                    setEditingEntry(viewingEntry);
+                  }
+                }}
+                disabled={unlockMutation.isPending}
+              >
+                {viewingEntry.isLocked ? "Edit & Re-sign" : "Edit Entry"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}

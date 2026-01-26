@@ -116,6 +116,15 @@ export const users = pgTable("users", {
   
   // Balance tracking (for owner payouts)
   balance: decimal("balance", { precision: 10, scale: 2 }).default("0.00"),
+
+  // Logbook Pro subscription (PayPal Subscriptions)
+  logbookProStatus: text("logbook_pro_status").default("free"), // free, pending, active, cancelled, suspended
+  logbookProPlan: text("logbook_pro_plan"), // monthly, biannual, yearly
+  logbookProSubscriptionId: text("logbook_pro_subscription_id"),
+  logbookProStartedAt: timestamp("logbook_pro_started_at"),
+  logbookProEndsAt: timestamp("logbook_pro_ends_at"),
+  logbookProCanceledAt: timestamp("logbook_pro_canceled_at"),
+  logbookProCancelAtPeriodEnd: boolean("logbook_pro_cancel_at_period_end").default(false),
   
   // Mobile app authentication (optional - for users who sign up via mobile)
   hashedPassword: text("hashed_password"), // bcrypt hash, null for Replit Auth only users

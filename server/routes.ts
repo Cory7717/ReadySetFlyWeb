@@ -55,6 +55,68 @@ const paypalClient = new Client({
 
 const ordersController = new OrdersController(paypalClient);
 
+const PAYPAL_API_BASE =
+  process.env.PAYPAL_ENV === "production" || process.env.NODE_ENV === "production"
+    ? "https://api-m.paypal.com"
+    : "https://api-m.sandbox.paypal.com";
+
+function getPublicBaseUrl() {
+  const base =
+    process.env.APP_BASE_URL ||
+    process.env.REPLIT_DEV_DOMAIN ||
+    process.env.RENDER_EXTERNAL_URL ||
+    "http://localhost:5000";
+  return base.startsWith("http") ? base : `https://${base}`;
+}
+
+async function getPayPalAccessToken() {
+  const clientId = process.env.PAYPAL_CLIENT_ID;
+  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error("Missing PayPal credentials");
+  }
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const res = await fetch(`${PAYPAL_API_BASE}/v1/oauth2/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${auth}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials",
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`PayPal token error: ${res.status} ${errText}`);
+  }
+  const data = await res.json();
+  return data.access_token as string;
+}
+
+async function paypalRequest(path: string, options: RequestInit = {}) {
+  const token = await getPayPalAccessToken();
+  const res = await fetch(`${PAYPAL_API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(options.headers || {}),
+    },
+  });
+  const dataText = await res.text();
+  let data: any = {};
+  if (dataText) {
+    try {
+      data = JSON.parse(dataText);
+    } catch {
+      data = { raw: dataText };
+    }
+  }
+  if (!res.ok) {
+    throw new Error(data?.message || `PayPal API error ${res.status}`);
+  }
+  return data;
+}
+
 // Multer setup for file uploads with disk storage
 const storage_config = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -419,6 +481,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
       clientId: process.env.PAYPAL_CLIENT_ID,
       environment: process.env.NODE_ENV === "production" ? "production" : "sandbox"
     });
+  });
+
+  // PayPal - Create Logbook Pro subscription
+  app.post("/api/paypal/logbook/subscribe", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const plan = (req.body?.plan || "MONTHLY").toUpperCase();
+      const planId =
+        plan === "YEARLY"
+          ? process.env.PAYPAL_LOGBOOK_PLAN_YEARLY_ID
+          : plan === "BIANNUAL"
+          ? process.env.PAYPAL_LOGBOOK_PLAN_BIANNUAL_ID
+          : process.env.PAYPAL_LOGBOOK_PLAN_MONTHLY_ID;
+
+      if (!planId) {
+        return res.status(500).json({ error: "Missing PayPal plan ID for selected interval" });
+      }
+
+      const baseUrl = getPublicBaseUrl();
+      const subscription = await paypalRequest("/v1/billing/subscriptions", {
+        method: "POST",
+        body: JSON.stringify({
+          plan_id: planId,
+          custom_id: userId,
+          subscriber: user.email ? { email_address: user.email } : undefined,
+          application_context: {
+            brand_name: "Ready Set Fly",
+            user_action: "SUBSCRIBE_NOW",
+            return_url: `${baseUrl}/logbook/pro/success`,
+            cancel_url: `${baseUrl}/logbook/pro/cancel`,
+          },
+        }),
+      });
+
+      const approveUrl =
+        subscription?.links?.find((l: any) => l.rel === "approve")?.href ||
+        subscription?.links?.[0]?.href;
+
+      await storage.updateUser(userId, {
+        logbookProStatus: "pending",
+        logbookProPlan: plan.toLowerCase(),
+        logbookProSubscriptionId: subscription.id,
+      });
+
+      res.json({ id: subscription.id, approveUrl });
+    } catch (error: any) {
+      console.error("Logbook subscription create error:", error);
+      res.status(500).json({ error: error.message || "Failed to create subscription" });
+    }
+  });
+
+  // PayPal - Confirm Logbook Pro subscription after approval
+  app.get("/api/paypal/logbook/confirm", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const subscriptionId = req.query.subscriptionId as string;
+      if (!subscriptionId) {
+        return res.status(400).json({ error: "Missing subscriptionId" });
+      }
+
+      const subscription = await paypalRequest(`/v1/billing/subscriptions/${subscriptionId}`, {
+        method: "GET",
+      });
+
+      if (subscription?.custom_id && subscription.custom_id !== userId) {
+        return res.status(403).json({ error: "Subscription does not belong to this user" });
+      }
+
+      const status = (subscription?.status || "UNKNOWN").toLowerCase();
+      const planId = subscription?.plan_id;
+      const plan =
+        planId === process.env.PAYPAL_LOGBOOK_PLAN_YEARLY_ID
+          ? "yearly"
+          : planId === process.env.PAYPAL_LOGBOOK_PLAN_BIANNUAL_ID
+          ? "biannual"
+          : "monthly";
+
+      const startedAt = subscription?.start_time ? new Date(subscription.start_time) : new Date();
+      const endsAt = subscription?.billing_info?.next_billing_time
+        ? new Date(subscription.billing_info.next_billing_time)
+        : null;
+
+      await storage.updateUser(userId, {
+        logbookProStatus: status === "active" ? "active" : status,
+        logbookProPlan: plan,
+        logbookProSubscriptionId: subscriptionId,
+        logbookProStartedAt: startedAt,
+        logbookProEndsAt: endsAt || undefined,
+      });
+
+      res.json({ status: subscription.status, subscription });
+    } catch (error: any) {
+      console.error("Logbook subscription confirm error:", error);
+      res.status(500).json({ error: error.message || "Failed to confirm subscription" });
+    }
+  });
+
+  // PayPal - Cancel Logbook Pro subscription
+  app.post("/api/paypal/logbook/cancel", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      if (!user || !user.logbookProSubscriptionId) {
+        return res.status(400).json({ error: "No active subscription found" });
+      }
+      const reason = req.body?.reason || "User requested cancellation";
+      await paypalRequest(`/v1/billing/subscriptions/${user.logbookProSubscriptionId}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+
+      await storage.updateUser(userId, {
+        logbookProStatus: "cancelled",
+        logbookProCanceledAt: new Date(),
+        logbookProCancelAtPeriodEnd: false,
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Logbook subscription cancel error:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel subscription" });
+    }
   });
 
   // PayPal - Create order for marketplace listing fees
@@ -5411,6 +5600,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.status(error.message?.includes("not found") ? 404 : 500).json({ 
         error: error.message || "Failed to countersign logbook entry" 
       });
+    }
+  });
+
+  app.post("/api/logbook/:id/unlock", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const existing = await storage.getLogbookEntryById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Logbook entry not found" });
+      }
+      if (existing.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const entry = await storage.unlockLogbookEntry(req.params.id);
+      res.json(entry);
+    } catch (error: any) {
+      console.error("Failed to unlock logbook entry:", error);
+      res.status(500).json({ error: error.message || "Failed to unlock logbook entry" });
     }
   });
 

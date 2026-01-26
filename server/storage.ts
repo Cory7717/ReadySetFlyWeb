@@ -2485,6 +2485,33 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
+  async unlockLogbookEntry(id: string): Promise<LogbookEntry | undefined> {
+    const existing = await this.getLogbookEntryById(id);
+    if (!existing) {
+      throw new Error("Logbook entry not found");
+    }
+    if (!existing.isLocked) {
+      return existing;
+    }
+    const [entry] = await db
+      .update(logbookEntries)
+      .set({
+        isLocked: false,
+        signatureDataUrl: null,
+        signedByName: null,
+        signedAt: null,
+        signatureIp: null,
+        cfiSignatureDataUrl: null,
+        cfiSignedByName: null,
+        cfiSignedAt: null,
+        cfiSignatureIp: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(logbookEntries.id, id))
+      .returning();
+    return entry;
+  }
+
   async lockLogbookEntry(id: string, signatureDataUrl: string, signedByName: string, signatureIp?: string): Promise<LogbookEntry | undefined> {
     const existing = await this.getLogbookEntryById(id);
     if (!existing) {

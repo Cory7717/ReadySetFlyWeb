@@ -36,6 +36,9 @@ import VerifyEmail from "@/pages/verify-email";
 import Logbook from "@/pages/logbook";
 import PilotTools from "@/pages/pilot-tools";
 import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
+import LogbookPro from "@/pages/logbook-pro";
+import LogbookProSuccess from "@/pages/logbook-pro-success";
+import LogbookProCancel from "@/pages/logbook-pro-cancel";
 
 function AnalyticsTracker() {
   const [path] = useLocation();
@@ -92,6 +95,9 @@ function Router() {
           <Route path="/verify-identity" component={VerifyIdentity} />
           <Route path="/settings" component={Settings} />
           <Route path="/logbook" component={Logbook} />
+          <Route path="/logbook/pro" component={LogbookPro} />
+          <Route path="/logbook/pro/success" component={LogbookProSuccess} />
+          <Route path="/logbook/pro/cancel" component={LogbookProCancel} />
         </>
       ) : (
         <>
@@ -113,6 +119,9 @@ function Router() {
           <Route path="/verify-identity" component={RequireAuth} />
           <Route path="/settings" component={RequireAuth} />
           <Route path="/logbook" component={RequireAuth} />
+          <Route path="/logbook/pro" component={RequireAuth} />
+          <Route path="/logbook/pro/success" component={RequireAuth} />
+          <Route path="/logbook/pro/cancel" component={RequireAuth} />
         </>
       )}
       

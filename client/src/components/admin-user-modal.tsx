@@ -289,6 +289,51 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                     </CardContent>
                   </Card>
 
+                  {/* Account Status */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-lg">Account Status</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div>
+                        <div className="text-sm font-medium text-muted-foreground">Joined</div>
+                        <div className="text-base">
+                          {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-muted-foreground">Email Verified</div>
+                        <div className="text-base">{user.emailVerified ? "Yes" : "No"}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-muted-foreground">Phone Verified</div>
+                        <div className="text-base">{user.phoneVerified ? "Yes" : "No"}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-muted-foreground">Account Approved</div>
+                        <div className="text-base">{user.isVerified ? "Yes" : "No"}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-muted-foreground">Identity Verified</div>
+                        <div className="text-base">
+                          {user.identityVerifiedAt ? new Date(user.identityVerifiedAt).toLocaleDateString() : "No"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-muted-foreground">Payment Verified</div>
+                        <div className="text-base">
+                          {user.paymentVerifiedAt ? new Date(user.paymentVerifiedAt).toLocaleDateString() : "No"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-muted-foreground">FAA Verified</div>
+                        <div className="text-base">
+                          {user.faaVerifiedAt ? new Date(user.faaVerifiedAt).toLocaleDateString() : "No"}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   {/* Pilot Information */}
                   <Card>
                     <CardHeader>

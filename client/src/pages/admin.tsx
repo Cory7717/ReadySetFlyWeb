@@ -509,8 +509,8 @@ export default function AdminDashboard() {
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/approach-plates/sync", {
         mode: "incremental",
-        limit: 800,
-        maxMs: 45000,
+        limit: 400,
+        maxMs: 30000,
       });
       const data = await res.json();
       if (!res.ok) {
@@ -518,10 +518,10 @@ export default function AdminDashboard() {
       }
       return data;
     },
-    onSuccess: (data: any) => {
+    onSuccess: () => {
       toast({
-        title: "Approach plates synced",
-        description: `Cycle ${data.cycle} • ${data.insertedCount} plates`,
+        title: "Approach plate sync started",
+        description: "Sync runs in the background. Search again in a minute.",
       });
     },
     onError: (error: any) => {
@@ -5720,3 +5720,5 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
+

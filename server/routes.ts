@@ -137,6 +137,22 @@ async function walkDir(dir: string): Promise<string[]> {
 
 type ApproachPlateType = "IAP" | "SID" | "STAR" | "AIRPORT" | "OTHER";
 
+type ApproachPlateSyncState = {
+  inProgress: boolean;
+  lastStartedAt: Date | null;
+  lastFinishedAt: Date | null;
+  lastResult: any | null;
+  lastError: string | null;
+};
+
+const approachPlateSyncState: ApproachPlateSyncState = {
+  inProgress: false,
+  lastStartedAt: null,
+  lastFinishedAt: null,
+  lastResult: null,
+  lastError: null,
+};
+
 function inferPlateType(name: string): ApproachPlateType {
   const upper = name.toUpperCase();
   if (upper.includes("STAR")) return "STAR";
@@ -2379,29 +2395,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
+      if (approachPlateSyncState.inProgress) {
+        return res.status(409).json({ error: "Sync already in progress" });
+      }
+
+      approachPlateSyncState.inProgress = true;
+      approachPlateSyncState.lastStartedAt = new Date();
+      approachPlateSyncState.lastFinishedAt = null;
+      approachPlateSyncState.lastError = null;
+
       const maxFiles = req.query?.limit ? Number(req.query.limit) : undefined;
       const maxMs = req.query?.maxMs ? Number(req.query.maxMs) : undefined;
       const replace = req.query?.mode === "incremental" ? false : true;
       const result = await syncApproachPlatesFromFaa({ maxFiles, maxMs, replace });
+      approachPlateSyncState.lastResult = result;
+      approachPlateSyncState.lastFinishedAt = new Date();
+      approachPlateSyncState.inProgress = false;
       res.json(result);
     } catch (error: any) {
       console.error("Approach plate sync error:", error);
+      approachPlateSyncState.lastError = error.message || String(error);
+      approachPlateSyncState.lastFinishedAt = new Date();
+      approachPlateSyncState.inProgress = false;
       res.status(500).json({ error: "Failed to sync approach plates", details: error.message || String(error) });
     }
   });
 
   app.post("/api/admin/approach-plates/sync", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      if (approachPlateSyncState.inProgress) {
+        return res.status(409).json({ error: "Sync already in progress" });
+      }
+
       const cycleOverride = req.body?.cycle;
       const maxFiles = typeof req.body?.limit === "number" ? req.body.limit : undefined;
       const maxMs = typeof req.body?.maxMs === "number" ? req.body.maxMs : undefined;
       const replace = req.body?.mode === "incremental" ? false : true;
-      const result = await syncApproachPlatesFromFaa({ cycleOverride, maxFiles, maxMs, replace });
-      res.json(result);
+
+      approachPlateSyncState.inProgress = true;
+      approachPlateSyncState.lastStartedAt = new Date();
+      approachPlateSyncState.lastFinishedAt = null;
+      approachPlateSyncState.lastError = null;
+
+      setTimeout(async () => {
+        try {
+          const result = await syncApproachPlatesFromFaa({ cycleOverride, maxFiles, maxMs, replace });
+          approachPlateSyncState.lastResult = result;
+          approachPlateSyncState.lastFinishedAt = new Date();
+        } catch (error: any) {
+          console.error("Admin approach plate sync error:", error);
+          approachPlateSyncState.lastError = error.message || String(error);
+          approachPlateSyncState.lastFinishedAt = new Date();
+        } finally {
+          approachPlateSyncState.inProgress = false;
+        }
+      }, 0);
+
+      res.status(202).json({
+        started: true,
+        mode: replace ? "full" : "incremental",
+        maxFiles,
+        maxMs,
+        cycle: cycleOverride || process.env.FAA_DTPP_CYCLE || null,
+      });
     } catch (error: any) {
       console.error("Admin approach plate sync error:", error);
       res.status(500).json({ error: "Failed to sync approach plates", details: error.message || String(error) });
     }
+  });
+
+  app.get("/api/admin/approach-plates/status", isAuthenticated, isAdmin, async (_req, res) => {
+    res.json({
+      inProgress: approachPlateSyncState.inProgress,
+      lastStartedAt: approachPlateSyncState.lastStartedAt,
+      lastFinishedAt: approachPlateSyncState.lastFinishedAt,
+      lastError: approachPlateSyncState.lastError,
+      lastResult: approachPlateSyncState.lastResult,
+    });
   });
 
   // AI Description Generation endpoint

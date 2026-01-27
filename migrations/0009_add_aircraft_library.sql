@@ -35,6 +35,11 @@ BEGIN
     FROM information_schema.columns
     WHERE table_name = 'aircraft_profiles'
       AND column_name = 'cruise_ktas'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'aircraft_profiles'
+      AND column_name = 'cruise_ktas_override'
   ) THEN
     ALTER TABLE "aircraft_profiles" RENAME COLUMN "cruise_ktas" TO "cruise_ktas_override";
   END IF;
@@ -44,6 +49,11 @@ BEGIN
     FROM information_schema.columns
     WHERE table_name = 'aircraft_profiles'
       AND column_name = 'fuel_burn_gph'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'aircraft_profiles'
+      AND column_name = 'fuel_burn_override_gph'
   ) THEN
     ALTER TABLE "aircraft_profiles" RENAME COLUMN "fuel_burn_gph" TO "fuel_burn_override_gph";
   END IF;

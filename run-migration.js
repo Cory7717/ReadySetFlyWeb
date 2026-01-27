@@ -76,7 +76,8 @@ async function runMigrationsFolder() {
     console.log('✓ All migrations up to date.');
     
   } catch (error) {
-    console.error('Migration failed:', error.message);
+    const details = error?.stack || error?.message || error;
+    console.error('Migration failed:', details);
     process.exit(1);
   } finally {
     await client.end();

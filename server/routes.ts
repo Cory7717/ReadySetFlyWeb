@@ -3,6 +3,9 @@ import express from "express";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import readline from "readline";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import cors from "cors";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -21,7 +24,6 @@ import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { getUpgradeDelta, calculateTotalWithTax, isValidUpgrade, VALID_TIERS } from "@shared/config/listingPricing";
-import AdmZip from "adm-zip";
 
 // Initialize OpenAI client with fallback to standard OpenAI if Replit integration vars are missing
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
@@ -163,123 +165,138 @@ function inferPlateType(name: string): ApproachPlateType {
   return "OTHER";
 }
 
-function parseApproachPlateFile(filePath: string) {
-  const fileName = path.basename(filePath);
-  const base = fileName.replace(/\\.pdf$/i, "");
-  const upper = base.toUpperCase();
-  const icaoMatch = upper.match(/^[A-Z0-9]{3,4}/);
-  const icao = icaoMatch ? icaoMatch[0] : null;
-  let procedureName = base.replace(/^[A-Z0-9]{3,4}[_-]?/i, "").replace(/[_-]+/g, " ").trim();
-  if (!procedureName) procedureName = base.replace(/[_-]+/g, " ").trim();
-  return {
-    fileName,
-    icao,
-    procedureName,
-    plateType: inferPlateType(base),
-  };
+type PlateMeta = {
+  name: string;
+  type: string;
+  effectiveDate?: string | null;
+  url: string;
+};
+
+const PLATE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const PLATE_CACHE_MAX = 500;
+const plateMetaCache = new Map<string, { data: PlateMeta[]; expiresAt: number; createdAt: number }>();
+
+function normalizeIcao(value: string) {
+  return value.trim().toUpperCase();
 }
 
-async function syncApproachPlatesFromFaa(options?: {
-  cycleOverride?: string;
-  maxFiles?: number;
-  maxMs?: number;
-  replace?: boolean;
-}) {
+function getDtppMetaUrl() {
+  if (process.env.FAA_DTPP_META_URL) return process.env.FAA_DTPP_META_URL;
   const zipUrl = process.env.FAA_DTPP_ZIP_URL;
   if (!zipUrl) {
-    throw new Error("FAA_DTPP_ZIP_URL is not configured");
+    throw new Error("FAA_DTPP_META_URL or FAA_DTPP_ZIP_URL must be configured");
   }
+  const firstUrl = zipUrl.split(",")[0].trim();
+  const base = firstUrl.split("/").slice(0, -1).join("/");
+  return `${base}/xml_data/d-TPP_Metafile.xml`;
+}
 
-  const cycle = options?.cycleOverride || process.env.FAA_DTPP_CYCLE || new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const maxFiles = typeof options?.maxFiles === "number" ? options?.maxFiles : undefined;
-  const maxMs = typeof options?.maxMs === "number" ? options?.maxMs : undefined;
-  const replace = options?.replace !== false;
-  const startTime = Date.now();
-  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "dtpp-"));
-
-  const zipUrls = zipUrl.split(",").map((entry) => entry.trim()).filter(Boolean);
-  if (!zipUrls.length) {
-    throw new Error("FAA_DTPP_ZIP_URL is empty");
+function getPdfBaseUrl() {
+  if (process.env.FAA_DTPP_PDF_BASE_URL) return process.env.FAA_DTPP_PDF_BASE_URL;
+  const zipUrl = process.env.FAA_DTPP_ZIP_URL;
+  if (!zipUrl) {
+    throw new Error("FAA_DTPP_PDF_BASE_URL or FAA_DTPP_ZIP_URL must be configured");
   }
+  const firstUrl = zipUrl.split(",")[0].trim();
+  return firstUrl.split("/").slice(0, -1).join("/");
+}
 
-  for (let i = 0; i < zipUrls.length; i += 1) {
-    const url = zipUrls[i];
-    const zipPath = path.join(tmpDir, `dtpp-${i}.zip`);
-    const response = await fetch(url);
-    if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Failed to download FAA dataset: ${response.status} ${body}`);
+function getCachedPlates(icao: string) {
+  const key = normalizeIcao(icao);
+  const cached = plateMetaCache.get(key);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    plateMetaCache.delete(key);
+    return null;
+  }
+  return cached.data;
+}
+
+function setCachedPlates(icao: string, data: PlateMeta[]) {
+  const key = normalizeIcao(icao);
+  plateMetaCache.set(key, {
+    data,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + PLATE_CACHE_TTL_MS,
+  });
+
+  if (plateMetaCache.size > PLATE_CACHE_MAX) {
+    let oldestKey: string | null = null;
+    let oldestAt = Infinity;
+    for (const [entryKey, entry] of plateMetaCache.entries()) {
+      if (entry.createdAt < oldestAt) {
+        oldestAt = entry.createdAt;
+        oldestKey = entryKey;
+      }
     }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    await fs.promises.writeFile(zipPath, buffer);
+    if (oldestKey) plateMetaCache.delete(oldestKey);
+  }
+}
 
-    const zip = new AdmZip(zipPath);
-    zip.extractAllTo(tmpDir, true);
+function clearPlateCache() {
+  plateMetaCache.clear();
+}
+
+async function fetchPlateMetadataForIcao(icao: string): Promise<PlateMeta[]> {
+  const cached = getCachedPlates(icao);
+  if (cached) return cached;
+
+  const normalizedIcao = normalizeIcao(icao);
+  const metaUrl = getDtppMetaUrl();
+  const pdfBase = getPdfBaseUrl().replace(/\/+$/, "");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  const response = await fetch(metaUrl, { signal: controller.signal });
+  clearTimeout(timeout);
+
+  if (!response.ok || !response.body) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Failed to fetch metadata: ${response.status} ${body}`);
   }
 
-  const files = (await walkDir(tmpDir)).filter((file) => file.toLowerCase().endsWith(".pdf"));
-  const plates: Array<{
-    icao: string | null;
-    airportName?: string | null;
-    procedureName: string;
-    plateType?: ApproachPlateType;
-    fileName: string;
-    storagePath: string;
-    cycle: string;
-  }> = [];
+  const stream = Readable.fromWeb(response.body as any);
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
-  const useS3 = !!process.env.AWS_S3_BUCKET;
-  let storageDir = "";
-  if (!useS3) {
-    storageDir = path.join(process.cwd(), "uploads", "approach-plates", cycle);
-    await fs.promises.mkdir(storageDir, { recursive: true });
-  }
+  const plates: PlateMeta[] = [];
+  let current: { icao?: string; name?: string; type?: string; pdfName?: string; effectiveDate?: string } = {};
 
-  let s3Service: any = null;
-  if (useS3) {
-    const mod = await import("./s3Storage.js");
-    s3Service = new mod.S3StorageService();
-  }
-
-  let processedFiles = 0;
-  for (const filePath of files) {
-    if (maxFiles && processedFiles >= maxFiles) break;
-    if (maxMs && Date.now() - startTime > maxMs) break;
-    const meta = parseApproachPlateFile(filePath);
-    let storagePath = "";
-    if (useS3) {
-      const key = `approach-plates/${cycle}/${meta.fileName}`;
-      await s3Service.uploadFile({ key, filePath, contentType: "application/pdf" });
-      storagePath = `s3:${key}`;
-    } else {
-      const destPath = path.join(storageDir, meta.fileName);
-      await fs.promises.copyFile(filePath, destPath);
-      storagePath = destPath;
+  for await (const line of rl) {
+    if (line.includes("<record")) {
+      current = {};
+      continue;
+    }
+    if (line.includes("</record>")) {
+      if (current.icao === normalizedIcao && current.pdfName) {
+        const name = current.name || current.pdfName;
+        const type = current.type || inferPlateType(name);
+        plates.push({
+          name,
+          type,
+          effectiveDate: current.effectiveDate || null,
+          url: `${pdfBase}/${current.pdfName}`,
+        });
+      }
+      current = {};
+      continue;
     }
 
-    plates.push({
-      icao: meta.icao,
-      procedureName: meta.procedureName,
-      plateType: meta.plateType,
-      fileName: meta.fileName,
-      storagePath,
-      cycle,
-    });
+    const match = line.match(/<([A-Za-z0-9_:-]+)>([^<]*)<\/\1>/);
+    if (!match) continue;
 
-    processedFiles += 1;
+    const tag = match[1].toLowerCase();
+    const value = match[2].trim();
+    if (!value) continue;
+
+    if (tag.includes("icao")) current.icao = value.toUpperCase();
+    if (tag.includes("pdf_name") || tag.includes("pdfname")) current.pdfName = value;
+    if (tag.includes("chart_name") || tag.includes("procedure_name") || tag.includes("proc_name")) current.name = value;
+    if (tag.includes("chart_type") || tag.includes("proc_type")) current.type = value;
+    if (tag.includes("effective")) current.effectiveDate = value;
   }
 
-  const insertedCount = replace
-    ? await storage.replaceApproachPlatesForCycle(cycle, plates)
-    : await storage.insertApproachPlates(plates);
-  return {
-    cycle,
-    totalFiles: files.length,
-    processedFiles,
-    insertedCount,
-    storage: useS3 ? "s3" : "local",
-    partial: !!maxFiles || !!maxMs || !replace,
-  };
+  setCachedPlates(icao, plates);
+  return plates;
 }
 
 // Multer setup for file uploads with disk storage
@@ -2383,7 +2400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Cron endpoint: Sync FAA approach plates into storage
+  // Cron endpoint: Clear approach-plate cache (metadata is fetched on demand)
   app.post("/api/cron/approach-plates/sync", async (req, res) => {
     try {
       const cronSecretHeader = req.headers['x-cron-secret'];
@@ -2395,23 +2412,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      if (approachPlateSyncState.inProgress) {
-        return res.status(409).json({ error: "Sync already in progress" });
-      }
-
-      approachPlateSyncState.inProgress = true;
-      approachPlateSyncState.lastStartedAt = new Date();
-      approachPlateSyncState.lastFinishedAt = null;
-      approachPlateSyncState.lastError = null;
-
-      const maxFiles = req.query?.limit ? Number(req.query.limit) : undefined;
-      const maxMs = req.query?.maxMs ? Number(req.query.maxMs) : undefined;
-      const replace = req.query?.mode === "incremental" ? false : true;
-      const result = await syncApproachPlatesFromFaa({ maxFiles, maxMs, replace });
-      approachPlateSyncState.lastResult = result;
+      clearPlateCache();
+      approachPlateSyncState.lastResult = { cleared: true };
       approachPlateSyncState.lastFinishedAt = new Date();
-      approachPlateSyncState.inProgress = false;
-      res.json(result);
+      res.json({ cleared: true });
     } catch (error: any) {
       console.error("Approach plate sync error:", error);
       approachPlateSyncState.lastError = error.message || String(error);
@@ -2427,11 +2431,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(409).json({ error: "Sync already in progress" });
       }
 
-      const cycleOverride = req.body?.cycle;
-      const maxFiles = typeof req.body?.limit === "number" ? req.body.limit : undefined;
-      const maxMs = typeof req.body?.maxMs === "number" ? req.body.maxMs : undefined;
-      const replace = req.body?.mode === "incremental" ? false : true;
-
       approachPlateSyncState.inProgress = true;
       approachPlateSyncState.lastStartedAt = new Date();
       approachPlateSyncState.lastFinishedAt = null;
@@ -2439,8 +2438,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       setTimeout(async () => {
         try {
-          const result = await syncApproachPlatesFromFaa({ cycleOverride, maxFiles, maxMs, replace });
-          approachPlateSyncState.lastResult = result;
+          clearPlateCache();
+          approachPlateSyncState.lastResult = { cleared: true };
           approachPlateSyncState.lastFinishedAt = new Date();
         } catch (error: any) {
           console.error("Admin approach plate sync error:", error);
@@ -2453,10 +2452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.status(202).json({
         started: true,
-        mode: replace ? "full" : "incremental",
-        maxFiles,
-        maxMs,
-        cycle: cycleOverride || process.env.FAA_DTPP_CYCLE || null,
+        cleared: true,
       });
     } catch (error: any) {
       console.error("Admin approach plate sync error:", error);
@@ -5754,7 +5750,82 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  // Approach Plates (FAA d-TPP, hosted by ReadySetFly)
+  // Approach Plates (FAA d-TPP metadata, on-demand)
+  const platesRateLimiter = createIpRateLimiter({
+    windowMs: 60 * 1000,
+    max: 30,
+    message: "Too many plate requests, please try again later",
+  });
+
+  app.get("/api/plates/:icao", platesRateLimiter, async (req, res) => {
+    try {
+      const icao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(icao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const plates = await fetchPlateMetadataForIcao(icao);
+      res.json({
+        icao,
+        fetchedAt: new Date().toISOString(),
+        plates,
+      });
+    } catch (error: any) {
+      console.error("Approach plate metadata error:", error);
+      res.status(500).json({ error: "Failed to load approach plates", details: error.message || String(error) });
+    }
+  });
+
+  // Streaming proxy for plate PDFs (no buffering)
+  app.get("/api/plates/proxy", platesRateLimiter, async (req, res) => {
+    try {
+      const urlParam = String(req.query.url || "");
+      if (!urlParam) {
+        return res.status(400).json({ error: "Missing url" });
+      }
+
+      const decodedUrl = decodeURIComponent(urlParam);
+      const target = new URL(decodedUrl);
+      const allowedHosts = (process.env.FAA_PLATE_PROXY_HOSTS || "aeronav.faa.gov,www.aeronav.faa.gov")
+        .split(",")
+        .map((host) => host.trim())
+        .filter(Boolean);
+
+      if (!allowedHosts.includes(target.hostname)) {
+        return res.status(400).json({ error: "URL host not allowed" });
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      const upstream = await fetch(target.toString(), { signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (!upstream.ok || !upstream.body) {
+        const body = await upstream.text().catch(() => "");
+        return res.status(upstream.status).send(body || "Failed to fetch plate");
+      }
+
+      const contentLength = upstream.headers.get("content-length");
+      if (contentLength && Number(contentLength) > 20 * 1024 * 1024) {
+        return res.status(413).json({ error: "Plate file too large" });
+      }
+
+      res.status(upstream.status);
+      const contentType = upstream.headers.get("content-type");
+      if (contentType) res.setHeader("Content-Type", contentType);
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+      const cacheControl = upstream.headers.get("cache-control");
+      if (cacheControl) res.setHeader("Cache-Control", cacheControl);
+
+      // Stream without buffering to avoid memory spikes
+      await pipeline(Readable.fromWeb(upstream.body as any), res);
+    } catch (error: any) {
+      console.error("Plate proxy error:", error);
+      res.status(500).json({ error: "Failed to proxy plate", details: error.message || String(error) });
+    }
+  });
+
+  // Legacy Approach Plates (stored PDFs)
   app.get("/api/approach-plates/search", async (req, res) => {
     try {
       const query = String(req.query.q || "").trim();

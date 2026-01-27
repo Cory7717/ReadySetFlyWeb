@@ -2704,6 +2704,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Aircraft Types (RSF Library)
+  app.get("/api/aircraft/types", aircraftTypeRateLimiter, async (req, res) => {
+    try {
+      const { q, category, engine_type: engineType, limit, offset } = req.query as any;
+      const types = await storage.getAircraftTypes({
+        q: typeof q === "string" ? q : undefined,
+        category: typeof category === "string" ? category : undefined,
+        engineType: typeof engineType === "string" ? engineType : undefined,
+        limit: limit ? Number(limit) : undefined,
+        offset: offset ? Number(offset) : undefined,
+      });
+      const response = types.map((type) => ({
+        ...type,
+        ...buildEffectiveValues(null, type),
+      }));
+      res.json(response);
+    } catch (error) {
+      console.error("Failed to fetch aircraft types:", error);
+      res.status(500).json({ error: "Failed to fetch aircraft types" });
+    }
+  });
+
+  app.get("/api/aircraft/types/:id", aircraftTypeRateLimiter, async (req, res) => {
+    try {
+      const type = await storage.getAircraftTypeById(req.params.id);
+      if (!type) {
+        return res.status(404).json({ error: "Aircraft type not found" });
+      }
+      res.json({ ...type, ...buildEffectiveValues(null, type) });
+    } catch (error) {
+      console.error("Failed to fetch aircraft type:", error);
+      res.status(500).json({ error: "Failed to fetch aircraft type" });
+    }
+  });
+
+  app.post("/api/aircraft/types", isAdmin, aircraftTypeRateLimiter, async (req, res) => {
+    try {
+      const result = insertAircraftTypeSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const created = await storage.createAircraftType(result.data as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create aircraft type:", error);
+      res.status(500).json({ error: "Failed to create aircraft type" });
+    }
+  });
+
+  app.put("/api/aircraft/types/:id", isAdmin, aircraftTypeRateLimiter, async (req, res) => {
+    try {
+      const result = insertAircraftTypeSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updated = await storage.updateAircraftType(req.params.id, result.data as any);
+      if (!updated) {
+        return res.status(404).json({ error: "Aircraft type not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update aircraft type:", error);
+      res.status(500).json({ error: "Failed to update aircraft type" });
+    }
+  });
+
+  app.delete("/api/aircraft/types/:id", isAdmin, aircraftTypeRateLimiter, async (req, res) => {
+    try {
+      const success = await storage.deleteAircraftType(req.params.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete aircraft type:", error);
+      res.status(500).json({ error: "Failed to delete aircraft type" });
+    }
+  });
+
+  // Aircraft Profiles (User-specific)
+  app.get("/api/aircraft/profiles", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profiles = await storage.getAircraftProfilesByUser(userId);
+      const typeIds = profiles.map((profile) => profile.typeId).filter(Boolean) as string[];
+      const types = await storage.getAircraftTypesByIds(typeIds);
+      const typeMap = new Map(types.map((type) => [type.id, type]));
+      const response = profiles.map((profile) => ({
+        ...profile,
+        type: profile.typeId ? typeMap.get(profile.typeId) || null : null,
+        ...buildEffectiveValues(profile, profile.typeId ? typeMap.get(profile.typeId) : null),
+      }));
+      res.json(response);
+    } catch (error) {
+      console.error("Failed to fetch aircraft profiles:", error);
+      res.status(500).json({ error: "Failed to fetch aircraft profiles" });
+    }
+  });
+
+  app.post("/api/aircraft/profiles", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = insertAircraftProfileSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const created = await storage.createAircraftProfile({ ...result.data, userId } as any);
+      const baseType = created.typeId ? await storage.getAircraftTypeById(created.typeId) : null;
+      res.status(201).json({ ...created, type: baseType, ...buildEffectiveValues(created, baseType) });
+    } catch (error) {
+      console.error("Failed to create aircraft profile:", error);
+      res.status(500).json({ error: "Failed to create aircraft profile" });
+    }
+  });
+
+  app.put("/api/aircraft/profiles/:id", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const existing = await storage.getAircraftProfileById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Aircraft profile not found" });
+      }
+      if (existing.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const result = insertAircraftProfileSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updated = await storage.updateAircraftProfile(req.params.id, result.data as any);
+      if (!updated) {
+        return res.status(404).json({ error: "Aircraft profile not found" });
+      }
+      const baseType = updated.typeId ? await storage.getAircraftTypeById(updated.typeId) : null;
+      res.json({ ...updated, type: baseType, ...buildEffectiveValues(updated, baseType) });
+    } catch (error) {
+      console.error("Failed to update aircraft profile:", error);
+      res.status(500).json({ error: "Failed to update aircraft profile" });
+    }
+  });
+
+  app.delete("/api/aircraft/profiles/:id", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const existing = await storage.getAircraftProfileById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Aircraft profile not found" });
+      }
+      if (existing.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const success = await storage.deleteAircraftProfile(req.params.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete aircraft profile:", error);
+      res.status(500).json({ error: "Failed to delete aircraft profile" });
+    }
+  });
+
   // Aircraft Listings
   app.get("/api/aircraft", async (req, res) => {
     try {
@@ -6434,162 +6590,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to fetch logbook pro summary:", error);
       res.status(500).json({ error: "Failed to fetch logbook pro summary" });
-    }
-  });
-
-  // Aircraft Types (RSF Library)
-  app.get("/api/aircraft/types", aircraftTypeRateLimiter, async (req, res) => {
-    try {
-      const { q, category, engine_type: engineType, limit, offset } = req.query as any;
-      const types = await storage.getAircraftTypes({
-        q: typeof q === "string" ? q : undefined,
-        category: typeof category === "string" ? category : undefined,
-        engineType: typeof engineType === "string" ? engineType : undefined,
-        limit: limit ? Number(limit) : undefined,
-        offset: offset ? Number(offset) : undefined,
-      });
-      const response = types.map((type) => ({
-        ...type,
-        ...buildEffectiveValues(null, type),
-      }));
-      res.json(response);
-    } catch (error) {
-      console.error("Failed to fetch aircraft types:", error);
-      res.status(500).json({ error: "Failed to fetch aircraft types" });
-    }
-  });
-
-  app.get("/api/aircraft/types/:id", aircraftTypeRateLimiter, async (req, res) => {
-    try {
-      const type = await storage.getAircraftTypeById(req.params.id);
-      if (!type) {
-        return res.status(404).json({ error: "Aircraft type not found" });
-      }
-      res.json({ ...type, ...buildEffectiveValues(null, type) });
-    } catch (error) {
-      console.error("Failed to fetch aircraft type:", error);
-      res.status(500).json({ error: "Failed to fetch aircraft type" });
-    }
-  });
-
-  app.post("/api/aircraft/types", isAdmin, aircraftTypeRateLimiter, async (req, res) => {
-    try {
-      const result = insertAircraftTypeSchema.safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ error: result.error.format() });
-      }
-      const created = await storage.createAircraftType(result.data as any);
-      res.status(201).json(created);
-    } catch (error) {
-      console.error("Failed to create aircraft type:", error);
-      res.status(500).json({ error: "Failed to create aircraft type" });
-    }
-  });
-
-  app.put("/api/aircraft/types/:id", isAdmin, aircraftTypeRateLimiter, async (req, res) => {
-    try {
-      const result = insertAircraftTypeSchema.partial().safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ error: result.error.format() });
-      }
-      const updated = await storage.updateAircraftType(req.params.id, result.data as any);
-      if (!updated) {
-        return res.status(404).json({ error: "Aircraft type not found" });
-      }
-      res.json(updated);
-    } catch (error) {
-      console.error("Failed to update aircraft type:", error);
-      res.status(500).json({ error: "Failed to update aircraft type" });
-    }
-  });
-
-  app.delete("/api/aircraft/types/:id", isAdmin, aircraftTypeRateLimiter, async (req, res) => {
-    try {
-      const success = await storage.deleteAircraftType(req.params.id);
-      res.json({ success });
-    } catch (error) {
-      console.error("Failed to delete aircraft type:", error);
-      res.status(500).json({ error: "Failed to delete aircraft type" });
-    }
-  });
-
-  // Aircraft Profiles (User-specific)
-  app.get("/api/aircraft/profiles", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const profiles = await storage.getAircraftProfilesByUser(userId);
-      const typeIds = profiles.map((profile) => profile.typeId).filter(Boolean) as string[];
-      const types = await storage.getAircraftTypesByIds(typeIds);
-      const typeMap = new Map(types.map((type) => [type.id, type]));
-      const response = profiles.map((profile) => ({
-        ...profile,
-        type: profile.typeId ? typeMap.get(profile.typeId) || null : null,
-        ...buildEffectiveValues(profile, profile.typeId ? typeMap.get(profile.typeId) : null),
-      }));
-      res.json(response);
-    } catch (error) {
-      console.error("Failed to fetch aircraft profiles:", error);
-      res.status(500).json({ error: "Failed to fetch aircraft profiles" });
-    }
-  });
-
-  app.post("/api/aircraft/profiles", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const result = insertAircraftProfileSchema.safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ error: result.error.format() });
-      }
-      const created = await storage.createAircraftProfile({ ...result.data, userId } as any);
-      const baseType = created.typeId ? await storage.getAircraftTypeById(created.typeId) : null;
-      res.status(201).json({ ...created, type: baseType, ...buildEffectiveValues(created, baseType) });
-    } catch (error) {
-      console.error("Failed to create aircraft profile:", error);
-      res.status(500).json({ error: "Failed to create aircraft profile" });
-    }
-  });
-
-  app.put("/api/aircraft/profiles/:id", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const existing = await storage.getAircraftProfileById(req.params.id);
-      if (!existing) {
-        return res.status(404).json({ error: "Aircraft profile not found" });
-      }
-      if (existing.userId !== userId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
-      const result = insertAircraftProfileSchema.partial().safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ error: result.error.format() });
-      }
-      const updated = await storage.updateAircraftProfile(req.params.id, result.data as any);
-      if (!updated) {
-        return res.status(404).json({ error: "Aircraft profile not found" });
-      }
-      const baseType = updated.typeId ? await storage.getAircraftTypeById(updated.typeId) : null;
-      res.json({ ...updated, type: baseType, ...buildEffectiveValues(updated, baseType) });
-    } catch (error) {
-      console.error("Failed to update aircraft profile:", error);
-      res.status(500).json({ error: "Failed to update aircraft profile" });
-    }
-  });
-
-  app.delete("/api/aircraft/profiles/:id", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const existing = await storage.getAircraftProfileById(req.params.id);
-      if (!existing) {
-        return res.status(404).json({ error: "Aircraft profile not found" });
-      }
-      if (existing.userId !== userId) {
-        return res.status(403).json({ error: "Access denied" });
-      }
-      const success = await storage.deleteAircraftProfile(req.params.id);
-      res.json({ success });
-    } catch (error) {
-      console.error("Failed to delete aircraft profile:", error);
-      res.status(500).json({ error: "Failed to delete aircraft profile" });
     }
   });
 

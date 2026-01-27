@@ -11,6 +11,7 @@
     "check": "tsc",
     "test:smoke": "node scripts/smoke-test.mjs",
     "seed:aircraft-types": "tsx seed_aircraft_types.ts",
+    "import:aircraft-types": "tsx scripts/import-aircraft-types.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

@@ -182,23 +182,39 @@ function normalizeIcao(value: string) {
 
 function getDtppMetaUrl() {
   if (process.env.FAA_DTPP_META_URL) return process.env.FAA_DTPP_META_URL;
-  const zipUrl = process.env.FAA_DTPP_ZIP_URL;
-  if (!zipUrl) {
-    throw new Error("FAA_DTPP_META_URL or FAA_DTPP_ZIP_URL must be configured");
+
+  const cycleCode = getDtppCycleCode();
+  if (!cycleCode) {
+    throw new Error("FAA_DTPP_CYCLE or FAA_DTPP_ZIP_URL must be configured");
   }
-  const firstUrl = zipUrl.split(",")[0].trim();
-  const base = firstUrl.split("/").slice(0, -1).join("/");
-  return `${base}/xml_data/d-TPP_Metafile.xml`;
+
+  return `https://aeronav.faa.gov/d-tpp/${cycleCode}/xml_data/d-TPP_Metafile.xml`;
 }
 
 function getPdfBaseUrl() {
   if (process.env.FAA_DTPP_PDF_BASE_URL) return process.env.FAA_DTPP_PDF_BASE_URL;
-  const zipUrl = process.env.FAA_DTPP_ZIP_URL;
-  if (!zipUrl) {
-    throw new Error("FAA_DTPP_PDF_BASE_URL or FAA_DTPP_ZIP_URL must be configured");
+
+  const cycleCode = getDtppCycleCode();
+  if (!cycleCode) {
+    throw new Error("FAA_DTPP_CYCLE or FAA_DTPP_ZIP_URL must be configured");
   }
-  const firstUrl = zipUrl.split(",")[0].trim();
-  return firstUrl.split("/").slice(0, -1).join("/");
+
+  return `https://aeronav.faa.gov/d-tpp/${cycleCode}`;
+}
+
+function getDtppCycleCode(): string | null {
+  const cycle = process.env.FAA_DTPP_CYCLE;
+  if (cycle && cycle.length >= 4) {
+    return cycle.slice(0, 4);
+  }
+
+  const zipUrl = process.env.FAA_DTPP_ZIP_URL;
+  if (!zipUrl) return null;
+  const match = zipUrl.match(/_(\d{6})/);
+  if (match && match[1]) {
+    return match[1].slice(0, 4);
+  }
+  return null;
 }
 
 function getCachedPlates(icao: string) {

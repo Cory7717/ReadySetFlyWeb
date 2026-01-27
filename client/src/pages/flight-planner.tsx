@@ -525,10 +525,10 @@ export default function FlightPlanner() {
               onChange={(e) => setWaypointsInput(e.target.value.toUpperCase())}
               placeholder="KISP KPVD (comma or space separated)"
             />
-            <p className="text-xs text-muted-foreground">Add ICAO codes separated by space or comma.</p>
+            <p className="text-xs text-muted-foreground">Optional. Add ICAO codes separated by space or comma.</p>
           </div>
           <div className="space-y-2">
-            <Label>Alternate</Label>
+            <Label>Alternate (optional)</Label>
             <Input
               value={form.alternate}
               onChange={(e) => setForm({ ...form, alternate: e.target.value })}
@@ -555,7 +555,9 @@ export default function FlightPlanner() {
           {routeIcaos.length === 0 ? (
             <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
           ) : mapPoints.length < 2 ? (
-            <div className="text-sm text-muted-foreground">Waiting for airport coordinates...</div>
+            <div className="text-sm text-muted-foreground">
+              Waiting for airport coordinates... Waypoints are optional. Check ICAO codes if this takes more than a few seconds.
+            </div>
           ) : (
             <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
               <PlannerMap points={mapPoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))} />

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting...</title>
+  <script>
+    // GitHub Pages SPA redirect
+    // Avoid infinite loops if the root itself 404s (e.g., when only the 404 was published).
+    (function() {
+      const key = 'spa-redirected-path';
+      const current = window.location.pathname || '/';
+      const lastRedirect = sessionStorage.getItem(key);
+
+      if (lastRedirect === current) {
+        // Give the user a hint instead of looping forever.
+        document.body.textContent = 'Unable to load the app. Please refresh.';
+        return;
+      }
+
+      sessionStorage.setItem(key, current);
+      window.location.replace(window.location.origin + '/');
+    })();
+  </script>
+</head>
+<body>
+  Redirecting...
+</body>
+</html>

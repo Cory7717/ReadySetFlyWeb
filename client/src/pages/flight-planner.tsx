@@ -124,7 +124,7 @@ export default function FlightPlanner() {
     notes: "",
   });
   const [waypointsInput, setWaypointsInput] = useState("");
-  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [selectedProfileId, setSelectedProfileId] = useState<string>("none");
   const [selectedTypeId, setSelectedTypeId] = useState<string>(FALLBACK_TYPE.id);
   const [reserveMinutes, setReserveMinutes] = useState("45");
   const [headwind, setHeadwind] = useState("0");
@@ -172,7 +172,9 @@ export default function FlightPlanner() {
     }
   }, [aircraftTypes, selectedTypeId]);
 
-  const selectedProfile = savedProfiles.find((p) => p.id === selectedProfileId) || null;
+  const selectedProfile = selectedProfileId === "none"
+    ? null
+    : savedProfiles.find((p) => p.id === selectedProfileId) || null;
   const selectedType = aircraftTypes.find((t) => t.id === selectedTypeId) || FALLBACK_TYPE;
 
   const planningCruise = selectedProfile?.cruise_ktas_effective ?? selectedType.cruise_ktas_effective ?? FALLBACK_TYPE.cruise_ktas_effective ?? 110;
@@ -523,7 +525,7 @@ export default function FlightPlanner() {
               <Label>RSF Aircraft Library</Label>
               <Select value={selectedTypeId} onValueChange={(value) => {
                 setSelectedTypeId(value);
-                setSelectedProfileId("");
+                setSelectedProfileId("none");
               }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select aircraft type" />
@@ -548,7 +550,7 @@ export default function FlightPlanner() {
                   <SelectValue placeholder="Select saved profile" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {savedProfiles.map((profile) => (
                     <SelectItem key={profile.id} value={profile.id}>
                       {profile.name}

@@ -529,6 +529,10 @@ export default function AdminDashboard() {
     },
   });
 
+  const { data: plateStatus } = useQuery<{ lastFinishedAt?: string | null }>({
+    queryKey: ["/api/admin/approach-plates/status"],
+  });
+
   // Aircraft listing mutations
   const toggleAircraftMutation = useMutation({
     mutationFn: async ({ id, isListed }: { id: string; isListed: boolean }) => {
@@ -3340,6 +3344,11 @@ export default function AdminDashboard() {
                 {syncApproachPlatesMutation.isPending ? "Syncing plates..." : "Sync Approach Plates Now"}
               </Button>
               <Badge variant="outline">FAA d-TPP</Badge>
+              {plateStatus?.lastFinishedAt && (
+                <span className="text-xs text-muted-foreground">
+                  Last cache refresh: {new Date(plateStatus.lastFinishedAt).toLocaleString()}
+                </span>
+              )}
             </CardContent>
           </Card>
 

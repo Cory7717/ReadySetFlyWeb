@@ -59,6 +59,7 @@ const FALLBACK_TYPE: AircraftType = {
   usable_fuel_gal_effective: 40,
   max_gross_weight_lb_effective: 2400,
 };
+const CUSTOM_TYPE_ID = "custom";
 
 type WeatherResponse = {
   icao: string;
@@ -177,10 +178,36 @@ export default function FlightPlanner() {
     : savedProfiles.find((p) => p.id === selectedProfileId) || null;
   const selectedType = aircraftTypes.find((t) => t.id === selectedTypeId) || FALLBACK_TYPE;
 
-  const planningCruise = selectedProfile?.cruise_ktas_effective ?? selectedType.cruise_ktas_effective ?? FALLBACK_TYPE.cruise_ktas_effective ?? 110;
-  const planningBurn = selectedProfile?.fuel_burn_gph_effective ?? selectedType.fuel_burn_gph_effective ?? FALLBACK_TYPE.fuel_burn_gph_effective ?? 8;
-  const planningFuel = selectedProfile?.usable_fuel_gal_effective ?? selectedType.usable_fuel_gal_effective ?? FALLBACK_TYPE.usable_fuel_gal_effective ?? 40;
-  const planningMaxWeight = selectedProfile?.max_gross_weight_lb_effective ?? selectedType.max_gross_weight_lb_effective ?? FALLBACK_TYPE.max_gross_weight_lb_effective ?? 2400;
+  const manualCruise = customProfile.cruiseKtasOverride ? Number(customProfile.cruiseKtasOverride) : null;
+  const manualBurn = customProfile.fuelBurnOverrideGph ? Number(customProfile.fuelBurnOverrideGph) : null;
+  const manualFuel = customProfile.usableFuelOverrideGal ? Number(customProfile.usableFuelOverrideGal) : null;
+  const manualMaxWeight = customProfile.maxGrossWeightOverrideLb ? Number(customProfile.maxGrossWeightOverrideLb) : null;
+
+  const useManual = selectedTypeId === CUSTOM_TYPE_ID;
+  const planningCruise =
+    (useManual ? manualCruise : null) ??
+    selectedProfile?.cruise_ktas_effective ??
+    selectedType.cruise_ktas_effective ??
+    FALLBACK_TYPE.cruise_ktas_effective ??
+    110;
+  const planningBurn =
+    (useManual ? manualBurn : null) ??
+    selectedProfile?.fuel_burn_gph_effective ??
+    selectedType.fuel_burn_gph_effective ??
+    FALLBACK_TYPE.fuel_burn_gph_effective ??
+    8;
+  const planningFuel =
+    (useManual ? manualFuel : null) ??
+    selectedProfile?.usable_fuel_gal_effective ??
+    selectedType.usable_fuel_gal_effective ??
+    FALLBACK_TYPE.usable_fuel_gal_effective ??
+    40;
+  const planningMaxWeight =
+    (useManual ? manualMaxWeight : null) ??
+    selectedProfile?.max_gross_weight_lb_effective ??
+    selectedType.max_gross_weight_lb_effective ??
+    FALLBACK_TYPE.max_gross_weight_lb_effective ??
+    2400;
 
   const waypoints = useMemo(() => parseWaypoints(waypointsInput), [waypointsInput]);
   const routeIcaos = useMemo(() => {
@@ -531,6 +558,7 @@ export default function FlightPlanner() {
                   <SelectValue placeholder="Select aircraft type" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={CUSTOM_TYPE_ID}>Custom entry</SelectItem>
                   <SelectItem value={FALLBACK_TYPE.id}>
                     {FALLBACK_TYPE.make} {FALLBACK_TYPE.model}
                   </SelectItem>
@@ -541,7 +569,9 @@ export default function FlightPlanner() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">Planning estimates only. Verify POH/AFM.</p>
+              <p className="text-xs text-muted-foreground">
+                Planning estimates only. Select a library type or choose Custom entry.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Saved Profile</Label>

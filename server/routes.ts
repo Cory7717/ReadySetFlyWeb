@@ -247,7 +247,13 @@ async function fetchPlateMetadataForIcao(icao: string): Promise<PlateMeta[]> {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
-  const response = await fetch(metaUrl, { signal: controller.signal });
+  const response = await fetch(metaUrl, {
+    signal: controller.signal,
+    headers: {
+      "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+      "Accept": "application/xml,text/xml;q=0.9,*/*;q=0.8",
+    },
+  });
   clearTimeout(timeout);
 
   if (!response.ok || !response.body) {
@@ -5772,7 +5778,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       });
     } catch (error: any) {
       console.error("Approach plate metadata error:", error);
-      res.status(500).json({ error: "Failed to load approach plates", details: error.message || String(error) });
+      res.status(500).json({
+        error: "Failed to load approach plates",
+        details: error.message || String(error),
+        metaUrl: (() => {
+          try { return getDtppMetaUrl(); } catch { return null; }
+        })(),
+      });
     }
   });
 

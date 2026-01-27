@@ -5812,31 +5812,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     message: "Too many plate requests, please try again later",
   });
 
-  app.get("/api/plates/:icao", platesRateLimiter, async (req, res) => {
-    try {
-      const icao = normalizeIcao(req.params.icao || "");
-      if (!/^[A-Z0-9]{3,4}$/.test(icao)) {
-        return res.status(400).json({ error: "Invalid ICAO code format" });
-      }
-
-      const plates = await fetchPlateMetadataForIcao(icao);
-      res.json({
-        icao,
-        fetchedAt: new Date().toISOString(),
-        plates,
-      });
-    } catch (error: any) {
-      console.error("Approach plate metadata error:", error);
-      res.status(500).json({
-        error: "Failed to load approach plates",
-        details: error.message || String(error),
-        metaUrl: (() => {
-          try { return getDtppMetaUrl(); } catch { return null; }
-        })(),
-      });
-    }
-  });
-
   // Streaming proxy for plate PDFs (no buffering)
   app.get("/api/plates/proxy", platesRateLimiter, async (req, res) => {
     try {
@@ -5883,6 +5858,31 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error: any) {
       console.error("Plate proxy error:", error);
       res.status(500).json({ error: "Failed to proxy plate", details: error.message || String(error) });
+    }
+  });
+
+  app.get("/api/plates/:icao", platesRateLimiter, async (req, res) => {
+    try {
+      const icao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(icao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const plates = await fetchPlateMetadataForIcao(icao);
+      res.json({
+        icao,
+        fetchedAt: new Date().toISOString(),
+        plates,
+      });
+    } catch (error: any) {
+      console.error("Approach plate metadata error:", error);
+      res.status(500).json({
+        error: "Failed to load approach plates",
+        details: error.message || String(error),
+        metaUrl: (() => {
+          try { return getDtppMetaUrl(); } catch { return null; }
+        })(),
+      });
     }
   });
 

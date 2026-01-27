@@ -613,7 +613,7 @@ export default function FlightPlanner() {
               <div className="grid gap-2 text-sm">
                 {legs.map((leg) => (
                   <div key={`${leg.from.icao}-${leg.to.icao}`} className="flex justify-between">
-                    <span>{leg.from.icao} -> {leg.to.icao}</span>
+                      <span>{leg.from.icao}{" to "}{leg.to.icao}</span>
                     <span>{leg.distanceNm.toFixed(1)} NM</span>
                   </div>
                 ))}

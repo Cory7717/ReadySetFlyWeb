@@ -154,6 +154,12 @@ const approachPlateSyncState: ApproachPlateSyncState = {
   lastError: null,
 };
 
+// Optional auto-cache refresh (clears metadata cache on interval)
+const ENABLE_PLATE_CACHE_CRON =
+  String(process.env.ENABLE_PLATE_CACHE_CRON || "").toLowerCase() === "true";
+const PLATE_CACHE_REFRESH_MS = Number(process.env.PLATE_CACHE_REFRESH_MS || 24 * 60 * 60 * 1000);
+let plateCacheCronStarted = false;
+
 function inferPlateType(name: string): ApproachPlateType {
   const upper = name.toUpperCase();
   if (upper.includes("STAR")) return "STAR";
@@ -250,6 +256,19 @@ function setCachedPlates(icao: string, data: PlateMeta[]) {
 
 function clearPlateCache() {
   plateMetaCache.clear();
+}
+
+function startPlateCacheCron() {
+  if (plateCacheCronStarted || !ENABLE_PLATE_CACHE_CRON) return;
+  plateCacheCronStarted = true;
+  const interval = Number.isFinite(PLATE_CACHE_REFRESH_MS) && PLATE_CACHE_REFRESH_MS > 0
+    ? PLATE_CACHE_REFRESH_MS
+    : 24 * 60 * 60 * 1000;
+  setInterval(() => {
+    clearPlateCache();
+    approachPlateSyncState.lastResult = { cleared: true, reason: "auto" };
+    approachPlateSyncState.lastFinishedAt = new Date();
+  }, interval);
 }
 
 function extractTagValue(source: string, tag: string): string | null {
@@ -503,6 +522,7 @@ const isVerified = async (req: any, res: any, next: any) => {
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  startPlateCacheCron();
   // CORS: allow frontend origins and send credentials for session cookies
   const defaultOrigins = [
     "https://readysetfly.us",

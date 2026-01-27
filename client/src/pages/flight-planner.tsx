@@ -448,6 +448,29 @@ export default function FlightPlanner() {
     setWaypointsInput(editingPlan.route || "");
   }, [editingPlan]);
 
+  useEffect(() => {
+    if (selectedProfile) {
+      setCustomProfile((prev) => ({
+        ...prev,
+        name: selectedProfile.name || prev.name,
+        cruiseKtasOverride: selectedProfile.cruise_ktas_effective ? String(selectedProfile.cruise_ktas_effective) : prev.cruiseKtasOverride,
+        fuelBurnOverrideGph: selectedProfile.fuel_burn_gph_effective ? String(selectedProfile.fuel_burn_gph_effective) : prev.fuelBurnOverrideGph,
+        usableFuelOverrideGal: selectedProfile.usable_fuel_gal_effective ? String(selectedProfile.usable_fuel_gal_effective) : prev.usableFuelOverrideGal,
+        maxGrossWeightOverrideLb: selectedProfile.max_gross_weight_lb_effective ? String(selectedProfile.max_gross_weight_lb_effective) : prev.maxGrossWeightOverrideLb,
+      }));
+      return;
+    }
+    if (selectedTypeId === CUSTOM_TYPE_ID) return;
+    setCustomProfile((prev) => ({
+      ...prev,
+      name: `${selectedType.make} ${selectedType.model}`.trim(),
+      cruiseKtasOverride: selectedType.cruise_ktas_effective ? String(selectedType.cruise_ktas_effective) : prev.cruiseKtasOverride,
+      fuelBurnOverrideGph: selectedType.fuel_burn_gph_effective ? String(selectedType.fuel_burn_gph_effective) : prev.fuelBurnOverrideGph,
+      usableFuelOverrideGal: selectedType.usable_fuel_gal_effective ? String(selectedType.usable_fuel_gal_effective) : prev.usableFuelOverrideGal,
+      maxGrossWeightOverrideLb: selectedType.max_gross_weight_lb_effective ? String(selectedType.max_gross_weight_lb_effective) : prev.maxGrossWeightOverrideLb,
+    }));
+  }, [selectedProfile, selectedType, selectedTypeId]);
+
   return (
     <div className="container mx-auto py-10 px-4 max-w-6xl space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -662,6 +685,7 @@ export default function FlightPlanner() {
                 value={customProfile.name}
                 onChange={(e) => setCustomProfile({ ...customProfile, name: e.target.value })}
                 placeholder="My C172"
+                disabled={selectedTypeId !== CUSTOM_TYPE_ID && !selectedProfile}
               />
             </div>
             <div className="space-y-2">
@@ -671,6 +695,7 @@ export default function FlightPlanner() {
                 onChange={(e) => setCustomProfile({ ...customProfile, cruiseKtasOverride: e.target.value })}
                 placeholder="110"
                 type="number"
+                disabled={selectedTypeId !== CUSTOM_TYPE_ID && !selectedProfile}
               />
             </div>
             <div className="space-y-2">
@@ -680,6 +705,7 @@ export default function FlightPlanner() {
                 onChange={(e) => setCustomProfile({ ...customProfile, fuelBurnOverrideGph: e.target.value })}
                 placeholder="8.5"
                 type="number"
+                disabled={selectedTypeId !== CUSTOM_TYPE_ID && !selectedProfile}
               />
             </div>
           </div>
@@ -691,6 +717,7 @@ export default function FlightPlanner() {
                 onChange={(e) => setCustomProfile({ ...customProfile, usableFuelOverrideGal: e.target.value })}
                 placeholder="40"
                 type="number"
+                disabled={selectedTypeId !== CUSTOM_TYPE_ID && !selectedProfile}
               />
             </div>
             <div className="space-y-2">
@@ -700,6 +727,7 @@ export default function FlightPlanner() {
                 onChange={(e) => setCustomProfile({ ...customProfile, maxGrossWeightOverrideLb: e.target.value })}
                 placeholder="2400"
                 type="number"
+                disabled={selectedTypeId !== CUSTOM_TYPE_ID && !selectedProfile}
               />
             </div>
           </div>

@@ -33,6 +33,8 @@ export default function Marketplace() {
   const [dismissedBanners, setDismissedBanners] = useState<string[]>([]);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [previousCategory, setPreviousCategory] = useState("aircraft-sale");
+  const [showSchoolEmptyModal, setShowSchoolEmptyModal] = useState(false);
+  const [hasShownSchoolEmptyModal, setHasShownSchoolEmptyModal] = useState(false);
   
   // Generic filter states
   const [cityFilter, setCityFilter] = useState("");
@@ -45,7 +47,31 @@ export default function Marketplace() {
   const [radiusFilter, setRadiusFilter] = useState("100"); // Jobs - default 100 miles
   const [cfiRatingFilter, setCfiRatingFilter] = useState("all"); // CFI ratings
   
+  const [appliedQueryParams, setAppliedQueryParams] = useState(false);
   const [, navigate] = useLocation();
+
+  // Apply query params from Student Pilot CTAs
+  useEffect(() => {
+    if (appliedQueryParams) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const type = params.get("type");
+    const locationParam = params.get("location");
+    const radiusParam = params.get("radius");
+    const tagsParam = params.get("tags");
+
+    if (type && categories.some((c) => c.id === type)) {
+      setSelectedCategory(type);
+    }
+    if (locationParam) setCityFilter(locationParam);
+    if (radiusParam) setRadiusFilter(radiusParam);
+    if (tagsParam) setKeywordFilter(tagsParam);
+
+    if (type || locationParam || radiusParam || tagsParam) {
+      setShowFilters(true);
+    }
+    setAppliedQueryParams(true);
+  }, [appliedQueryParams]);
 
   // Build query params for backend filtering
   const buildQueryParams = () => {
@@ -113,6 +139,16 @@ export default function Marketplace() {
     alert => alert.showOnCategoryPages && 
     (!alert.targetCategories || alert.targetCategories.length === 0 || alert.targetCategories.includes(selectedCategory))
   );
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (hasShownSchoolEmptyModal) return;
+    if (selectedCategory !== "flight-school") return;
+    if (categoryListings.length > 0) return;
+    if (!appliedQueryParams && !cityFilter && !keywordFilter) return;
+    setShowSchoolEmptyModal(true);
+    setHasShownSchoolEmptyModal(true);
+  }, [selectedCategory, isLoading, categoryListings.length, appliedQueryParams, cityFilter, keywordFilter, hasShownSchoolEmptyModal]);
 
   return (
     <div className="min-h-screen">
@@ -542,6 +578,33 @@ export default function Marketplace() {
           </DialogContent>
         </Dialog>
       )}
+
+      <Dialog open={showSchoolEmptyModal} onOpenChange={setShowSchoolEmptyModal}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-flight-school-empty">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Flight schools are coming soon</DialogTitle>
+            <DialogDescription className="text-base">
+              We are actively onboarding flight schools in your area. Check back soon as new listings go live.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <Button
+              variant="default"
+              onClick={() => setSelectedCategory("cfi")}
+              data-testid="button-flight-school-to-cfi"
+            >
+              Explore CFIs
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowSchoolEmptyModal(false)}
+              data-testid="button-flight-school-close"
+            >
+              Got it
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

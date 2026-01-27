@@ -14,7 +14,7 @@ import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
 import { storage } from "./storage";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
 import { sendContactFormEmail } from "./email-templates";
@@ -177,9 +177,43 @@ type PlateMeta = {
   url: string;
 };
 
+type AirportMeta = {
+  icao: string;
+  name: string | null;
+  lat: number;
+  lon: number;
+  elevationFt?: number | null;
+};
+
+function toNumber(value: any): number | null {
+  if (value === null || value === undefined) return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function buildEffectiveValues(profile: any | null, baseType: any | null) {
+  const baseCruise = toNumber(baseType?.cruiseKtas);
+  const baseBurn = toNumber(baseType?.fuelBurnGph);
+  const baseFuel = toNumber(baseType?.usableFuelGal);
+  const baseWeight = toNumber(baseType?.maxGrossWeightLb);
+  const overrideCruise = toNumber(profile?.cruiseKtasOverride);
+  const overrideBurn = toNumber(profile?.fuelBurnOverrideGph);
+  const overrideFuel = toNumber(profile?.usableFuelOverrideGal);
+  const overrideWeight = toNumber(profile?.maxGrossWeightOverrideLb);
+
+  return {
+    cruise_ktas_effective: overrideCruise ?? baseCruise,
+    fuel_burn_gph_effective: overrideBurn ?? baseBurn,
+    usable_fuel_gal_effective: overrideFuel ?? baseFuel,
+    max_gross_weight_lb_effective: overrideWeight ?? baseWeight,
+  };
+}
+
 const PLATE_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const PLATE_CACHE_MAX = 500;
 const plateMetaCache = new Map<string, { data: PlateMeta[]; expiresAt: number; createdAt: number }>();
+const AIRPORT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const airportMetaCache = new Map<string, { data: AirportMeta; expiresAt: number }>();
 
 function normalizeIcao(value: string) {
   return value.trim().toUpperCase();
@@ -252,6 +286,25 @@ function setCachedPlates(icao: string, data: PlateMeta[]) {
     }
     if (oldestKey) plateMetaCache.delete(oldestKey);
   }
+}
+
+function getCachedAirport(icao: string) {
+  const key = normalizeIcao(icao);
+  const cached = airportMetaCache.get(key);
+  if (!cached) return null;
+  if (Date.now() > cached.expiresAt) {
+    airportMetaCache.delete(key);
+    return null;
+  }
+  return cached.data;
+}
+
+function setCachedAirport(icao: string, data: AirportMeta) {
+  const key = normalizeIcao(icao);
+  airportMetaCache.set(key, {
+    data,
+    expiresAt: Date.now() + AIRPORT_CACHE_TTL_MS,
+  });
 }
 
 function clearPlateCache() {
@@ -491,6 +544,27 @@ const contactFormRateLimiter = createIpRateLimiter({
   max: 5,
   dailyMax: 20,
   message: "Too many contact form submissions. Please try again later."
+});
+
+const airportLookupRateLimiter = createIpRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  dailyMax: 1000,
+  message: "Too many airport lookups. Please try again shortly.",
+});
+
+const aircraftProfileRateLimiter = createIpRateLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  dailyMax: 500,
+  message: "Too many requests. Please slow down.",
+});
+
+const aircraftTypeRateLimiter = createIpRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  dailyMax: 1000,
+  message: "Too many requests. Please slow down.",
 });
 
 // Verification middleware - checks if user is verified
@@ -5705,6 +5779,48 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  // Student Pilot profile (tools-first experience)
+  const studentProfileLimiter = createIpRateLimiter({
+    windowMs: 60 * 1000,
+    max: 60,
+    message: "Too many student profile requests, please try again later",
+  });
+
+  app.get("/api/student/profile", isAuthenticated, studentProfileLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getStudentProfile(String(userId));
+      res.json(profile || { userId, wizardJson: null, roadmapJson: null, progressJson: null });
+    } catch (error) {
+      console.error("Failed to fetch student profile:", error);
+      res.status(500).json({ error: "Failed to fetch student profile" });
+    }
+  });
+
+  app.put("/api/student/profile", isAuthenticated, studentProfileLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const payloadSize = JSON.stringify(req.body || {}).length;
+      if (payloadSize > 20000) {
+        return res.status(413).json({ error: "Payload too large" });
+      }
+
+      const updates = {
+        wizardJson: req.body?.wizardJson ?? null,
+        roadmapJson: req.body?.roadmapJson ?? null,
+        progressJson: req.body?.progressJson ?? null,
+      };
+      const profile = await storage.upsertStudentProfile(String(userId), updates);
+      res.json(profile);
+    } catch (error) {
+      console.error("Failed to update student profile:", error);
+      res.status(500).json({ error: "Failed to update student profile" });
+    }
+  });
+
   // Users/Profile
   app.get("/api/users/:id", async (req, res) => {
     try {
@@ -5733,6 +5849,59 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   // Aviation Weather API (public access with caching)
   const weatherCache = new Map<string, { data: any; timestamp: number }>();
   const WEATHER_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
+
+  app.get("/api/airports/:icao", airportLookupRateLimiter, async (req, res) => {
+    try {
+      const icao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(icao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const cached = getCachedAirport(icao);
+      if (cached) {
+        return res.json({ ...cached, cached: true });
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const response = await fetch(`https://aviationweather.gov/api/data/stations?ids=${icao}&format=json`, {
+        signal: controller.signal,
+        headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        return res.status(502).json({ error: "Failed to fetch airport data", details: body });
+      }
+
+      const stations = await response.json();
+      const station = Array.isArray(stations) ? stations[0] : null;
+      if (!station) {
+        return res.status(404).json({ error: "Airport not found" });
+      }
+
+      const lat = Number(station.latitude ?? station.lat);
+      const lon = Number(station.longitude ?? station.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        return res.status(404).json({ error: "Airport coordinates unavailable" });
+      }
+
+      const payload: AirportMeta = {
+        icao,
+        name: station.site ?? station.name ?? station.stationName ?? null,
+        lat,
+        lon,
+        elevationFt: station.elevation ? Number(station.elevation) : null,
+      };
+
+      setCachedAirport(icao, payload);
+      res.json({ ...payload, cached: false });
+    } catch (error) {
+      console.error("Airport lookup failed:", error);
+      res.status(500).json({ error: "Failed to fetch airport data" });
+    }
+  });
 
   app.get("/api/aviation-weather/:icao", async (req, res) => {
     try {
@@ -6265,6 +6434,162 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to fetch logbook pro summary:", error);
       res.status(500).json({ error: "Failed to fetch logbook pro summary" });
+    }
+  });
+
+  // Aircraft Types (RSF Library)
+  app.get("/api/aircraft/types", aircraftTypeRateLimiter, async (req, res) => {
+    try {
+      const { q, category, engine_type: engineType, limit, offset } = req.query as any;
+      const types = await storage.getAircraftTypes({
+        q: typeof q === "string" ? q : undefined,
+        category: typeof category === "string" ? category : undefined,
+        engineType: typeof engineType === "string" ? engineType : undefined,
+        limit: limit ? Number(limit) : undefined,
+        offset: offset ? Number(offset) : undefined,
+      });
+      const response = types.map((type) => ({
+        ...type,
+        ...buildEffectiveValues(null, type),
+      }));
+      res.json(response);
+    } catch (error) {
+      console.error("Failed to fetch aircraft types:", error);
+      res.status(500).json({ error: "Failed to fetch aircraft types" });
+    }
+  });
+
+  app.get("/api/aircraft/types/:id", aircraftTypeRateLimiter, async (req, res) => {
+    try {
+      const type = await storage.getAircraftTypeById(req.params.id);
+      if (!type) {
+        return res.status(404).json({ error: "Aircraft type not found" });
+      }
+      res.json({ ...type, ...buildEffectiveValues(null, type) });
+    } catch (error) {
+      console.error("Failed to fetch aircraft type:", error);
+      res.status(500).json({ error: "Failed to fetch aircraft type" });
+    }
+  });
+
+  app.post("/api/aircraft/types", isAdmin, aircraftTypeRateLimiter, async (req, res) => {
+    try {
+      const result = insertAircraftTypeSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const created = await storage.createAircraftType(result.data as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create aircraft type:", error);
+      res.status(500).json({ error: "Failed to create aircraft type" });
+    }
+  });
+
+  app.put("/api/aircraft/types/:id", isAdmin, aircraftTypeRateLimiter, async (req, res) => {
+    try {
+      const result = insertAircraftTypeSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updated = await storage.updateAircraftType(req.params.id, result.data as any);
+      if (!updated) {
+        return res.status(404).json({ error: "Aircraft type not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update aircraft type:", error);
+      res.status(500).json({ error: "Failed to update aircraft type" });
+    }
+  });
+
+  app.delete("/api/aircraft/types/:id", isAdmin, aircraftTypeRateLimiter, async (req, res) => {
+    try {
+      const success = await storage.deleteAircraftType(req.params.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete aircraft type:", error);
+      res.status(500).json({ error: "Failed to delete aircraft type" });
+    }
+  });
+
+  // Aircraft Profiles (User-specific)
+  app.get("/api/aircraft/profiles", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const profiles = await storage.getAircraftProfilesByUser(userId);
+      const typeIds = profiles.map((profile) => profile.typeId).filter(Boolean) as string[];
+      const types = await storage.getAircraftTypesByIds(typeIds);
+      const typeMap = new Map(types.map((type) => [type.id, type]));
+      const response = profiles.map((profile) => ({
+        ...profile,
+        type: profile.typeId ? typeMap.get(profile.typeId) || null : null,
+        ...buildEffectiveValues(profile, profile.typeId ? typeMap.get(profile.typeId) : null),
+      }));
+      res.json(response);
+    } catch (error) {
+      console.error("Failed to fetch aircraft profiles:", error);
+      res.status(500).json({ error: "Failed to fetch aircraft profiles" });
+    }
+  });
+
+  app.post("/api/aircraft/profiles", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = insertAircraftProfileSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const created = await storage.createAircraftProfile({ ...result.data, userId } as any);
+      const baseType = created.typeId ? await storage.getAircraftTypeById(created.typeId) : null;
+      res.status(201).json({ ...created, type: baseType, ...buildEffectiveValues(created, baseType) });
+    } catch (error) {
+      console.error("Failed to create aircraft profile:", error);
+      res.status(500).json({ error: "Failed to create aircraft profile" });
+    }
+  });
+
+  app.put("/api/aircraft/profiles/:id", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const existing = await storage.getAircraftProfileById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Aircraft profile not found" });
+      }
+      if (existing.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const result = insertAircraftProfileSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updated = await storage.updateAircraftProfile(req.params.id, result.data as any);
+      if (!updated) {
+        return res.status(404).json({ error: "Aircraft profile not found" });
+      }
+      const baseType = updated.typeId ? await storage.getAircraftTypeById(updated.typeId) : null;
+      res.json({ ...updated, type: baseType, ...buildEffectiveValues(updated, baseType) });
+    } catch (error) {
+      console.error("Failed to update aircraft profile:", error);
+      res.status(500).json({ error: "Failed to update aircraft profile" });
+    }
+  });
+
+  app.delete("/api/aircraft/profiles/:id", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const existing = await storage.getAircraftProfileById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Aircraft profile not found" });
+      }
+      if (existing.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const success = await storage.deleteAircraftProfile(req.params.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete aircraft profile:", error);
+      res.status(500).json({ error: "Failed to delete aircraft profile" });
     }
   });
 

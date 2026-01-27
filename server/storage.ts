@@ -53,8 +53,14 @@ import {
   type InsertLogbookEntry,
   type LogbookProSettings,
   type InsertLogbookProSettings,
+  type StudentProfile,
+  type InsertStudentProfile,
   type FlightPlan,
   type InsertFlightPlan,
+  type AircraftType,
+  type InsertAircraftType,
+  type AircraftProfile,
+  type InsertAircraftProfile,
   type ApproachPlate,
   type InsertApproachPlate,
   users,
@@ -85,7 +91,10 @@ import {
   contactSubmissions,
   logbookEntries,
   logbookProSettings,
+  studentProfiles,
   flightPlans,
+  aircraftTypes,
+  aircraftProfiles,
   approachPlates,
 } from "@shared/schema";
 import { db } from "./db";
@@ -358,12 +367,37 @@ export interface IStorage {
   getLogbookProSettings(userId: string): Promise<LogbookProSettings | undefined>;
   upsertLogbookProSettings(userId: string, updates: InsertLogbookProSettings): Promise<LogbookProSettings>;
 
+  // Student Profiles
+  getStudentProfile(userId: string): Promise<StudentProfile | undefined>;
+  upsertStudentProfile(userId: string, updates: InsertStudentProfile): Promise<StudentProfile>;
+
   // Flight Planner
   getFlightPlansByUser(userId: string): Promise<FlightPlan[]>;
   getFlightPlanById(id: string): Promise<FlightPlan | undefined>;
   createFlightPlan(plan: InsertFlightPlan & { userId: string }): Promise<FlightPlan>;
   updateFlightPlan(id: string, updates: Partial<FlightPlan>): Promise<FlightPlan | undefined>;
   deleteFlightPlan(id: string): Promise<boolean>;
+
+  // Aircraft Library (RSF)
+  getAircraftTypes(filters?: {
+    q?: string;
+    category?: string;
+    engineType?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AircraftType[]>;
+  getAircraftTypeById(id: string): Promise<AircraftType | undefined>;
+  getAircraftTypesByIds(ids: string[]): Promise<AircraftType[]>;
+  createAircraftType(type: InsertAircraftType): Promise<AircraftType>;
+  updateAircraftType(id: string, updates: Partial<AircraftType>): Promise<AircraftType | undefined>;
+  deleteAircraftType(id: string): Promise<boolean>;
+
+  // Aircraft Profiles (Flight Planner)
+  getAircraftProfilesByUser(userId: string): Promise<AircraftProfile[]>;
+  getAircraftProfileById(id: string): Promise<AircraftProfile | undefined>;
+  createAircraftProfile(profile: InsertAircraftProfile & { userId: string }): Promise<AircraftProfile>;
+  updateAircraftProfile(id: string, updates: Partial<AircraftProfile>): Promise<AircraftProfile | undefined>;
+  deleteAircraftProfile(id: string): Promise<boolean>;
 
   // Approach Plates
   searchApproachPlates(query: string, limit?: number, cycle?: string): Promise<ApproachPlate[]>;
@@ -2404,6 +2438,29 @@ export class DatabaseStorage implements IStorage {
     return settings;
   }
 
+  // Student Profiles
+  async getStudentProfile(userId: string): Promise<StudentProfile | undefined> {
+    const [profile] = await db
+      .select()
+      .from(studentProfiles)
+      .where(eq(studentProfiles.userId, userId));
+    return profile;
+  }
+
+  async upsertStudentProfile(userId: string, updates: InsertStudentProfile): Promise<StudentProfile> {
+    const existing = await this.getStudentProfile(userId);
+    if (existing) {
+      const [profile] = await db
+        .update(studentProfiles)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(studentProfiles.userId, userId))
+        .returning();
+      return profile;
+    }
+    const [profile] = await db.insert(studentProfiles).values({ ...updates, userId }).returning();
+    return profile;
+  }
+
   // Flight Planner
   async getFlightPlansByUser(userId: string): Promise<FlightPlan[]> {
     return await db
@@ -2434,6 +2491,101 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFlightPlan(id: string): Promise<boolean> {
     const result = await db.delete(flightPlans).where(eq(flightPlans.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Aircraft Library (RSF)
+  async getAircraftTypes(filters?: {
+    q?: string;
+    category?: string;
+    engineType?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AircraftType[]> {
+    const limit = filters?.limit ? Math.min(filters.limit, 100) : 50;
+    const offset = filters?.offset ?? 0;
+    const conditions: any[] = [];
+
+    if (filters?.q) {
+      const like = `%${filters.q}%`;
+      conditions.push(or(ilike(aircraftTypes.make, like), ilike(aircraftTypes.model, like), ilike(aircraftTypes.icaoType, like)));
+    }
+    if (filters?.category) {
+      conditions.push(eq(aircraftTypes.category, filters.category));
+    }
+    if (filters?.engineType) {
+      conditions.push(eq(aircraftTypes.engineType, filters.engineType));
+    }
+
+    const whereClause = conditions.length ? and(...conditions) : undefined;
+    return await db
+      .select()
+      .from(aircraftTypes)
+      .where(whereClause)
+      .orderBy(asc(aircraftTypes.make), asc(aircraftTypes.model))
+      .limit(limit)
+      .offset(offset);
+  }
+
+  async getAircraftTypeById(id: string): Promise<AircraftType | undefined> {
+    const [type] = await db.select().from(aircraftTypes).where(eq(aircraftTypes.id, id));
+    return type;
+  }
+
+  async getAircraftTypesByIds(ids: string[]): Promise<AircraftType[]> {
+    if (!ids.length) return [];
+    return await db.select().from(aircraftTypes).where(inArray(aircraftTypes.id, ids));
+  }
+
+  async createAircraftType(type: InsertAircraftType): Promise<AircraftType> {
+    const [created] = await db.insert(aircraftTypes).values(type).returning();
+    return created;
+  }
+
+  async updateAircraftType(id: string, updates: Partial<AircraftType>): Promise<AircraftType | undefined> {
+    const [updated] = await db
+      .update(aircraftTypes)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(aircraftTypes.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAircraftType(id: string): Promise<boolean> {
+    const result = await db.delete(aircraftTypes).where(eq(aircraftTypes.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Aircraft Profiles (Flight Planner)
+  async getAircraftProfilesByUser(userId: string): Promise<AircraftProfile[]> {
+    return await db
+      .select()
+      .from(aircraftProfiles)
+      .where(eq(aircraftProfiles.userId, userId))
+      .orderBy(desc(aircraftProfiles.createdAt));
+  }
+
+  async getAircraftProfileById(id: string): Promise<AircraftProfile | undefined> {
+    const [profile] = await db.select().from(aircraftProfiles).where(eq(aircraftProfiles.id, id));
+    return profile;
+  }
+
+  async createAircraftProfile(profile: InsertAircraftProfile & { userId: string }): Promise<AircraftProfile> {
+    const [created] = await db.insert(aircraftProfiles).values(profile).returning();
+    return created;
+  }
+
+  async updateAircraftProfile(id: string, updates: Partial<AircraftProfile>): Promise<AircraftProfile | undefined> {
+    const [updated] = await db
+      .update(aircraftProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(aircraftProfiles.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAircraftProfile(id: string): Promise<boolean> {
+    const result = await db.delete(aircraftProfiles).where(eq(aircraftProfiles.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
   }
 

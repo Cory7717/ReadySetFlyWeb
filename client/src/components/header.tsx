@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+﻿import { Link, useLocation } from "wouter";
 import { User, Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,7 @@ export function Header() {
   const isRentals = location === "/rentals" || location.startsWith("/aircraft");
   const isMarketplace = location.startsWith("/marketplace");
   const isFaq = location === "/faq";
+  const isStudent = location.startsWith("/student") || location.startsWith("/start-flying");
   
   const displayName = user?.firstName && user?.lastName 
     ? `${user.firstName} ${user.lastName}`
@@ -60,6 +61,15 @@ export function Header() {
                 className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isMarketplace ? "bg-background shadow-sm" : ""}`}
               >
                 Marketplace
+              </Button>
+            </Link>
+            <Link href="/student" data-testid="link-student">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isStudent ? "bg-background shadow-sm" : ""}`}
+              >
+                Student Pilots
               </Button>
             </Link>
             <Link href="/faq" data-testid="link-faq">
@@ -153,6 +163,9 @@ export function Header() {
                       <Link href="/logbook" data-testid="link-logbook">Pilot Logbook</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
+                      <Link href="/my-aircraft" data-testid="link-my-aircraft">My Aircraft</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
                       <Link href="/pilot-tools" data-testid="link-pilot-tools">Pilot Tools</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -163,7 +176,12 @@ export function Header() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem asChild>
                           <Link href="/admin" data-testid="link-admin" className="text-primary font-medium">
-                            🛡️ Admin Dashboard
+                            Admin Dashboard
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/aircraft-library" data-testid="link-admin-aircraft-library" className="text-primary font-medium">
+                            Aircraft Library
                           </Link>
                         </DropdownMenuItem>
                       </>
@@ -188,3 +206,4 @@ export function Header() {
     </header>
   );
 }
+

@@ -1024,6 +1024,16 @@ export const logbookProSettings = pgTable("logbook_pro_settings", {
   index("idx_logbook_pro_settings_user").on(table.userId),
 ]);
 
+export const studentProfiles = pgTable("student_profiles", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  wizardJson: jsonb("wizard_json"),
+  roadmapJson: jsonb("roadmap_json"),
+  progressJson: jsonb("progress_json"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_student_profiles_user").on(table.userId),
+]);
+
 export const approachPlates = pgTable("approach_plates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   icao: text("icao"),
@@ -1061,6 +1071,43 @@ export const flightPlans = pgTable("flight_plans", {
 }, (table) => [
   index("idx_flight_plans_user").on(table.userId),
   index("idx_flight_plans_departure").on(table.plannedDepartureAt),
+]);
+
+export const aircraftTypes = pgTable("aircraft_types", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  make: text("make").notNull(),
+  model: text("model").notNull(),
+  icaoType: text("icao_type"),
+  category: text("category").notNull(),
+  engineType: text("engine_type").notNull(),
+  cruiseKtas: decimal("cruise_ktas", { precision: 6, scale: 2 }).notNull(),
+  fuelBurnGph: decimal("fuel_burn_gph", { precision: 6, scale: 2 }).notNull(),
+  usableFuelGal: decimal("usable_fuel_gal", { precision: 8, scale: 2 }).notNull(),
+  maxGrossWeightLb: decimal("max_gross_weight_lb", { precision: 10, scale: 2 }).notNull(),
+  defaultAltitudeFt: integer("default_altitude_ft"),
+  isVerified: boolean("is_verified").default(false),
+  sourceNote: text("source_note"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_aircraft_types_make_model").on(table.make, table.model),
+  index("idx_aircraft_types_icao").on(table.icaoType),
+]);
+
+export const aircraftProfiles = pgTable("aircraft_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  tailNumber: text("tail_number"),
+  typeId: varchar("type_id").references(() => aircraftTypes.id, { onDelete: "set null" }),
+  cruiseKtasOverride: decimal("cruise_ktas_override", { precision: 6, scale: 2 }),
+  fuelBurnOverrideGph: decimal("fuel_burn_override_gph", { precision: 6, scale: 2 }),
+  usableFuelOverrideGal: decimal("usable_fuel_override_gal", { precision: 8, scale: 2 }),
+  maxGrossWeightOverrideLb: decimal("max_gross_weight_override_lb", { precision: 10, scale: 2 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_aircraft_profiles_user").on(table.userId),
 ]);
 
 export const insertLogbookEntrySchema = createInsertSchema(logbookEntries).omit({
@@ -1105,6 +1152,10 @@ export const insertLogbookProSettingsSchema = createInsertSchema(logbookProSetti
   ipcDate: z.string().optional().nullable(),
 });
 
+export const insertStudentProfileSchema = createInsertSchema(studentProfiles).omit({
+  updatedAt: true,
+});
+
 export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   id: true,
   userId: true,
@@ -1115,6 +1166,31 @@ export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   plannedArrivalAt: z.coerce.date().optional().nullable(),
   fuelOnBoard: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   fuelRequired: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+});
+
+export const insertAircraftTypeSchema = createInsertSchema(aircraftTypes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  cruiseKtas: z.coerce.number().min(60).max(450),
+  fuelBurnGph: z.coerce.number().min(1).max(100),
+  usableFuelGal: z.coerce.number().min(5).max(4000),
+  maxGrossWeightLb: z.coerce.number().min(500).max(2000000),
+  defaultAltitudeFt: z.coerce.number().min(1000).max(45000).optional().nullable(),
+});
+
+export const insertAircraftProfileSchema = createInsertSchema(aircraftProfiles).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  typeId: z.string().uuid().optional().nullable(),
+  cruiseKtasOverride: z.coerce.number().min(60).max(450).optional().nullable(),
+  fuelBurnOverrideGph: z.coerce.number().min(1).max(100).optional().nullable(),
+  usableFuelOverrideGal: z.coerce.number().min(5).max(4000).optional().nullable(),
+  maxGrossWeightOverrideLb: z.coerce.number().min(500).max(2000000).optional().nullable(),
 });
 
 export const insertApproachPlateSchema = createInsertSchema(approachPlates).omit({
@@ -1401,8 +1477,14 @@ export type LogbookEntry = typeof logbookEntries.$inferSelect;
 export type InsertLogbookEntry = z.infer<typeof insertLogbookEntrySchema>;
 export type LogbookProSettings = typeof logbookProSettings.$inferSelect;
 export type InsertLogbookProSettings = z.infer<typeof insertLogbookProSettingsSchema>;
+export type StudentProfile = typeof studentProfiles.$inferSelect;
+export type InsertStudentProfile = z.infer<typeof insertStudentProfileSchema>;
 export type FlightPlan = typeof flightPlans.$inferSelect;
 export type InsertFlightPlan = z.infer<typeof insertFlightPlanSchema>;
+export type AircraftType = typeof aircraftTypes.$inferSelect;
+export type InsertAircraftType = z.infer<typeof insertAircraftTypeSchema>;
+export type AircraftProfile = typeof aircraftProfiles.$inferSelect;
+export type InsertAircraftProfile = z.infer<typeof insertAircraftProfileSchema>;
 export type ApproachPlate = typeof approachPlates.$inferSelect;
 export type InsertApproachPlate = z.infer<typeof insertApproachPlateSchema>;
 

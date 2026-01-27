@@ -9,6 +9,8 @@
     "build:pages": "cross-env GITHUB_PAGES=true vite build",
     "start": "NODE_ENV=production node run-migration.js && node dist/index.js",
     "check": "tsc",
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "seed:aircraft-types": "tsx seed_aircraft_types.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
@@ -79,6 +81,7 @@
     "input-otp": "^1.4.2",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.453.0",
+    "leaflet": "^1.9.4",
     "memoizee": "^0.4.17",
     "memorystore": "^1.6.7",
     "multer": "^2.0.2",
@@ -93,6 +96,7 @@
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.55.0",
     "react-icons": "^5.4.0",
+    "react-leaflet": "^4.2.1",
     "react-resizable-panels": "^2.1.7",
     "recharts": "^2.15.2",
     "resend": "^6.2.2",

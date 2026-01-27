@@ -1,4 +1,5 @@
 import { Switch, Route, useLocation } from "wouter";
+import { lazy, Suspense, type ComponentType } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -42,6 +43,25 @@ import LogbookProCancel from "@/pages/logbook-pro-cancel";
 import FlightPlanner from "@/pages/flight-planner";
 import ApproachPlates from "@/pages/approach-plates";
 import FaqPage from "@/pages/faq";
+import MyAircraft from "@/pages/my-aircraft";
+import AdminAircraftLibrary from "@/pages/admin-aircraft-library";
+
+const StudentHub = lazy(() => import("@/pages/student/hub"));
+const StudentWizard = lazy(() => import("@/pages/student/wizard"));
+const StudentRoadmap = lazy(() => import("@/pages/student/roadmap"));
+const StudentCost = lazy(() => import("@/pages/student/cost"));
+const StudentProgress = lazy(() => import("@/pages/student/progress"));
+const StudentWritten = lazy(() => import("@/pages/student/written"));
+const StudentChecklists = lazy(() => import("@/pages/student/checklists"));
+const StudentWeather = lazy(() => import("@/pages/student/weather"));
+
+function StudentPageLoader({ component: Component }: { component: ComponentType }) {
+  return (
+    <Suspense fallback={<div className="container mx-auto px-4 py-10 text-sm text-muted-foreground">Loading...</div>}>
+      <Component />
+    </Suspense>
+  );
+}
 
 function AnalyticsTracker() {
   const [path] = useLocation();
@@ -75,6 +95,15 @@ function Router() {
       <Route path="/pilot-tools" component={PilotTools} />
       <Route path="/approach-plates" component={ApproachPlates} />
       <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
+      <Route path="/student" component={() => <StudentPageLoader component={StudentHub} />} />
+      <Route path="/start-flying" component={() => <StudentPageLoader component={StudentHub} />} />
+      <Route path="/student/wizard" component={() => <StudentPageLoader component={StudentWizard} />} />
+      <Route path="/student/roadmap" component={() => <StudentPageLoader component={StudentRoadmap} />} />
+      <Route path="/student/cost" component={() => <StudentPageLoader component={StudentCost} />} />
+      <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
+      <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
+      <Route path="/student/checklists" component={() => <StudentPageLoader component={StudentChecklists} />} />
+      <Route path="/student/weather" component={() => <StudentPageLoader component={StudentWeather} />} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
       <Route path="/delete-account" component={DeleteAccount} />
@@ -104,6 +133,8 @@ function Router() {
           <Route path="/logbook/pro/success" component={LogbookProSuccess} />
           <Route path="/logbook/pro/cancel" component={LogbookProCancel} />
           <Route path="/flight-planner" component={FlightPlanner} />
+          <Route path="/my-aircraft" component={MyAircraft} />
+          <Route path="/admin/aircraft-library" component={AdminAircraftLibrary} />
         </>
       ) : (
         <>
@@ -129,6 +160,8 @@ function Router() {
           <Route path="/logbook/pro/success" component={RequireAuth} />
           <Route path="/logbook/pro/cancel" component={RequireAuth} />
           <Route path="/flight-planner" component={RequireAuth} />
+          <Route path="/my-aircraft" component={RequireAuth} />
+          <Route path="/admin/aircraft-library" component={RequireAuth} />
         </>
       )}
       

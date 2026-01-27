@@ -84,9 +84,15 @@ export default function LogbookProPage() {
       <Card>
         <CardHeader>
           <CardTitle>Logbook Pro</CardTitle>
-          <CardDescription>Upgrade for advanced analytics and automation.</CardDescription>
+          <CardDescription>
+            Upgrade for advanced analytics, automation, and flight planning tools.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid gap-2 text-sm text-muted-foreground">
+            <div>• Advanced flight planning: aircraft performance profiles, wind-adjusted ETE, fuel planning, route risk flags, alternates, and plan-to-logbook.</div>
+            <div>• Pro currency tools, report exports, and priority support.</div>
+          </div>
           <div className="flex items-center gap-2">
             <Badge variant={isActive ? "default" : "outline"}>
               Status: {proStatus}

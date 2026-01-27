@@ -3,7 +3,6 @@ import express from "express";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import readline from "readline";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import cors from "cors";
@@ -253,6 +252,56 @@ function clearPlateCache() {
   plateMetaCache.clear();
 }
 
+function extractTagValue(source: string, tag: string): string | null {
+  const match = source.match(new RegExp(`<${tag}>(.*?)</${tag}>`, "i"));
+  return match ? match[1].trim() : null;
+}
+
+async function extractAirportXmlForIcao(response: Response, icao: string): Promise<string | null> {
+  if (!response.body) return null;
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const target = `icao_ident="${icao}"`;
+  const endTag = "</airport_name>";
+
+  let buffer = "";
+  let foundStart = false;
+  let startIdx = -1;
+  const maxBuffer = 600000;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    if (!foundStart) {
+      const targetIdx = buffer.indexOf(target);
+      if (targetIdx !== -1) {
+        startIdx = buffer.lastIndexOf("<airport_name", targetIdx);
+        if (startIdx !== -1) {
+          foundStart = true;
+        }
+      }
+    }
+
+    if (foundStart) {
+      const endIdx = buffer.indexOf(endTag, startIdx);
+      if (endIdx !== -1) {
+        return buffer.slice(startIdx, endIdx + endTag.length);
+      }
+      if (buffer.length > maxBuffer) {
+        buffer = buffer.slice(startIdx);
+      }
+    } else if (buffer.length > maxBuffer) {
+      buffer = buffer.slice(-maxBuffer);
+    }
+  }
+
+  return null;
+}
+
 async function fetchPlateMetadataForIcao(icao: string): Promise<PlateMeta[]> {
   const cached = getCachedPlates(icao);
   if (cached) return cached;
@@ -277,44 +326,27 @@ async function fetchPlateMetadataForIcao(icao: string): Promise<PlateMeta[]> {
     throw new Error(`Failed to fetch metadata: ${response.status} ${body}`);
   }
 
-  const stream = Readable.fromWeb(response.body as any);
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  const airportXml = await extractAirportXmlForIcao(response, normalizedIcao);
+  if (!airportXml) {
+    setCachedPlates(icao, []);
+    return [];
+  }
 
+  const recordMatches = airportXml.match(/<record>[\s\S]*?<\/record>/gi) || [];
   const plates: PlateMeta[] = [];
-  let current: { icao?: string; name?: string; type?: string; pdfName?: string; effectiveDate?: string } = {};
 
-  for await (const line of rl) {
-    if (line.includes("<record")) {
-      current = {};
-      continue;
-    }
-    if (line.includes("</record>")) {
-      if (current.icao === normalizedIcao && current.pdfName) {
-        const name = current.name || current.pdfName;
-        const type = current.type || inferPlateType(name);
-        plates.push({
-          name,
-          type,
-          effectiveDate: current.effectiveDate || null,
-          url: `${pdfBase}/${current.pdfName}`,
-        });
-      }
-      current = {};
-      continue;
-    }
-
-    const match = line.match(/<([A-Za-z0-9_:-]+)>([^<]*)<\/\1>/);
-    if (!match) continue;
-
-    const tag = match[1].toLowerCase();
-    const value = match[2].trim();
-    if (!value) continue;
-
-    if (tag.includes("icao")) current.icao = value.toUpperCase();
-    if (tag.includes("pdf_name") || tag.includes("pdfname")) current.pdfName = value;
-    if (tag.includes("chart_name") || tag.includes("procedure_name") || tag.includes("proc_name")) current.name = value;
-    if (tag.includes("chart_type") || tag.includes("proc_type")) current.type = value;
-    if (tag.includes("effective")) current.effectiveDate = value;
+  for (const record of recordMatches) {
+    const pdfName = extractTagValue(record, "pdf_name");
+    if (!pdfName) continue;
+    const name = extractTagValue(record, "chart_name") || pdfName;
+    const type = extractTagValue(record, "chart_code") || inferPlateType(name);
+    const effectiveDate = extractTagValue(record, "amdtdate");
+    plates.push({
+      name,
+      type,
+      effectiveDate,
+      url: `${pdfBase}/${pdfName}`,
+    });
   }
 
   setCachedPlates(icao, plates);

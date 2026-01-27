@@ -262,37 +262,38 @@ async function extractAirportXmlForIcao(response: Response, icao: string): Promi
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  const target = `icao_ident="${icao}"`;
+  const target = `ICAO_IDENT="${icao}"`;
   const endTag = "</airport_name>";
 
   let buffer = "";
   let foundStart = false;
   let startIdx = -1;
-  const maxBuffer = 600000;
+  const maxBuffer = 1200000;
 
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
+    const upperBuffer = buffer.toUpperCase();
 
     if (!foundStart) {
-      const targetIdx = buffer.indexOf(target);
+      const targetIdx = upperBuffer.indexOf(target);
       if (targetIdx !== -1) {
-        startIdx = buffer.lastIndexOf("<airport_name", targetIdx);
-        if (startIdx !== -1) {
-          foundStart = true;
-        }
+        startIdx = upperBuffer.lastIndexOf("<AIRPORT_NAME", targetIdx);
+        if (startIdx === -1) startIdx = targetIdx;
+        foundStart = true;
       }
     }
 
     if (foundStart) {
-      const endIdx = buffer.indexOf(endTag, startIdx);
+      const endIdx = upperBuffer.indexOf(endTag.toUpperCase(), startIdx);
       if (endIdx !== -1) {
         return buffer.slice(startIdx, endIdx + endTag.length);
       }
       if (buffer.length > maxBuffer) {
         buffer = buffer.slice(startIdx);
+        startIdx = 0;
       }
     } else if (buffer.length > maxBuffer) {
       buffer = buffer.slice(-maxBuffer);

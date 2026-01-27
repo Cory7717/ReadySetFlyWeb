@@ -801,7 +801,7 @@ export default function FlightPlanner() {
               <Input
                 value={form.aircraftType}
                 onChange={(e) => setForm({ ...form, aircraftType: e.target.value })}
-                placeholder={selectedProfile.name}
+                placeholder={selectedProfile?.name || ""}
               />
             </div>
             <div className="space-y-2">

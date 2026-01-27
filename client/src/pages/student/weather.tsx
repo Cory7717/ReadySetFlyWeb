@@ -31,9 +31,19 @@ export default function StudentWeather() {
     }
   };
 
-  const status = result?.metar?.flight_category || "UNKNOWN";
-  const trainingLabel =
-    status === "VFR" ? "Good for training" : status === "MVFR" ? "Marginal" : "No-go";
+  const status = (() => {
+    const raw = result?.metar?.rawOb || "";
+    if (!raw) return "UNKNOWN";
+    const visMatch = raw.match(/\s(\d{1,2})SM/);
+    const visibility = visMatch ? parseInt(visMatch[1], 10) : 10;
+    const ceilingMatch = raw.match(/(BKN|OVC)(\d{3})/);
+    const ceiling = ceilingMatch ? parseInt(ceilingMatch[2], 10) * 100 : 10000;
+    if (ceiling >= 3000 && visibility > 5) return "VFR";
+    if (ceiling >= 1000 && visibility >= 3) return "MVFR";
+    if (ceiling >= 500 && visibility >= 1) return "IFR";
+    return "LIFR";
+  })();
+  const trainingLabel = status === "VFR" ? "Good for training" : status === "MVFR" ? "Marginal" : "No-go";
 
   return (
     <StudentLayout
@@ -63,7 +73,7 @@ export default function StudentWeather() {
           <div className="text-sm text-muted-foreground">Flight category</div>
           <div className="text-2xl font-semibold">{status}</div>
           <div className="text-sm text-muted-foreground">{trainingLabel}</div>
-          <div className="text-xs text-muted-foreground">METAR: {result?.metar?.raw || "Unavailable"}</div>
+          <div className="text-xs text-muted-foreground">METAR: {result?.metar?.rawOb || "Unavailable"}</div>
         </Card>
       )}
 

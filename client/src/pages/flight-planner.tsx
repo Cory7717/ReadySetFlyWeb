@@ -243,6 +243,16 @@ export default function FlightPlanner() {
     return map;
   }, [airportQueries, routeIcaos]);
 
+  const airportErrors = useMemo(() => {
+    return airportQueries
+      .map((query, index) => ({ icao: routeIcaos[index], error: query.error }))
+      .filter((item) => item.icao && item.error);
+  }, [airportQueries, routeIcaos]);
+
+  const missingIcaos = useMemo(() => {
+    return routeIcaos.filter((icao) => !airportMap.has(icao));
+  }, [routeIcaos, airportMap]);
+
   const mapPoints: AirportPoint[] = useMemo(() => {
     return routeIcaos
       .map((icao) => {
@@ -562,6 +572,16 @@ export default function FlightPlanner() {
             <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
               <PlannerMap points={mapPoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))} />
             </Suspense>
+          )}
+          {airportErrors.length > 0 && (
+            <div className="mt-3 text-xs text-destructive">
+              Airport lookup failed for: {airportErrors.map((item) => item.icao).join(", ")}. Check ICAO codes.
+            </div>
+          )}
+          {airportErrors.length === 0 && missingIcaos.length > 0 && (
+            <div className="mt-3 text-xs text-muted-foreground">
+              Waiting on coordinates for: {missingIcaos.join(", ")}.
+            </div>
           )}
         </CardContent>
       </Card>

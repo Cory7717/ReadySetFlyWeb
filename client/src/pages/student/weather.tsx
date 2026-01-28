@@ -31,6 +31,18 @@ export default function StudentWeather() {
     }
   };
 
+  const speakWeather = () => {
+    if (!result?.metar && !result?.taf) return;
+    if (!("speechSynthesis" in window)) return;
+    const metar = result?.metar?.rawOb || "No METAR available.";
+    const taf = result?.taf?.rawTAF || "No TAF available.";
+    const text = `Ready Set Fly ATIS. ${icao.toUpperCase()}. METAR. ${metar}. TAF. ${taf}. End of report.`;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    window.speechSynthesis.speak(utterance);
+  };
+
   const status = (() => {
     const raw = result?.metar?.rawOb || "";
     if (!raw) return "UNKNOWN";
@@ -74,6 +86,11 @@ export default function StudentWeather() {
           <div className="text-2xl font-semibold">{status}</div>
           <div className="text-sm text-muted-foreground">{trainingLabel}</div>
           <div className="text-xs text-muted-foreground">METAR: {result?.metar?.rawOb || "Unavailable"}</div>
+          <div>
+            <Button size="sm" variant="outline" onClick={speakWeather}>
+              Play ATIS audio
+            </Button>
+          </div>
         </Card>
       )}
 

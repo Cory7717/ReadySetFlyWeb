@@ -173,6 +173,7 @@ export default function RadioCommsTrainer() {
   const [showFeedback, setShowFeedback] = useState<string | null>(null);
   const [enableAudio, setEnableAudio] = useState(true);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceUri, setSelectedVoiceUri] = useState<string>("");
 
   useEffect(() => {
     trackEvent("radio_comms_view", { pro: isPro });
@@ -212,7 +213,8 @@ export default function RadioCommsTrainer() {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.95;
     if (voices.length) {
-      utterance.voice = voices[0];
+      const selected = voices.find((voice) => voice.voiceURI === selectedVoiceUri);
+      utterance.voice = selected || voices[0];
     }
     window.speechSynthesis.speak(utterance);
   };
@@ -304,6 +306,21 @@ export default function RadioCommsTrainer() {
           <CardDescription>{scenario.summary}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-xs text-muted-foreground">Voice</div>
+            <select
+              className="rounded-md border bg-background px-2 py-1 text-sm"
+              value={selectedVoiceUri}
+              onChange={(e) => setSelectedVoiceUri(e.target.value)}
+            >
+              <option value="">Best available</option>
+              {voices.map((voice) => (
+                <option key={voice.voiceURI} value={voice.voiceURI}>
+                  {voice.name} ({voice.lang})
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center justify-between">
             <div className="text-sm text-muted-foreground">
               Step {stepIndex + 1} of {scenario.steps.length}

@@ -142,6 +142,18 @@ export default function PilotTools() {
   const atisInfo = extractAtisIdentifier(weather?.metar);
   const runwayInUse = extractRunwayInUse(weather?.metar);
 
+  const speakWeather = () => {
+    if (!weather?.metar && !weather?.taf) return;
+    if (!("speechSynthesis" in window)) return;
+    const metar = weather?.metar?.rawOb || "No METAR available.";
+    const taf = weather?.taf?.rawTAF || "No TAF available.";
+    const text = `Ready Set Fly ATIS. ${weather.icao}. METAR. ${metar}. TAF. ${taf}. End of report.`;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    window.speechSynthesis.speak(utterance);
+  };
+
   return (
     <div className="container mx-auto py-8 px-4 max-w-5xl">
       <div className="space-y-6">
@@ -257,9 +269,9 @@ export default function PilotTools() {
                     <Cloud className="h-5 w-5" />
                     {weather.icao} - Current Conditions
                   </CardTitle>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge 
-                      variant="outline" 
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge 
+                    variant="outline" 
                       className={`text-white ${
                         flightCategory.color === "green" ? "bg-green-600" :
                         flightCategory.color === "blue" ? "bg-blue-600" :
@@ -273,6 +285,11 @@ export default function PilotTools() {
                       <Badge variant="outline" className="bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200">
                         {atisInfo}
                       </Badge>
+                    )}
+                    {weather?.metar && (
+                      <Button size="sm" variant="outline" onClick={speakWeather}>
+                        Play ATIS audio
+                      </Button>
                     )}
                   </div>
                 </div>

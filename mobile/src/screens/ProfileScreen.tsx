@@ -166,6 +166,138 @@ export default function ProfileScreen({ navigation }: any) {
           </View>
 
           <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Pilot Tools</Text>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('PilotTools')}
+              data-testid="button-pilot-tools"
+            >
+              <Ionicons name="compass-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Pilot Tools Hub</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('FlightPlanner')}
+              data-testid="button-flight-planner"
+            >
+              <Ionicons name="map-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Flight Planner</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('ApproachPlates')}
+              data-testid="button-approach-plates"
+            >
+              <Ionicons name="document-text-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Approach Plates</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('RadioCommsTrainer')}
+              data-testid="button-radio-comms"
+            >
+              <Ionicons name="radio-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Radio Comms Trainer</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('OwnershipCost')}
+              data-testid="button-ownership-cost"
+            >
+              <Ionicons name="calculator-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Ownership Cost Tool</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Student Pilots</Text>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('StudentHub')}
+              data-testid="button-student-hub"
+            >
+              <Ionicons name="school-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Student Pilot Hub</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('StudentWizard')}
+              data-testid="button-student-wizard"
+            >
+              <Ionicons name="sparkles-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Readiness Wizard</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('StudentRoadmap')}
+              data-testid="button-student-roadmap"
+            >
+              <Ionicons name="trail-sign-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Training Roadmap</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('StudentWritten')}
+              data-testid="button-student-written"
+            >
+              <Ionicons name="clipboard-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Written Test Prep</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Logbook</Text>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('Logbook')}
+              data-testid="button-logbook"
+            >
+              <Ionicons name="book-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Digital Logbook</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('LogbookPro')}
+              data-testid="button-logbook-pro"
+            >
+              <Ionicons name="rocket-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Logbook Pro Upgrade</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('MyAircraft')}
+              data-testid="button-my-aircraft"
+            >
+              <Ionicons name="airplane-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>My Aircraft Profiles</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Settings</Text>
             
             <TouchableOpacity style={styles.menuItem} data-testid="button-notifications">
@@ -177,6 +309,16 @@ export default function ProfileScreen({ navigation }: any) {
             <TouchableOpacity style={styles.menuItem} data-testid="button-help">
               <Ionicons name="help-circle-outline" size={24} color="#1e40af" />
               <Text style={styles.menuText}>Help & Support</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('FAQ')}
+              data-testid="button-faq"
+            >
+              <Ionicons name="chatbox-ellipses-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>FAQ</Text>
               <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
             </TouchableOpacity>
 

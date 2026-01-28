@@ -177,6 +177,24 @@ export default function PilotTools() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <Radio className="h-5 w-5" />
+              Radio Comms Trainer (Logbook Pro)
+            </CardTitle>
+            <CardDescription>Practice ATC phraseology with guided scenarios.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button asChild>
+              <Link href="/radio-comms-trainer">
+                {user?.logbookProStatus === "active" ? "Open Trainer" : "Try Demo"}
+              </Link>
+            </Button>
+            <Badge variant="outline">{user?.logbookProStatus === "active" ? "Active" : "Demo available"}</Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
               IFR Approach Plates
             </CardTitle>

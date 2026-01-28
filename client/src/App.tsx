@@ -45,6 +45,7 @@ import ApproachPlates from "@/pages/approach-plates";
 import FaqPage from "@/pages/faq";
 import MyAircraft from "@/pages/my-aircraft";
 import AdminAircraftLibrary from "@/pages/admin-aircraft-library";
+import RadioCommsTrainer from "@/pages/radio-comms-trainer";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -133,6 +134,7 @@ function Router() {
           <Route path="/logbook/pro/success" component={LogbookProSuccess} />
           <Route path="/logbook/pro/cancel" component={LogbookProCancel} />
           <Route path="/flight-planner" component={FlightPlanner} />
+          <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
           <Route path="/my-aircraft" component={MyAircraft} />
           <Route path="/admin/aircraft-library" component={AdminAircraftLibrary} />
         </>
@@ -160,6 +162,7 @@ function Router() {
           <Route path="/logbook/pro/success" component={RequireAuth} />
           <Route path="/logbook/pro/cancel" component={RequireAuth} />
           <Route path="/flight-planner" component={RequireAuth} />
+          <Route path="/radio-comms-trainer" component={RequireAuth} />
           <Route path="/my-aircraft" component={RequireAuth} />
           <Route path="/admin/aircraft-library" component={RequireAuth} />
         </>

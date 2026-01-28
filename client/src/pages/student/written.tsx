@@ -66,6 +66,38 @@ export default function StudentWrittenTracker() {
     );
   }, [selectedTags]);
 
+  const [quizSelections, setQuizSelections] = useState<Record<string, string>>({});
+  const [quizRevealed, setQuizRevealed] = useState<Record<string, boolean>>({});
+
+  const todaySeed = useMemo(() => {
+    const now = new Date();
+    return `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}`;
+  }, []);
+
+  const rotateQuestions = (moduleId: string, questions: typeof faaAlignedCurriculum[number]["quiz"]) => {
+    if (!questions.length) return questions;
+    const seedValue = `${moduleId}-${todaySeed}`;
+    let hash = 0;
+    for (let i = 0; i < seedValue.length; i += 1) {
+      hash = (hash * 31 + seedValue.charCodeAt(i)) % 9973;
+    }
+    const offset = hash % questions.length;
+    return [...questions.slice(offset), ...questions.slice(0, offset)];
+  };
+
+  const selectQuizAnswer = (moduleId: string, question: string, option: string) => {
+    const key = `${moduleId}::${question}`;
+    setQuizSelections((prev) => ({ ...prev, [key]: option }));
+  };
+
+  const revealModuleQuiz = (moduleId: string, questions: typeof faaAlignedCurriculum[number]["quiz"]) => {
+    const keys = questions.map((q) => `${moduleId}::${q.question}`);
+    const allAnswered = keys.every((key) => Boolean(quizSelections[key]));
+    if (allAnswered) {
+      setQuizRevealed((prev) => ({ ...prev, [moduleId]: true }));
+    }
+  };
+
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
       prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag]
@@ -166,7 +198,12 @@ export default function StudentWrittenTracker() {
           </Button>
         </div>
         <Accordion type="single" collapsible className="w-full">
-          {miniModules.map((module) => (
+          {miniModules.map((module) => {
+            const rotatedQuiz = rotateQuestions(module.id, module.quiz);
+            const answeredCount = rotatedQuiz.filter((q) => quizSelections[`${module.id}::${q.question}`]).length;
+            const canReveal = answeredCount === rotatedQuiz.length && rotatedQuiz.length > 0;
+            const revealed = quizRevealed[module.id];
+            return (
             <AccordionItem key={module.id} value={module.id}>
               <AccordionTrigger>{module.title}</AccordionTrigger>
               <AccordionContent>
@@ -206,26 +243,62 @@ export default function StudentWrittenTracker() {
                   </div>
                   <div>
                     <div className="font-semibold">Quick quiz</div>
+                    <div className="text-xs text-muted-foreground mb-2">
+                      {rotatedQuiz.length ? `${answeredCount}/${rotatedQuiz.length} answered` : "No quiz available"}
+                    </div>
                     <div className="space-y-2 text-muted-foreground">
-                      {module.quiz.map((quiz) => (
-                        <div key={quiz.question} className="rounded-md border p-3">
-                          <div className="font-medium text-foreground">{quiz.question}</div>
-                          <ul className="list-disc pl-5">
-                            {quiz.options.map((option) => (
-                              <li key={option}>{option}</li>
-                            ))}
-                          </ul>
-                          <div className="text-xs text-muted-foreground mt-2">
-                            Answer: {quiz.answer}
+                      {rotatedQuiz.map((quiz) => {
+                        const key = `${module.id}::${quiz.question}`;
+                        const selected = quizSelections[key];
+                        return (
+                          <div key={quiz.question} className="rounded-md border p-3">
+                            <div className="font-medium text-foreground">{quiz.question}</div>
+                            <div className="mt-2 grid gap-2">
+                              {quiz.options.map((option) => {
+                                const isSelected = selected === option;
+                                const isCorrect = option === quiz.answer;
+                                const showResult = revealed && isSelected;
+                                const resultIcon = showResult ? (isCorrect ? "✅" : "❌") : "";
+                                return (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    onClick={() => selectQuizAnswer(module.id, quiz.question, option)}
+                                    className={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${
+                                      isSelected ? "border-primary bg-primary/10" : "border-muted"
+                                    }`}
+                                  >
+                                    <span className="mr-2">{resultIcon}</span>
+                                    {option}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {revealed && (
+                              <div className="text-xs text-muted-foreground mt-2">
+                                Answer: {quiz.answer}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
+                    </div>
+                    <div className="mt-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!canReveal}
+                        onClick={() => revealModuleQuiz(module.id, rotatedQuiz)}
+                      >
+                        Reveal answers
+                      </Button>
                     </div>
                   </div>
                 </div>
               </AccordionContent>
             </AccordionItem>
-          ))}
+          );
+          })}
         </Accordion>
       </Card>
 

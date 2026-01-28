@@ -398,58 +398,118 @@ export async function sendWelcomeEmail(data: {
 <head>
   <meta charset="utf-8">
   <style>
-    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: #1e40af; color: white; padding: 20px; text-align: center; }
-    .content { padding: 20px; background: #f9fafb; }
-    .button { display: inline-block; background: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0; }
-    .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+    .card { background: white; border-radius: 12px; padding: 28px; border: 1px solid #e5e7eb; }
+    h1 { font-size: 24px; margin: 0 0 8px 0; }
+    h2 { font-size: 18px; margin: 20px 0 10px 0; }
+    .muted { color: #6b7280; }
+    .cta { display: inline-block; background: #1e40af; color: #fff !important; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+    ul { padding-left: 18px; }
+    .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="header">
-      <h1>Welcome to Ready Set Fly</h1>
-      <p>Your General Aviation hub is ready</p>
-    </div>
-    <div class="content">
-      <h2>Hi ${name},</h2>
-      <p>Thanks for joining Ready Set Fly. You now have access to pilot tools, training resources, and a growing marketplace for rentals, flight schools, and aviation services.</p>
-      <p style="margin-top: 10px;">We are brand new and actively building the marketplace community. Your early support helps us bring more listings, schools, and aircraft to the platform.</p>
+    <div class="card">
+      <h1>Welcome to <strong>Ready Set Fly</strong> ✈️</h1>
+      <p class="muted">Your email is verified, and you are officially cleared for takeoff.</p>
+      <p>Hi ${name},</p>
+      <p>I am Cory, the founder of Ready Set Fly, and I want to personally welcome you. RSF is currently in <strong>beta</strong>, and you are joining at an important moment as the platform continues to take shape with early users.</p>
+      <p>Ready Set Fly was built around a simple idea: <strong>give pilots and aviation enthusiasts real utility first - then let everything else follow naturally.</strong></p>
+      <p>That is why RSF focuses on practical, day-to-day aviation tools, including:</p>
       <ul>
-        <li>Student Pilot Hub + training roadmap</li>
-        <li>Flight Planner + weather tools</li>
-        <li>Digital Logbook</li>
+        <li>Flight planning (routes, distance, estimated time, fuel planning)</li>
+        <li>Live ATIS and airport weather</li>
+        <li>Digital logbook features</li>
+        <li>Training and ownership cost calculators</li>
+        <li>Student and low-time pilot resources</li>
+        <li>Access to current IFR approach plates</li>
       </ul>
-      <div style="text-align: center;">
-        <a class="button" href="${dashboardUrl}/dashboard">Go to your dashboard</a>
+
+      <p>Alongside the tools, Ready Set Fly also includes a growing <strong>aviation marketplace</strong> designed to serve the entire aviation ecosystem. Current and upcoming categories include:</p>
+      <ul>
+        <li>✈️ <strong>Flight schools & training programs</strong></li>
+        <li>🧑‍✈️ <strong>CFIs (independent and school-affiliated)</strong></li>
+        <li>🛩 <strong>Aircraft rentals</strong></li>
+        <li>🚁 <strong>Charter services</strong></li>
+        <li>🏷 <strong>Aircraft for sale</strong></li>
+        <li>💼 <strong>Aviation jobs & career opportunities</strong></li>
+        <li>🧰 <strong>Aviation services</strong> (maintenance, instruction, support)</li>
+      </ul>
+
+      <p>Since this is a new launch, we are actively building this marketplace community now - onboarding providers, refining categories, and making sure it grows in a way that genuinely serves pilots, students, and owners.</p>
+
+      <h2>A few ways to get the most out of Ready Set Fly:</h2>
+      <ul>
+        <li>Start with the <strong>Flight Planner</strong> and see how it fits your workflow</li>
+        <li>Explore the <strong>Student Pilot tools</strong> if you are early in training</li>
+        <li>Browse the <strong>Marketplace</strong> to see what is available - and what is coming</li>
+      </ul>
+
+      <p>If you find Ready Set Fly useful, please feel free to <strong>share it with your fellow pilots, students, or aviation friends</strong>, and <strong>bookmark the site</strong> so it is easy to come back to as new tools and listings are added.</p>
+      <p>Most importantly, your feedback matters here. If something feels helpful, confusing, missing, or unnecessary - just reply to this email. It comes straight to me, and early feedback is shaping the platform every day.</p>
+
+      <div style="text-align:center; margin: 24px 0;">
+        <a class="cta" href="${dashboardUrl}/dashboard">Open your dashboard</a>
       </div>
-      <p style="font-size: 14px; color: #6b7280;">
-        Questions? Reply to this email and our team will help.
-      </p>
+
+      <p>Thanks again for joining Ready Set Fly, and welcome aboard.</p>
+      <p><strong>Blue skies,</strong><br><strong>Cory Armer</strong><br>Founder, Ready Set Fly ✈️</p>
     </div>
-    <div class="footer">
-      <p>Ready Set Fly - Fly smarter, train faster.</p>
-    </div>
+    <div class="footer">Ready Set Fly - General Aviation tools and marketplace</div>
   </div>
 </body>
 </html>
   `.trim();
 
   const textBody = `
-Welcome to Ready Set Fly, ${name}.
+Welcome to Ready Set Fly ✈️
 
-Thanks for joining Ready Set Fly. You now have access to pilot tools, training resources, and a growing marketplace for rentals, flight schools, and aviation services.
+Your email is verified, and you are officially cleared for takeoff.
 
-We are brand new and actively building the marketplace community. Your early support helps us bring more listings, schools, and aircraft to the platform.
+Hi ${name},
 
-- Student Pilot Hub + training roadmap
-- Flight Planner + weather tools
-- Digital Logbook
+I am Cory, the founder of Ready Set Fly, and I want to personally welcome you. RSF is currently in beta, and you are joining at an important moment as the platform continues to take shape with early users.
 
-Dashboard: ${dashboardUrl}/dashboard
+Ready Set Fly was built around a simple idea:
+give pilots and aviation enthusiasts real utility first - then let everything else follow naturally.
 
-Questions? Reply to this email and our team will help.
+That is why RSF focuses on practical, day-to-day aviation tools, including:
+- Flight planning (routes, distance, estimated time, fuel planning)
+- Live ATIS and airport weather
+- Digital logbook features
+- Training and ownership cost calculators
+- Student and low-time pilot resources
+- Access to current IFR approach plates
+
+Alongside the tools, Ready Set Fly also includes a growing aviation marketplace designed to serve the entire aviation ecosystem. Current and upcoming categories include:
+- Flight schools and training programs
+- CFIs (independent and school-affiliated)
+- Aircraft rentals
+- Charter services
+- Aircraft for sale
+- Aviation jobs and career opportunities
+- Aviation services (maintenance, instruction, support)
+
+Since this is a new launch, we are actively building this marketplace community now - onboarding providers, refining categories, and making sure it grows in a way that genuinely serves pilots, students, and owners.
+
+A few ways to get the most out of Ready Set Fly:
+- Start with the Flight Planner and see how it fits your workflow
+- Explore the Student Pilot tools if you are early in training
+- Browse the Marketplace to see what is available - and what is coming
+
+If you find Ready Set Fly useful, please feel free to share it with your fellow pilots, students, or aviation friends, and bookmark the site so it is easy to come back to as new tools and listings are added.
+
+Most importantly, your feedback matters here. If something feels helpful, confusing, missing, or unnecessary - just reply to this email. It comes straight to me, and early feedback is shaping the platform every day.
+
+Open your dashboard: ${dashboardUrl}/dashboard
+
+Thanks again for joining Ready Set Fly, and welcome aboard.
+
+Blue skies,
+Cory Armer
+Founder, Ready Set Fly ✈️
   `.trim();
 
   try {

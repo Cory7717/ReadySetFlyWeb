@@ -22,6 +22,7 @@ type Scenario = {
   title: string;
   summary: string;
   steps: ScenarioStep[];
+  examples: { pilot: string; atc: string }[];
 };
 
 const SCENARIOS: Scenario[] = [
@@ -63,6 +64,16 @@ const SCENARIOS: Scenario[] = [
         tips: "Advise when you are clear and ready to taxi.",
       },
     ],
+    examples: [
+      {
+        pilot: "Van Nuys Tower, Cessna 123AB, ten miles east, inbound full stop with Information Alpha.",
+        atc: "Cessna 123AB, Van Nuys Tower, enter left downwind runway 16R, report midfield.",
+      },
+      {
+        pilot: "Van Nuys Tower, Cessna 123AB, midfield left downwind runway 16R.",
+        atc: "Cessna 123AB, number two, follow Cherokee on base.",
+      },
+    ],
   },
   {
     id: "ground-departure",
@@ -94,6 +105,16 @@ const SCENARIOS: Scenario[] = [
         tips: "Share your direction of departure and altitude.",
       },
     ],
+    examples: [
+      {
+        pilot: "Austin Ground, Cessna 123AB at Signature, ready to taxi with Information Bravo, VFR to the south.",
+        atc: "Cessna 123AB, Austin Ground, taxi to runway 18L via Bravo and Delta.",
+      },
+      {
+        pilot: "Austin Tower, Cessna 123AB holding short runway 18L, ready for departure.",
+        atc: "Cessna 123AB, Austin Tower, cleared for takeoff runway 18L.",
+      },
+    ],
   },
   {
     id: "class-d-arrival",
@@ -123,6 +144,16 @@ const SCENARIOS: Scenario[] = [
         expectedTokens: ["clear", "runway"],
         atcReply: "Cessna 123AB, taxi to parking via Alpha.",
         tips: "Advise when you are clear and ready to taxi.",
+      },
+    ],
+    examples: [
+      {
+        pilot: "McKinney Tower, Cessna 123AB, fifteen miles northeast, inbound full stop with Information Echo.",
+        atc: "Cessna 123AB, McKinney Tower, enter right downwind runway 17, report base.",
+      },
+      {
+        pilot: "McKinney Tower, Cessna 123AB, right base runway 17.",
+        atc: "Cessna 123AB, cleared to land runway 17.",
       },
     ],
   },
@@ -161,6 +192,13 @@ export default function RadioCommsTrainer() {
     setShowFeedback(null);
   };
 
+  const speakLine = (text: string) => {
+    if (!enableAudio || !("speechSynthesis" in window)) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    window.speechSynthesis.speak(utterance);
+  };
+
   const evaluate = () => {
     if (!currentStep) return;
     const tokens = currentStep.expectedTokens.map((t) => normalize(t));
@@ -173,11 +211,7 @@ export default function RadioCommsTrainer() {
     setScore(nextScore);
     setShowFeedback(hit ? "Correct" : "Needs work");
     trackEvent("radio_comms_attempt", { scenario: scenario.id, hit });
-    if (enableAudio && "speechSynthesis" in window) {
-      const utterance = new SpeechSynthesisUtterance(currentStep.atcReply);
-      utterance.rate = 0.95;
-      window.speechSynthesis.speak(utterance);
-    }
+    speakLine(currentStep.atcReply);
   };
 
   const nextStep = () => {
@@ -299,6 +333,45 @@ export default function RadioCommsTrainer() {
                 <span className="text-primary">Scenario complete. Great work!</span>
               )}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sample radio calls</CardTitle>
+          <CardDescription>
+            Hear and read example calls. Available in full with Logbook Pro.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {scenario.examples.map((example, idx) => (
+            <div key={`${scenario.id}-example-${idx}`} className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold">Example {idx + 1}</div>
+                <Button size="sm" variant="outline" onClick={() => speakLine(example.pilot)}>
+                  Play Pilot
+                </Button>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                <div className="font-medium text-foreground">Pilot</div>
+                <div>{example.pilot}</div>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                <div className="font-medium text-foreground">ATC</div>
+                <div>{example.atc}</div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => speakLine(example.atc)}>
+                Play ATC
+              </Button>
+            </div>
+          ))}
+          {!isPro && (
+            <Alert>
+              <AlertDescription>
+                Upgrade to Logbook Pro to unlock full scenario examples, scoring, and practice history.
+              </AlertDescription>
+            </Alert>
           )}
         </CardContent>
       </Card>

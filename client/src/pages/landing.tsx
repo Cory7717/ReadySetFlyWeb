@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun, Calculator } from "lucide-react";
+import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun, Calculator, Radio } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -221,6 +221,50 @@ export default function Landing() {
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     Free for everyone - no account needed
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Radio Comms Trainer Card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex flex-col items-center text-center space-y-4">
+                  <div className="h-16 w-16 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                    <Radio className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold">Radio Comms Trainer</h3>
+                  <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400">
+                    Demo Included
+                  </Badge>
+                  <p className="text-muted-foreground">
+                    Practice ATC phraseology with guided scenarios. Try the demo and unlock full scenarios with Logbook Pro.
+                  </p>
+                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
+                      <span>Towered pattern, departures, and arrivals</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
+                      <span>ATC response audio + transcripts</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
+                      <span>Scoring and coaching tips</span>
+                    </li>
+                  </ul>
+                  <Button 
+                    className="w-full"
+                    variant="outline"
+                    asChild
+                  >
+                    <Link href="/radio-comms-trainer">
+                      Open Radio Trainer
+                    </Link>
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Demo available - full access with Logbook Pro
                   </p>
                 </div>
               </CardContent>

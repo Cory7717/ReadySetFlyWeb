@@ -172,10 +172,24 @@ export default function RadioCommsTrainer() {
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [showFeedback, setShowFeedback] = useState<string | null>(null);
   const [enableAudio, setEnableAudio] = useState(true);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   useEffect(() => {
     trackEvent("radio_comms_view", { pro: isPro });
   }, [isPro]);
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+    const loadVoices = () => {
+      const nextVoices = window.speechSynthesis.getVoices();
+      if (nextVoices.length) setVoices(nextVoices);
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
 
   const scenario = useMemo(() => {
     const found = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[0];
@@ -194,8 +208,12 @@ export default function RadioCommsTrainer() {
 
   const speakLine = (text: string) => {
     if (!enableAudio || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.95;
+    if (voices.length) {
+      utterance.voice = voices[0];
+    }
     window.speechSynthesis.speak(utterance);
   };
 
@@ -240,6 +258,13 @@ export default function RadioCommsTrainer() {
         <Alert>
           <AlertDescription>
             Demo mode includes one scenario with limited steps. Upgrade to Logbook Pro for all scenarios, scoring, and full practice sessions.
+          </AlertDescription>
+        </Alert>
+      )}
+      {!("speechSynthesis" in window) && (
+        <Alert>
+          <AlertDescription>
+            Audio playback is not supported in this browser. You can still use the trainer with text prompts.
           </AlertDescription>
         </Alert>
       )}

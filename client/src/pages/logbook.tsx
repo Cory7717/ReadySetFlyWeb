@@ -682,6 +682,20 @@ export default function Logbook() {
                 <p className="text-xs text-muted-foreground">Build and save routes with fuel notes</p>
               </div>
             </div>
+            <div className="flex items-start gap-2">
+              <TrendingUp className="h-4 w-4 text-primary mt-0.5" />
+              <div>
+                <p className="font-semibold">Radio Comms Trainer</p>
+                <p className="text-xs text-muted-foreground">Full scenarios, audio practice, scoring</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Award className="h-4 w-4 text-primary mt-0.5" />
+              <div>
+                <p className="font-semibold">Advanced Reports</p>
+                <p className="text-xs text-muted-foreground">Exportable summaries and insights</p>
+              </div>
+            </div>
           </div>
           <Separator className="my-4" />
           <div className="flex flex-col items-center gap-3">

@@ -487,6 +487,11 @@ export default function FlightPlanner() {
         <div>
           <h1 className="text-3xl font-bold">Flight Planner</h1>
           <p className="text-muted-foreground">Build a route, estimate time and fuel, then save to Logbook Pro.</p>
+          {!isPro && (
+            <p className="text-xs text-muted-foreground mt-2">
+              Logbook Pro adds saved plans, per-leg breakdowns, wind-adjusted ETE, advanced reports, and the Radio Comms Trainer.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!isPro && <Badge variant="outline">Preview mode</Badge>}

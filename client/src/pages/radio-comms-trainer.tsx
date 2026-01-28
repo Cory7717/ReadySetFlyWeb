@@ -174,6 +174,7 @@ export default function RadioCommsTrainer() {
   const [enableAudio, setEnableAudio] = useState(true);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceUri, setSelectedVoiceUri] = useState<string>("");
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string>("");
 
   useEffect(() => {
     trackEvent("radio_comms_view", { pro: isPro });
@@ -183,14 +184,25 @@ export default function RadioCommsTrainer() {
     if (!("speechSynthesis" in window)) return;
     const loadVoices = () => {
       const nextVoices = window.speechSynthesis.getVoices();
-      if (nextVoices.length) setVoices(nextVoices);
+      if (nextVoices.length) {
+        setVoices(nextVoices);
+        if (!selectedVoiceUri && !selectedVoiceName) {
+          const preferred = nextVoices.find((voice) =>
+            /Google|Samantha|Aria|Jenny|Natural|Neural/i.test(voice.name)
+          );
+          if (preferred) {
+            setSelectedVoiceUri(preferred.voiceURI);
+            setSelectedVoiceName(preferred.name);
+          }
+        }
+      }
     };
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
     return () => {
       window.speechSynthesis.onvoiceschanged = null;
     };
-  }, []);
+  }, [selectedVoiceUri, selectedVoiceName]);
 
   const scenario = useMemo(() => {
     const found = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[0];
@@ -207,14 +219,34 @@ export default function RadioCommsTrainer() {
     setShowFeedback(null);
   };
 
+  const resolveVoice = (availableVoices: SpeechSynthesisVoice[]) => {
+    if (!availableVoices.length) return null;
+    const byUri = selectedVoiceUri
+      ? availableVoices.find((voice) => voice.voiceURI === selectedVoiceUri)
+      : null;
+    if (byUri) return byUri;
+    const byName = selectedVoiceName
+      ? availableVoices.find(
+          (voice) => voice.name.toLowerCase() === selectedVoiceName.toLowerCase()
+        )
+      : null;
+    if (byName) return byName;
+    const preferred = availableVoices.find((voice) =>
+      /Google|Samantha|Aria|Jenny|Natural|Neural|David|Zira/i.test(voice.name)
+    );
+    return preferred || availableVoices[0];
+  };
+
   const speakLine = (text: string) => {
     if (!enableAudio || !("speechSynthesis" in window)) return;
+    const availableVoices = voices.length ? voices : window.speechSynthesis.getVoices();
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.95;
-    if (voices.length) {
-      const selected = voices.find((voice) => voice.voiceURI === selectedVoiceUri);
-      utterance.voice = selected || voices[0];
+    const selected = resolveVoice(availableVoices);
+    if (selected) {
+      utterance.voice = selected;
+      utterance.lang = selected.lang || "en-US";
     }
     window.speechSynthesis.speak(utterance);
   };
@@ -259,7 +291,7 @@ export default function RadioCommsTrainer() {
       {!isPro && (
         <Alert>
           <AlertDescription>
-            Demo mode includes one scenario with limited steps. Upgrade to Logbook Pro for all scenarios, scoring, and full practice sessions.
+            Demo mode includes one scenario with limited steps. Logbook Pro unlocks full scenarios, scoring, audio practice, saved history, and advanced flight planning tools.
           </AlertDescription>
         </Alert>
       )}
@@ -311,7 +343,12 @@ export default function RadioCommsTrainer() {
             <select
               className="rounded-md border bg-background px-2 py-1 text-sm"
               value={selectedVoiceUri}
-              onChange={(e) => setSelectedVoiceUri(e.target.value)}
+              onChange={(e) => {
+                const uri = e.target.value;
+                setSelectedVoiceUri(uri);
+                const match = voices.find((voice) => voice.voiceURI === uri);
+                setSelectedVoiceName(match?.name || "");
+              }}
             >
               <option value="">Best available</option>
               {voices.map((voice) => (
@@ -320,6 +357,11 @@ export default function RadioCommsTrainer() {
                 </option>
               ))}
             </select>
+            {selectedVoiceName && (
+              <span className="text-xs text-muted-foreground">
+                Using: {selectedVoiceName}
+              </span>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <div className="text-sm text-muted-foreground">
@@ -422,7 +464,7 @@ export default function RadioCommsTrainer() {
         <CardHeader>
           <CardTitle>Want more practice?</CardTitle>
           <CardDescription>
-            Logbook Pro unlocks all scenarios, advanced scoring, and saved practice history.
+            Logbook Pro unlocks all scenarios, advanced scoring, saved practice history, and full access to pilot tools.
           </CardDescription>
         </CardHeader>
         <CardContent>

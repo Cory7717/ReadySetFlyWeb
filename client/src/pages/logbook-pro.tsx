@@ -90,8 +90,10 @@ export default function LogbookProPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-2 text-sm text-muted-foreground">
-            <div>• Advanced flight planning: aircraft performance profiles, wind-adjusted ETE, fuel planning, route risk flags, alternates, and plan-to-logbook.</div>
-            <div>• Pro currency tools, report exports, and priority support.</div>
+            <div>??? Advanced flight planning: aircraft performance profiles, wind-adjusted ETE, fuel planning, route risk flags, alternates, and plan-to-logbook.</div>
+            <div>??? Saved plans, per-leg breakdowns, and unlimited route storage.</div>
+            <div>??? Radio Comms Trainer: full scenarios, audio practice, and scoring feedback.</div>
+            <div>??? Pro currency tools, report exports, and priority support.</div>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={isActive ? "default" : "outline"}>
@@ -165,3 +167,4 @@ export default function LogbookProPage() {
     </div>
   );
 }
+

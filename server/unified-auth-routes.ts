@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { IStorage } from './storage';
 import { generateAccessToken, generateRefreshToken, verifyAccessToken } from './jwt';
 import { getUncachableResendClient } from './resendClient';
+import { sendWelcomeEmail } from './email-templates';
 
 const router = Router();
 
@@ -129,6 +130,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
             </div>
           `,
         });
+        await sendWelcomeEmail({ email, firstName });
       } catch (emailError) {
         console.error('Failed to send verification email:', emailError);
         // Don't fail registration if email sending fails
@@ -275,6 +277,13 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         totalFlightHours: 0,
         aircraftTypesFlown: [],
       });
+
+      // Send welcome email (no verification flow for mobile)
+      try {
+        await sendWelcomeEmail({ email, firstName });
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+      }
 
       // Generate tokens
       const accessToken = generateAccessToken(user.id, user.email!);

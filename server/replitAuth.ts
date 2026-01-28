@@ -105,7 +105,7 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
       });
       const refreshed = await storage.getUser(byEmail.id);
       if (!refreshed) throw new Error("User not found after update (email match)");
-      return refreshed;
+      return { user: refreshed, isNew: false };
     }
   }
 
@@ -119,7 +119,7 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
     // NOTE: hashedPassword remains null for OAuth-only accounts
   } as any);
 
-  return created;
+  return { user: created, isNew: true };
 }
 
   // ✅ Unified auth guard:
@@ -211,10 +211,22 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
         },
         async (_accessToken, _refreshToken, profile, done) => {
           try {
-            const dbUser = await resolveUserFromGoogle(profile);
-            if (!dbUser) throw new Error("resolveUserFromGoogle returned undefined");
+            const result = await resolveUserFromGoogle(profile);
+            if (!result?.user) throw new Error("resolveUserFromGoogle returned undefined");
 
-            const passportUser = makePassportUser(dbUser.id, profile);
+            if (result.isNew && result.user.email) {
+              try {
+                const { sendWelcomeEmail } = await import("./email-templates");
+                await sendWelcomeEmail({
+                  email: result.user.email,
+                  firstName: result.user.firstName,
+                });
+              } catch (emailError) {
+                console.error("Failed to send welcome email:", emailError);
+              }
+            }
+
+            const passportUser = makePassportUser(result.user.id, profile);
             done(null, passportUser);
           } catch (err) {
             done(err as any);

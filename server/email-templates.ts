@@ -299,6 +299,7 @@ export async function sendContactFormEmail(data: {
 }) {
   const { getUncachableResendClient } = await import('./resendClient');
   const { client: resend, fromEmail } = await getUncachableResendClient();
+  const supportEmail = process.env.SUPPORT_EMAIL || "support@readysetfly.us";
   
   const htmlBody = `
 <!DOCTYPE html>
@@ -371,7 +372,7 @@ Ready Set Fly - Connecting Pilots with Aircraft
   try {
     await resend.emails.send({
       from: fromEmail,
-      to: 'coryarmer@gmail.com',
+      to: supportEmail,
       subject: `Contact Form: ${data.subject}`,
       html: htmlBody,
       text: textBody,
@@ -379,6 +380,88 @@ Ready Set Fly - Connecting Pilots with Aircraft
     });
   } catch (error) {
     console.error('Failed to send contact form email:', error);
+  }
+}
+
+export async function sendWelcomeEmail(data: {
+  email: string;
+  firstName?: string | null;
+}) {
+  const { getUncachableResendClient } = await import('./resendClient');
+  const { client: resend, fromEmail } = await getUncachableResendClient();
+  const name = data.firstName || "pilot";
+  const dashboardUrl = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #1e40af; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f9fafb; }
+    .button { display: inline-block; background: #1e40af; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0; }
+    .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Welcome to Ready Set Fly</h1>
+      <p>Your General Aviation hub is ready</p>
+    </div>
+    <div class="content">
+      <h2>Hi ${name},</h2>
+      <p>Thanks for joining Ready Set Fly. You now have access to pilot tools, training resources, and a growing marketplace for rentals, flight schools, and aviation services.</p>
+      <p style="margin-top: 10px;">We are brand new and actively building the marketplace community. Your early support helps us bring more listings, schools, and aircraft to the platform.</p>
+      <ul>
+        <li>Student Pilot Hub + training roadmap</li>
+        <li>Flight Planner + weather tools</li>
+        <li>Digital Logbook</li>
+      </ul>
+      <div style="text-align: center;">
+        <a class="button" href="${dashboardUrl}/dashboard">Go to your dashboard</a>
+      </div>
+      <p style="font-size: 14px; color: #6b7280;">
+        Questions? Reply to this email and our team will help.
+      </p>
+    </div>
+    <div class="footer">
+      <p>Ready Set Fly - Fly smarter, train faster.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const textBody = `
+Welcome to Ready Set Fly, ${name}.
+
+Thanks for joining Ready Set Fly. You now have access to pilot tools, training resources, and a growing marketplace for rentals, flight schools, and aviation services.
+
+We are brand new and actively building the marketplace community. Your early support helps us bring more listings, schools, and aircraft to the platform.
+
+- Student Pilot Hub + training roadmap
+- Flight Planner + weather tools
+- Digital Logbook
+
+Dashboard: ${dashboardUrl}/dashboard
+
+Questions? Reply to this email and our team will help.
+  `.trim();
+
+  try {
+    await resend.emails.send({
+      from: fromEmail,
+      to: data.email,
+      subject: "Welcome to Ready Set Fly",
+      html: htmlBody,
+      text: textBody,
+    });
+  } catch (error) {
+    console.error("Failed to send welcome email:", error);
   }
 }
 

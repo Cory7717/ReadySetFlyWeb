@@ -16,6 +16,11 @@ type AircraftType = {
   icaoType?: string | null;
   maxGrossWeightLb: number;
   usableFuelGal: number;
+  emptyArmIn?: number | null;
+  frontArmIn?: number | null;
+  rearArmIn?: number | null;
+  baggageArmIn?: number | null;
+  fuelArmIn?: number | null;
 };
 
 function toNumber(value: string) {
@@ -56,6 +61,21 @@ export default function WeightBalance() {
     if (!selectedType || maxGrossOverride) return;
     setMaxGrossOverride(String(selectedType.maxGrossWeightLb ?? ""));
   }, [selectedType, maxGrossOverride]);
+
+  useEffect(() => {
+    if (!selectedType) return;
+    const maybeSet = (current: string, next?: number | null, setter?: (value: string) => void) => {
+      if (!setter) return;
+      if (current !== "" && toNumber(current) !== 0) return;
+      if (typeof next !== "number") return;
+      setter(String(next));
+    };
+    maybeSet(emptyArm, selectedType.emptyArmIn ?? undefined, setEmptyArm);
+    maybeSet(frontArm, selectedType.frontArmIn ?? undefined, setFrontArm);
+    maybeSet(rearArm, selectedType.rearArmIn ?? undefined, setRearArm);
+    maybeSet(baggageArm, selectedType.baggageArmIn ?? undefined, setBaggageArm);
+    maybeSet(fuelArm, selectedType.fuelArmIn ?? undefined, setFuelArm);
+  }, [selectedType, emptyArm, frontArm, rearArm, baggageArm, fuelArm]);
 
   const fuelWeight = toNumber(fuelGallons) * 6;
   const maxGross = toNumber(maxGrossOverride);

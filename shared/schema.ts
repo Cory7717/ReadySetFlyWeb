@@ -1105,6 +1105,11 @@ export const aircraftTypes = pgTable("aircraft_types", {
   fuelBurnGph: decimal("fuel_burn_gph", { precision: 6, scale: 2 }).notNull(),
   usableFuelGal: decimal("usable_fuel_gal", { precision: 8, scale: 2 }).notNull(),
   maxGrossWeightLb: decimal("max_gross_weight_lb", { precision: 10, scale: 2 }).notNull(),
+  emptyArmIn: decimal("empty_arm_in", { precision: 6, scale: 2 }),
+  frontArmIn: decimal("front_arm_in", { precision: 6, scale: 2 }),
+  rearArmIn: decimal("rear_arm_in", { precision: 6, scale: 2 }),
+  baggageArmIn: decimal("baggage_arm_in", { precision: 6, scale: 2 }),
+  fuelArmIn: decimal("fuel_arm_in", { precision: 6, scale: 2 }),
   defaultAltitudeFt: integer("default_altitude_ft"),
   isVerified: boolean("is_verified").default(false),
   sourceNote: text("source_note"),
@@ -1199,6 +1204,11 @@ export const insertAircraftTypeSchema = createInsertSchema(aircraftTypes).omit({
   usableFuelGal: z.coerce.number().min(5).max(4000),
   maxGrossWeightLb: z.coerce.number().min(500).max(2000000),
   defaultAltitudeFt: z.coerce.number().min(1000).max(45000).optional().nullable(),
+  emptyArmIn: z.coerce.number().min(0).max(400).optional().nullable(),
+  frontArmIn: z.coerce.number().min(0).max(400).optional().nullable(),
+  rearArmIn: z.coerce.number().min(0).max(400).optional().nullable(),
+  baggageArmIn: z.coerce.number().min(0).max(400).optional().nullable(),
+  fuelArmIn: z.coerce.number().min(0).max(400).optional().nullable(),
 });
 
 export const insertAircraftProfileSchema = createInsertSchema(aircraftProfiles).omit({

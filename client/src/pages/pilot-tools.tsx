@@ -125,7 +125,8 @@ export default function PilotTools() {
   const [windGust, setWindGust] = useState("");
   const [fieldElevation, setFieldElevation] = useState("500");
   const [altimeterSetting, setAltimeterSetting] = useState("29.92");
-  const [oatC, setOatC] = useState("20");
+  const [oatValue, setOatValue] = useState("20");
+  const [tempUnit, setTempUnit] = useState<"C" | "F">("C");
 
   const heading = Number(runwayHeading) || 0;
   const windDir = Number(windDirection) || 0;
@@ -141,7 +142,8 @@ export default function PilotTools() {
 
   const elevation = Number(fieldElevation) || 0;
   const altimeter = Number(altimeterSetting) || 29.92;
-  const oat = Number(oatC) || 0;
+  const oatInput = Number(oatValue) || 0;
+  const oat = tempUnit === "F" ? (oatInput - 32) * (5 / 9) : oatInput;
   const pressureAltitude = Math.round(elevation + (29.92 - altimeter) * 1000);
   const isaTemp = 15 - 2 * (pressureAltitude / 1000);
   const densityAltitude = Math.round(pressureAltitude + 120 * (oat - isaTemp));
@@ -312,8 +314,32 @@ export default function PilotTools() {
                 <Input value={altimeterSetting} onChange={(e) => setAltimeterSetting(e.target.value)} placeholder="29.92" />
               </div>
               <div className="space-y-2">
-                <Label>OAT (°C)</Label>
-                <Input value={oatC} onChange={(e) => setOatC(e.target.value)} placeholder="20" />
+                <Label>OAT ({tempUnit === "F" ? "°F" : "°C"})</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={oatValue}
+                    onChange={(e) => setOatValue(e.target.value)}
+                    placeholder={tempUnit === "F" ? "68" : "20"}
+                  />
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant={tempUnit === "C" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setTempUnit("C")}
+                    >
+                      °C
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={tempUnit === "F" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setTempUnit("F")}
+                    >
+                      °F
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">

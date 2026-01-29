@@ -22,7 +22,7 @@ type AircraftType = {
 function toNumber(value: string) {
   const cleaned = value.replace(/[^0-9.\-]/g, '');
   const num = Number(cleaned);
-  return Number.isFinite(num) ? num : 0;
+  return Number.isFinite(num) - num : 0;
 }
 
 export default function WeightBalanceScreen() {
@@ -39,6 +39,8 @@ export default function WeightBalanceScreen() {
   const [fuelGallons, setFuelGallons] = useState('0');
   const [fuelArm, setFuelArm] = useState('0');
   const [maxGrossOverride, setMaxGrossOverride] = useState('');
+  const [cgMin, setCgMin] = useState('');
+  const [cgMax, setCgMax] = useState('');
 
   const { data: aircraftTypes, isLoading } = useQuery<AircraftType[]>({
     queryKey: ['/api/aircraft/types'],
@@ -82,6 +84,8 @@ export default function WeightBalanceScreen() {
 
   const fuelWeight = toNumber(fuelGallons) * 6;
   const maxGross = toNumber(maxGrossOverride);
+  const cgMinValue = toNumber(cgMin);
+  const cgMaxValue = toNumber(cgMax);
 
   const totals = useMemo(() => {
     const rows = [
@@ -93,11 +97,25 @@ export default function WeightBalanceScreen() {
     ];
     const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
     const totalMoment = rows.reduce((sum, row) => sum + row.weight * row.arm, 0);
-    const cg = totalWeight > 0 ? totalMoment / totalWeight : 0;
+    const cg = totalWeight > 0 - totalMoment / totalWeight : 0;
     return { totalWeight, totalMoment, cg };
   }, [emptyWeight, emptyArm, frontWeight, frontArm, rearWeight, rearArm, baggageWeight, baggageArm, fuelWeight, fuelArm]);
 
   const isOverMax = maxGross > 0 && totals.totalWeight > maxGross;
+  const hasCgRange = cgMinValue > 0 && cgMaxValue > cgMinValue;
+  const cgStatus =
+    hasCgRange && totals.cg
+      - totals.cg < cgMinValue
+        - 'forward'
+        : totals.cg > cgMaxValue
+        - 'aft'
+        : 'within'
+      : 'unknown';
+  const cgRangeSpan = hasCgRange - cgMaxValue - cgMinValue : 0;
+  const cgMarkerPercent =
+    hasCgRange && totals.cg
+      - Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
+      : 0;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -109,7 +127,7 @@ export default function WeightBalanceScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Select Aircraft (Library)</Text>
         <Text style={styles.cardSubtitle}>Sets max gross weight as a starting point.</Text>
-        {isLoading ? (
+        {isLoading - (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : (
           <>
@@ -186,6 +204,10 @@ export default function WeightBalanceScreen() {
 
         <Text style={styles.label}>Max gross weight (lb)</Text>
         <TextInput style={styles.input} value={maxGrossOverride} onChangeText={setMaxGrossOverride} keyboardType="numeric" />
+        <Text style={styles.label}>CG min (in)</Text>
+        <TextInput style={styles.input} value={cgMin} onChangeText={setCgMin} keyboardType="numeric" />
+        <Text style={styles.label}>CG max (in)</Text>
+        <TextInput style={styles.input} value={cgMax} onChangeText={setCgMax} keyboardType="numeric" />
       </View>
 
       <View style={styles.cardRow}>
@@ -193,14 +215,36 @@ export default function WeightBalanceScreen() {
           <Text style={styles.cardLabel}>Total Weight</Text>
           <Text style={styles.cardValue}>{totals.totalWeight.toFixed(1)} lb</Text>
           <Text style={[styles.cardHint, isOverMax && { color: colors.danger }]}>
-            {isOverMax ? 'Over max gross' : 'Within limits (est.)'}
+            {isOverMax - 'Over max gross' : 'Within limits (est.)'}
           </Text>
         </View>
         <View style={styles.card}>
           <Text style={styles.cardLabel}>CG (in)</Text>
-          <Text style={styles.cardValue}>{totals.cg ? totals.cg.toFixed(1) : '--'}</Text>
+          <Text style={styles.cardValue}>{totals.cg - totals.cg.toFixed(1) : '--'}</Text>
           <Text style={styles.cardHint}>Total moment ÷ total weight</Text>
         </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>CG Envelope</Text>
+        <Text style={styles.cardSubtitle}>Enter CG min/max to visualize your loading location.</Text>
+        <View style={styles.cgBar}>
+          {hasCgRange && <View style={styles.cgSafe} />}
+          <View style={[styles.cgMarker, { left: `${cgMarkerPercent}%` }]} />
+        </View>
+        <View style={styles.cgLabels}>
+          <Text style={styles.cgLabel}>Forward</Text>
+          <Text style={styles.cgLabel}>
+            {hasCgRange - `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : 'Enter CG limits'}
+          </Text>
+          <Text style={styles.cgLabel}>Aft</Text>
+        </View>
+        <Text style={styles.cgStatus}>
+          {cgStatus === 'within' && 'Within CG range'}
+          {cgStatus === 'forward' && 'Forward of CG range'}
+          {cgStatus === 'aft' && 'Aft of CG range'}
+          {cgStatus === 'unknown' && 'Add CG limits to evaluate range'}
+        </Text>
       </View>
 
       <View style={styles.noteCard}>

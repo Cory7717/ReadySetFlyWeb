@@ -26,7 +26,7 @@ type AircraftType = {
 function toNumber(value: string) {
   const cleaned = value.replace(/[^0-9.\-]/g, "");
   const num = Number(cleaned);
-  return Number.isFinite(num) ? num : 0;
+  return Number.isFinite(num) - num : 0;
 }
 
 export default function WeightBalance() {
@@ -42,6 +42,8 @@ export default function WeightBalance() {
   const [fuelGallons, setFuelGallons] = useState("0");
   const [fuelArm, setFuelArm] = useState("0");
   const [maxGrossOverride, setMaxGrossOverride] = useState("");
+  const [cgMin, setCgMin] = useState("");
+  const [cgMax, setCgMax] = useState("");
 
   const { data: aircraftTypes = [] } = useQuery<AircraftType[]>({
     queryKey: ["/api/aircraft/types"],
@@ -79,6 +81,8 @@ export default function WeightBalance() {
 
   const fuelWeight = toNumber(fuelGallons) * 6;
   const maxGross = toNumber(maxGrossOverride);
+  const cgMinValue = toNumber(cgMin);
+  const cgMaxValue = toNumber(cgMax);
 
   const totals = useMemo(() => {
     const rows = [
@@ -90,11 +94,25 @@ export default function WeightBalance() {
     ];
     const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
     const totalMoment = rows.reduce((sum, row) => sum + row.weight * row.arm, 0);
-    const cg = totalWeight > 0 ? totalMoment / totalWeight : 0;
+    const cg = totalWeight > 0 - totalMoment / totalWeight : 0;
     return { totalWeight, totalMoment, cg };
   }, [emptyWeight, emptyArm, frontWeight, frontArm, rearWeight, rearArm, baggageWeight, baggageArm, fuelWeight, fuelArm]);
 
   const isOverMax = maxGross > 0 && totals.totalWeight > maxGross;
+  const hasCgRange = cgMinValue > 0 && cgMaxValue > cgMinValue;
+  const cgStatus =
+    hasCgRange && totals.cg
+      - totals.cg < cgMinValue
+        - "forward"
+        : totals.cg > cgMaxValue
+        - "aft"
+        : "within"
+      : "unknown";
+  const cgRangeSpan = hasCgRange - cgMaxValue - cgMinValue : 0;
+  const cgMarkerPercent =
+    hasCgRange && totals.cg
+      - Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
+      : 0;
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
@@ -123,7 +141,7 @@ export default function WeightBalance() {
               <SelectContent>
                 {aircraftTypes.map((type) => (
                   <SelectItem key={type.id} value={type.id}>
-                    {type.make} {type.model} {type.icaoType ? `(${type.icaoType})` : ""}
+                    {type.make} {type.model} {type.icaoType - `(${type.icaoType})` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -205,6 +223,16 @@ export default function WeightBalance() {
                 <Input value={maxGrossOverride} onChange={(e) => setMaxGrossOverride(e.target.value)} />
               </div>
             </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>CG min (in)</Label>
+                <Input value={cgMin} onChange={(e) => setCgMin(e.target.value)} placeholder="e.g., 35.0" />
+              </div>
+              <div className="space-y-2">
+                <Label>CG max (in)</Label>
+                <Input value={cgMax} onChange={(e) => setCgMax(e.target.value)} placeholder="e.g., 47.0" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -215,8 +243,8 @@ export default function WeightBalance() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold">{totals.totalWeight.toFixed(1)} lb</div>
-              <p className={`text-sm ${isOverMax ? "text-destructive" : "text-muted-foreground"}`}>
-                {isOverMax ? "Over max gross" : "Within limits (est.)"}
+              <p className={`text-sm ${isOverMax - "text-destructive" : "text-muted-foreground"}`}>
+                {isOverMax - "Over max gross" : "Within limits (est.)"}
               </p>
             </CardContent>
           </Card>
@@ -234,11 +262,45 @@ export default function WeightBalance() {
               <CardTitle>CG (in)</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">{totals.cg ? totals.cg.toFixed(1) : "--"}</div>
+              <div className="text-2xl font-semibold">{totals.cg - totals.cg.toFixed(1) : "--"}</div>
               <p className="text-sm text-muted-foreground">Moment ÷ weight</p>
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>CG Envelope</CardTitle>
+            <CardDescription>
+              Enter CG min/max to visualize your loading location.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="relative h-3 w-full rounded-full bg-muted">
+              <div className="absolute left-0 top-0 h-3 w-full rounded-full bg-muted" />
+              {hasCgRange && (
+                <div className="absolute left-0 top-0 h-3 w-full rounded-full bg-emerald-200" />
+              )}
+              <div
+                className="absolute -top-1 h-5 w-1 rounded-full bg-slate-900"
+                style={{ left: `${cgMarkerPercent}%` }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-between text-xs text-muted-foreground">
+              <span>Forward</span>
+              <span>
+                {hasCgRange - `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : "Enter CG limits"}
+              </span>
+              <span>Aft</span>
+            </div>
+            <div className="text-sm">
+              {cgStatus === "within" && <span className="text-emerald-600">Within CG range</span>}
+              {cgStatus === "forward" && <span className="text-destructive">Forward of CG range</span>}
+              {cgStatus === "aft" && <span className="text-destructive">Aft of CG range</span>}
+              {cgStatus === "unknown" && <span className="text-muted-foreground">Add CG limits to evaluate range</span>}
+            </div>
+          </CardContent>
+        </Card>
 
         <Alert>
           <AlertDescription className="text-xs">

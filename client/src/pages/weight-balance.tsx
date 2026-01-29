@@ -102,16 +102,16 @@ export default function WeightBalance() {
   const hasCgRange = cgMinValue > 0 && cgMaxValue > cgMinValue;
   const cgStatus =
     hasCgRange && totals.cg
-      - totals.cg < cgMinValue
-        - "forward"
+      ? totals.cg < cgMinValue
+        ? "forward"
         : totals.cg > cgMaxValue
-        - "aft"
+        ? "aft"
         : "within"
       : "unknown";
-  const cgRangeSpan = hasCgRange - cgMaxValue - cgMinValue : 0;
+const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
   const cgMarkerPercent =
     hasCgRange && totals.cg
-      - Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
+      ? Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
       : 0;
 
   return (

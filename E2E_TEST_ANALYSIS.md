@@ -877,4 +877,5 @@ ERROR CASE TESTS (Scenario C)
 
 **Last Updated:** January 5, 2026  
 **Next Review:** After beta launch (March 2026)  
-**Contact:** Cory (coryarmer@gmail.com)
+**Contact:** Cory (support@readysetfly.us)
+

@@ -11,6 +11,15 @@ type Props = NativeStackScreenProps<MarketplaceStackParamList, 'MarketplaceCateg
 
 export default function MarketplaceCategoryScreen({ route, navigation }: Props) {
   const { category } = route.params;
+  const categoryLabelMap: Record<string, string> = {
+    'aircraft-sale': 'Aircraft For Sale',
+    charter: 'Charter Services',
+    cfi: 'CFI Services',
+    'flight-school': 'Flight Schools',
+    mechanic: 'Mechanics',
+    job: 'Aviation Jobs',
+  };
+  const categoryLabel = categoryLabelMap[category] || category;
 
   const { data: listings, isLoading, error } = useQuery({
     queryKey: ['/api/marketplace', category],
@@ -72,6 +81,10 @@ export default function MarketplaceCategoryScreen({ route, navigation }: Props) 
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>{categoryLabel}</Text>
+        <Text style={styles.headerSubtitle}>Listings</Text>
+      </View>
       <FlatList
         data={listings || []}
         renderItem={renderListing}
@@ -93,6 +106,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  header: {
+    padding: spacing.md,
+    paddingBottom: 0,
+  },
+  headerTitle: {
+    ...typography.h2,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
   },
   centerContainer: {
     flex: 1,

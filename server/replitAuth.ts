@@ -273,7 +273,10 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
     // Callback (mobile)
     app.get(
       "/api/auth/google/mobile/callback",
-      passport.authenticate("google", { failureRedirect: "/" }),
+      passport.authenticate("google", {
+        failureRedirect: "/",
+        callbackURL: `${getApiBaseUrl()}/api/auth/google/mobile/callback`,
+      }),
       (req: any, res: any) => {
         const userId = req.user?.claims?.sub;
         if (userId) req.session.userId = userId;

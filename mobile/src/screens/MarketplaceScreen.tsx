@@ -6,12 +6,12 @@ import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
 
 const categories = [
-  { id: 'Aviation Jobs', icon: 'briefcase', color: '#1e40af' },
-  { id: 'Aircraft For Sale', icon: 'pricetag', color: '#7c3aed' },
-  { id: 'CFIs', icon: 'school', color: '#0891b2' },
-  { id: 'Flight Schools', icon: 'business', color: '#059669' },
-  { id: 'Mechanics', icon: 'construct', color: '#dc2626' },
-  { id: 'Charter Services', icon: 'business-outline', color: '#ea580c' },
+  { id: 'job', label: 'Aviation Jobs', icon: 'briefcase', color: '#1e40af' },
+  { id: 'aircraft-sale', label: 'Aircraft For Sale', icon: 'pricetag', color: '#7c3aed' },
+  { id: 'cfi', label: 'CFIs', icon: 'school', color: '#0891b2' },
+  { id: 'flight-school', label: 'Flight Schools', icon: 'business', color: '#059669' },
+  { id: 'mechanic', label: 'Mechanics', icon: 'construct', color: '#dc2626' },
+  { id: 'charter', label: 'Charter Services', icon: 'business-outline', color: '#ea580c' },
 ];
 
 export default function MarketplaceScreen({ navigation }: any) {
@@ -53,7 +53,7 @@ export default function MarketplaceScreen({ navigation }: any) {
               <Ionicons name={category.icon as any} size={32} color={category.color} />
             </View>
             <View style={styles.categoryInfo}>
-              <Text style={styles.categoryTitle}>{category.id}</Text>
+              <Text style={styles.categoryTitle}>{category.label}</Text>
               <Text style={styles.categorySubtitle}>View listings</Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color="#9ca3af" />

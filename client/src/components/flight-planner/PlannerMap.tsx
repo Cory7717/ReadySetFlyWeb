@@ -23,14 +23,37 @@ const defaultIcon = L.icon({
   iconAnchor: [12, 41],
 });
 
-function FitBounds({ points }: { points: PlannerPoint[] }) {
+function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "standard" | "sectional" }) {
   const map = useMap();
 
   useEffect(() => {
     if (points.length === 0) return;
     const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lon]));
     map.fitBounds(bounds.pad(0.2));
-  }, [map, points]);
+    if (mapStyle === "sectional") {
+      const zoom = map.getZoom();
+      if (zoom < 8) map.setZoom(8);
+      if (zoom > 12) map.setZoom(12);
+    }
+  }, [map, points, mapStyle]);
+
+  return null;
+}
+
+function MapStyleController({ mapStyle }: { mapStyle: "standard" | "sectional" }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (mapStyle === "sectional") {
+      map.setMinZoom(8);
+      map.setMaxZoom(12);
+      if (map.getZoom() < 8) map.setZoom(8);
+      if (map.getZoom() > 12) map.setZoom(12);
+      return;
+    }
+    map.setMinZoom(3);
+    map.setMaxZoom(18);
+  }, [map, mapStyle]);
 
   return null;
 }
@@ -47,6 +70,8 @@ export default function PlannerMap({ points, height = "380px", mapStyle = "stand
           <TileLayer
             attribution='Federal Aviation Administration, Aeronautical Information Services'
             url="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
+            minZoom={8}
+            maxZoom={12}
           />
         ) : (
           <TileLayer
@@ -54,6 +79,7 @@ export default function PlannerMap({ points, height = "380px", mapStyle = "stand
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
         )}
+        <MapStyleController mapStyle={mapStyle} />
         {points.length > 1 && (
           <Polyline
             positions={points.map((p) => [p.lat, p.lon])}
@@ -67,7 +93,7 @@ export default function PlannerMap({ points, height = "380px", mapStyle = "stand
             icon={defaultIcon}
           />
         ))}
-        <FitBounds points={points} />
+        <FitBounds points={points} mapStyle={mapStyle} />
       </MapContainer>
     </div>
   );

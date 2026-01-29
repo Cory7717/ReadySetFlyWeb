@@ -23,6 +23,7 @@ import StudentWeatherScreen from '../screens/StudentWeatherScreen';
 import OwnershipCostCalculatorScreen from '../screens/OwnershipCostCalculatorScreen';
 import MyAircraftScreen from '../screens/MyAircraftScreen';
 import FAQScreen from '../screens/FAQScreen';
+import ContactUsScreen from '../screens/ContactUsScreen';
 
 export type ProfileStackParamList = {
   ProfileHome: undefined;
@@ -49,13 +50,14 @@ export type ProfileStackParamList = {
   OwnershipCost: undefined;
   MyAircraft: undefined;
   FAQ: undefined;
+  ContactUs: undefined;
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
 export default function ProfileStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen 
         name="ProfileHome" 
         component={ProfileScreen}
@@ -64,209 +66,122 @@ export default function ProfileStack() {
       <Stack.Screen 
         name="MyRentals" 
         component={MyRentalsScreen}
-        options={{ 
-          title: 'My Rentals',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'My Rentals' }}
       />
       <Stack.Screen 
         name="Balance" 
         component={BalanceScreen}
-        options={{ 
-          title: 'Balance & Withdrawals',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Balance & Withdrawals' }}
       />
       <Stack.Screen 
         name="Verification" 
         component={VerificationScreen}
-        options={{ 
-          title: 'Verification Status',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Verification Status' }}
       />
       <Stack.Screen 
         name="Favorites" 
         component={FavoritesScreen}
-        options={{ 
-          title: 'My Favorites',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'My Favorites' }}
       />
       <Stack.Screen 
         name="Auth" 
         component={AuthScreen}
-        options={{ 
-          title: 'Sign In',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Sign In' }}
       />
       <Stack.Screen 
         name="PilotTools" 
         component={PilotToolsScreen}
-        options={{ 
-          title: 'Pilot Tools',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Pilot Tools' }}
       />
       <Stack.Screen 
         name="ApproachPlates" 
         component={ApproachPlatesScreen}
-        options={{ 
-          title: 'Approach Plates',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Approach Plates' }}
       />
       <Stack.Screen 
         name="FlightPlanner" 
         component={FlightPlannerScreen}
-        options={{ 
-          title: 'Flight Planner',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Flight Planner' }}
       />
       <Stack.Screen 
         name="RadioCommsTrainer" 
         component={RadioCommsTrainerScreen}
-        options={{ 
-          title: 'Radio Comms Trainer',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Radio Comms Trainer' }}
       />
       <Stack.Screen 
         name="Logbook" 
         component={LogbookScreen}
-        options={{ 
-          title: 'Digital Logbook',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Digital Logbook' }}
       />
       <Stack.Screen 
         name="LogbookEntry" 
         component={LogbookEntryScreen}
-        options={{ 
-          title: 'Logbook Entry',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Logbook Entry' }}
       />
       <Stack.Screen 
         name="LogbookPro" 
         component={LogbookProScreen}
-        options={{ 
-          title: 'Logbook Pro',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Logbook Pro' }}
       />
       <Stack.Screen 
         name="StudentHub" 
         component={StudentHubScreen}
-        options={{ 
-          title: 'Student Pilots',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Student Pilots' }}
       />
       <Stack.Screen 
         name="StudentWizard" 
         component={StudentWizardScreen}
-        options={{ 
-          title: 'Pilot Readiness Wizard',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Pilot Readiness Wizard' }}
       />
       <Stack.Screen 
         name="StudentRoadmap" 
         component={StudentRoadmapScreen}
-        options={{ 
-          title: 'Training Roadmap',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Training Roadmap' }}
       />
       <Stack.Screen 
         name="StudentCost" 
         component={StudentCostScreen}
-        options={{ 
-          title: 'Training Cost',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Training Cost' }}
       />
       <Stack.Screen 
         name="StudentProgress" 
         component={StudentProgressScreen}
-        options={{ 
-          title: 'Progress Tracker',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Progress Tracker' }}
       />
       <Stack.Screen 
         name="StudentWritten" 
         component={StudentWrittenScreen}
-        options={{ 
-          title: 'Written Test Prep',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Written Test Prep' }}
       />
       <Stack.Screen 
         name="StudentChecklists" 
         component={StudentChecklistsScreen}
-        options={{ 
-          title: 'Checklists',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Checklists' }}
       />
       <Stack.Screen 
         name="StudentWeather" 
         component={StudentWeatherScreen}
-        options={{ 
-          title: 'Student Weather',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Student Weather' }}
       />
       <Stack.Screen 
         name="OwnershipCost" 
         component={OwnershipCostCalculatorScreen}
-        options={{ 
-          title: 'Ownership Cost',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Ownership Cost' }}
       />
       <Stack.Screen 
         name="MyAircraft" 
         component={MyAircraftScreen}
-        options={{ 
-          title: 'My Aircraft',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'My Aircraft' }}
       />
       <Stack.Screen 
         name="FAQ" 
         component={FAQScreen}
-        options={{ 
-          title: 'FAQ',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'FAQ' }}
+      />
+      <Stack.Screen
+        name="ContactUs"
+        component={ContactUsScreen}
+        options={{ title: 'Contact Us' }}
       />
     </Stack.Navigator>
   );

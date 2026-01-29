@@ -323,6 +323,26 @@ export default function ProfileScreen({ navigation }: any) {
               <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
             </TouchableOpacity>
 
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('ContactUs')}
+              data-testid="button-contact-us"
+            >
+              <Ionicons name="mail-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Contact Us</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => Linking.openURL('https://readysetfly.us/settings')}
+              data-testid="button-manage-subscription"
+            >
+              <Ionicons name="card-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Manage Subscription</Text>
+              <Ionicons name="open-outline" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
             <TouchableOpacity 
               style={styles.menuItem}
               onPress={handleOpenPrivacyPolicy}
@@ -358,6 +378,16 @@ export default function ProfileScreen({ navigation }: any) {
                 {deleteAccountMutation.isPending ? 'Deleting...' : 'Delete Account'}
               </Text>
               <Ionicons name="chevron-forward" size={20} color="#ef4444" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuItem, { borderColor: '#fecaca' }]}
+              onPress={() => Linking.openURL('https://readysetfly.us/delete-account')}
+              data-testid="button-delete-account-web"
+            >
+              <Ionicons name="trash-bin-outline" size={24} color="#ef4444" />
+              <Text style={[styles.menuText, { color: '#ef4444' }]}>Delete Account (web)</Text>
+              <Ionicons name="open-outline" size={20} color="#ef4444" />
             </TouchableOpacity>
           </View>
 

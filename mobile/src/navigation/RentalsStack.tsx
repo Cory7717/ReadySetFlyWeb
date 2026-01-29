@@ -24,7 +24,7 @@ const Stack = createNativeStackNavigator<RentalsStackParamList>();
 
 export default function RentalsStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen 
         name="RentalsList" 
         component={RentalsScreen}
@@ -33,29 +33,17 @@ export default function RentalsStack() {
       <Stack.Screen 
         name="AircraftDetail" 
         component={AircraftDetailScreen}
-        options={{ 
-          title: 'Aircraft Details',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Aircraft Details' }}
       />
       <Stack.Screen 
         name="Booking" 
         component={BookingScreen}
-        options={{ 
-          title: 'Book Aircraft',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Book Aircraft' }}
       />
       <Stack.Screen 
         name="RentalPayment" 
         component={RentalPaymentScreen}
-        options={{ 
-          title: 'Secure Payment',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Secure Payment' }}
       />
     </Stack.Navigator>
   );

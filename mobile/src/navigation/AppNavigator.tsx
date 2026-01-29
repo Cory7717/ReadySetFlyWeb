@@ -33,16 +33,10 @@ export default function AppNavigator() {
           },
           tabBarActiveTintColor: '#1e40af',
           tabBarInactiveTintColor: 'gray',
-          headerStyle: {
-            backgroundColor: '#1e40af',
-          },
-          headerTintColor: '#fff',
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
+          headerShown: false,
         })}
       >
-        <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Ready Set Fly' }} />
+        <Tab.Screen name="Home" component={HomeScreen} />
         <Tab.Screen name="Rentals" component={RentalsStack} options={{ headerShown: false }} />
         <Tab.Screen name="Marketplace" component={MarketplaceStack} options={{ headerShown: false }} />
         <Tab.Screen name="Messages" component={MessagesScreen} />

@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
@@ -42,6 +43,14 @@ type AircraftProfile = {
   maxGrossWeightLbEffective?: number;
 };
 
+const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+
+type WeatherResponse = {
+  icao: string;
+  metar: any;
+  taf: any;
+};
+
 function toRad(deg: number) {
   return (deg * Math.PI) / 180;
 }
@@ -58,15 +67,40 @@ function greatCircleNm(a: AirportMeta, b: AirportMeta) {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+function parseFlightCategory(metar: any): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNKNOWN' {
+  if (!metar?.rawOb) return 'UNKNOWN';
+  const raw = metar.rawOb || '';
+  const visMatch = raw.match(/\s(\d{1,2})SM/);
+  const visibility = visMatch ? parseInt(visMatch[1], 10) : 10;
+  const ceilingMatch = raw.match(/(BKN|OVC)(\d{3})/);
+  const ceiling = ceilingMatch ? parseInt(ceilingMatch[2], 10) * 100 : 10000;
+
+  if (ceiling >= 3000 && visibility > 5) return 'VFR';
+  if (ceiling >= 1000 && visibility >= 3) return 'MVFR';
+  if (ceiling >= 500 && visibility >= 1) return 'IFR';
+  return 'LIFR';
+}
+
+function hasThunder(taf: any) {
+  const raw = taf?.rawTAF || '';
+  return raw.includes('TS');
+}
+
 export default function FlightPlannerScreen() {
   const { isAuthenticated } = useIsAuthenticated();
   const [departure, setDeparture] = useState('KJFK');
   const [destination, setDestination] = useState('KBOS');
   const [waypoints, setWaypoints] = useState('');
+  const [plannedStops, setPlannedStops] = useState('');
   const [alternate, setAlternate] = useState('');
+  const [tailNumber, setTailNumber] = useState('');
+  const [fuelOnBoard, setFuelOnBoard] = useState('');
+  const [notes, setNotes] = useState('');
   const [suggestedMode, setSuggestedMode] = useState<'direct' | 'midpoint'>('direct');
   const [loading, setLoading] = useState(false);
   const [routeSummary, setRouteSummary] = useState<{ totalNm: number; legs: { from: string; to: string; nm: number }[] } | null>(null);
+  const [routePoints, setRoutePoints] = useState<AirportMeta[]>([]);
+  const [mapStyle, setMapStyle] = useState<'standard' | 'sectional'>('standard');
 
   const [aircraftQuery, setAircraftQuery] = useState('');
   const [aircraftResults, setAircraftResults] = useState<AircraftType[]>([]);
@@ -79,6 +113,21 @@ export default function FlightPlannerScreen() {
   const [usableFuel, setUsableFuel] = useState('40');
   const [maxGrossWeight, setMaxGrossWeight] = useState('2400');
   const [reserveMinutes, setReserveMinutes] = useState('45');
+  const [headwind, setHeadwind] = useState('0');
+
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [departureWeather, setDepartureWeather] = useState<WeatherResponse | null>(null);
+  const [destinationWeather, setDestinationWeather] = useState<WeatherResponse | null>(null);
+  const [departureSuggestions, setDepartureSuggestions] = useState<AirportMeta[]>([]);
+  const [destinationSuggestions, setDestinationSuggestions] = useState<AirportMeta[]>([]);
+
+  const [checklist, setChecklist] = useState({
+    weather: false,
+    fuel: false,
+    currency: false,
+    notams: false,
+  });
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -86,6 +135,42 @@ export default function FlightPlannerScreen() {
       .then((res) => setProfiles(res.data || []))
       .catch(() => setProfiles([]));
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    const value = departure.trim();
+    const normalized = value.toUpperCase();
+    if (!value || ICAO_REGEX.test(normalized)) {
+      setDepartureSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/airports/search', { params: { q: value } });
+        setDepartureSuggestions(res.data || []);
+      } catch {
+        setDepartureSuggestions([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [departure]);
+
+  useEffect(() => {
+    const value = destination.trim();
+    const normalized = value.toUpperCase();
+    if (!value || ICAO_REGEX.test(normalized)) {
+      setDestinationSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/airports/search', { params: { q: value } });
+        setDestinationSuggestions(res.data || []);
+      } catch {
+        setDestinationSuggestions([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [destination]);
 
   const effectiveProfile = useMemo(
     () => profiles.find((p) => p.id === selectedProfileId) || null,
@@ -123,6 +208,29 @@ export default function FlightPlannerScreen() {
     }
   };
 
+  const fetchWeather = async () => {
+    const dep = departure.trim().toUpperCase();
+    const dest = destination.trim().toUpperCase();
+    if (!dep || !dest) {
+      Alert.alert('Missing airports', 'Departure and destination are required.');
+      return;
+    }
+    setWeatherLoading(true);
+    setWeatherError(null);
+    try {
+      const [depRes, destRes] = await Promise.all([
+        api.get(`/api/aviation-weather/${dep}`),
+        api.get(`/api/aviation-weather/${dest}`),
+      ]);
+      setDepartureWeather(depRes.data);
+      setDestinationWeather(destRes.data);
+    } catch (error: any) {
+      setWeatherError(error?.response?.data?.error || 'Unable to load weather.');
+    } finally {
+      setWeatherLoading(false);
+    }
+  };
+
   const buildRoute = async () => {
     const dep = departure.trim().toUpperCase();
     const dest = destination.trim().toUpperCase();
@@ -134,7 +242,11 @@ export default function FlightPlannerScreen() {
       .split(/[\s,]+/)
       .map((code) => code.trim().toUpperCase())
       .filter(Boolean);
-    const codes = [dep, ...wpList, dest];
+    const stopList = plannedStops
+      .split(/[\s,]+/)
+      .map((code) => code.trim().toUpperCase())
+      .filter(Boolean);
+    const codes = [dep, ...stopList, ...wpList, dest];
     setLoading(true);
     try {
       const airports: AirportMeta[] = [];
@@ -143,7 +255,7 @@ export default function FlightPlannerScreen() {
         airports.push(res.data);
       }
       let routedAirports = airports;
-      if (suggestedMode === 'midpoint' && wpList.length === 0 && airports.length >= 2) {
+      if (suggestedMode === 'midpoint' && wpList.length === 0 && stopList.length === 0 && airports.length >= 2) {
         const start = airports[0];
         const end = airports[airports.length - 1];
         const lat1 = toRad(start.latitude);
@@ -176,9 +288,11 @@ export default function FlightPlannerScreen() {
       });
       const totalNm = legs.reduce((sum, leg) => sum + leg.nm, 0);
       setRouteSummary({ totalNm, legs });
+      setRoutePoints(routedAirports);
     } catch (error: any) {
       Alert.alert('Route error', error?.response?.data?.error || 'Unable to build route.');
       setRouteSummary(null);
+      setRoutePoints([]);
     } finally {
       setLoading(false);
     }
@@ -187,24 +301,80 @@ export default function FlightPlannerScreen() {
   const cruise = parseFloat(cruiseKtas) || 0;
   const burn = parseFloat(fuelBurnGph) || 0;
   const reserve = parseFloat(reserveMinutes) || 0;
+  const wind = parseFloat(headwind) || 0;
   const totalNm = routeSummary?.totalNm || 0;
-  const eteHours = cruise > 0 ? totalNm / cruise : 0;
+  const effectiveSpeed = Math.max(cruise - wind, 1);
+  const eteHours = effectiveSpeed > 0 ? totalNm / effectiveSpeed : 0;
   const fuelRequired = eteHours * burn;
   const totalFuel = fuelRequired + (burn * (reserve / 60));
+  const depCategory = parseFlightCategory(departureWeather?.metar);
+  const destCategory = parseFlightCategory(destinationWeather?.metar);
+  const routeRisk = [depCategory, destCategory].some((cat) => cat === 'IFR' || cat === 'LIFR') || hasThunder(departureWeather?.taf) || hasThunder(destinationWeather?.taf);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Route Builder</Text>
-        <TextInput style={styles.input} value={departure} onChangeText={setDeparture} placeholder="Departure (ICAO)" />
-        <TextInput style={styles.input} value={destination} onChangeText={setDestination} placeholder="Destination (ICAO)" />
+        <TextInput style={styles.input} value={departure} onChangeText={setDeparture} placeholder="Departure (ICAO or city/state)" />
+        {departureSuggestions.length > 0 && (
+          <View style={styles.suggestionList}>
+            {departureSuggestions.slice(0, 6).map((airport) => (
+              <TouchableOpacity
+                key={`${airport.icao}-${airport.name ?? ''}`}
+                style={styles.suggestionItem}
+                onPress={() => {
+                  setDeparture(airport.icao);
+                  setDepartureSuggestions([]);
+                }}
+              >
+                <Text style={styles.suggestionItemText}>
+                  {airport.icao} {airport.name ? `• ${airport.name}` : ''}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        <TextInput style={styles.input} value={destination} onChangeText={setDestination} placeholder="Destination (ICAO or city/state)" />
+        {destinationSuggestions.length > 0 && (
+          <View style={styles.suggestionList}>
+            {destinationSuggestions.slice(0, 6).map((airport) => (
+              <TouchableOpacity
+                key={`${airport.icao}-${airport.name ?? ''}`}
+                style={styles.suggestionItem}
+                onPress={() => {
+                  setDestination(airport.icao);
+                  setDestinationSuggestions([]);
+                }}
+              >
+                <Text style={styles.suggestionItemText}>
+                  {airport.icao} {airport.name ? `• ${airport.name}` : ''}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
         <TextInput
           style={styles.input}
           value={waypoints}
           onChangeText={setWaypoints}
           placeholder="Waypoints (optional, space or comma separated)"
         />
+        <TextInput
+          style={styles.input}
+          value={plannedStops}
+          onChangeText={setPlannedStops}
+          placeholder="Planned stops for fuel (optional)"
+        />
         <TextInput style={styles.input} value={alternate} onChangeText={setAlternate} placeholder="Alternate (optional)" />
+        <TextInput style={styles.input} value={tailNumber} onChangeText={setTailNumber} placeholder="Tail Number (optional)" />
+        <TextInput style={styles.input} value={fuelOnBoard} onChangeText={setFuelOnBoard} placeholder="Fuel on board (gal)" keyboardType="numeric" />
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Notes or route details"
+          multiline
+        />
         <View style={styles.suggestionBox}>
           <Text style={styles.suggestionTitle}>Suggested routes</Text>
           <Text style={styles.suggestionText}>Midpoint adds a virtual waypoint for planning only.</Text>
@@ -218,18 +388,78 @@ export default function FlightPlannerScreen() {
             <TouchableOpacity
               style={[styles.suggestionButton, suggestedMode === 'midpoint' && styles.suggestionButtonActive]}
               onPress={() => setSuggestedMode('midpoint')}
-              disabled={waypoints.trim().length > 0}
+              disabled={waypoints.trim().length > 0 || plannedStops.trim().length > 0}
             >
               <Text style={styles.suggestionButtonText}>Add midpoint</Text>
             </TouchableOpacity>
           </View>
-          {waypoints.trim().length > 0 && (
-            <Text style={styles.suggestionHint}>Midpoint is disabled when custom waypoints are entered.</Text>
+          {(waypoints.trim().length > 0 || plannedStops.trim().length > 0) && (
+            <Text style={styles.suggestionHint}>Midpoint is disabled when custom waypoints or stops are entered.</Text>
           )}
         </View>
         <TouchableOpacity style={styles.primaryButton} onPress={buildRoute} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Build Route</Text>}
         </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={fetchWeather} disabled={weatherLoading}>
+          {weatherLoading ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.secondaryButtonText}>Check Weather</Text>}
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.mapHeader}>
+          <Text style={styles.sectionTitle}>Route Map</Text>
+          <View style={styles.mapToggleRow}>
+            <TouchableOpacity
+              style={[styles.mapToggleButton, mapStyle === 'standard' && styles.mapToggleActive]}
+              onPress={() => setMapStyle('standard')}
+            >
+              <Text style={styles.mapToggleText}>Standard</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.mapToggleButton, mapStyle === 'sectional' && styles.mapToggleActive]}
+              onPress={() => setMapStyle('sectional')}
+            >
+              <Text style={styles.mapToggleText}>Sectional (FAA)</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        {routePoints.length > 0 ? (
+          <MapView
+            style={styles.map}
+            mapType={mapStyle === 'sectional' ? 'none' : 'standard'}
+            initialRegion={{
+              latitude: routePoints[0].latitude,
+              longitude: routePoints[0].longitude,
+              latitudeDelta: 3,
+              longitudeDelta: 3,
+            }}
+          >
+            {mapStyle === 'sectional' && (
+              <UrlTile
+                urlTemplate="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
+                maximumZ={12}
+                minimumZ={6}
+                tileSize={256}
+              />
+            )}
+            <Polyline
+              coordinates={routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude }))}
+              strokeColor="#0ea5e9"
+              strokeWidth={3}
+            />
+            {routePoints.map((point) => (
+              <Marker
+                key={point.icao}
+                coordinate={{ latitude: point.latitude, longitude: point.longitude }}
+                title={point.icao}
+                description={point.name || undefined}
+              />
+            ))}
+          </MapView>
+        ) : (
+          <Text style={styles.helperText}>Enter airports and build a route to preview the map.</Text>
+        )}
+        <Text style={styles.helperText}>Sectional tiles provided by FAA/Aeronautical Information Services.</Text>
       </View>
 
       <View style={styles.section}>
@@ -304,6 +534,10 @@ export default function FlightPlannerScreen() {
             <Text style={styles.label}>Reserve (min)</Text>
             <TextInput style={styles.input} value={reserveMinutes} onChangeText={setReserveMinutes} keyboardType="numeric" />
           </View>
+          <View style={styles.gridItem}>
+            <Text style={styles.label}>Avg Headwind (kt)</Text>
+            <TextInput style={styles.input} value={headwind} onChangeText={setHeadwind} keyboardType="numeric" />
+          </View>
         </View>
       </View>
 
@@ -325,6 +559,48 @@ export default function FlightPlannerScreen() {
           <Text style={styles.summaryLabel}>Fuel + Reserve</Text>
           <Text style={styles.summaryValue}>{totalFuel ? `${totalFuel.toFixed(1)} gal` : '-'}</Text>
         </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Route Risk</Text>
+          <Text style={[styles.summaryValue, routeRisk && { color: colors.warning }]}>{routeRisk ? 'Check conditions' : 'Normal'}</Text>
+        </View>
+      </View>
+
+      {(departureWeather || destinationWeather || weatherError) && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Weather Snapshot</Text>
+          {weatherError && <Text style={styles.helperText}>{weatherError}</Text>}
+          <View style={styles.weatherCard}>
+            <Text style={styles.weatherTitle}>Departure {departure.toUpperCase()}</Text>
+            <Text style={styles.weatherValue}>{depCategory}</Text>
+            <Text style={styles.weatherText} numberOfLines={2}>{departureWeather?.metar?.rawOb || 'METAR unavailable'}</Text>
+          </View>
+          <View style={styles.weatherCard}>
+            <Text style={styles.weatherTitle}>Destination {destination.toUpperCase()}</Text>
+            <Text style={styles.weatherValue}>{destCategory}</Text>
+            <Text style={styles.weatherText} numberOfLines={2}>{destinationWeather?.metar?.rawOb || 'METAR unavailable'}</Text>
+          </View>
+        </View>
+      )}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Go / No-Go Checklist</Text>
+        {[
+          { key: 'weather', label: 'Weather reviewed' },
+          { key: 'fuel', label: 'Fuel planned' },
+          { key: 'currency', label: 'Currency checked' },
+          { key: 'notams', label: 'NOTAMs acknowledged' },
+        ].map((item) => (
+          <TouchableOpacity
+            key={item.key}
+            style={styles.checkRow}
+            onPress={() => setChecklist((prev) => ({ ...prev, [item.key]: !prev[item.key as keyof typeof prev] }))}
+          >
+            <View style={[styles.checkBox, checklist[item.key as keyof typeof checklist] && styles.checkBoxActive]}>
+              {checklist[item.key as keyof typeof checklist] && <Ionicons name="checkmark" size={14} color="#fff" />}
+            </View>
+            <Text style={styles.checkText}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {routeSummary?.legs?.length ? (
@@ -332,7 +608,7 @@ export default function FlightPlannerScreen() {
           <Text style={styles.sectionTitle}>Route Legs</Text>
           {routeSummary.legs.map((leg) => (
             <View key={`${leg.from}-${leg.to}`} style={styles.legRow}>
-              <Text style={styles.legText}>{leg.from} → {leg.to}</Text>
+              <Text style={styles.legText}>{leg.from} -> {leg.to}</Text>
               <Text style={styles.legText}>{leg.nm.toFixed(1)} NM</Text>
             </View>
           ))}
@@ -397,4 +673,23 @@ const styles = StyleSheet.create({
   suggestionButtonActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
   suggestionButtonText: { fontSize: 12, color: colors.text },
   suggestionHint: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
+  suggestionList: { backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, marginBottom: spacing.sm },
+  suggestionItem: { paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  suggestionItemText: { fontSize: 12, color: colors.text },
+  textArea: { minHeight: 80, textAlignVertical: 'top' },
+  weatherCard: { backgroundColor: colors.surfaceMuted, padding: spacing.sm, borderRadius: radius.md, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border },
+  weatherTitle: { fontSize: 12, color: colors.textMuted },
+  weatherValue: { fontSize: 16, fontWeight: '700', color: colors.text, marginTop: spacing.xs },
+  weatherText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
+  checkRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  checkBox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', marginRight: spacing.sm },
+  checkBoxActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  checkText: { fontSize: 13, color: colors.text },
+  mapHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  mapToggleRow: { flexDirection: 'row', gap: spacing.xs },
+  mapToggleButton: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  mapToggleActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  mapToggleText: { fontSize: 12, color: colors.text },
+  map: { width: '100%', height: 240, borderRadius: radius.lg, overflow: 'hidden' },
 });
+

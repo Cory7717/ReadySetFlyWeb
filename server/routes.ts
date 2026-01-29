@@ -5,6 +5,7 @@ import os from "os";
 import path from "path";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
+import zlib from "zlib";
 import cors from "cors";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -185,6 +186,15 @@ type AirportMeta = {
   elevationFt?: number | null;
 };
 
+type AirportSearchResult = {
+  icao: string;
+  name: string | null;
+  city?: string | null;
+  state?: string | null;
+  lat: number;
+  lon: number;
+};
+
 function toNumber(value: any): number | null {
   if (value === null || value === undefined) return null;
   const num = Number(value);
@@ -214,9 +224,68 @@ const PLATE_CACHE_MAX = 500;
 const plateMetaCache = new Map<string, { data: PlateMeta[]; expiresAt: number; createdAt: number }>();
 const AIRPORT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const airportMetaCache = new Map<string, { data: AirportMeta; expiresAt: number }>();
+const STATION_CACHE_URL = "https://aviationweather.gov/data/cache/stations.cache.json.gz";
+const STATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+let stationCache: { data: AirportSearchResult[]; expiresAt: number } | null = null;
 
 function normalizeIcao(value: string) {
   return value.trim().toUpperCase();
+}
+
+function buildIcaoCandidates(value: string) {
+  const normalized = normalizeIcao(value);
+  if (normalized.length === 3) {
+    return Array.from(new Set([`K${normalized}`, normalized]));
+  }
+  return [normalized];
+}
+
+function normalizeSearch(value: string) {
+  return value.trim().toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+async function loadStationCache(): Promise<AirportSearchResult[]> {
+  const now = Date.now();
+  if (stationCache && stationCache.expiresAt > now) return stationCache.data;
+
+  const response = await fetch(STATION_CACHE_URL, {
+    headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load station cache: ${response.status}`);
+  }
+
+  const compressed = Buffer.from(await response.arrayBuffer());
+  const jsonText = zlib.gunzipSync(compressed).toString("utf-8");
+  const parsed = JSON.parse(jsonText);
+  const rows = Array.isArray(parsed) ? parsed : parsed?.data ?? [];
+
+  const mapped: AirportSearchResult[] = rows
+    .map((row: any) => {
+      const icao =
+        row.icaoId ??
+        row.icao ??
+        row.stationId ??
+        row.station ??
+        row.site ??
+        row.siteId ??
+        row.iataId;
+      const lat = Number(row.latitude ?? row.lat ?? row.latitude_dec ?? row.lat_dec ?? row.latDec);
+      const lon = Number(row.longitude ?? row.lon ?? row.longitude_dec ?? row.lon_dec ?? row.lonDec);
+      if (!icao || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      return {
+        icao: String(icao).toUpperCase(),
+        name: row.name ?? row.site ?? row.stationName ?? row.facilityName ?? null,
+        city: row.city ?? null,
+        state: row.state ?? row.stateCode ?? null,
+        lat,
+        lon,
+      } as AirportSearchResult;
+    })
+    .filter(Boolean);
+
+  stationCache = { data: mapped, expiresAt: now + STATION_CACHE_TTL_MS };
+  return mapped;
 }
 
 function getDtppMetaUrl() {
@@ -2097,7 +2166,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Set 30-second timeout
       processingTimeout = setTimeout(() => {
-        resetProcessing('Payment timed out after 30 seconds. Please try again or contact coryarmer@gmail.com');
+        resetProcessing('Payment timed out after 30 seconds. Please try again or contact support@readysetfly.us');
       }, 30000);
     }
     
@@ -2223,11 +2292,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               window.location.href = '/';
             }, 5000);
           } else {
-            resetProcessing(result.error || 'Failed to claim free order. Please contact coryarmer@gmail.com');
+            resetProcessing(result.error || 'Failed to claim free order. Please contact support@readysetfly.us');
           }
         } catch (error) {
           console.error('Free order claim error:', error);
-          resetProcessing('Failed to claim free order. Please try again or contact coryarmer@gmail.com');
+          resetProcessing('Failed to claim free order. Please try again or contact support@readysetfly.us');
         }
       });
     } else {
@@ -2320,7 +2389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           } catch (error) {
             console.error('Payment capture error:', error);
-            resetProcessing('Payment capture failed. Please contact coryarmer@gmail.com with order ID: ${orderId}');
+            resetProcessing('Payment capture failed. Please contact support@readysetfly.us with order ID: ${orderId}');
           }
         },
         onError: (error) => {
@@ -2349,7 +2418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         });
       } else {
-        errorDiv.innerHTML = '<div class="error">Card payments are not available. Please contact coryarmer@gmail.com.</div>';
+        errorDiv.innerHTML = '<div class="error">Card payments are not available. Please contact support@readysetfly.us.</div>';
       }
     }
   </script>
@@ -5844,7 +5913,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         console.error(`CRITICAL: Failed to send job application email to ${recipientEmail}:`, emailError);
         // Email send failed, so don't create application (prevents orphaned records)
         return res.status(500).json({ 
-          error: "Failed to send notification to job poster. Please try again or contact coryarmer@gmail.com" 
+          error: "Failed to send notification to job poster. Please try again or contact support@readysetfly.us" 
         });
       }
     } catch (error: any) {
@@ -6008,178 +6077,234 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/airports/:icao", airportLookupRateLimiter, async (req, res) => {
     try {
-      const icao = normalizeIcao(req.params.icao || "");
-      if (!/^[A-Z0-9]{3,4}$/.test(icao)) {
+      const requestedIcao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
 
-      const cached = getCachedAirport(icao);
-      if (cached) {
-        return res.json({ ...cached, cached: true });
-      }
+      const candidates = buildIcaoCandidates(requestedIcao);
 
-      const stationUrls = [
-        `https://aviationweather.gov/api/data/station?ids=${icao}&format=json`,
-        `https://aviationweather.gov/api/data/airport?ids=${icao}&format=json`,
-        `https://aviationweather.gov/api/data/stations?ids=${icao}&format=json`,
-      ];
-
-      const fetchStation = async (url: string) => {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        try {
-          const response = await fetch(url, {
-            signal: controller.signal,
-            headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
-          });
-          if (!response.ok) {
-            return null;
-          }
-          return await response.json();
-        } finally {
-          clearTimeout(timeout);
+      for (const candidate of candidates) {
+        const cached = getCachedAirport(candidate);
+        if (cached) {
+          return res.json({ ...cached, cached: true });
         }
-      };
 
-      let stationData: any = null;
-      for (const url of stationUrls) {
-        stationData = await fetchStation(url);
-        if (stationData) break;
+        const stationUrls = [
+          `https://aviationweather.gov/api/data/station?ids=${candidate}&format=json`,
+          `https://aviationweather.gov/api/data/airport?ids=${candidate}&format=json`,
+          `https://aviationweather.gov/api/data/stations?ids=${candidate}&format=json`,
+        ];
+
+        const fetchStation = async (url: string) => {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 8000);
+          try {
+            const response = await fetch(url, {
+              signal: controller.signal,
+              headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+            });
+            if (!response.ok) {
+              return null;
+            }
+            return await response.json();
+          } catch {
+            return null;
+          } finally {
+            clearTimeout(timeout);
+          }
+        };
+
+        let stationData: any = null;
+        for (const url of stationUrls) {
+          stationData = await fetchStation(url);
+          if (stationData) break;
+        }
+
+        const stationCandidate = Array.isArray(stationData)
+          ? stationData[0]
+          : stationData?.[0] ?? stationData?.data?.[0] ?? stationData;
+
+        if (!stationCandidate) {
+          continue;
+        }
+
+        const lat = Number(
+          stationCandidate.latitude ??
+            stationCandidate.lat ??
+            stationCandidate.latitude_dec ??
+            stationCandidate.lat_dec ??
+            stationCandidate.latDec
+        );
+        const lon = Number(
+          stationCandidate.longitude ??
+            stationCandidate.lon ??
+            stationCandidate.longitude_dec ??
+            stationCandidate.lon_dec ??
+            stationCandidate.lonDec
+        );
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+          continue;
+        }
+
+        const payload: AirportMeta = {
+          icao: candidate,
+          name:
+            stationCandidate.site ??
+            stationCandidate.name ??
+            stationCandidate.stationName ??
+            stationCandidate.facilityName ??
+            null,
+          lat,
+          lon,
+          elevationFt: stationCandidate.elevation ? Number(stationCandidate.elevation) : null,
+        };
+
+        setCachedAirport(candidate, payload);
+        if (candidate !== requestedIcao) {
+          setCachedAirport(requestedIcao, payload);
+        }
+        return res.json({ ...payload, cached: false });
       }
 
-      const stationCandidate = Array.isArray(stationData)
-        ? stationData[0]
-        : stationData?.[0] ?? stationData?.data?.[0] ?? stationData;
-
-      if (!stationCandidate) {
-        return res.status(404).json({ error: "Airport not found" });
-      }
-
-      const lat = Number(
-        stationCandidate.latitude ??
-          stationCandidate.lat ??
-          stationCandidate.latitude_dec ??
-          stationCandidate.lat_dec ??
-          stationCandidate.latDec
-      );
-      const lon = Number(
-        stationCandidate.longitude ??
-          stationCandidate.lon ??
-          stationCandidate.longitude_dec ??
-          stationCandidate.lon_dec ??
-          stationCandidate.lonDec
-      );
-
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-        return res.status(404).json({ error: "Airport coordinates unavailable" });
-      }
-
-      const payload: AirportMeta = {
-        icao,
-        name:
-          stationCandidate.site ??
-          stationCandidate.name ??
-          stationCandidate.stationName ??
-          stationCandidate.facilityName ??
-          null,
-        lat,
-        lon,
-        elevationFt: stationCandidate.elevation ? Number(stationCandidate.elevation) : null,
-      };
-
-      setCachedAirport(icao, payload);
-      res.json({ ...payload, cached: false });
+      return res.status(404).json({ error: "Airport not found" });
     } catch (error) {
       console.error("Airport lookup failed:", error);
       res.status(500).json({ error: "Failed to fetch airport data" });
     }
   });
 
+  app.get("/api/airports/search", airportLookupRateLimiter, async (req, res) => {
+    try {
+      const rawQuery = String(req.query.q || "");
+      const query = normalizeSearch(rawQuery);
+      if (!query || query.length < 2) {
+        return res.json([]);
+      }
+
+      const stations = await loadStationCache();
+      const terms = query.split(" ").filter(Boolean);
+
+      const scored = stations
+        .map((station) => {
+          const haystack = normalizeSearch(
+            `${station.icao} ${station.name ?? ""} ${station.city ?? ""} ${station.state ?? ""}`
+          );
+
+          let score = 0;
+          if (station.icao.toLowerCase() === query) score += 100;
+          if (station.icao.toLowerCase().startsWith(query)) score += 80;
+          if (haystack.includes(query)) score += 40;
+          for (const term of terms) {
+            if (station.icao.toLowerCase().startsWith(term)) score += 30;
+            if (haystack.includes(term)) score += 10;
+          }
+
+          return score > 0 ? { station, score } : null;
+        })
+        .filter(Boolean) as { station: AirportSearchResult; score: number }[];
+
+      scored.sort((a, b) => b.score - a.score);
+
+      const results = scored.slice(0, 12).map(({ station }) => station);
+      return res.json(results);
+    } catch (error) {
+      console.error("Airport search failed:", error);
+      res.status(500).json({ error: "Failed to search airports" });
+    }
+  });
+
   app.get("/api/aviation-weather/:icao", async (req, res) => {
     try {
-      const icao = req.params.icao.toUpperCase();
+      const requestedIcao = normalizeIcao(req.params.icao || "");
       
       // Validate ICAO format (3-4 letter code)
-      if (!/^[A-Z]{3,4}$/.test(icao)) {
+      if (!/^[A-Z]{3,4}$/.test(requestedIcao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
 
       const now = Date.now();
-      const cached = weatherCache.get(icao);
+      const candidates = buildIcaoCandidates(requestedIcao);
 
-      // Return cached data if fresh
-      if (cached && (now - cached.timestamp) < WEATHER_CACHE_TTL) {
-        return res.json({ ...cached.data, cached: true });
-      }
+      for (const candidate of candidates) {
+        const cached = weatherCache.get(candidate);
 
-      // Fetch METAR and TAF from Aviation Weather Center API
-      const metarUrl = `https://aviationweather.gov/api/data/metar?ids=${icao}&format=json`;
-      const tafUrl = `https://aviationweather.gov/api/data/taf?ids=${icao}&format=json`;
-
-      const [metarRes, tafRes] = await Promise.all([
-        fetch(metarUrl, { headers: { 'User-Agent': 'ReadySetFly/1.0' } }),
-        fetch(tafUrl, { headers: { 'User-Agent': 'ReadySetFly/1.0' } })
-      ]);
-
-      let metar = null;
-      let taf = null;
-      let metarError = null;
-      let tafError = null;
-
-      if (metarRes.ok) {
-        try {
-          const metarData = await metarRes.json();
-          metar = metarData.length > 0 ? metarData[0] : null;
-        } catch (e) {
-          metarError = "Failed to parse METAR response";
-          console.error(`METAR parse error for ${icao}:`, e);
+        // Return cached data if fresh
+        if (cached && (now - cached.timestamp) < WEATHER_CACHE_TTL) {
+          return res.json({ ...cached.data, cached: true });
         }
-      } else {
-        metarError = `METAR unavailable (${metarRes.status})`;
-        console.log(`METAR fetch failed for ${icao}: ${metarRes.status}`);
-      }
 
-      if (tafRes.ok) {
-        try {
-          const tafData = await tafRes.json();
-          taf = tafData.length > 0 ? tafData[0] : null;
-        } catch (e) {
-          tafError = "Failed to parse TAF response";
-          console.error(`TAF parse error for ${icao}:`, e);
+        // Fetch METAR and TAF from Aviation Weather Center API
+        const metarUrl = `https://aviationweather.gov/api/data/metar?ids=${candidate}&format=json`;
+        const tafUrl = `https://aviationweather.gov/api/data/taf?ids=${candidate}&format=json`;
+
+        const [metarRes, tafRes] = await Promise.all([
+          fetch(metarUrl, { headers: { 'User-Agent': 'ReadySetFly/1.0' } }),
+          fetch(tafUrl, { headers: { 'User-Agent': 'ReadySetFly/1.0' } })
+        ]);
+
+        let metar = null;
+        let taf = null;
+        let metarError = null;
+        let tafError = null;
+
+        if (metarRes.ok) {
+          try {
+            const metarData = await metarRes.json();
+            metar = metarData.length > 0 ? metarData[0] : null;
+          } catch (e) {
+            metarError = "Failed to parse METAR response";
+            console.error(`METAR parse error for ${candidate}:`, e);
+          }
+        } else {
+          metarError = `METAR unavailable (${metarRes.status})`;
+          console.log(`METAR fetch failed for ${candidate}: ${metarRes.status}`);
         }
-      } else {
-        tafError = `TAF unavailable (${tafRes.status})`;
-        console.log(`TAF fetch failed for ${icao}: ${tafRes.status}`);
-      }
 
-      // If both failed, return an error with details
-      if (!metar && !taf && metarError && tafError) {
-        return res.status(404).json({ 
-          error: `No weather data available for ${icao}. This airport may not report METAR/TAF data.`,
-          details: { metarError, tafError }
-        });
-      }
-
-      const responseData = {
-        icao,
-        metar,
-        taf,
-        timestamp: now,
-        cached: false
-      };
-
-      // Cache the result (even if partial)
-      weatherCache.set(icao, { data: responseData, timestamp: now });
-
-      // Cleanup old cache entries (keep cache size manageable)
-      if (weatherCache.size > 100) {
-        const oldestKey = weatherCache.keys().next().value as string | undefined;
-        if (oldestKey) {
-          weatherCache.delete(oldestKey);
+        if (tafRes.ok) {
+          try {
+            const tafData = await tafRes.json();
+            taf = tafData.length > 0 ? tafData[0] : null;
+          } catch (e) {
+            tafError = "Failed to parse TAF response";
+            console.error(`TAF parse error for ${candidate}:`, e);
+          }
+        } else {
+          tafError = `TAF unavailable (${tafRes.status})`;
+          console.log(`TAF fetch failed for ${candidate}: ${tafRes.status}`);
         }
+
+        if (!metar && !taf && metarError && tafError) {
+          continue;
+        }
+
+        const responseData = {
+          icao: candidate,
+          metar,
+          taf,
+          timestamp: now,
+          cached: false
+        };
+
+        weatherCache.set(candidate, { data: responseData, timestamp: now });
+        if (candidate !== requestedIcao) {
+          weatherCache.set(requestedIcao, { data: responseData, timestamp: now });
+        }
+
+        if (weatherCache.size > 100) {
+          const oldestKey = weatherCache.keys().next().value as string | undefined;
+          if (oldestKey) {
+            weatherCache.delete(oldestKey);
+          }
+        }
+
+        return res.json(responseData);
       }
 
-      res.json(responseData);
+      return res.status(404).json({ 
+        error: `No weather data available for ${requestedIcao}. This airport may not report METAR/TAF data.`,
+      });
     } catch (error) {
       console.error("Aviation weather fetch error:", error);
       res.status(500).json({ error: "Failed to fetch aviation weather data" });
@@ -6776,4 +6901,5 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   return httpServer;
 }
+
 

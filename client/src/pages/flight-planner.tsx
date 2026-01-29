@@ -48,6 +48,15 @@ type AircraftType = {
   max_gross_weight_lb_effective?: number | null;
 };
 
+type AirportSearchResult = {
+  icao: string;
+  name?: string | null;
+  city?: string | null;
+  state?: string | null;
+  lat?: number;
+  lon?: number;
+};
+
 const FALLBACK_TYPE: AircraftType = {
   id: "fallback",
   make: "Generic",
@@ -140,6 +149,8 @@ export default function FlightPlanner() {
     maxGrossWeightOverrideLb: "",
   });
   const [checklist, setChecklist] = useState(checklistDefaults);
+  const [departureSuggestions, setDepartureSuggestions] = useState<AirportSearchResult[]>([]);
+  const [destinationSuggestions, setDestinationSuggestions] = useState<AirportSearchResult[]>([]);
 
   useEffect(() => {
     const stored = localStorage.getItem("flightPlannerChecklist");
@@ -155,6 +166,52 @@ export default function FlightPlanner() {
   useEffect(() => {
     localStorage.setItem("flightPlannerChecklist", JSON.stringify(checklist));
   }, [checklist]);
+
+  useEffect(() => {
+    const value = form.departure.trim();
+    const normalized = value.toUpperCase();
+    if (!value || ICAO_REGEX.test(normalized)) {
+      setDepartureSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/airports/search?q=${encodeURIComponent(value)}`);
+        if (!res.ok) {
+          setDepartureSuggestions([]);
+          return;
+        }
+        const data = await res.json();
+        setDepartureSuggestions(Array.isArray(data) ? data : []);
+      } catch {
+        setDepartureSuggestions([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [form.departure]);
+
+  useEffect(() => {
+    const value = form.destination.trim();
+    const normalized = value.toUpperCase();
+    if (!value || ICAO_REGEX.test(normalized)) {
+      setDestinationSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/airports/search?q=${encodeURIComponent(value)}`);
+        if (!res.ok) {
+          setDestinationSuggestions([]);
+          return;
+        }
+        const data = await res.json();
+        setDestinationSuggestions(Array.isArray(data) ? data : []);
+      } catch {
+        setDestinationSuggestions([]);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [form.destination]);
 
   const { data: savedPlans = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
     queryKey: ["/api/flight-plans"],
@@ -569,16 +626,54 @@ export default function FlightPlanner() {
             <Input
               value={form.departure}
               onChange={(e) => setForm({ ...form, departure: e.target.value.toUpperCase() })}
-              placeholder="KJFK"
+              placeholder="KJFK or Austin, TX"
             />
+            {departureSuggestions.length > 0 && (
+              <div className="rounded-md border bg-background p-2 max-h-40 overflow-y-auto space-y-1 text-sm">
+                {departureSuggestions.map((airport) => (
+                  <button
+                    key={`${airport.icao}-${airport.name ?? ""}`}
+                    type="button"
+                    className="w-full text-left hover:bg-muted rounded px-2 py-1"
+                    onClick={() => {
+                      setForm({ ...form, departure: airport.icao.toUpperCase() });
+                      setDepartureSuggestions([]);
+                    }}
+                  >
+                    <span className="font-medium">{airport.icao}</span>
+                    {airport.name ? ` — ${airport.name}` : ""}
+                    {airport.city ? ` (${airport.city}${airport.state ? `, ${airport.state}` : ""})` : ""}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <Label>Destination (ICAO)</Label>
             <Input
               value={form.destination}
               onChange={(e) => setForm({ ...form, destination: e.target.value.toUpperCase() })}
-              placeholder="KBOS"
+              placeholder="KBOS or Dallas, TX"
             />
+            {destinationSuggestions.length > 0 && (
+              <div className="rounded-md border bg-background p-2 max-h-40 overflow-y-auto space-y-1 text-sm">
+                {destinationSuggestions.map((airport) => (
+                  <button
+                    key={`${airport.icao}-${airport.name ?? ""}`}
+                    type="button"
+                    className="w-full text-left hover:bg-muted rounded px-2 py-1"
+                    onClick={() => {
+                      setForm({ ...form, destination: airport.icao.toUpperCase() });
+                      setDestinationSuggestions([]);
+                    }}
+                  >
+                    <span className="font-medium">{airport.icao}</span>
+                    {airport.name ? ` — ${airport.name}` : ""}
+                    {airport.city ? ` (${airport.city}${airport.state ? `, ${airport.state}` : ""})` : ""}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Waypoints (optional)</Label>
@@ -716,7 +811,7 @@ export default function FlightPlanner() {
                 <SelectTrigger>
                   <SelectValue placeholder="Select aircraft type" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-72 overflow-y-auto">
                   <SelectItem value={CUSTOM_TYPE_ID}>Custom entry</SelectItem>
                   <SelectItem value={FALLBACK_TYPE.id}>
                     {FALLBACK_TYPE.make} {FALLBACK_TYPE.model}

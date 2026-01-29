@@ -17,7 +17,7 @@ const Stack = createNativeStackNavigator<MarketplaceStackParamList>();
 
 export default function MarketplaceStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen 
         name="MarketplaceHome" 
         component={MarketplaceScreen}
@@ -26,20 +26,12 @@ export default function MarketplaceStack() {
       <Stack.Screen 
         name="MarketplaceCategory" 
         component={MarketplaceCategoryScreen}
-        options={({ route }) => ({ 
-          title: route.params.category,
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        })}
+        options={({ route }) => ({ title: route.params.category })}
       />
       <Stack.Screen 
         name="MarketplaceDetail" 
         component={MarketplaceDetailScreen}
-        options={{ 
-          title: 'Listing Details',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Listing Details' }}
       />
       <Stack.Screen 
         name="CreateMarketplaceListing" 
@@ -49,11 +41,7 @@ export default function MarketplaceStack() {
       <Stack.Screen 
         name="MarketplacePayment" 
         component={MarketplacePaymentScreen}
-        options={{ 
-          title: 'Complete Payment',
-          headerStyle: { backgroundColor: '#1e40af' },
-          headerTintColor: '#fff',
-        }}
+        options={{ title: 'Complete Payment' }}
       />
     </Stack.Navigator>
   );

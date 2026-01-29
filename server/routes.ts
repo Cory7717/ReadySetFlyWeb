@@ -6083,6 +6083,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.json([]);
       }
 
+      res.setHeader("x-rsf-airport-search", "1");
       const stations = await loadStationCache();
       const terms = query.split(" ").filter(Boolean);
 
@@ -6118,6 +6119,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   app.get("/api/airports/:icao", airportLookupRateLimiter, async (req, res) => {
     try {
       const requestedIcao = normalizeIcao(req.params.icao || "");
+      if (requestedIcao.toLowerCase() === "search") {
+        return res.status(400).json({ error: "Use /api/airports/search?q=your+city" });
+      }
       if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }

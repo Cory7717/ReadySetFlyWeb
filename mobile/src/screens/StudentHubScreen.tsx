@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 export default function StudentHubScreen({ navigation }: any) {
   const goToFlightSchools = () => {
@@ -10,7 +11,7 @@ export default function StudentHubScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.title}>Student Pilot Hub</Text>
         <Text style={styles.subtitle}>
@@ -88,25 +89,29 @@ export default function StudentHubScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  header: { padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700', color: '#111827' },
-  subtitle: { marginTop: 6, color: '#6b7280' },
-  section: { padding: 16 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { paddingBottom: spacing.lg },
+  header: { padding: spacing.lg, backgroundColor: colors.surface },
+  title: { ...typography.h2 },
+  subtitle: { marginTop: spacing.xs, color: colors.textMuted },
+  section: { padding: spacing.md },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
   },
-  cardText: { marginLeft: 12, flex: 1 },
-  cardTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  cardSubtitle: { fontSize: 12, color: '#6b7280', marginTop: 4 },
-  cta: { padding: 20, backgroundColor: '#fff', margin: 16, borderRadius: 12 },
-  ctaTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  ctaSubtitle: { fontSize: 12, color: '#6b7280', marginTop: 4 },
-  primaryButton: { marginTop: 12, backgroundColor: '#1e40af', padding: 12, borderRadius: 10, alignItems: 'center' },
+  cardText: { marginLeft: spacing.sm, flex: 1 },
+  cardTitle: { ...typography.h3 },
+  cardSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  cta: { padding: spacing.lg, backgroundColor: colors.surface, margin: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  ctaTitle: { ...typography.h3 },
+  ctaSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  primaryButton: { marginTop: spacing.sm, backgroundColor: colors.primary, padding: spacing.sm, borderRadius: radius.md, alignItems: 'center' },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
 });

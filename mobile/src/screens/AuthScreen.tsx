@@ -16,8 +16,9 @@ import { useLogin, useRegister } from '../utils/auth';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as SecureStore from 'expo-secure-store';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
-const API_BASE_URL = 'https://readysetfly.us';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://readysetfly-api.onrender.com';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -88,7 +89,7 @@ export default function AuthScreen() {
   const handleGoogleLogin = async () => {
     try {
       setIsOAuthLoading(true);
-      const authUrl = `${API_BASE_URL}/api/login?mobile=true`;
+      const authUrl = `${API_BASE_URL}/api/auth/google/mobile`;
       const result = await WebBrowser.openAuthSessionAsync(authUrl, 'readysetfly://oauth-callback');
       
       if (result.type === 'cancel') {
@@ -314,28 +315,28 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: spacing.xl,
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1e40af',
-    marginTop: 16,
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: spacing.md,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginTop: 8,
+    fontSize: 15,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
   },
   form: {
     width: '100%',
@@ -351,26 +352,26 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
+    color: colors.text,
+    marginBottom: spacing.xs,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.sm,
     fontSize: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
   },
   passwordInput: {
     flex: 1,
@@ -381,14 +382,15 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   submitButton: {
-    backgroundColor: '#1e40af',
-    borderRadius: 8,
-    padding: 16,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    padding: spacing.md,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
+    ...shadow.card,
   },
   submitButtonDisabled: {
-    backgroundColor: '#9ca3af',
+    backgroundColor: '#94a3b8',
   },
   submitButtonText: {
     color: '#ffffff',
@@ -406,24 +408,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
   },
   dividerText: {
-    color: '#6b7280',
-    fontSize: 14,
-    marginHorizontal: 16,
+    color: colors.textMuted,
+    fontSize: 13,
+    marginHorizontal: spacing.md,
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 16,
-    gap: 8,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: spacing.sm,
+    ...shadow.card,
   },
   googleButtonText: {
-    color: '#1e40af',
-    fontSize: 16,
+    color: colors.primary,
+    fontSize: 15,
     fontWeight: '600',
   },
   toggleContainer: {
@@ -432,12 +435,12 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   toggleText: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 13,
+    color: colors.textMuted,
   },
   toggleLink: {
-    fontSize: 14,
-    color: '#1e40af',
+    fontSize: 13,
+    color: colors.primary,
     fontWeight: '600',
   },
 });

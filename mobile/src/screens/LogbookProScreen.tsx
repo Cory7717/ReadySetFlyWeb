@@ -3,6 +3,7 @@ import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } 
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const SALES_TAX_RATE = 0.0825;
 const PLANS = [
@@ -99,24 +100,24 @@ export default function LogbookProScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  content: { padding: 16 },
-  header: { marginBottom: 16 },
-  title: { fontSize: 22, fontWeight: '700', color: '#111827' },
-  subtitle: { marginTop: 6, color: '#6b7280' },
-  featureList: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 16 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md },
+  header: { marginBottom: spacing.md },
+  title: { ...typography.h2 },
+  subtitle: { marginTop: spacing.xs, color: colors.textMuted },
+  featureList: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   featureRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
-  featureText: { flex: 1, fontSize: 13, color: '#374151' },
+  featureText: { flex: 1, fontSize: 13, color: colors.text },
   planGrid: { gap: 10 },
-  planCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, borderWidth: 1, borderColor: '#e5e7eb' },
-  planCardActive: { borderColor: '#1e40af', backgroundColor: '#eef2ff' },
-  planLabel: { fontSize: 14, color: '#6b7280' },
-  planPrice: { fontSize: 20, fontWeight: '700', color: '#111827', marginTop: 4 },
-  planMeta: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  planCard: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  planCardActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  planLabel: { fontSize: 13, color: colors.textMuted },
+  planPrice: { fontSize: 20, fontWeight: '700', color: colors.text, marginTop: 4 },
+  planMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  totalLabel: { fontSize: 14, color: '#6b7280' },
-  totalValue: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  primaryButton: { backgroundColor: '#1e40af', borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 16 },
+  totalLabel: { fontSize: 14, color: colors.textMuted },
+  totalValue: { fontSize: 16, fontWeight: '600', color: colors.text },
+  primaryButton: { backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.md, ...shadow.card },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
-  statusText: { marginTop: 10, fontSize: 12, color: '#6b7280' },
+  statusText: { marginTop: spacing.sm, fontSize: 12, color: colors.textMuted },
 });

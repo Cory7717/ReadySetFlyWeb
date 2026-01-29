@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { api } from '../services/api';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 type AircraftType = {
   id: string;
@@ -200,22 +201,22 @@ export default function MyAircraftScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  content: { padding: 16 },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  subtitle: { marginTop: 4, color: '#6b7280', marginBottom: 12 },
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 12 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#111827', marginBottom: 10 },
-  input: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 10, marginBottom: 10 },
-  secondaryButton: { backgroundColor: '#e0e7ff', padding: 10, borderRadius: 10, alignItems: 'center', marginBottom: 10 },
-  secondaryButtonText: { color: '#1e40af', fontWeight: '600' },
-  listItem: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  listItemText: { fontSize: 12, color: '#111827' },
-  helperText: { fontSize: 12, color: '#6b7280', marginBottom: 8 },
-  primaryButton: { backgroundColor: '#1e40af', padding: 12, borderRadius: 10, alignItems: 'center' },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md },
+  title: { ...typography.h2 },
+  subtitle: { marginTop: spacing.xs, color: colors.textMuted, marginBottom: spacing.sm },
+  card: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
+  input: { backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm },
+  secondaryButton: { backgroundColor: colors.primarySoft, padding: spacing.sm, borderRadius: radius.md, alignItems: 'center', marginBottom: spacing.sm },
+  secondaryButtonText: { color: colors.primary, fontWeight: '600' },
+  listItem: { paddingVertical: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
+  listItemText: { fontSize: 12, color: colors.text },
+  helperText: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.xs },
+  primaryButton: { backgroundColor: colors.primary, padding: spacing.sm, borderRadius: radius.md, alignItems: 'center' },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
   profileRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },
-  profileName: { fontSize: 13, fontWeight: '600', color: '#111827' },
-  profileMeta: { fontSize: 11, color: '#6b7280', marginTop: 2 },
-  deleteText: { color: '#ef4444', fontSize: 12, fontWeight: '600' },
+  profileName: { fontSize: 13, fontWeight: '600', color: colors.text },
+  profileMeta: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  deleteText: { color: colors.danger, fontSize: 12, fontWeight: '600' },
 });

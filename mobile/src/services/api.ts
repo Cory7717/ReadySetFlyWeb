@@ -8,8 +8,8 @@ import type {
 } from '@shared/schema';
 import { TokenStorage } from '../utils/tokenStorage';
 
-// Backend API base URL - update this to your production URL when deploying
-const API_BASE_URL = 'https://readysetfly.us';
+// Backend API base URL - set EXPO_PUBLIC_API_URL in app config/env
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://readysetfly-api.onrender.com';
 
 // Flag to prevent multiple simultaneous refresh attempts
 let isRefreshing = false;

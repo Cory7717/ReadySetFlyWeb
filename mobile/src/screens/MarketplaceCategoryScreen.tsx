@@ -5,6 +5,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MarketplaceStackParamList } from '../navigation/MarketplaceStack';
 import { apiEndpoints } from '../services/api';
 import type { MarketplaceListing } from '@shared/schema';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 type Props = NativeStackScreenProps<MarketplaceStackParamList, 'MarketplaceCategory'>;
 
@@ -91,7 +92,7 @@ export default function MarketplaceCategoryScreen({ route, navigation }: Props) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
   },
   centerContainer: {
     flex: 1,
@@ -100,18 +101,16 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   listContainer: {
-    padding: 16,
+    padding: spacing.md,
   },
   listingCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -121,15 +120,13 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+    ...typography.h3,
   },
   price: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1e40af',
-    marginLeft: 12,
+    fontWeight: '700',
+    color: colors.primary,
+    marginLeft: spacing.sm,
   },
   locationRow: {
     flexDirection: 'row',
@@ -137,37 +134,37 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   location: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 13,
+    color: colors.textMuted,
     marginLeft: 4,
   },
   description: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 13,
+    color: colors.textMuted,
     lineHeight: 20,
-    marginBottom: 12,
+    marginBottom: spacing.sm,
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 12,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: colors.border,
   },
   category: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: colors.textMuted,
   },
   loadingText: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginTop: 12,
+    fontSize: 15,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
   },
   errorText: {
-    fontSize: 16,
-    color: '#ef4444',
-    marginTop: 12,
+    fontSize: 15,
+    color: colors.danger,
+    marginTop: spacing.sm,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -176,12 +173,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#4b5563',
-    marginTop: 16,
+    color: colors.textMuted,
+    marginTop: spacing.md,
   },
   emptySubtext: {
-    fontSize: 14,
-    color: '#9ca3af',
-    marginTop: 8,
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
   },
 });

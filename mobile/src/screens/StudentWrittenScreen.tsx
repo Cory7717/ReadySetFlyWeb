@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const TOPICS = [
   {
@@ -98,22 +99,22 @@ export default function StudentWrittenScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  content: { padding: 16 },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  subtitle: { marginTop: 4, color: '#6b7280', marginBottom: 12 },
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 12 },
-  topicItem: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  topicItemActive: { backgroundColor: '#eef2ff' },
-  topicTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  topicSummary: { fontSize: 12, color: '#6b7280', marginTop: 4 },
-  questionTitle: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  choice: { padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', marginBottom: 8 },
-  choiceSelected: { borderColor: '#1e40af' },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md },
+  title: { ...typography.h2 },
+  subtitle: { marginTop: spacing.xs, color: colors.textMuted, marginBottom: spacing.sm },
+  card: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  topicItem: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  topicItemActive: { backgroundColor: colors.primarySoft },
+  topicTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
+  topicSummary: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  questionTitle: { fontSize: 14, fontWeight: '600', marginBottom: spacing.sm, color: colors.text },
+  choice: { padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.xs },
+  choiceSelected: { borderColor: colors.primary },
   choiceCorrect: { backgroundColor: '#dcfce7', borderColor: '#16a34a' },
-  choiceIncorrect: { backgroundColor: '#fee2e2', borderColor: '#ef4444' },
-  choiceText: { fontSize: 12, color: '#111827' },
-  primaryButton: { backgroundColor: '#1e40af', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 6 },
+  choiceIncorrect: { backgroundColor: '#fee2e2', borderColor: colors.danger },
+  choiceText: { fontSize: 12, color: colors.text },
+  primaryButton: { backgroundColor: colors.primary, padding: spacing.sm, borderRadius: radius.md, alignItems: 'center', marginTop: spacing.xs },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
-  resultText: { marginTop: 8, color: '#111827', fontSize: 12 },
+  resultText: { marginTop: spacing.xs, color: colors.text, fontSize: 12 },
 });

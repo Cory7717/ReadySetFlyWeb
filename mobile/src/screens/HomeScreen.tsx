@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsAuthenticated } from '../utils/auth';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
 const LOGO_IMAGE = require('../../assets/logo.png');
@@ -13,7 +14,7 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Hero Section with Wingtip Background */}
       <ImageBackground 
         source={WINGTIP_IMAGE}
@@ -23,7 +24,7 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.heroOverlay}>
           <Image source={LOGO_IMAGE} style={styles.logo} resizeMode="contain" />
           <Text style={styles.heroTitle}>Ready Set Fly</Text>
-          <Text style={styles.heroSubtitle}>Aviation Marketplace & Rental Platform</Text>
+          <Text style={styles.heroSubtitle}>The premier hub for General Aviation tools, training, and community.</Text>
           
           {!isAuthenticated && !isLoading && (
             <TouchableOpacity 
@@ -79,6 +80,32 @@ export default function HomeScreen({ navigation }: any) {
 
         <TouchableOpacity 
           style={styles.actionCard}
+          onPress={() => navigation.navigate('Profile', { screen: 'PilotTools' })}
+          data-testid="button-pilot-tools"
+        >
+          <Ionicons name="compass-outline" size={32} color="#1e40af" />
+          <View style={styles.actionText}>
+            <Text style={styles.actionTitle}>Pilot Tools</Text>
+            <Text style={styles.actionSubtitle}>Flight planning, weather, plates</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.actionCard}
+          onPress={() => navigation.navigate('Profile', { screen: 'StudentHub' })}
+          data-testid="button-student-hub"
+        >
+          <Ionicons name="school-outline" size={32} color="#1e40af" />
+          <View style={styles.actionText}>
+            <Text style={styles.actionTitle}>Student Pilot Hub</Text>
+            <Text style={styles.actionSubtitle}>Wizard, roadmap, study tools</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.actionCard}
           onPress={() => navigation.navigate('Profile')}
           data-testid="button-my-profile"
         >
@@ -93,29 +120,29 @@ export default function HomeScreen({ navigation }: any) {
 
       {/* Features */}
       <View style={styles.features}>
-        <Text style={styles.sectionTitle}>Why Choose Ready Set Fly</Text>
+        <Text style={styles.sectionTitle}>Why Ready Set Fly</Text>
         
         <View style={styles.featureItem}>
           <Ionicons name="shield-checkmark" size={24} color="#10b981" />
           <View style={styles.featureText}>
-            <Text style={styles.featureTitle}>Verified Pilots & Aircraft</Text>
-            <Text style={styles.featureDescription}>All users and aircraft are thoroughly verified</Text>
+            <Text style={styles.featureTitle}>Pilot-first tools</Text>
+            <Text style={styles.featureDescription}>Flight planning, training, logbook, and comms in one place</Text>
           </View>
         </View>
 
         <View style={styles.featureItem}>
           <Ionicons name="cash" size={24} color="#10b981" />
           <View style={styles.featureText}>
-            <Text style={styles.featureTitle}>Secure Payments</Text>
-            <Text style={styles.featureDescription}>Protected transactions with instant payouts</Text>
+            <Text style={styles.featureTitle}>Marketplace growth</Text>
+            <Text style={styles.featureDescription}>Rentals, schools, CFIs, and listings grow as the community grows</Text>
           </View>
         </View>
 
         <View style={styles.featureItem}>
           <Ionicons name="chatbubbles" size={24} color="#10b981" />
           <View style={styles.featureText}>
-            <Text style={styles.featureTitle}>Real-time Messaging</Text>
-            <Text style={styles.featureDescription}>Connect directly with owners and renters</Text>
+            <Text style={styles.featureTitle}>Verified community</Text>
+            <Text style={styles.featureDescription}>Secure messaging and trusted profiles</Text>
           </View>
         </View>
       </View>
@@ -126,7 +153,10 @@ export default function HomeScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingBottom: spacing.lg,
   },
   hero: {
     height: 320,
@@ -139,10 +169,10 @@ const styles = StyleSheet.create({
   heroOverlay: {
     flex: 1,
     width: '100%',
-    backgroundColor: 'rgba(30, 64, 175, 0.75)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.lg,
   },
   logo: {
     width: 120,
@@ -151,7 +181,7 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontSize: 32,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#fff',
     marginTop: 8,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
@@ -160,7 +190,7 @@ const styles = StyleSheet.create({
   },
   heroSubtitle: {
     fontSize: 16,
-    color: '#fff',
+    color: '#e2e8f0',
     marginTop: 8,
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
@@ -170,11 +200,11 @@ const styles = StyleSheet.create({
   loginButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10b981',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 8,
-    marginTop: 24,
+    backgroundColor: colors.success,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: radius.lg,
+    marginTop: spacing.lg,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
@@ -203,43 +233,37 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   quickActions: {
-    padding: 20,
+    padding: spacing.lg,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 16,
+    ...typography.h2,
+    marginBottom: spacing.md,
   },
   actionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
   },
   actionText: {
     flex: 1,
     marginLeft: 16,
   },
   actionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+    ...typography.h3,
   },
   actionSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 13,
+    color: colors.textMuted,
     marginTop: 2,
   },
   features: {
-    padding: 20,
+    padding: spacing.lg,
     paddingTop: 0,
   },
   featureItem: {
@@ -252,13 +276,11 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   featureTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+    ...typography.h3,
   },
   featureDescription: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 13,
+    color: colors.textMuted,
     marginTop: 4,
   },
 });

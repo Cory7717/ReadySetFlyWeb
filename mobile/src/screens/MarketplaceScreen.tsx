@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { PromoBanner } from '../components/PromoBanner';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
 
@@ -15,7 +16,7 @@ const categories = [
 
 export default function MarketplaceScreen({ navigation }: any) {
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <ImageBackground 
         source={WINGTIP_IMAGE}
         style={styles.header}
@@ -73,7 +74,10 @@ export default function MarketplaceScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingBottom: spacing.lg,
   },
   header: {
     height: 180,
@@ -86,14 +90,14 @@ const styles = StyleSheet.create({
   headerOverlay: {
     flex: 1,
     width: '100%',
-    backgroundColor: 'rgba(30, 64, 175, 0.75)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#fff',
     marginTop: 12,
     textAlign: 'center',
@@ -103,7 +107,7 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#fff',
+    color: '#e2e8f0',
     marginTop: 4,
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
@@ -111,21 +115,19 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
   categories: {
-    padding: 16,
+    padding: spacing.md,
   },
   categoryCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
     borderLeftWidth: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
   },
   iconContainer: {
     width: 60,
@@ -139,50 +141,46 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   categoryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+    ...typography.h3,
   },
   categorySubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 13,
+    color: colors.textMuted,
     marginTop: 2,
   },
   infoSection: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#dbeafe',
-    padding: 16,
-    margin: 16,
-    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    padding: spacing.md,
+    margin: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   infoText: {
     flex: 1,
-    fontSize: 14,
-    color: '#1e3a8a',
-    marginLeft: 12,
+    fontSize: 13,
+    color: colors.primary,
+    marginLeft: spacing.sm,
     lineHeight: 20,
   },
   createListingButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#059669',
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
+    backgroundColor: colors.success,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    ...shadow.card,
   },
   createListingText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
-    marginLeft: 8,
+    marginLeft: spacing.sm,
   },
 });

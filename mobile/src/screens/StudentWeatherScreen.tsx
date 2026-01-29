@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { api } from '../services/api';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 function parseCategory(raw: string) {
   const visMatch = raw.match(/\s(\d{1,2})SM/);
@@ -61,16 +62,16 @@ export default function StudentWeatherScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6', padding: 16 },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  subtitle: { color: '#6b7280', marginTop: 4 },
-  search: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  input: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-  primaryButton: { backgroundColor: '#1e40af', paddingHorizontal: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  container: { flex: 1, backgroundColor: colors.background, padding: spacing.md },
+  title: { ...typography.h2 },
+  subtitle: { color: colors.textMuted, marginTop: spacing.xs },
+  search: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  input: { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  primaryButton: { backgroundColor: colors.primary, paddingHorizontal: spacing.md, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginTop: 16 },
-  cardTitle: { fontSize: 14, color: '#6b7280' },
-  category: { fontSize: 24, fontWeight: '700', color: '#111827', marginTop: 6 },
-  metarLabel: { fontSize: 12, color: '#6b7280', marginTop: 10 },
-  metar: { fontSize: 12, color: '#374151', marginTop: 4 },
+  card: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginTop: spacing.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  cardTitle: { fontSize: 14, color: colors.textMuted },
+  category: { fontSize: 24, fontWeight: '700', color: colors.text, marginTop: spacing.xs },
+  metarLabel: { fontSize: 12, color: colors.textMuted, marginTop: spacing.sm },
+  metar: { fontSize: 12, color: colors.text, marginTop: spacing.xs },
 });

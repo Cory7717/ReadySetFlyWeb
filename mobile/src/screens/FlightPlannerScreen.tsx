@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 type AirportMeta = {
   icao: string;
@@ -167,7 +168,7 @@ export default function FlightPlannerScreen() {
   const totalFuel = fuelRequired + (burn * (reserve / 60));
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Route Builder</Text>
         <TextInput style={styles.input} value={departure} onChangeText={setDeparture} placeholder="Departure (ICAO)" />
@@ -295,49 +296,50 @@ export default function FlightPlannerScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  section: { padding: 16, backgroundColor: '#fff', marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { paddingBottom: spacing.lg },
+  section: { padding: spacing.md, backgroundColor: colors.surface, marginBottom: spacing.sm, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  sectionTitle: { ...typography.h3, marginBottom: spacing.sm },
   input: {
-    backgroundColor: '#f9fafb',
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 10,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
     fontSize: 14,
   },
   primaryButton: {
-    backgroundColor: '#1e40af',
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    padding: spacing.sm,
     alignItems: 'center',
   },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
   secondaryButton: {
-    backgroundColor: '#e0e7ff',
-    borderRadius: 10,
-    padding: 10,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.md,
+    padding: spacing.sm,
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.sm,
   },
-  secondaryButtonText: { color: '#1e40af', fontWeight: '600' },
-  list: { marginBottom: 12 },
+  secondaryButtonText: { color: colors.primary, fontWeight: '600' },
+  list: { marginBottom: spacing.sm },
   listItem: {
-    paddingVertical: 10,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border,
   },
-  listItemText: { fontSize: 14, color: '#111827' },
-  subTitle: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 8 },
-  helperText: { fontSize: 12, color: '#6b7280' },
+  listItemText: { fontSize: 14, color: colors.text },
+  subTitle: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
+  helperText: { fontSize: 12, color: colors.textMuted },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   gridItem: { width: '48%' },
-  label: { fontSize: 12, color: '#6b7280', marginBottom: 4 },
+  label: { fontSize: 12, color: colors.textMuted, marginBottom: 4 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  summaryLabel: { fontSize: 14, color: '#6b7280' },
-  summaryValue: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  summaryLabel: { fontSize: 14, color: colors.textMuted },
+  summaryValue: { fontSize: 14, fontWeight: '600', color: colors.text },
   legRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
-  legText: { fontSize: 13, color: '#374151' },
+  legText: { fontSize: 13, color: colors.textMuted },
 });

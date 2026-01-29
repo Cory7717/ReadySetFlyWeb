@@ -1,9 +1,10 @@
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 export default function PilotToolsScreen({ navigation }: any) {
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.title}>Pilot Tools Hub</Text>
         <Text style={styles.subtitle}>
@@ -96,21 +97,25 @@ export default function PilotToolsScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  header: { padding: 20, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  title: { fontSize: 22, fontWeight: '700', color: '#111827' },
-  subtitle: { marginTop: 6, fontSize: 14, color: '#6b7280' },
-  section: { padding: 20, paddingBottom: 0 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#374151', marginBottom: 12 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { paddingBottom: spacing.lg },
+  header: { padding: spacing.lg, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
+  title: { ...typography.h2 },
+  subtitle: { marginTop: spacing.xs, fontSize: 14, color: colors.textMuted },
+  section: { padding: spacing.lg, paddingBottom: 0 },
+  sectionTitle: { ...typography.h3, marginBottom: spacing.sm },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
   },
-  cardText: { flex: 1, marginLeft: 12 },
-  cardTitle: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  cardSubtitle: { fontSize: 13, color: '#6b7280', marginTop: 4 },
+  cardText: { flex: 1, marginLeft: spacing.sm },
+  cardTitle: { ...typography.h3 },
+  cardSubtitle: { fontSize: 13, color: colors.textMuted, marginTop: 4 },
 });

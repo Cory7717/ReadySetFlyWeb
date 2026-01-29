@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Linking, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 type Plate = {
   name: string;
@@ -88,38 +89,41 @@ export default function ApproachPlatesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6', padding: 16 },
+  container: { flex: 1, backgroundColor: colors.background, padding: spacing.md },
   searchBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   input: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     fontSize: 16,
   },
   searchButton: {
-    backgroundColor: '#1e40af',
-    padding: 12,
-    borderRadius: 10,
-    marginLeft: 8,
+    backgroundColor: colors.primary,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    marginLeft: spacing.sm,
   },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  metaText: { fontSize: 12, color: '#6b7280' },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
+  metaText: { fontSize: 12, color: colors.textMuted },
   listContent: { paddingBottom: 20 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
   },
-  cardText: { flex: 1, marginRight: 8 },
-  cardTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  cardSubtitle: { fontSize: 12, color: '#6b7280', marginTop: 4 },
+  cardText: { flex: 1, marginRight: spacing.sm },
+  cardTitle: { ...typography.h3 },
+  cardSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   emptyState: { alignItems: 'center', marginTop: 32 },
-  emptyText: { marginTop: 8, color: '#6b7280' },
+  emptyText: { marginTop: 8, color: colors.textMuted },
 });

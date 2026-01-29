@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity,
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 type LogbookEntry = {
   id: string;
@@ -92,17 +93,17 @@ export default function LogbookScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  header: { padding: 16, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  primaryButton: { flexDirection: 'row', backgroundColor: '#1e40af', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, alignItems: 'center', gap: 6 },
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { padding: spacing.md, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
+  title: { ...typography.h2 },
+  primaryButton: { flexDirection: 'row', backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, alignItems: 'center', gap: 6 },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
-  listContent: { padding: 16 },
-  card: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#fff', padding: 14, borderRadius: 12, marginBottom: 12 },
-  cardTitle: { fontSize: 14, fontWeight: '600', color: '#111827' },
-  cardSubtitle: { fontSize: 12, color: '#6b7280', marginTop: 4 },
+  listContent: { padding: spacing.md },
+  card: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  cardTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
+  cardSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   emptyState: { alignItems: 'center', marginTop: 40 },
-  emptyText: { color: '#6b7280' },
+  emptyText: { color: colors.textMuted },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  centerText: { marginTop: 12, color: '#6b7280' },
+  centerText: { marginTop: 12, color: colors.textMuted },
 });

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsAuthenticated } from '../utils/auth';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const SCENARIOS = [
   {
@@ -41,7 +42,7 @@ export default function RadioCommsTrainerScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.title}>Radio Comms Trainer</Text>
         <Text style={styles.subtitle}>Practice ATC phraseology with guided scenarios.</Text>
@@ -97,32 +98,33 @@ export default function RadioCommsTrainerScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  header: { padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 22, fontWeight: '700', color: '#111827' },
-  subtitle: { marginTop: 6, color: '#6b7280' },
-  alert: { flexDirection: 'row', gap: 8, backgroundColor: '#e0e7ff', margin: 16, padding: 12, borderRadius: 10 },
-  alertText: { flex: 1, color: '#1e40af', fontSize: 12 },
-  section: { padding: 16, backgroundColor: '#fff', marginBottom: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 8 },
-  card: { padding: 12, borderRadius: 10, backgroundColor: '#f9fafb', marginBottom: 8 },
-  cardActive: { borderWidth: 1, borderColor: '#1e40af' },
-  cardTitle: { fontSize: 14, fontWeight: '600', color: '#111827' },
-  prompt: { fontSize: 14, color: '#111827', marginBottom: 6 },
-  tips: { fontSize: 12, color: '#6b7280', marginBottom: 10 },
-  sampleLabel: { fontSize: 12, fontWeight: '600', color: '#374151' },
-  sample: { fontSize: 12, color: '#4b5563', marginBottom: 12 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { paddingBottom: spacing.lg },
+  header: { padding: spacing.lg, backgroundColor: colors.surface },
+  title: { ...typography.h2 },
+  subtitle: { marginTop: spacing.xs, color: colors.textMuted },
+  alert: { flexDirection: 'row', gap: 8, backgroundColor: colors.primarySoft, margin: spacing.md, padding: spacing.sm, borderRadius: radius.md },
+  alertText: { flex: 1, color: colors.primary, fontSize: 12 },
+  section: { padding: spacing.md, backgroundColor: colors.surface, marginBottom: spacing.sm, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  sectionTitle: { ...typography.h3, marginBottom: spacing.xs },
+  card: { padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surfaceMuted, marginBottom: spacing.sm },
+  cardActive: { borderWidth: 1, borderColor: colors.primary },
+  cardTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
+  prompt: { fontSize: 14, color: colors.text, marginBottom: 6 },
+  tips: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.sm },
+  sampleLabel: { fontSize: 12, fontWeight: '600', color: colors.text },
+  sample: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.sm },
   input: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 10,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    padding: 12,
+    borderColor: colors.border,
+    padding: spacing.sm,
     minHeight: 80,
     textAlignVertical: 'top',
-    marginBottom: 10,
+    marginBottom: spacing.sm,
   },
-  primaryButton: { backgroundColor: '#1e40af', borderRadius: 10, padding: 12, alignItems: 'center' },
+  primaryButton: { backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center', ...shadow.card },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
-  feedback: { marginTop: 8, fontSize: 12, color: '#111827' },
+  feedback: { marginTop: spacing.xs, fontSize: 12, color: colors.text },
 });

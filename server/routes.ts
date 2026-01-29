@@ -6018,37 +6018,73 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.json({ ...cached, cached: true });
       }
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      const response = await fetch(`https://aviationweather.gov/api/data/stations?ids=${icao}&format=json`, {
-        signal: controller.signal,
-        headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
-      });
-      clearTimeout(timeout);
+      const stationUrls = [
+        `https://aviationweather.gov/api/data/station?ids=${icao}&format=json`,
+        `https://aviationweather.gov/api/data/airport?ids=${icao}&format=json`,
+        `https://aviationweather.gov/api/data/stations?ids=${icao}&format=json`,
+      ];
 
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        return res.status(502).json({ error: "Failed to fetch airport data", details: body });
+      const fetchStation = async (url: string) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        try {
+          const response = await fetch(url, {
+            signal: controller.signal,
+            headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+          });
+          if (!response.ok) {
+            return null;
+          }
+          return await response.json();
+        } finally {
+          clearTimeout(timeout);
+        }
+      };
+
+      let stationData: any = null;
+      for (const url of stationUrls) {
+        stationData = await fetchStation(url);
+        if (stationData) break;
       }
 
-      const stations = await response.json();
-      const station = Array.isArray(stations) ? stations[0] : null;
-      if (!station) {
+      const stationCandidate = Array.isArray(stationData)
+        ? stationData[0]
+        : stationData?.[0] ?? stationData?.data?.[0] ?? stationData;
+
+      if (!stationCandidate) {
         return res.status(404).json({ error: "Airport not found" });
       }
 
-      const lat = Number(station.latitude ?? station.lat);
-      const lon = Number(station.longitude ?? station.lon);
+      const lat = Number(
+        stationCandidate.latitude ??
+          stationCandidate.lat ??
+          stationCandidate.latitude_dec ??
+          stationCandidate.lat_dec ??
+          stationCandidate.latDec
+      );
+      const lon = Number(
+        stationCandidate.longitude ??
+          stationCandidate.lon ??
+          stationCandidate.longitude_dec ??
+          stationCandidate.lon_dec ??
+          stationCandidate.lonDec
+      );
+
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
         return res.status(404).json({ error: "Airport coordinates unavailable" });
       }
 
       const payload: AirportMeta = {
         icao,
-        name: station.site ?? station.name ?? station.stationName ?? null,
+        name:
+          stationCandidate.site ??
+          stationCandidate.name ??
+          stationCandidate.stationName ??
+          stationCandidate.facilityName ??
+          null,
         lat,
         lon,
-        elevationFt: station.elevation ? Number(station.elevation) : null,
+        elevationFt: stationCandidate.elevation ? Number(stationCandidate.elevation) : null,
       };
 
       setCachedAirport(icao, payload);

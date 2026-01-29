@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const STEPS = ['Goals', 'Budget', 'Time', 'Medical', 'Location'];
 
@@ -116,27 +117,27 @@ export default function StudentWizardScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  content: { padding: 16 },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  subtitle: { fontSize: 12, color: '#6b7280', marginTop: 4 },
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginTop: 12 },
-  stepTitle: { fontSize: 16, fontWeight: '600', color: '#111827', marginBottom: 10 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md },
+  title: { ...typography.h2 },
+  subtitle: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
+  card: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  stepTitle: { ...typography.h3, marginBottom: spacing.sm },
   input: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#f9fafb',
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surfaceMuted,
   },
-  actions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, gap: 8 },
-  primaryButton: { backgroundColor: '#1e40af', padding: 12, borderRadius: 10, alignItems: 'center', flex: 1 },
+  actions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md, gap: 8 },
+  primaryButton: { backgroundColor: colors.primary, padding: spacing.sm, borderRadius: radius.md, alignItems: 'center', flex: 1 },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
-  secondaryButton: { backgroundColor: '#e5e7eb', padding: 12, borderRadius: 10, alignItems: 'center', flex: 1 },
+  secondaryButton: { backgroundColor: '#e2e8f0', padding: spacing.sm, borderRadius: radius.md, alignItems: 'center', flex: 1 },
   secondaryButtonText: { color: '#111827', fontWeight: '600' },
   summary: { gap: 8 },
-  summaryTitle: { fontSize: 16, fontWeight: '700' },
-  summaryText: { fontSize: 13, color: '#374151' },
-  summaryCallout: { fontSize: 12, color: '#6b7280', marginTop: 6 },
+  summaryTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
+  summaryText: { fontSize: 13, color: colors.text },
+  summaryCallout: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
 });

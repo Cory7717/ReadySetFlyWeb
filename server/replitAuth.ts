@@ -235,13 +235,22 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
       )
     );
 
-    // Start Google auth
+    // Start Google auth (web)
     app.get(
       "/api/auth/google",
       passport.authenticate("google", { scope: ["profile", "email"] })
     );
 
-    // Callback
+    // Start Google auth (mobile deep link flow)
+    app.get(
+      "/api/auth/google/mobile",
+      passport.authenticate("google", {
+        scope: ["profile", "email"],
+        callbackURL: `${getApiBaseUrl()}/api/auth/google/mobile/callback`,
+      })
+    );
+
+    // Callback (web)
     app.get(
       "/api/auth/google/callback",
       passport.authenticate("google", { failureRedirect: "/" }),
@@ -257,6 +266,26 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
 
           const frontend = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
           return res.redirect(frontend);
+        });
+      }
+    );
+
+    // Callback (mobile)
+    app.get(
+      "/api/auth/google/mobile/callback",
+      passport.authenticate("google", { failureRedirect: "/" }),
+      (req: any, res: any) => {
+        const userId = req.user?.claims?.sub;
+        if (userId) req.session.userId = userId;
+
+        req.session.save((saveErr: any) => {
+          if (saveErr) {
+            console.error("[AUTH][google mobile callback] session save error:", saveErr);
+            return res.status(500).json({ message: "Session save failed", detail: String(saveErr) });
+          }
+
+          const apiBase = getApiBaseUrl();
+          return res.redirect(`${apiBase}/api/auth/mobile-oauth-callback`);
         });
       }
     );

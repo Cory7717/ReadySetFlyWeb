@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 export default function StudentProgressScreen({ navigation }: any) {
   const [hours, setHours] = useState('0');
@@ -49,18 +50,18 @@ export default function StudentProgressScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  content: { padding: 16 },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  subtitle: { marginTop: 4, color: '#6b7280', marginBottom: 12 },
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 12 },
-  label: { fontSize: 12, fontWeight: '600', color: '#374151', marginTop: 8 },
-  input: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, padding: 10, marginTop: 6 },
-  toggleButton: { marginTop: 12, backgroundColor: '#e5e7eb', padding: 10, borderRadius: 10, alignItems: 'center' },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md },
+  title: { ...typography.h2 },
+  subtitle: { marginTop: spacing.xs, color: colors.textMuted, marginBottom: spacing.sm },
+  card: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  label: { fontSize: 12, fontWeight: '600', color: colors.text, marginTop: spacing.xs },
+  input: { backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.sm, marginTop: spacing.xs },
+  toggleButton: { marginTop: spacing.sm, backgroundColor: '#e2e8f0', padding: spacing.sm, borderRadius: radius.md, alignItems: 'center' },
   toggleButtonActive: { backgroundColor: '#bbf7d0' },
-  toggleButtonText: { fontSize: 12, fontWeight: '600', color: '#111827' },
-  nextTitle: { fontSize: 14, fontWeight: '600', color: '#111827' },
-  nextText: { fontSize: 12, color: '#6b7280', marginTop: 4 },
-  primaryButton: { backgroundColor: '#1e40af', borderRadius: 10, padding: 12, alignItems: 'center', marginTop: 12 },
+  toggleButtonText: { fontSize: 12, fontWeight: '600', color: colors.text },
+  nextTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
+  nextText: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  primaryButton: { backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
 });

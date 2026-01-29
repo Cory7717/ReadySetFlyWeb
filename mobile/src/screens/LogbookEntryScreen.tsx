@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { api } from '../services/api';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 export default function LogbookEntryScreen({ navigation, route }: any) {
   const entryId = route?.params?.entryId as string | undefined;
@@ -137,21 +138,21 @@ export default function LogbookEntryScreen({ navigation, route }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  content: { padding: 16 },
-  label: { fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 4 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md },
+  label: { fontSize: 12, fontWeight: '600', color: colors.text, marginBottom: 4 },
   input: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
   },
   multiline: { minHeight: 90, textAlignVertical: 'top' },
   row: { flexDirection: 'row', gap: 12 },
   rowItem: { flex: 1 },
-  primaryButton: { backgroundColor: '#1e40af', padding: 12, borderRadius: 10, alignItems: 'center' },
+  primaryButton: { backgroundColor: colors.primary, padding: spacing.sm, borderRadius: radius.md, alignItems: 'center', ...shadow.card },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
 });

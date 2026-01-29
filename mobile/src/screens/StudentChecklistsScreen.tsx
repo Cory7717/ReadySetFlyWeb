@@ -1,4 +1,5 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const CHECKLISTS = [
   {
@@ -34,11 +35,11 @@ export default function StudentChecklistsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  content: { padding: 16 },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  subtitle: { marginTop: 4, color: '#6b7280', marginBottom: 12 },
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 12 },
-  cardTitle: { fontSize: 15, fontWeight: '600', marginBottom: 8 },
-  item: { fontSize: 12, color: '#374151', marginBottom: 4 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md },
+  title: { ...typography.h2 },
+  subtitle: { marginTop: spacing.xs, color: colors.textMuted, marginBottom: spacing.sm },
+  card: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  cardTitle: { fontSize: 15, fontWeight: '600', marginBottom: spacing.xs, color: colors.text },
+  item: { fontSize: 12, color: colors.textMuted, marginBottom: 4 },
 });

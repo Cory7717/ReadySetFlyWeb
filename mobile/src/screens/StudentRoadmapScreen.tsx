@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const STEPS = [
   { title: 'Discovery Flight', range: '1 day', cost: '$150-$250', action: 'Book a discovery flight' },
@@ -44,25 +45,25 @@ export default function StudentRoadmapScreen({ navigation }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3f4f6' },
-  content: { padding: 16 },
-  title: { fontSize: 20, fontWeight: '700', color: '#111827' },
-  subtitle: { marginTop: 4, color: '#6b7280', marginBottom: 12 },
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 12 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md },
+  title: { ...typography.h2 },
+  subtitle: { marginTop: spacing.xs, color: colors.textMuted, marginBottom: spacing.sm },
+  card: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepIndex: { fontSize: 14, fontWeight: '700', color: '#1e40af' },
-  stepTitle: { fontSize: 15, fontWeight: '600', color: '#111827' },
-  meta: { fontSize: 12, color: '#6b7280', marginTop: 4 },
-  tip: { fontSize: 12, color: '#374151', marginTop: 8 },
+  stepIndex: { fontSize: 14, fontWeight: '700', color: colors.primary },
+  stepTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
+  meta: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  tip: { fontSize: 12, color: colors.text, marginTop: 8 },
   secondaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 10,
-    backgroundColor: '#eef2ff',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    marginTop: spacing.sm,
+    backgroundColor: colors.primarySoft,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
   },
-  secondaryButtonText: { color: '#1e40af', fontWeight: '600', fontSize: 12 },
+  secondaryButtonText: { color: colors.primary, fontWeight: '600', fontSize: 12 },
 });

@@ -24,6 +24,7 @@ import OwnershipCostCalculatorScreen from '../screens/OwnershipCostCalculatorScr
 import MyAircraftScreen from '../screens/MyAircraftScreen';
 import FAQScreen from '../screens/FAQScreen';
 import ContactUsScreen from '../screens/ContactUsScreen';
+import ReceiverHelpScreen from '../screens/ReceiverHelpScreen';
 
 export type ProfileStackParamList = {
   ProfileHome: undefined;
@@ -51,6 +52,7 @@ export type ProfileStackParamList = {
   MyAircraft: undefined;
   FAQ: undefined;
   ContactUs: undefined;
+  ReceiverHelp: undefined;
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -182,6 +184,11 @@ export default function ProfileStack() {
         name="ContactUs"
         component={ContactUsScreen}
         options={{ title: 'Contact Us' }}
+      />
+      <Stack.Screen
+        name="ReceiverHelp"
+        component={ReceiverHelpScreen}
+        options={{ title: 'ADS-B Setup' }}
       />
     </Stack.Navigator>
   );

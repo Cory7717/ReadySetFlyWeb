@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import * as Location from 'expo-location';
+import { createGdl90Listener, TrafficTarget } from '../utils/gdl90';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
@@ -100,7 +102,19 @@ export default function FlightPlannerScreen() {
   const [loading, setLoading] = useState(false);
   const [routeSummary, setRouteSummary] = useState<{ totalNm: number; legs: { from: string; to: string; nm: number }[] } | null>(null);
   const [routePoints, setRoutePoints] = useState<AirportMeta[]>([]);
-  const [mapStyle, setMapStyle] = useState<'standard' | 'sectional'>('standard');
+  const [mapStyle, setMapStyle] = useState<'standard' | 'sectional' | 'terrain'>('standard');
+  const [trafficEnabled, setTrafficEnabled] = useState(false);
+  const [trafficPort, setTrafficPort] = useState('4000');
+  const [trafficTargets, setTrafficTargets] = useState<TrafficTarget[]>([]);
+  const [trafficStatus, setTrafficStatus] = useState<'idle' | 'listening' | 'error'>('idle');
+  const [trafficError, setTrafficError] = useState<string | null>(null);
+  const trafficListenerRef = useState<{ stop?: () => void }>(() => ({}))[0];
+  const [gpsEnabled, setGpsEnabled] = useState(false);
+  const [gpsStatus, setGpsStatus] = useState<'idle' | 'listening' | 'error'>('idle');
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [gpsData, setGpsData] = useState<{ lat: number; lon: number; altitudeFt?: number; speedKts?: number; heading?: number } | null>(null);
+  const [verticalSpeedFpm, setVerticalSpeedFpm] = useState<number | null>(null);
+  const locationSubRef = useState<{ remove?: () => void }>(() => ({}))[0];
 
   const [aircraftQuery, setAircraftQuery] = useState('');
   const [aircraftResults, setAircraftResults] = useState<AircraftType[]>([]);
@@ -128,6 +142,68 @@ export default function FlightPlannerScreen() {
     currency: false,
     notams: false,
   });
+
+  useEffect(() => {
+    let lastAlt: { alt: number; time: number } | null = null;
+    if (!gpsEnabled) {
+      locationSubRef.remove?.();
+      setGpsStatus('idle');
+      setGpsError(null);
+      setGpsData(null);
+      setVerticalSpeedFpm(null);
+      return;
+    }
+
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setGpsStatus('error');
+        setGpsError('Location permission denied.');
+        setGpsEnabled(false);
+        return;
+      }
+      setGpsStatus('listening');
+      setGpsError(null);
+      const subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 2000,
+          distanceInterval: 5,
+        },
+        (location) => {
+          const speedKts = location.coords.speed ? location.coords.speed * 1.94384 : undefined;
+          const altitudeFt = location.coords.altitude ? location.coords.altitude * 3.28084 : undefined;
+          const heading = location.coords.heading ?? undefined;
+          setGpsData({
+            lat: location.coords.latitude,
+            lon: location.coords.longitude,
+            altitudeFt,
+            speedKts,
+            heading,
+          });
+          if (altitudeFt) {
+            const now = Date.now();
+            if (lastAlt) {
+              const delta = altitudeFt - lastAlt.alt;
+              const minutes = (now - lastAlt.time) / 60000;
+              if (minutes > 0) {
+                setVerticalSpeedFpm(delta / minutes);
+              }
+            }
+            lastAlt = { alt: altitudeFt, time: now };
+          }
+        }
+      );
+      locationSubRef.remove = subscription.remove;
+    })().catch((err) => {
+      setGpsStatus('error');
+      setGpsError(String(err));
+    });
+
+    return () => {
+      locationSubRef.remove?.();
+    };
+  }, [gpsEnabled]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -421,8 +497,90 @@ export default function FlightPlannerScreen() {
             >
               <Text style={styles.mapToggleText}>Sectional (FAA)</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.mapToggleButton, mapStyle === 'terrain' && styles.mapToggleActive]}
+              onPress={() => setMapStyle('terrain')}
+            >
+              <Text style={styles.mapToggleText}>Terrain</Text>
+            </TouchableOpacity>
           </View>
         </View>
+        <TouchableOpacity style={styles.helpLink} onPress={() => navigation?.navigate?.('ReceiverHelp')}>
+          <Ionicons name="help-circle-outline" size={16} color={colors.primary} />
+          <Text style={styles.helpLinkText}>How to connect your ADS‑B receiver</Text>
+        </TouchableOpacity>
+        <View style={styles.trafficRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Live Traffic (ADS-B)</Text>
+            <Text style={styles.helperText}>Connect to onboard receiver (GDL-90 compatible).</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.mapToggleButton, trafficEnabled && styles.mapToggleActive]}
+            onPress={() => {
+              const enabled = !trafficEnabled;
+              setTrafficEnabled(enabled);
+              if (!enabled) {
+                trafficListenerRef.stop?.();
+                setTrafficStatus('idle');
+                setTrafficTargets([]);
+                return;
+              }
+              setTrafficError(null);
+              setTrafficStatus('listening');
+              const port = Math.max(1, Math.min(65535, Number(trafficPort) || 4000));
+              const listener = createGdl90Listener(
+                port,
+                (target) => {
+                  setTrafficTargets((prev) => {
+                    const next = prev.filter((t) => Date.now() - t.updatedAt < 2 * 60 * 1000);
+                    const existingIndex = next.findIndex((t) => t.id === target.id);
+                    if (existingIndex >= 0) {
+                      next[existingIndex] = target;
+                      return [...next];
+                    }
+                    return [...next, target];
+                  });
+                },
+                (err) => {
+                  setTrafficStatus('error');
+                  setTrafficError(String(err));
+                }
+              );
+              trafficListenerRef.stop = listener.stop;
+              listener.start();
+            }}
+          >
+            <Text style={styles.mapToggleText}>{trafficEnabled ? 'On' : 'Off'}</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.trafficRow}>
+          <TextInput
+            style={[styles.input, styles.portInput]}
+            value={trafficPort}
+            onChangeText={setTrafficPort}
+            keyboardType="numeric"
+            placeholder="Port"
+          />
+          <Text style={styles.helperText}>Default ports: 4000 / 49002</Text>
+        </View>
+        <View style={styles.trafficRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Device GPS (fallback)</Text>
+            <Text style={styles.helperText}>Uses phone GPS for altitude and speed if ADS‑B not available.</Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.mapToggleButton, gpsEnabled && styles.mapToggleActive]}
+            onPress={() => setGpsEnabled((prev) => !prev)}
+          >
+            <Text style={styles.mapToggleText}>{gpsEnabled ? 'On' : 'Off'}</Text>
+          </TouchableOpacity>
+        </View>
+        {gpsStatus === 'error' && gpsError && (
+          <Text style={styles.errorText}>GPS error: {gpsError}</Text>
+        )}
+        {trafficStatus === 'error' && trafficError && (
+          <Text style={styles.errorText}>Traffic error: {trafficError}</Text>
+        )}
         {routePoints.length > 0 ? (
           <MapView
             style={styles.map}
@@ -442,11 +600,28 @@ export default function FlightPlannerScreen() {
                 tileSize={256}
               />
             )}
+            {mapStyle === 'terrain' && (
+              <UrlTile
+                urlTemplate="https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}"
+                maximumZ={15}
+                minimumZ={6}
+                tileSize={256}
+              />
+            )}
             <Polyline
               coordinates={routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude }))}
               strokeColor="#0ea5e9"
               strokeWidth={3}
             />
+            {trafficTargets.map((target) => (
+              <Marker
+                key={target.id}
+                coordinate={{ latitude: target.lat, longitude: target.lon }}
+                title={target.callsign || 'Traffic'}
+                description={target.altitudeFt ? `${target.altitudeFt} ft` : undefined}
+                pinColor="#f97316"
+              />
+            ))}
             {routePoints.map((point) => (
               <Marker
                 key={point.icao}
@@ -460,6 +635,30 @@ export default function FlightPlannerScreen() {
           <Text style={styles.helperText}>Enter airports and build a route to preview the map.</Text>
         )}
         <Text style={styles.helperText}>Sectional tiles provided by FAA/Aeronautical Information Services.</Text>
+        {mapStyle === 'terrain' && <Text style={styles.helperText}>Terrain tiles provided by USGS National Map.</Text>}
+        <View style={styles.instrumentPanel}>
+          <Text style={styles.instrumentTitle}>Live Flight Data</Text>
+          <View style={styles.instrumentRow}>
+            <View style={styles.instrumentBox}>
+              <Text style={styles.instrumentLabel}>Altitude</Text>
+              <Text style={styles.instrumentValue}>{gpsData?.altitudeFt ? `${gpsData.altitudeFt.toFixed(0)} ft` : '-'}</Text>
+            </View>
+            <View style={styles.instrumentBox}>
+              <Text style={styles.instrumentLabel}>Groundspeed</Text>
+              <Text style={styles.instrumentValue}>{gpsData?.speedKts ? `${gpsData.speedKts.toFixed(0)} kt` : '-'}</Text>
+            </View>
+          </View>
+          <View style={styles.instrumentRow}>
+            <View style={styles.instrumentBox}>
+              <Text style={styles.instrumentLabel}>Track</Text>
+              <Text style={styles.instrumentValue}>{gpsData?.heading ? `${gpsData.heading.toFixed(0)}°` : '-'}</Text>
+            </View>
+            <View style={styles.instrumentBox}>
+              <Text style={styles.instrumentLabel}>Vert Speed</Text>
+              <Text style={styles.instrumentValue}>{verticalSpeedFpm ? `${verticalSpeedFpm.toFixed(0)} fpm` : '-'}</Text>
+            </View>
+          </View>
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -691,5 +890,16 @@ const styles = StyleSheet.create({
   mapToggleActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
   mapToggleText: { fontSize: 12, color: colors.text },
   map: { width: '100%', height: 240, borderRadius: radius.lg, overflow: 'hidden' },
+  helpLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.sm },
+  helpLinkText: { fontSize: 12, color: colors.primary, fontWeight: '600' },
+  trafficRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  portInput: { flex: 1 },
+  errorText: { fontSize: 12, color: colors.danger },
+  instrumentPanel: { marginTop: spacing.sm, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
+  instrumentTitle: { fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
+  instrumentRow: { flexDirection: 'row', gap: spacing.sm },
+  instrumentBox: { flex: 1, padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface },
+  instrumentLabel: { fontSize: 11, color: colors.textMuted },
+  instrumentValue: { fontSize: 14, fontWeight: '700', color: colors.text, marginTop: 4 },
 });
 

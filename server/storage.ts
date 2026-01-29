@@ -2502,7 +2502,7 @@ export class DatabaseStorage implements IStorage {
     limit?: number;
     offset?: number;
   }): Promise<AircraftType[]> {
-    const limit = filters?.limit ? Math.min(filters.limit, 100) : 50;
+    const limit = filters?.limit ? Math.min(filters.limit, 500) : 500;
     const offset = filters?.offset ?? 0;
     const conditions: any[] = [];
 

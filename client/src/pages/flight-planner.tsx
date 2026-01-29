@@ -176,7 +176,7 @@ export default function FlightPlanner() {
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/airports/search?q=${encodeURIComponent(value)}`);
+        const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(value)}`));
         if (!res.ok) {
           setDepartureSuggestions([]);
           return;
@@ -199,7 +199,7 @@ export default function FlightPlanner() {
     }
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/airports/search?q=${encodeURIComponent(value)}`);
+        const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(value)}`));
         if (!res.ok) {
           setDestinationSuggestions([]);
           return;
@@ -224,7 +224,7 @@ export default function FlightPlanner() {
   });
 
   const { data: aircraftTypes = [] } = useQuery<AircraftType[]>({
-    queryKey: ["/api/aircraft/types"],
+    queryKey: ["/api/aircraft/types?limit=500"],
   });
 
   useEffect(() => {
@@ -751,6 +751,15 @@ export default function FlightPlanner() {
           <CardDescription>Route draws once valid airport coordinates are found.</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-3 text-sm">
+            <a
+              href="/adsb-receiver-help"
+              className="text-primary hover:underline"
+              onClick={() => trackEvent("adsb_help_click", { target: "/adsb-receiver-help" })}
+            >
+              How to connect your ADS‑B receiver
+            </a>
+          </div>
             {routeIcaos.length === 0 ? (
               <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
             ) : routePoints.length < 2 ? (

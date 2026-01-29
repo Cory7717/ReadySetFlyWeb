@@ -13,7 +13,14 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Ready Set Fly connects to nearby ADS-B receivers to show live traffic.",
+        "NSLocationWhenInUseUsageDescription": "Ready Set Fly uses your location to show live flight stats and nearby airports.",
+        "NSBonjourServices": [
+          "_gdl90._udp"
+        ]
+      }
     },
     "android": {
       "package": "com.readysetfly.mobile",
@@ -22,7 +29,10 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

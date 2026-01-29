@@ -64,6 +64,7 @@ export default function FlightPlannerScreen() {
   const [destination, setDestination] = useState('KBOS');
   const [waypoints, setWaypoints] = useState('');
   const [alternate, setAlternate] = useState('');
+  const [suggestedMode, setSuggestedMode] = useState<'direct' | 'midpoint'>('direct');
   const [loading, setLoading] = useState(false);
   const [routeSummary, setRouteSummary] = useState<{ totalNm: number; legs: { from: string; to: string; nm: number }[] } | null>(null);
 
@@ -141,8 +142,32 @@ export default function FlightPlannerScreen() {
         const res = await api.get(`/api/airports/${code}`);
         airports.push(res.data);
       }
-      const legs = airports.slice(0, -1).map((airport, idx) => {
-        const next = airports[idx + 1];
+      let routedAirports = airports;
+      if (suggestedMode === 'midpoint' && wpList.length === 0 && airports.length >= 2) {
+        const start = airports[0];
+        const end = airports[airports.length - 1];
+        const lat1 = toRad(start.latitude);
+        const lon1 = toRad(start.longitude);
+        const lat2 = toRad(end.latitude);
+        const lon2 = toRad(end.longitude);
+        const dLon = lon2 - lon1;
+        const bx = Math.cos(lat2) * Math.cos(dLon);
+        const by = Math.cos(lat2) * Math.sin(dLon);
+        const lat3 = Math.atan2(
+          Math.sin(lat1) + Math.sin(lat2),
+          Math.sqrt((Math.cos(lat1) + bx) ** 2 + by ** 2)
+        );
+        const lon3 = lon1 + Math.atan2(by, Math.cos(lat1) + bx);
+        const mid: AirportMeta = {
+          icao: 'MID',
+          latitude: (lat3 * 180) / Math.PI,
+          longitude: (lon3 * 180) / Math.PI,
+          name: 'Midpoint',
+        };
+        routedAirports = [start, mid, end];
+      }
+      const legs = routedAirports.slice(0, -1).map((airport, idx) => {
+        const next = routedAirports[idx + 1];
         return {
           from: airport.icao,
           to: next.icao,
@@ -180,6 +205,28 @@ export default function FlightPlannerScreen() {
           placeholder="Waypoints (optional, space or comma separated)"
         />
         <TextInput style={styles.input} value={alternate} onChangeText={setAlternate} placeholder="Alternate (optional)" />
+        <View style={styles.suggestionBox}>
+          <Text style={styles.suggestionTitle}>Suggested routes</Text>
+          <Text style={styles.suggestionText}>Midpoint adds a virtual waypoint for planning only.</Text>
+          <View style={styles.suggestionRow}>
+            <TouchableOpacity
+              style={[styles.suggestionButton, suggestedMode === 'direct' && styles.suggestionButtonActive]}
+              onPress={() => setSuggestedMode('direct')}
+            >
+              <Text style={styles.suggestionButtonText}>Direct</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.suggestionButton, suggestedMode === 'midpoint' && styles.suggestionButtonActive]}
+              onPress={() => setSuggestedMode('midpoint')}
+              disabled={waypoints.trim().length > 0}
+            >
+              <Text style={styles.suggestionButtonText}>Add midpoint</Text>
+            </TouchableOpacity>
+          </View>
+          {waypoints.trim().length > 0 && (
+            <Text style={styles.suggestionHint}>Midpoint is disabled when custom waypoints are entered.</Text>
+          )}
+        </View>
         <TouchableOpacity style={styles.primaryButton} onPress={buildRoute} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Build Route</Text>}
         </TouchableOpacity>
@@ -342,4 +389,12 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 14, fontWeight: '600', color: colors.text },
   legRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
   legText: { fontSize: 13, color: colors.textMuted },
+  suggestionBox: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
+  suggestionTitle: { fontSize: 13, fontWeight: '600', color: colors.text },
+  suggestionText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
+  suggestionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  suggestionButton: { paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  suggestionButtonActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  suggestionButtonText: { fontSize: 12, color: colors.text },
+  suggestionHint: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
 });

@@ -12,6 +12,7 @@ export type PlannerPoint = {
 type PlannerMapProps = {
   points: PlannerPoint[];
   height?: string;
+  mapStyle?: "standard" | "sectional";
 };
 
 const defaultIcon = L.icon({
@@ -34,7 +35,7 @@ function FitBounds({ points }: { points: PlannerPoint[] }) {
   return null;
 }
 
-export default function PlannerMap({ points, height = "380px" }: PlannerMapProps) {
+export default function PlannerMap({ points, height = "380px", mapStyle = "standard" }: PlannerMapProps) {
   const center: [number, number] = points.length
     ? [points[0].lat, points[0].lon]
     : [39.5, -98.35];
@@ -42,10 +43,17 @@ export default function PlannerMap({ points, height = "380px" }: PlannerMapProps
   return (
     <div style={{ height }}>
       <MapContainer center={center} zoom={points.length ? 6 : 4} scrollWheelZoom className="h-full w-full rounded-xl">
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        {mapStyle === "sectional" ? (
+          <TileLayer
+            attribution='Federal Aviation Administration, Aeronautical Information Services'
+            url="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
+          />
+        ) : (
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+        )}
         {points.length > 1 && (
           <Polyline
             positions={points.map((p) => [p.lat, p.lon])}

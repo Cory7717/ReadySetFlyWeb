@@ -183,7 +183,9 @@ export default function RadioCommsTrainer() {
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
     const loadVoices = () => {
-      const nextVoices = window.speechSynthesis.getVoices();
+      const nextVoices = window.speechSynthesis
+        .getVoices()
+        .filter((voice) => voice.lang?.toLowerCase().startsWith("en"));
       if (nextVoices.length) {
         setVoices(nextVoices);
         if (!selectedVoiceUri && !selectedVoiceName) {

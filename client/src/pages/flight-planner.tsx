@@ -86,13 +86,13 @@ function hasThunder(taf: any) {
   return raw.includes("TS");
 }
 
-function parseWaypoints(input: string) {
-  return input
-    .split(/[,\s]+/)
-    .map((item) => item.trim().toUpperCase())
-    .filter(Boolean)
-    .filter((item) => ICAO_REGEX.test(item));
-}
+  function parseWaypoints(input: string) {
+    return input
+      .split(/[,\s]+/)
+      .map((item) => item.trim().toUpperCase())
+      .filter(Boolean)
+      .filter((item) => ICAO_REGEX.test(item));
+  }
 
 const checklistDefaults = {
   weather: false,
@@ -125,10 +125,13 @@ export default function FlightPlanner() {
     notes: "",
   });
   const [waypointsInput, setWaypointsInput] = useState("");
+  const [plannedStopsInput, setPlannedStopsInput] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState<string>("none");
   const [selectedTypeId, setSelectedTypeId] = useState<string>(FALLBACK_TYPE.id);
   const [reserveMinutes, setReserveMinutes] = useState("45");
   const [headwind, setHeadwind] = useState("0");
+  const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
+  const [mapStyle, setMapStyle] = useState<"standard" | "sectional">("standard");
   const [customProfile, setCustomProfile] = useState({
     name: "",
     cruiseKtasOverride: "",
@@ -210,14 +213,16 @@ export default function FlightPlanner() {
     2400;
 
   const waypoints = useMemo(() => parseWaypoints(waypointsInput), [waypointsInput]);
+  const plannedStops = useMemo(() => parseWaypoints(plannedStopsInput), [plannedStopsInput]);
   const routeIcaos = useMemo(() => {
     const list = [
       form.departure.trim().toUpperCase(),
+      ...plannedStops,
       ...waypoints,
       form.destination.trim().toUpperCase(),
     ].filter(Boolean);
     return Array.from(new Set(list)).filter((icao) => ICAO_REGEX.test(icao));
-  }, [form.departure, form.destination, waypoints]);
+  }, [form.departure, form.destination, waypoints, plannedStops]);
 
   const airportQueries = useQueries({
     queries: routeIcaos.map((icao) => ({
@@ -253,7 +258,7 @@ export default function FlightPlanner() {
     return routeIcaos.filter((icao) => !airportMap.has(icao));
   }, [routeIcaos, airportMap]);
 
-  const mapPoints: AirportPoint[] = useMemo(() => {
+  const airportPoints: AirportPoint[] = useMemo(() => {
     return routeIcaos
       .map((icao) => {
         const data = airportMap.get(icao);
@@ -263,7 +268,40 @@ export default function FlightPlanner() {
       .filter(Boolean) as AirportPoint[];
   }, [airportMap, routeIcaos]);
 
-  const legs = useMemo(() => buildLegs(mapPoints), [mapPoints]);
+  const suggestedWaypoint = useMemo(() => {
+    if (routeSuggestion !== "midpoint") return null;
+    if (waypoints.length > 0 || plannedStops.length > 0) return null;
+    if (airportPoints.length < 2) return null;
+    const start = airportPoints[0];
+    const end = airportPoints[airportPoints.length - 1];
+    const lat1 = (start.lat * Math.PI) / 180;
+    const lon1 = (start.lon * Math.PI) / 180;
+    const lat2 = (end.lat * Math.PI) / 180;
+    const lon2 = (end.lon * Math.PI) / 180;
+    const dLon = lon2 - lon1;
+    const bx = Math.cos(lat2) * Math.cos(dLon);
+    const by = Math.cos(lat2) * Math.sin(dLon);
+    const lat3 = Math.atan2(
+      Math.sin(lat1) + Math.sin(lat2),
+      Math.sqrt((Math.cos(lat1) + bx) ** 2 + by ** 2)
+    );
+    const lon3 = lon1 + Math.atan2(by, Math.cos(lat1) + bx);
+    const midpoint = {
+      icao: "MID",
+      lat: (lat3 * 180) / Math.PI,
+      lon: (lon3 * 180) / Math.PI,
+    };
+    return midpoint;
+  }, [airportPoints, routeSuggestion, waypoints.length]);
+
+  const routePoints: AirportPoint[] = useMemo(() => {
+    if (!suggestedWaypoint) return airportPoints;
+    const [start, ...rest] = airportPoints;
+    if (!start || rest.length === 0) return airportPoints;
+    return [start, suggestedWaypoint, rest[rest.length - 1]];
+  }, [airportPoints, suggestedWaypoint]);
+
+  const legs = useMemo(() => buildLegs(routePoints), [routePoints]);
   const totalDistance = useMemo(() => sumDistance(legs), [legs]);
 
   const windValue = Number(headwind || 0);
@@ -314,32 +352,37 @@ export default function FlightPlanner() {
   }, [weatherData]);
   const resetForm = () => {
     setEditingPlan(null);
-    setForm({
-      title: "",
-      departure: "",
-      destination: "",
-      route: "",
-      alternate: "",
-      plannedDepartureAt: "",
-      plannedArrivalAt: "",
-      aircraftType: "",
-      tailNumber: "",
-      fuelOnBoard: "",
-      notes: "",
-    });
-    setWaypointsInput("");
-  };
+      setForm({
+        title: "",
+        departure: "",
+        destination: "",
+        route: "",
+        alternate: "",
+        plannedDepartureAt: "",
+        plannedArrivalAt: "",
+        aircraftType: "",
+        tailNumber: "",
+        fuelOnBoard: "",
+        notes: "",
+      });
+      setWaypointsInput("");
+      setPlannedStopsInput("");
+    };
 
   const createPlanMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
-        ...form,
-        route: waypointsInput,
-        aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
-        fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
-        plannedDepartureAt: form.plannedDepartureAt ? new Date(form.plannedDepartureAt).toISOString() : null,
-        plannedArrivalAt: form.plannedArrivalAt ? new Date(form.plannedArrivalAt).toISOString() : null,
-      };
+        const routeString = [plannedStopsInput, waypointsInput]
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .join(" ");
+        const payload = {
+          ...form,
+          route: routeString,
+          aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
+          fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
+          plannedDepartureAt: form.plannedDepartureAt ? new Date(form.plannedDepartureAt).toISOString() : null,
+          plannedArrivalAt: form.plannedArrivalAt ? new Date(form.plannedArrivalAt).toISOString() : null,
+        };
       const res = await apiRequest("POST", "/api/flight-plans", payload);
       return res.json();
     },
@@ -356,14 +399,18 @@ export default function FlightPlanner() {
   const updatePlanMutation = useMutation({
     mutationFn: async () => {
       if (!editingPlan) return null;
-      const payload = {
-        ...form,
-        route: waypointsInput,
-        aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
-        fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
-        plannedDepartureAt: form.plannedDepartureAt ? new Date(form.plannedDepartureAt).toISOString() : null,
-        plannedArrivalAt: form.plannedArrivalAt ? new Date(form.plannedArrivalAt).toISOString() : null,
-      };
+        const routeString = [plannedStopsInput, waypointsInput]
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .join(" ");
+        const payload = {
+          ...form,
+          route: routeString,
+          aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
+          fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
+          plannedDepartureAt: form.plannedDepartureAt ? new Date(form.plannedDepartureAt).toISOString() : null,
+          plannedArrivalAt: form.plannedArrivalAt ? new Date(form.plannedArrivalAt).toISOString() : null,
+        };
       const res = await apiRequest("PATCH", `/api/flight-plans/${editingPlan.id}`, payload);
       return res.json();
     },
@@ -533,15 +580,24 @@ export default function FlightPlanner() {
               placeholder="KBOS"
             />
           </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label>Waypoints (optional)</Label>
-            <Input
-              value={waypointsInput}
-              onChange={(e) => setWaypointsInput(e.target.value.toUpperCase())}
-              placeholder="KISP KPVD (comma or space separated)"
-            />
-            <p className="text-xs text-muted-foreground">Optional. Add ICAO codes separated by space or comma.</p>
-          </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Waypoints (optional)</Label>
+              <Input
+                value={waypointsInput}
+                onChange={(e) => setWaypointsInput(e.target.value.toUpperCase())}
+                placeholder="KISP KPVD (comma or space separated)"
+              />
+              <p className="text-xs text-muted-foreground">Optional. Add ICAO codes separated by space or comma.</p>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Planned stops (optional)</Label>
+              <Input
+                value={plannedStopsInput}
+                onChange={(e) => setPlannedStopsInput(e.target.value.toUpperCase())}
+                placeholder="KACT KTYR (fuel/meal stops)"
+              />
+              <p className="text-xs text-muted-foreground">Use ICAO codes for planned fuel or rest stops.</p>
+            </div>
           <div className="space-y-2">
             <Label>Alternate (optional)</Label>
             <Input
@@ -550,16 +606,49 @@ export default function FlightPlanner() {
               placeholder="KBDL"
             />
           </div>
-          <div className="space-y-2">
-            <Label>Tail Number</Label>
-            <Input
-              value={form.tailNumber}
-              onChange={(e) => setForm({ ...form, tailNumber: e.target.value })}
-              placeholder="N12345"
-            />
-          </div>
-        </CardContent>
-      </Card>
+            <div className="space-y-2">
+              <Label>Tail Number</Label>
+              <Input
+                value={form.tailNumber}
+                onChange={(e) => setForm({ ...form, tailNumber: e.target.value })}
+                placeholder="N12345"
+              />
+            </div>
+            <div className="md:col-span-2 rounded-lg border p-4 space-y-2">
+              <div className="font-semibold">Suggested routes</div>
+              <div className="text-xs text-muted-foreground">
+                Choose a quick routing hint. Midpoint adds a virtual waypoint for planning only.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={routeSuggestion === "direct" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setRouteSuggestion("direct")}
+                >
+                  Direct
+                </Button>
+                <Button
+                  variant={routeSuggestion === "midpoint" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setRouteSuggestion("midpoint")}
+                  disabled={waypoints.length > 0}
+                >
+                  Add midpoint
+                </Button>
+              </div>
+              {(waypoints.length > 0 || plannedStops.length > 0) && (
+                <div className="text-xs text-muted-foreground">
+                  Midpoint is disabled when custom waypoints are entered.
+                </div>
+              )}
+              {suggestedWaypoint && (
+                <div className="text-xs text-muted-foreground">
+                  Suggested waypoint: MID ({suggestedWaypoint.lat.toFixed(3)}, {suggestedWaypoint.lon.toFixed(3)})
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
       <Card>
         <CardHeader>
@@ -567,29 +656,49 @@ export default function FlightPlanner() {
           <CardDescription>Route draws once valid airport coordinates are found.</CardDescription>
         </CardHeader>
         <CardContent>
-          {routeIcaos.length === 0 ? (
-            <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
-          ) : mapPoints.length < 2 ? (
-            <div className="text-sm text-muted-foreground">
-              Waiting for airport coordinates... Waypoints are optional. Check ICAO codes if this takes more than a few seconds.
-            </div>
-          ) : (
-            <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
-              <PlannerMap points={mapPoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))} />
-            </Suspense>
-          )}
+            {routeIcaos.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
+            ) : routePoints.length < 2 ? (
+              <div className="text-sm text-muted-foreground">
+                Waiting for airport coordinates... Waypoints are optional. Check ICAO codes if this takes more than a few seconds.
+              </div>
+            ) : (
+              <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
+                <PlannerMap
+                  points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                  mapStyle={mapStyle}
+                />
+              </Suspense>
+            )}
           {airportErrors.length > 0 && (
             <div className="mt-3 text-xs text-destructive">
               Airport lookup failed for: {airportErrors.map((item) => item.icao).join(", ")}. Check ICAO codes.
             </div>
           )}
-          {airportErrors.length === 0 && missingIcaos.length > 0 && (
-            <div className="mt-3 text-xs text-muted-foreground">
-              Waiting on coordinates for: {missingIcaos.join(", ")}.
+            {airportErrors.length === 0 && missingIcaos.length > 0 && (
+              <div className="mt-3 text-xs text-muted-foreground">
+                Waiting on coordinates for: {missingIcaos.join(", ")}.
+              </div>
+            )}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <div className="text-xs text-muted-foreground">Map style</div>
+              <Button
+                variant={mapStyle === "standard" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMapStyle("standard")}
+              >
+                Standard
+              </Button>
+              <Button
+                variant={mapStyle === "sectional" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMapStyle("sectional")}
+              >
+                Sectional (FAA)
+              </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
       <Card>
         <CardHeader>

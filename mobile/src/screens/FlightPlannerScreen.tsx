@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import { createGdl90Listener, TrafficTarget } from '../utils/gdl90';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
@@ -142,6 +143,14 @@ export default function FlightPlannerScreen() {
     currency: false,
     notams: false,
   });
+
+  useEffect(() => {
+    if (trafficEnabled || gpsEnabled) {
+      activateKeepAwake();
+    } else {
+      deactivateKeepAwake();
+    }
+  }, [trafficEnabled, gpsEnabled]);
 
   useEffect(() => {
     let lastAlt: { alt: number; time: number } | null = null;

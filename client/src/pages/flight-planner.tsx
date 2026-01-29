@@ -141,6 +141,7 @@ export default function FlightPlanner() {
   const [headwind, setHeadwind] = useState("0");
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
   const [mapStyle, setMapStyle] = useState<"standard" | "sectional">("standard");
+  const [wakeLockError, setWakeLockError] = useState<string | null>(null);
   const [customProfile, setCustomProfile] = useState({
     name: "",
     cruiseKtasOverride: "",
@@ -166,6 +167,35 @@ export default function FlightPlanner() {
   useEffect(() => {
     localStorage.setItem("flightPlannerChecklist", JSON.stringify(checklist));
   }, [checklist]);
+
+  useEffect(() => {
+    let wakeLock: any = null;
+    let cancelled = false;
+
+    const requestWakeLock = async () => {
+      try {
+        setWakeLockError(null);
+        if (typeof navigator === "undefined" || !(navigator as any).wakeLock?.request) {
+          setWakeLockError("Wake lock not supported in this browser.");
+          return;
+        }
+        wakeLock = await (navigator as any).wakeLock.request("screen");
+      } catch (err: any) {
+        if (!cancelled) {
+          setWakeLockError(err?.message || "Unable to keep screen awake.");
+        }
+      }
+    };
+
+    requestWakeLock();
+
+    return () => {
+      cancelled = true;
+      if (wakeLock) {
+        wakeLock.release().catch(() => null);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const value = form.departure.trim();
@@ -751,6 +781,11 @@ export default function FlightPlanner() {
           <CardDescription>Route draws once valid airport coordinates are found.</CardDescription>
         </CardHeader>
         <CardContent>
+          {wakeLockError && (
+            <div className="mb-3 text-xs text-muted-foreground">
+              {wakeLockError}
+            </div>
+          )}
           <div className="mb-3 text-sm">
             <a
               href="/adsb-receiver-help"

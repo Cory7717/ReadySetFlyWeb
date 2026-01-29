@@ -6075,6 +6075,46 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const weatherCache = new Map<string, { data: any; timestamp: number }>();
   const WEATHER_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
 
+  app.get("/api/airports/search", airportLookupRateLimiter, async (req, res) => {
+    try {
+      const rawQuery = String(req.query.q || "");
+      const query = normalizeSearch(rawQuery);
+      if (!query || query.length < 2) {
+        return res.json([]);
+      }
+
+      const stations = await loadStationCache();
+      const terms = query.split(" ").filter(Boolean);
+
+      const scored = stations
+        .map((station) => {
+          const haystack = normalizeSearch(
+            `${station.icao} ${station.name ?? ""} ${station.city ?? ""} ${station.state ?? ""}`
+          );
+
+          let score = 0;
+          if (station.icao.toLowerCase() === query) score += 100;
+          if (station.icao.toLowerCase().startsWith(query)) score += 80;
+          if (haystack.includes(query)) score += 40;
+          for (const term of terms) {
+            if (station.icao.toLowerCase().startsWith(term)) score += 30;
+            if (haystack.includes(term)) score += 10;
+          }
+
+          return score > 0 ? { station, score } : null;
+        })
+        .filter(Boolean) as { station: AirportSearchResult; score: number }[];
+
+      scored.sort((a, b) => b.score - a.score);
+
+      const results = scored.slice(0, 12).map(({ station }) => station);
+      return res.json(results);
+    } catch (error) {
+      console.error("Airport search failed:", error);
+      res.status(500).json({ error: "Failed to search airports" });
+    }
+  });
+
   app.get("/api/airports/:icao", airportLookupRateLimiter, async (req, res) => {
     try {
       const requestedIcao = normalizeIcao(req.params.icao || "");
@@ -6172,46 +6212,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Airport lookup failed:", error);
       res.status(500).json({ error: "Failed to fetch airport data" });
-    }
-  });
-
-  app.get("/api/airports/search", airportLookupRateLimiter, async (req, res) => {
-    try {
-      const rawQuery = String(req.query.q || "");
-      const query = normalizeSearch(rawQuery);
-      if (!query || query.length < 2) {
-        return res.json([]);
-      }
-
-      const stations = await loadStationCache();
-      const terms = query.split(" ").filter(Boolean);
-
-      const scored = stations
-        .map((station) => {
-          const haystack = normalizeSearch(
-            `${station.icao} ${station.name ?? ""} ${station.city ?? ""} ${station.state ?? ""}`
-          );
-
-          let score = 0;
-          if (station.icao.toLowerCase() === query) score += 100;
-          if (station.icao.toLowerCase().startsWith(query)) score += 80;
-          if (haystack.includes(query)) score += 40;
-          for (const term of terms) {
-            if (station.icao.toLowerCase().startsWith(term)) score += 30;
-            if (haystack.includes(term)) score += 10;
-          }
-
-          return score > 0 ? { station, score } : null;
-        })
-        .filter(Boolean) as { station: AirportSearchResult; score: number }[];
-
-      scored.sort((a, b) => b.score - a.score);
-
-      const results = scored.slice(0, 12).map(({ station }) => station);
-      return res.json(results);
-    } catch (error) {
-      console.error("Airport search failed:", error);
-      res.status(500).json({ error: "Failed to search airports" });
     }
   });
 

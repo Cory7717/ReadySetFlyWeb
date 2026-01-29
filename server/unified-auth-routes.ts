@@ -107,6 +107,11 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         aircraftTypesFlown: [],
       });
 
+      const pendingInvite = await storage.getAdminInviteByEmail(email.toLowerCase());
+      if (pendingInvite && (!pendingInvite.expiresAt || new Date(pendingInvite.expiresAt) > new Date())) {
+        await storage.acceptAdminInvite(pendingInvite.id, user.id);
+      }
+
       // Send verification email
       try {
         const { client, fromEmail } = await getUncachableResendClient();
@@ -277,6 +282,11 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         totalFlightHours: 0,
         aircraftTypesFlown: [],
       });
+
+      const pendingInvite = await storage.getAdminInviteByEmail(email.toLowerCase());
+      if (pendingInvite && (!pendingInvite.expiresAt || new Date(pendingInvite.expiresAt) > new Date())) {
+        await storage.acceptAdminInvite(pendingInvite.id, user.id);
+      }
 
       // Send welcome email (no verification flow for mobile)
       try {

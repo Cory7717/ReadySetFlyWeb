@@ -21,6 +21,9 @@ import StudentWrittenScreen from '../screens/StudentWrittenScreen';
 import StudentChecklistsScreen from '../screens/StudentChecklistsScreen';
 import StudentWeatherScreen from '../screens/StudentWeatherScreen';
 import OwnershipCostCalculatorScreen from '../screens/OwnershipCostCalculatorScreen';
+import CrosswindCalculatorScreen from '../screens/CrosswindCalculatorScreen';
+import DensityAltitudeScreen from '../screens/DensityAltitudeScreen';
+import WeightBalanceScreen from '../screens/WeightBalanceScreen';
 import MyAircraftScreen from '../screens/MyAircraftScreen';
 import FAQScreen from '../screens/FAQScreen';
 import ContactUsScreen from '../screens/ContactUsScreen';
@@ -49,6 +52,9 @@ export type ProfileStackParamList = {
   StudentChecklists: undefined;
   StudentWeather: undefined;
   OwnershipCost: undefined;
+  CrosswindCalc: undefined;
+  DensityAltitude: undefined;
+  WeightBalance: undefined;
   MyAircraft: undefined;
   FAQ: undefined;
   ContactUs: undefined;
@@ -169,6 +175,21 @@ export default function ProfileStack() {
         name="OwnershipCost" 
         component={OwnershipCostCalculatorScreen}
         options={{ title: 'Ownership Cost' }}
+      />
+      <Stack.Screen 
+        name="CrosswindCalc" 
+        component={CrosswindCalculatorScreen}
+        options={{ title: 'Crosswind Calculator' }}
+      />
+      <Stack.Screen 
+        name="DensityAltitude" 
+        component={DensityAltitudeScreen}
+        options={{ title: 'Density Altitude' }}
+      />
+      <Stack.Screen
+        name="WeightBalance"
+        component={WeightBalanceScreen}
+        options={{ title: 'Weight & Balance' }}
       />
       <Stack.Screen 
         name="MyAircraft" 

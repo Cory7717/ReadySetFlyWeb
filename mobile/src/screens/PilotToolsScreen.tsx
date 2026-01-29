@@ -92,6 +92,45 @@ export default function PilotToolsScreen({ navigation }: any) {
           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
         </TouchableOpacity>
       </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Quick Calculators</Text>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('CrosswindCalc')}
+        >
+          <Ionicons name="speedometer-outline" size={28} color="#1e40af" />
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>Crosswind Calculator</Text>
+            <Text style={styles.cardSubtitle}>Estimate headwind and crosswind components.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('DensityAltitude')}
+        >
+          <Ionicons name="analytics-outline" size={28} color="#1e40af" />
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>Density Altitude</Text>
+            <Text style={styles.cardSubtitle}>Calculate pressure and density altitude.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('WeightBalance')}
+        >
+          <Ionicons name="scale-outline" size={28} color="#1e40af" />
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>Weight & Balance</Text>
+            <Text style={styles.cardSubtitle}>Calculate CG and gross weight.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, CloudSun, Plane } from "lucide-react";
+import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, CloudSun, Plane, Wind, Gauge, Scale } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -119,6 +119,32 @@ export default function PilotTools() {
   const { user } = useAuth();
   const [icao, setIcao] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
+  const [runwayHeading, setRunwayHeading] = useState("180");
+  const [windDirection, setWindDirection] = useState("210");
+  const [windSpeed, setWindSpeed] = useState("12");
+  const [windGust, setWindGust] = useState("");
+  const [fieldElevation, setFieldElevation] = useState("500");
+  const [altimeterSetting, setAltimeterSetting] = useState("29.92");
+  const [oatC, setOatC] = useState("20");
+
+  const heading = Number(runwayHeading) || 0;
+  const windDir = Number(windDirection) || 0;
+  const windKt = Number(windSpeed) || 0;
+  const gustKt = Number(windGust) || 0;
+  const angle = ((windDir - heading + 540) % 360) - 180;
+  const angleRad = (Math.PI / 180) * angle;
+  const crosswind = windKt * Math.sin(angleRad);
+  const headwind = windKt * Math.cos(angleRad);
+  const crosswindDir = crosswind > 0 ? "from right" : crosswind < 0 ? "from left" : "calm";
+  const maxCrosswind = gustKt ? Math.abs(gustKt * Math.sin(angleRad)) : Math.abs(crosswind);
+  const maxHeadwind = gustKt ? gustKt * Math.cos(angleRad) : headwind;
+
+  const elevation = Number(fieldElevation) || 0;
+  const altimeter = Number(altimeterSetting) || 29.92;
+  const oat = Number(oatC) || 0;
+  const pressureAltitude = Math.round(elevation + (29.92 - altimeter) * 1000);
+  const isaTemp = 15 - 2 * (pressureAltitude / 1000);
+  const densityAltitude = Math.round(pressureAltitude + 120 * (oat - isaTemp));
 
   const { data: weather, isLoading, error, refetch } = useQuery<WeatherData>({
     queryKey: [`/api/aviation-weather/${searchIcao}`],
@@ -206,6 +232,121 @@ export default function PilotTools() {
               <Link href="/approach-plates">Open Approach Plates</Link>
             </Button>
             <Badge variant="outline">Hosted by ReadySetFly</Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wind className="h-5 w-5" />
+              Crosswind Calculator
+            </CardTitle>
+            <CardDescription>Quickly estimate crosswind and headwind components.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-4">
+              <div className="space-y-2">
+                <Label>Runway heading</Label>
+                <Input value={runwayHeading} onChange={(e) => setRunwayHeading(e.target.value)} placeholder="180" />
+              </div>
+              <div className="space-y-2">
+                <Label>Wind direction</Label>
+                <Input value={windDirection} onChange={(e) => setWindDirection(e.target.value)} placeholder="210" />
+              </div>
+              <div className="space-y-2">
+                <Label>Wind speed (kt)</Label>
+                <Input value={windSpeed} onChange={(e) => setWindSpeed(e.target.value)} placeholder="12" />
+              </div>
+              <div className="space-y-2">
+                <Label>Gust (kt, optional)</Label>
+                <Input value={windGust} onChange={(e) => setWindGust(e.target.value)} placeholder="20" />
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">Crosswind</div>
+                <div className="text-lg font-semibold">
+                  {Math.abs(crosswind).toFixed(1)} kt {crosswindDir}
+                </div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">Head/Tailwind</div>
+                <div className="text-lg font-semibold">
+                  {Math.abs(headwind).toFixed(1)} kt {headwind >= 0 ? "headwind" : "tailwind"}
+                </div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">Max crosswind (gust)</div>
+                <div className="text-lg font-semibold">
+                  {maxCrosswind.toFixed(1)} kt
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Max headwind: {Math.abs(maxHeadwind).toFixed(1)} kt
+                </div>
+              </div>
+            </div>
+            <Alert>
+              <AlertDescription className="text-xs">
+                For planning only. Verify with official sources and aircraft limitations.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gauge className="h-5 w-5" />
+              Density Altitude Calculator
+            </CardTitle>
+            <CardDescription>Estimate pressure altitude and density altitude.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label>Field elevation (ft)</Label>
+                <Input value={fieldElevation} onChange={(e) => setFieldElevation(e.target.value)} placeholder="500" />
+              </div>
+              <div className="space-y-2">
+                <Label>Altimeter (inHg)</Label>
+                <Input value={altimeterSetting} onChange={(e) => setAltimeterSetting(e.target.value)} placeholder="29.92" />
+              </div>
+              <div className="space-y-2">
+                <Label>OAT (°C)</Label>
+                <Input value={oatC} onChange={(e) => setOatC(e.target.value)} placeholder="20" />
+              </div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">Pressure altitude</div>
+                <div className="text-lg font-semibold">{pressureAltitude.toLocaleString()} ft</div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-muted-foreground">Density altitude</div>
+                <div className="text-lg font-semibold">{densityAltitude.toLocaleString()} ft</div>
+              </div>
+            </div>
+            <Alert>
+              <AlertDescription className="text-xs">
+                Density altitude is an estimate. Always consult official performance charts.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Scale className="h-5 w-5" />
+              Weight & Balance
+            </CardTitle>
+            <CardDescription>Calculate CG and gross weight using the RSF aircraft library.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button asChild>
+              <Link href="/weight-balance">Open Weight & Balance</Link>
+            </Button>
+            <Badge variant="outline">Planning tool</Badge>
           </CardContent>
         </Card>
 

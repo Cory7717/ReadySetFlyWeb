@@ -22,6 +22,7 @@ import CreateMarketplaceListing from "@/pages/create-marketplace-listing";
 import MarketplaceListingCheckout from "@/pages/marketplace-listing-checkout";
 import RentalPayment from "@/pages/rental-payment";
 import AdminDashboard from "@/pages/admin";
+import AdminInviteAccept from "@/pages/admin-invite";
 import VerifyIdentity from "@/pages/verify-identity";
 import OwnerPayoutSetup from "@/pages/owner-payout-setup";
 import OwnerWithdrawals from "@/pages/owner-withdrawals";
@@ -37,6 +38,7 @@ import VerifyEmail from "@/pages/verify-email";
 import Logbook from "@/pages/logbook";
 import PilotTools from "@/pages/pilot-tools";
 import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
+import WeightBalance from "@/pages/weight-balance";
 import LogbookPro from "@/pages/logbook-pro";
 import LogbookProSuccess from "@/pages/logbook-pro-success";
 import LogbookProCancel from "@/pages/logbook-pro-cancel";
@@ -106,7 +108,9 @@ function Router() {
       <Route path="/pilot-tools" component={PilotTools} />
       <Route path="/approach-plates" component={ApproachPlates} />
       <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
+      <Route path="/weight-balance" component={WeightBalance} />
       <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
+      <Route path="/admin/invite" component={RequireAuth} />
       <Route path="/student" component={() => <StudentPageLoader component={StudentHub} />} />
       <Route path="/start-flying" component={() => <StudentPageLoader component={StudentHub} />} />
       <Route path="/student/wizard" component={() => <StudentPageLoader component={StudentWizard} />} />
@@ -138,6 +142,7 @@ function Router() {
           <Route path="/owner-payout-setup" component={OwnerPayoutSetup} />
           <Route path="/owner-withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
+          <Route path="/admin/invite" component={AdminInviteAccept} />
           <Route path="/verify-identity" component={VerifyIdentity} />
           <Route path="/settings" component={Settings} />
           <Route path="/logbook" component={Logbook} />
@@ -167,6 +172,7 @@ function Router() {
           <Route path="/owner-payout-setup" component={RequireAuth} />
           <Route path="/owner-withdrawals" component={RequireAuth} />
           <Route path="/admin" component={RequireAuth} />
+          <Route path="/admin/invite" component={RequireAuth} />
           <Route path="/verify-identity" component={RequireAuth} />
           <Route path="/settings" component={RequireAuth} />
           <Route path="/logbook" component={RequireAuth} />

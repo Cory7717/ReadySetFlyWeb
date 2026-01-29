@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun, Calculator, Radio } from "lucide-react";
+import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun, Calculator, Radio, Gauge, Scale } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -305,6 +305,94 @@ export default function Landing() {
                   >
                     <Link href="/ownership-cost-calculator">
                       Open Calculator
+                    </Link>
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Free for everyone - no account needed
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Density Altitude Calculator Card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex flex-col items-center text-center space-y-4">
+                  <div className="h-16 w-16 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                    <Gauge className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold">Density Altitude</h3>
+                  <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
+                    Quick Tool
+                  </Badge>
+                  <p className="text-muted-foreground">
+                    Estimate pressure and density altitude for performance planning before you fly.
+                  </p>
+                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
+                      <span>Field elevation + altimeter inputs</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
+                      <span>OAT-based density altitude estimate</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
+                      <span>Fast training-ready reference</span>
+                    </li>
+                  </ul>
+                  <Button 
+                    className="w-full"
+                    variant="outline"
+                    asChild
+                  >
+                    <Link href="/pilot-tools">
+                      Open Calculator
+                    </Link>
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Free for everyone - no account needed
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Weight & Balance Card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex flex-col items-center text-center space-y-4">
+                  <div className="h-16 w-16 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                    <Scale className="h-8 w-8 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold">Weight & Balance</h3>
+                  <Badge variant="secondary" className="bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400">
+                    New
+                  </Badge>
+                  <p className="text-muted-foreground">
+                    Calculate CG and total weight with quick access to RSF aircraft library data.
+                  </p>
+                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
+                      <span>Library-backed max gross reference</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
+                      <span>Station-by-station CG calculator</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
+                      <span>Planning-only safety disclaimer</span>
+                    </li>
+                  </ul>
+                  <Button 
+                    className="w-full"
+                    variant="outline"
+                    asChild
+                  >
+                    <Link href="/weight-balance">
+                      Open Weight & Balance
                     </Link>
                   </Button>
                   <p className="text-xs text-muted-foreground">

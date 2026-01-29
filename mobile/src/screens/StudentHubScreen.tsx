@@ -77,6 +77,25 @@ export default function StudentHubScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Quick Calculators</Text>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('CrosswindCalc')}>
+          <Ionicons name="speedometer-outline" size={24} color="#1e40af" />
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>Crosswind Calculator</Text>
+            <Text style={styles.cardSubtitle}>Practice headwind and crosswind math.</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('DensityAltitude')}>
+          <Ionicons name="analytics-outline" size={24} color="#1e40af" />
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>Density Altitude</Text>
+            <Text style={styles.cardSubtitle}>Pressure + density altitude estimates.</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.cta}>
         <Text style={styles.ctaTitle}>Ready to start training?</Text>
         <Text style={styles.ctaSubtitle}>Find a flight school near you.</Text>

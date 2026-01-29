@@ -152,6 +152,8 @@ export default function FlightPlanner() {
   const [checklist, setChecklist] = useState(checklistDefaults);
   const [departureSuggestions, setDepartureSuggestions] = useState<AirportSearchResult[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<AirportSearchResult[]>([]);
+  const [departureResolved, setDepartureResolved] = useState("");
+  const [destinationResolved, setDestinationResolved] = useState("");
 
   useEffect(() => {
     const stored = localStorage.getItem("flightPlannerChecklist");
@@ -221,6 +223,24 @@ export default function FlightPlanner() {
   }, [form.departure]);
 
   useEffect(() => {
+    const value = form.departure.trim().toUpperCase();
+    if (!value) {
+      setDepartureResolved("");
+      return;
+    }
+    if (value.length === 3 && ICAO_REGEX.test(value)) {
+      setDepartureResolved(value);
+      return;
+    }
+    if (value.length === 4 && ICAO_REGEX.test(value) && /^[KCP]/.test(value)) {
+      setDepartureResolved(value);
+      return;
+    }
+    const exact = departureSuggestions.find((airport) => airport.icao?.toUpperCase() === value);
+    setDepartureResolved(exact ? exact.icao.toUpperCase() : "");
+  }, [form.departure, departureSuggestions]);
+
+  useEffect(() => {
     const value = form.destination.trim();
     const normalized = value.toUpperCase();
     if (!value || ICAO_REGEX.test(normalized)) {
@@ -242,6 +262,24 @@ export default function FlightPlanner() {
     }, 300);
     return () => clearTimeout(timer);
   }, [form.destination]);
+
+  useEffect(() => {
+    const value = form.destination.trim().toUpperCase();
+    if (!value) {
+      setDestinationResolved("");
+      return;
+    }
+    if (value.length === 3 && ICAO_REGEX.test(value)) {
+      setDestinationResolved(value);
+      return;
+    }
+    if (value.length === 4 && ICAO_REGEX.test(value) && /^[KCP]/.test(value)) {
+      setDestinationResolved(value);
+      return;
+    }
+    const exact = destinationSuggestions.find((airport) => airport.icao?.toUpperCase() === value);
+    setDestinationResolved(exact ? exact.icao.toUpperCase() : "");
+  }, [form.destination, destinationSuggestions]);
 
   const { data: savedPlans = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
     queryKey: ["/api/flight-plans"],
@@ -303,13 +341,13 @@ export default function FlightPlanner() {
   const plannedStops = useMemo(() => parseWaypoints(plannedStopsInput), [plannedStopsInput]);
   const routeIcaos = useMemo(() => {
     const list = [
-      form.departure.trim().toUpperCase(),
+      departureResolved.trim().toUpperCase(),
       ...plannedStops,
       ...waypoints,
-      form.destination.trim().toUpperCase(),
+      destinationResolved.trim().toUpperCase(),
     ].filter(Boolean);
     return Array.from(new Set(list)).filter((icao) => ICAO_REGEX.test(icao));
-  }, [form.departure, form.destination, waypoints, plannedStops]);
+  }, [departureResolved, destinationResolved, waypoints, plannedStops]);
 
   const airportQueries = useQueries({
     queries: routeIcaos.map((icao) => ({
@@ -400,12 +438,12 @@ export default function FlightPlanner() {
 
   const weatherIcaos = useMemo(() => {
     const list = [
-      form.departure.trim().toUpperCase(),
+      departureResolved.trim().toUpperCase(),
       ...waypoints.slice(0, 2),
-      form.destination.trim().toUpperCase(),
+      destinationResolved.trim().toUpperCase(),
     ].filter(Boolean);
     return Array.from(new Set(list)).filter((icao) => ICAO_REGEX.test(icao));
-  }, [form.departure, form.destination, waypoints]);
+  }, [departureResolved, destinationResolved, waypoints]);
 
   const weatherQueries = useQueries({
     queries: weatherIcaos.map((icao) => ({
@@ -667,6 +705,7 @@ export default function FlightPlanner() {
                     className="w-full text-left hover:bg-muted rounded px-2 py-1"
                     onClick={() => {
                       setForm({ ...form, departure: airport.icao.toUpperCase() });
+                      setDepartureResolved(airport.icao.toUpperCase());
                       setDepartureSuggestions([]);
                     }}
                   >
@@ -694,6 +733,7 @@ export default function FlightPlanner() {
                     className="w-full text-left hover:bg-muted rounded px-2 py-1"
                     onClick={() => {
                       setForm({ ...form, destination: airport.icao.toUpperCase() });
+                      setDestinationResolved(airport.icao.toUpperCase());
                       setDestinationSuggestions([]);
                     }}
                   >

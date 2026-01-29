@@ -6,14 +6,18 @@
   <script>
     // GitHub Pages SPA redirect
     // Avoid infinite loops if the root itself 404s (e.g., when only the 404 was published).
-    (function() {
+    (function () {
       const key = 'spa-redirected-path';
-      const current = window.location.pathname || '/';
+      const current = (window.location.pathname || '/') + window.location.search + window.location.hash;
       const lastRedirect = sessionStorage.getItem(key);
 
       if (lastRedirect === current) {
         // Give the user a hint instead of looping forever.
-        document.body.textContent = 'Unable to load the app. Please refresh.';
+        window.addEventListener('DOMContentLoaded', function () {
+          if (document.body) {
+            document.body.textContent = 'Unable to load the app. Please refresh.';
+          }
+        });
         return;
       }
 

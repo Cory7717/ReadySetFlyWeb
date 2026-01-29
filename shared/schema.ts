@@ -17,6 +17,7 @@ export const leadSources = ["website", "referral", "social_media", "advertising"
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
 export const withdrawalStatuses = ["pending", "processing", "completed", "failed", "cancelled"] as const;
 export const approachPlateTypes = ["IAP", "SID", "STAR", "AIRPORT", "OTHER"] as const;
+export const adminRoles = ["operations", "finance", "sales", "support", "content"] as const;
 
 // Session storage table (REQUIRED for Replit Auth - from blueprint:javascript_log_in_with_replit)
 export const sessions = pgTable(
@@ -82,6 +83,8 @@ export const users = pgTable("users", {
   backgroundCheckCompleted: boolean("background_check_completed").default(false),
   isAdmin: boolean("is_admin").default(false),
   isSuperAdmin: boolean("is_super_admin").default(false),
+  adminRole: text("admin_role"),
+  adminPermissions: text("admin_permissions").array().notNull().default(sql`ARRAY[]::text[]`),
   
   // Renter Verification (new comprehensive system)
   legalFirstName: text("legal_first_name"),
@@ -156,6 +159,18 @@ export const users = pgTable("users", {
     }),
   })
 );
+
+export const adminInvites = pgTable("admin_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").notNull(),
+  role: text("role").notNull(),
+  permissions: text("permissions").array().notNull().default(sql`ARRAY[]::text[]`),
+  token: text("token").notNull().unique(),
+  invitedBy: varchar("invited_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 // Aircraft Listings (for rent)
 export const aircraftListings = pgTable("aircraft_listings", {
@@ -928,6 +943,12 @@ export const insertUserSchema = createInsertSchema(users).omit({
   totalFlightHours: z.number().min(0).default(0),
 });
 
+export const insertAdminInviteSchema = createInsertSchema(adminInvites).omit({
+  id: true,
+  createdAt: true,
+  acceptedAt: true,
+});
+
 export const insertRefreshTokenSchema = createInsertSchema(refreshTokens).omit({
   id: true,
   createdAt: true,
@@ -1405,6 +1426,9 @@ export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalReques
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = typeof users.$inferInsert; // For Replit Auth (from blueprint:javascript_log_in_with_replit)
+
+export type AdminInvite = typeof adminInvites.$inferSelect;
+export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;
 
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type InsertRefreshToken = z.infer<typeof insertRefreshTokenSchema>;

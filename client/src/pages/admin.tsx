@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,7 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, type User, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder } from "@shared/schema";
+import { useAuth } from "@/hooks/useAuth";
+import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder } from "@shared/schema";
+import { ADMIN_ROLE_LABELS, ADMIN_ROLE_PERMISSIONS, type AdminRole, type AdminPermission } from "@shared/config/adminAccess";
 import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
 import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
 import { AdminUserModal } from "@/components/admin-user-modal";
@@ -25,6 +27,37 @@ import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
+  const adminRole = (user?.adminRole as AdminRole | undefined) || undefined;
+  const adminPermissions = (user?.adminPermissions || []) as AdminPermission[];
+  const canAccess = (permission: AdminPermission) =>
+    isSuperAdmin ||
+    (adminRole ? ADMIN_ROLE_PERMISSIONS[adminRole]?.includes(permission) : false) ||
+    adminPermissions.includes(permission);
+
+  useEffect(() => {
+    const allowed = [
+      canAccess("analytics") && "analytics",
+      canAccess("crm") && "crm",
+      canAccess("users") && "users",
+      canAccess("verifications") && "verifications",
+      canAccess("aircraft") && "aircraft",
+      canAccess("marketplace") && "marketplace",
+      canAccess("stale") && "stale",
+      canAccess("promo") && "promo",
+      canAccess("promo-codes") && "promo-codes",
+      canAccess("withdrawals") && "withdrawals",
+      canAccess("notifications") && "notifications",
+      canAccess("banners") && "banners",
+      isSuperAdmin && "admins",
+    ].filter(Boolean) as string[];
+
+    if (!allowed.includes(activeTab) && allowed.length > 0) {
+      setActiveTab(allowed[0]);
+    }
+  }, [adminRole, adminPermissions, isSuperAdmin, activeTab]);
+
   const [userSearch, setUserSearch] = useState("");
   const [activeTab, setActiveTab] = useState("analytics");
   const [selectedSubmission, setSelectedSubmission] = useState<VerificationSubmission | null>(null);
@@ -32,6 +65,8 @@ export default function AdminDashboard() {
   const [rejectionNotes, setRejectionNotes] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [userModalOpen, setUserModalOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<AdminRole>("operations");
   
   // CRM state
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
@@ -358,6 +393,16 @@ export default function AdminDashboard() {
     enabled: activeTab === "banners",
   });
 
+  const { data: adminInvites = [], isLoading: invitesLoading } = useQuery<AdminInvite[]>({
+    queryKey: ["/api/admin/invites"],
+    enabled: activeTab === "admins" && isSuperAdmin,
+  });
+
+  const { data: adminUsers = [], isLoading: adminUsersLoading } = useQuery<User[]>({
+    queryKey: ["/api/admin/admins"],
+    enabled: activeTab === "admins" && isSuperAdmin,
+  });
+
   // Create orderId→bannerAd lookup to check activation status
   const bannerAdsByOrderId = useMemo(() => {
     const map = new Map<string, BannerAd>();
@@ -502,6 +547,42 @@ export default function AdminDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications/unread"] });
       toast({ title: "Notification deleted" });
+    },
+  });
+
+  const createAdminInviteMutation = useMutation({
+    mutationFn: async (payload: { email: string; role: AdminRole }) => {
+      const res = await apiRequest("POST", "/api/admin/invites", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invites"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/admins"] });
+      toast({ title: "Invite sent", description: "The admin invite email was sent." });
+      setInviteEmail("");
+      setInviteRole("operations");
+    },
+    onError: (error: any) => {
+      toast({ title: "Invite failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateAdminRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: AdminRole }) => {
+      const permissions = ADMIN_ROLE_PERMISSIONS[role];
+      return await apiRequest("PATCH", `/api/admin/users/${userId}`, {
+        isAdmin: true,
+        adminRole: role,
+        adminPermissions: permissions,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/admins"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Admin role updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -1346,75 +1427,105 @@ export default function AdminDashboard() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 md:grid-cols-12 h-auto">
-          <TabsTrigger value="analytics" data-testid="tab-analytics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span>Analytics</span>
-          </TabsTrigger>
-          <TabsTrigger value="crm" data-testid="tab-crm" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <Briefcase className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span>CRM</span>
-          </TabsTrigger>
-          <TabsTrigger value="users" data-testid="tab-users" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <Users className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span>Users</span>
-          </TabsTrigger>
-          <TabsTrigger value="verifications" data-testid="tab-verifications" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <Shield className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span className="flex items-center gap-1">
-              Verify
-              {verificationSubmissions.length > 0 && (
-                <Badge variant="destructive" className="text-xs px-1">
-                  {verificationSubmissions.length}
-                </Badge>
-              )}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="aircraft" data-testid="tab-aircraft" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <Plane className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span>Aircraft</span>
-          </TabsTrigger>
-          <TabsTrigger value="marketplace" data-testid="tab-marketplace" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <List className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span className="flex items-center gap-1">
-              Market
-              {flaggedListings.length > 0 && (
-                <Badge variant="destructive" className="text-xs px-1">
-                  {flaggedListings.length}
-                </Badge>
-              )}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="stale" data-testid="tab-stale" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <Clock className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span>Stale</span>
-          </TabsTrigger>
-          <TabsTrigger value="promo" data-testid="tab-promo" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <Gift className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span>Promos</span>
-          </TabsTrigger>
-          <TabsTrigger value="promo-codes" data-testid="tab-promo-codes" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <Tag className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span>Codes</span>
-          </TabsTrigger>
-          <TabsTrigger value="withdrawals" data-testid="tab-withdrawals" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span>Payouts</span>
-          </TabsTrigger>
-          <TabsTrigger value="notifications" data-testid="tab-notifications" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <Bell className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span className="flex items-center gap-1">
-              Alerts
-              {unreadNotifications.length > 0 && (
-                <Badge variant="destructive" className="text-xs px-1">
-                  {unreadNotifications.length}
-                </Badge>
-              )}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="banners" data-testid="tab-banners" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
-            <Image className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-            <span>Banners</span>
-          </TabsTrigger>
+          {canAccess("analytics") && (
+            <TabsTrigger value="analytics" data-testid="tab-analytics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Analytics</span>
+            </TabsTrigger>
+          )}
+          {canAccess("crm") && (
+            <TabsTrigger value="crm" data-testid="tab-crm" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Briefcase className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>CRM</span>
+            </TabsTrigger>
+          )}
+          {canAccess("users") && (
+            <TabsTrigger value="users" data-testid="tab-users" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Users className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Users</span>
+            </TabsTrigger>
+          )}
+          {canAccess("verifications") && (
+            <TabsTrigger value="verifications" data-testid="tab-verifications" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Shield className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span className="flex items-center gap-1">
+                Verify
+                {verificationSubmissions.length > 0 && (
+                  <Badge variant="destructive" className="text-xs px-1">
+                    {verificationSubmissions.length}
+                  </Badge>
+                )}
+              </span>
+            </TabsTrigger>
+          )}
+          {canAccess("aircraft") && (
+            <TabsTrigger value="aircraft" data-testid="tab-aircraft" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Plane className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Aircraft</span>
+            </TabsTrigger>
+          )}
+          {canAccess("marketplace") && (
+            <TabsTrigger value="marketplace" data-testid="tab-marketplace" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <List className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span className="flex items-center gap-1">
+                Market
+                {flaggedListings.length > 0 && (
+                  <Badge variant="destructive" className="text-xs px-1">
+                    {flaggedListings.length}
+                  </Badge>
+                )}
+              </span>
+            </TabsTrigger>
+          )}
+          {canAccess("stale") && (
+            <TabsTrigger value="stale" data-testid="tab-stale" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Stale</span>
+            </TabsTrigger>
+          )}
+          {canAccess("promo") && (
+            <TabsTrigger value="promo" data-testid="tab-promo" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Gift className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Promos</span>
+            </TabsTrigger>
+          )}
+          {canAccess("promo-codes") && (
+            <TabsTrigger value="promo-codes" data-testid="tab-promo-codes" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Tag className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Codes</span>
+            </TabsTrigger>
+          )}
+          {canAccess("withdrawals") && (
+            <TabsTrigger value="withdrawals" data-testid="tab-withdrawals" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Payouts</span>
+            </TabsTrigger>
+          )}
+          {canAccess("notifications") && (
+            <TabsTrigger value="notifications" data-testid="tab-notifications" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Bell className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span className="flex items-center gap-1">
+                Alerts
+                {unreadNotifications.length > 0 && (
+                  <Badge variant="destructive" className="text-xs px-1">
+                    {unreadNotifications.length}
+                  </Badge>
+                )}
+              </span>
+            </TabsTrigger>
+          )}
+          {canAccess("banners") && (
+            <TabsTrigger value="banners" data-testid="tab-banners" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Image className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Banners</span>
+            </TabsTrigger>
+          )}
+          {isSuperAdmin && (
+            <TabsTrigger value="admins" data-testid="tab-admins" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <UserPlus className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Admins</span>
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Analytics Tab */}
@@ -3837,6 +3948,137 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isSuperAdmin && (
+          <TabsContent value="admins" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Invite Admin</CardTitle>
+                <CardDescription>Send an admin invite to a team member by email.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="team@readysetfly.us"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Role</Label>
+                    <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as AdminRole)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(ADMIN_ROLE_LABELS).map(([role, label]) => (
+                          <SelectItem key={role} value={role}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Permissions: {ADMIN_ROLE_PERMISSIONS[inviteRole].join(", ")}
+                </div>
+                <Button
+                  onClick={() => createAdminInviteMutation.mutate({ email: inviteEmail.trim(), role: inviteRole })}
+                  disabled={!inviteEmail.trim() || createAdminInviteMutation.isPending}
+                >
+                  {createAdminInviteMutation.isPending ? "Sending..." : "Send Invite"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Admin Users</CardTitle>
+                <CardDescription>Manage admin roles and access.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {adminUsersLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading admins...</div>
+                ) : adminUsers.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No admins found.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {adminUsers.map((admin) => (
+                      <div key={admin.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+                        <div>
+                          <div className="font-semibold">
+                            {admin.firstName || "Admin"} {admin.lastName || ""}{" "}
+                            {admin.isSuperAdmin && <Badge variant="default">Super Admin</Badge>}
+                          </div>
+                          <div className="text-xs text-muted-foreground">{admin.email}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={(admin.adminRole as AdminRole) || "operations"}
+                            onValueChange={(value) => updateAdminRoleMutation.mutate({ userId: admin.id, role: value as AdminRole })}
+                            disabled={admin.isSuperAdmin}
+                          >
+                            <SelectTrigger className="w-40">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(ADMIN_ROLE_LABELS).map(([role, label]) => (
+                                <SelectItem key={role} value={role}>
+                                  {label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            variant="outline"
+                            onClick={() => updateAdminRoleMutation.mutate({ userId: admin.id, role: (admin.adminRole as AdminRole) || "operations" })}
+                            disabled={admin.isSuperAdmin}
+                          >
+                            Update
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Pending Invites</CardTitle>
+                <CardDescription>Track outstanding admin invitations.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {invitesLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading invites...</div>
+                ) : adminInvites.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No pending invites.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {adminInvites.map((invite) => (
+                      <div key={invite.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+                        <div>
+                          <div className="font-semibold">{invite.email}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Role: {ADMIN_ROLE_LABELS[(invite.role as AdminRole) || "operations"]} •
+                            Expires {invite.expiresAt ? new Date(invite.expiresAt).toLocaleDateString() : "—"}
+                          </div>
+                        </div>
+                        <Badge variant={invite.acceptedAt ? "secondary" : "outline"}>
+                          {invite.acceptedAt ? "Accepted" : "Pending"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Verification Review Dialog */}

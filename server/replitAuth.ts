@@ -153,6 +153,20 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
     next();
   };
 
+  export const isSuperAdmin: RequestHandler = async (req: any, res, next) => {
+    if (AUTH_DISABLED) return next();
+
+    const userId = req.user?.claims?.sub || req.session?.userId;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    const dbUser = await storage.getUser(String(userId));
+    if (!dbUser || !dbUser.isSuperAdmin) {
+      return res.status(403).json({ message: "Forbidden - Super Admin access required" });
+    }
+
+    next();
+  };
+
   export async function setupAuth(app: Express) {
   // Always set trust proxy for secure cookies on Render/behind proxies
   app.set("trust proxy", 1);

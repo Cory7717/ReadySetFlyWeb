@@ -118,6 +118,37 @@ export default function HomeScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
+      {/* Quick Calculators */}
+      <View style={styles.quickActions}>
+        <Text style={styles.sectionTitle}>Quick Calculators</Text>
+
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => navigation.navigate('Profile', { screen: 'CrosswindCalc' })}
+          data-testid="button-crosswind-calc"
+        >
+          <Ionicons name="speedometer-outline" size={32} color="#1e40af" />
+          <View style={styles.actionText}>
+            <Text style={styles.actionTitle}>Crosswind Calculator</Text>
+            <Text style={styles.actionSubtitle}>Headwind & crosswind components</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => navigation.navigate('Profile', { screen: 'DensityAltitude' })}
+          data-testid="button-density-altitude"
+        >
+          <Ionicons name="analytics-outline" size={32} color="#1e40af" />
+          <View style={styles.actionText}>
+            <Text style={styles.actionTitle}>Density Altitude</Text>
+            <Text style={styles.actionSubtitle}>Pressure + density altitude</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
+        </TouchableOpacity>
+      </View>
+
       {/* Features */}
       <View style={styles.features}>
         <Text style={styles.sectionTitle}>Why Ready Set Fly</Text>

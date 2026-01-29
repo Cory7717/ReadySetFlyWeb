@@ -525,6 +525,41 @@ Founder, Ready Set Fly ✈️
   }
 }
 
+export async function sendAdminInviteEmail(data: {
+  email: string;
+  inviteToken: string;
+  role: string;
+}) {
+  const { email, inviteToken, role } = data;
+  const { getUncachableResendClient } = await import('./resendClient');
+  const { client: resend, fromEmail } = await getUncachableResendClient();
+  const frontendBase = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+  const inviteUrl = `${frontendBase}/admin/invite?token=${encodeURIComponent(inviteToken)}`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2>Ready Set Fly Admin Invite</h2>
+      <p>You have been invited to join the Ready Set Fly team as a <strong>${role}</strong>.</p>
+      <p>Click the button below to create your account and accept the invite:</p>
+      <p style="margin: 24px 0;">
+        <a href="${inviteUrl}" style="background:#1e40af;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;">Accept Invite</a>
+      </p>
+      <p>If you already have an account with this email, log in first and then open the invite link.</p>
+      <p style="font-size:12px;color:#6b7280;">If you did not expect this invite, you can ignore this email.</p>
+    </div>
+  `;
+
+  const text = `Ready Set Fly Admin Invite\n\nYou have been invited as ${role}.\nAccept invite: ${inviteUrl}\n\nIf you did not expect this invite, ignore this email.`;
+
+  await resend.emails.send({
+    from: fromEmail,
+    to: email,
+    subject: "Ready Set Fly Admin Invite",
+    html,
+    text,
+  });
+}
+
 // Banner Ad Expiration Reminder (2 days before endDate)
 export function getBannerAdExpirationReminderHtml(
   sponsorName: string,

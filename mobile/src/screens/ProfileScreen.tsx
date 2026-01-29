@@ -218,6 +218,36 @@ export default function ProfileScreen({ navigation }: any) {
               <Text style={styles.menuText}>Ownership Cost Tool</Text>
               <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
             </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('CrosswindCalc')}
+              data-testid="button-crosswind-calc"
+            >
+              <Ionicons name="speedometer-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Crosswind Calculator</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('DensityAltitude')}
+              data-testid="button-density-altitude"
+            >
+              <Ionicons name="analytics-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Density Altitude</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('WeightBalance')}
+              data-testid="button-weight-balance"
+            >
+              <Ionicons name="scale-outline" size={24} color="#1e40af" />
+              <Text style={styles.menuText}>Weight & Balance</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.section}>

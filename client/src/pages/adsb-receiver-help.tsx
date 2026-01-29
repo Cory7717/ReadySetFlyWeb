@@ -5,8 +5,8 @@ const receivers = [
   {
     name: "Stratux",
     steps: [
-      "Power on the Stratux and wait for the Wi‑Fi network to appear.",
-      "Connect your device to the Stratux Wi‑Fi.",
+      "Power on the Stratux and wait for the Wi-Fi network to appear.",
+      "Connect your device to the Stratux Wi-Fi.",
       "Use port 4000 (or 49002 if configured).",
       "Enable Live Traffic in the Flight Planner.",
     ],
@@ -14,23 +14,23 @@ const receivers = [
   {
     name: "Sentry / Stratus",
     steps: [
-      "Connect to the device Wi‑Fi.",
-      "Confirm GDL‑90 output is enabled (default for most).",
+      "Connect to the device Wi-Fi.",
+      "Confirm GDL-90 output is enabled (default for most).",
       "Use port 4000 if unsure.",
     ],
   },
   {
     name: "Garmin GDL",
     steps: [
-      "Connect to the Garmin GDL Wi‑Fi network.",
-      "Confirm GDL‑90 traffic is enabled.",
+      "Connect to the Garmin GDL Wi-Fi network.",
+      "Confirm GDL-90 traffic is enabled.",
       "Use port 4000 or 49002 depending on configuration.",
     ],
   },
   {
     name: "uAvionix SkyEcho",
     steps: [
-      "Connect to the SkyEcho Wi‑Fi.",
+      "Connect to the SkyEcho Wi-Fi.",
       "Confirm traffic output is enabled.",
       "Use port 4000 unless configured otherwise.",
     ],
@@ -41,8 +41,8 @@ export default function AdsbReceiverHelp() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">ADS‑B Receiver Setup</h1>
-        <p className="text-muted-foreground">Connect your portable ADS‑B receiver to view live traffic.</p>
+        <h1 className="text-3xl font-bold">ADS-B Receiver Setup</h1>
+        <p className="text-muted-foreground">Connect your portable ADS-B receiver to view live traffic.</p>
       </div>
 
       <Alert>
@@ -60,7 +60,7 @@ export default function AdsbReceiverHelp() {
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               {receiver.steps.map((step) => (
-                <div key={step}>• {step}</div>
+                <div key={step}>- {step}</div>
               ))}
             </CardContent>
           </Card>
@@ -73,9 +73,9 @@ export default function AdsbReceiverHelp() {
           <CardDescription>Common fixes</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <div>• Confirm your device is connected to the receiver’s Wi‑Fi.</div>
-          <div>• Try port 4000 or 49002.</div>
-          <div>• Ensure GPS lock and ADS‑B reception on the receiver.</div>
+          <div>- Confirm your device is connected to the receiver's Wi-Fi.</div>
+          <div>- Try port 4000 or 49002.</div>
+          <div>- Ensure GPS lock and ADS-B reception on the receiver.</div>
         </CardContent>
       </Card>
     </div>

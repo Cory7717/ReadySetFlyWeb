@@ -49,6 +49,8 @@ import {
   type InsertPromoCode,
   type PromoCodeUsage,
   type InsertPromoCodeUsage,
+  type AdminInvite,
+  type InsertAdminInvite,
   type LogbookEntry,
   type InsertLogbookEntry,
   type LogbookProSettings,
@@ -96,6 +98,7 @@ import {
   aircraftTypes,
   aircraftProfiles,
   approachPlates,
+  adminInvites,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray, isNull, arrayOverlaps } from "drizzle-orm";
@@ -105,8 +108,14 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByVerificationToken(token: string): Promise<User | undefined>;
+  getAdminInviteByEmail(email: string): Promise<AdminInvite | undefined>;
+  getAdminInviteByToken(token: string): Promise<AdminInvite | undefined>;
+  listAdminInvites(): Promise<AdminInvite[]>;
+  createAdminInvite(invite: InsertAdminInvite): Promise<AdminInvite>;
+  acceptAdminInvite(id: string, userId: string): Promise<AdminInvite | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
+  getAdminUsers(): Promise<User[]>;
   upsertUser(user: UpsertUser): Promise<User>; // REQUIRED for Replit Auth
   searchUsers(query: string): Promise<User[]>; // Admin search by name
   updateUserPassword(id: string, hashedPassword: string): Promise<User | undefined>;
@@ -433,6 +442,55 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.emailVerificationToken, token))
       .limit(1);
     return result[0];
+  }
+
+  async getAdminUsers(): Promise<User[]> {
+    return db.select().from(users).where(eq(users.isAdmin, true)).orderBy(desc(users.createdAt));
+  }
+
+  async getAdminInviteByEmail(email: string): Promise<AdminInvite | undefined> {
+    const result = await db
+      .select()
+      .from(adminInvites)
+      .where(and(eq(adminInvites.email, email.toLowerCase()), isNull(adminInvites.acceptedAt)))
+      .orderBy(desc(adminInvites.createdAt))
+      .limit(1);
+    return result[0];
+  }
+
+  async getAdminInviteByToken(token: string): Promise<AdminInvite | undefined> {
+    const result = await db
+      .select()
+      .from(adminInvites)
+      .where(eq(adminInvites.token, token))
+      .limit(1);
+    return result[0];
+  }
+
+  async listAdminInvites(): Promise<AdminInvite[]> {
+    return db.select().from(adminInvites).orderBy(desc(adminInvites.createdAt));
+  }
+
+  async createAdminInvite(invite: InsertAdminInvite): Promise<AdminInvite> {
+    const [created] = await db.insert(adminInvites).values(invite).returning();
+    return created;
+  }
+
+  async acceptAdminInvite(id: string, userId: string): Promise<AdminInvite | undefined> {
+    const [invite] = await db
+      .update(adminInvites)
+      .set({ acceptedAt: new Date() })
+      .where(eq(adminInvites.id, id))
+      .returning();
+
+    if (!invite) return undefined;
+
+    await db
+      .update(users)
+      .set({ isAdmin: true, adminRole: invite.role, adminPermissions: invite.permissions })
+      .where(eq(users.id, userId));
+
+    return invite;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {

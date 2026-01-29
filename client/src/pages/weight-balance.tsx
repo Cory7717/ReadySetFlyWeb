@@ -94,7 +94,7 @@ export default function WeightBalance() {
     ];
     const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
     const totalMoment = rows.reduce((sum, row) => sum + row.weight * row.arm, 0);
-    const cg = totalWeight > 0 - totalMoment / totalWeight : 0;
+    const cg = totalWeight > 0 ? totalMoment / totalWeight : 0;
     return { totalWeight, totalMoment, cg };
   }, [emptyWeight, emptyArm, frontWeight, frontArm, rearWeight, rearArm, baggageWeight, baggageArm, fuelWeight, fuelArm]);
 

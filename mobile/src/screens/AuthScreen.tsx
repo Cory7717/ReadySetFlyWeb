@@ -225,6 +225,9 @@ export default function AuthScreen() {
                 placeholder="••••••••"
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="password"
+                textContentType="password"
                 testID="input-password"
               />
               <TouchableOpacity
@@ -251,6 +254,9 @@ export default function AuthScreen() {
                 placeholder="••••••••"
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="password-new"
+                textContentType="newPassword"
                 testID="input-confirm-password"
               />
             </View>
@@ -385,6 +391,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     fontSize: 16,
+    color: colors.text,
   },
   eyeIcon: {
     padding: 12,

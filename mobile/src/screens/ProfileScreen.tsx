@@ -396,13 +396,21 @@ export default function ProfileScreen({ navigation }: any) {
               <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} data-testid="button-my-listings">
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('MyListings')}
+              data-testid="button-my-listings"
+            >
               <Ionicons name="list-outline" size={24} color="#1e40af" />
               <Text style={styles.menuText}>My Listings</Text>
               <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} data-testid="button-reviews">
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('Reviews')}
+              data-testid="button-reviews"
+            >
               <Ionicons name="star-outline" size={24} color="#1e40af" />
               <Text style={styles.menuText}>Reviews</Text>
               <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
@@ -479,13 +487,21 @@ export default function ProfileScreen({ navigation }: any) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Settings</Text>
             
-            <TouchableOpacity style={styles.menuItem} data-testid="button-notifications">
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('Notifications')}
+              data-testid="button-notifications"
+            >
               <Ionicons name="notifications-outline" size={24} color="#1e40af" />
               <Text style={styles.menuText}>Notifications</Text>
               <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} data-testid="button-help">
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => navigation.navigate('HelpSupport')}
+              data-testid="button-help"
+            >
               <Ionicons name="help-circle-outline" size={24} color="#1e40af" />
               <Text style={styles.menuText}>Help & Support</Text>
               <Ionicons name="chevron-forward" size={20} color="#9ca3af" />

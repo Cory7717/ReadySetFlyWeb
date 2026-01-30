@@ -25,6 +25,10 @@ import CrosswindCalculatorScreen from '../screens/CrosswindCalculatorScreen';
 import DensityAltitudeScreen from '../screens/DensityAltitudeScreen';
 import WeightBalanceScreen from '../screens/WeightBalanceScreen';
 import MyAircraftScreen from '../screens/MyAircraftScreen';
+import MyListingsScreen from '../screens/MyListingsScreen';
+import ReviewsScreen from '../screens/ReviewsScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
+import HelpSupportScreen from '../screens/HelpSupportScreen';
 import FAQScreen from '../screens/FAQScreen';
 import ContactUsScreen from '../screens/ContactUsScreen';
 import ReceiverHelpScreen from '../screens/ReceiverHelpScreen';
@@ -56,6 +60,10 @@ export type ProfileStackParamList = {
   DensityAltitude: undefined;
   WeightBalance: undefined;
   MyAircraft: undefined;
+  MyListings: undefined;
+  Reviews: undefined;
+  Notifications: undefined;
+  HelpSupport: undefined;
   FAQ: undefined;
   ContactUs: undefined;
   ReceiverHelp: undefined;
@@ -195,6 +203,26 @@ export default function ProfileStack() {
         name="MyAircraft" 
         component={MyAircraftScreen}
         options={{ title: 'My Aircraft' }}
+      />
+      <Stack.Screen
+        name="MyListings"
+        component={MyListingsScreen}
+        options={{ title: 'My Listings' }}
+      />
+      <Stack.Screen
+        name="Reviews"
+        component={ReviewsScreen}
+        options={{ title: 'Reviews' }}
+      />
+      <Stack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ title: 'Notifications' }}
+      />
+      <Stack.Screen
+        name="HelpSupport"
+        component={HelpSupportScreen}
+        options={{ title: 'Help & Support' }}
       />
       <Stack.Screen 
         name="FAQ" 

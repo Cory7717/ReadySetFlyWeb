@@ -20,7 +20,7 @@ import { useIsAuthenticated } from '../utils/auth';
 import { ReviewDialog } from '../components/ReviewDialog';
 
 export default function MyRentalsScreen({ navigation }: any) {
-  const { isAuthenticated, isLoading: authLoading } = useIsAuthenticated();
+  const { isAuthenticated, isLoading: authLoading, user } = useIsAuthenticated();
   const [reviewDialogVisible, setReviewDialogVisible] = useState(false);
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
   

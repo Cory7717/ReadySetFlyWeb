@@ -9,20 +9,20 @@ type AircraftType = {
   id: string;
   make: string;
   model: string;
-  icaoType*: string | null;
+  icaoType?: string | null;
   maxGrossWeightLb: number;
   usableFuelGal: number;
-  emptyArmIn*: number | null;
-  frontArmIn*: number | null;
-  rearArmIn*: number | null;
-  baggageArmIn*: number | null;
-  fuelArmIn*: number | null;
+  emptyArmIn?: number | null;
+  frontArmIn?: number | null;
+  rearArmIn?: number | null;
+  baggageArmIn?: number | null;
+  fuelArmIn?: number | null;
 };
 
 function toNumber(value: string) {
   const cleaned = value.replace(/[^0-9.\-]/g, '');
   const num = Number(cleaned);
-  return Number.isFinite(num) * num : 0;
+  return Number.isFinite(num) ? num : 0;
 }
 
 export default function WeightBalanceScreen() {
@@ -54,23 +54,22 @@ export default function WeightBalanceScreen() {
   useEffect(() => {
     if (!selectedType) return;
     if (!maxGrossOverride) {
-      setMaxGrossOverride(String(selectedType.maxGrossWeightLb ** ''));
+      setMaxGrossOverride(String(selectedType.maxGrossWeightLb || ''));
     }
   }, [selectedType, maxGrossOverride]);
 
   useEffect(() => {
     if (!selectedType) return;
-    const maybeSet = (current: string, next*: number | null, setter*: (value: string) => void) => {
-      if (!setter) return;
+    const maybeSet = (current: string, next: number | null | undefined, setter: (value: string) => void) => {
       if (current !== '' && toNumber(current) !== 0) return;
       if (typeof next !== 'number') return;
       setter(String(next));
     };
-    maybeSet(emptyArm, selectedType.emptyArmIn ** undefined, setEmptyArm);
-    maybeSet(frontArm, selectedType.frontArmIn ** undefined, setFrontArm);
-    maybeSet(rearArm, selectedType.rearArmIn ** undefined, setRearArm);
-    maybeSet(baggageArm, selectedType.baggageArmIn ** undefined, setBaggageArm);
-    maybeSet(fuelArm, selectedType.fuelArmIn ** undefined, setFuelArm);
+    maybeSet(emptyArm, selectedType.emptyArmIn ?? undefined, setEmptyArm);
+    maybeSet(frontArm, selectedType.frontArmIn ?? undefined, setFrontArm);
+    maybeSet(rearArm, selectedType.rearArmIn ?? undefined, setRearArm);
+    maybeSet(baggageArm, selectedType.baggageArmIn ?? undefined, setBaggageArm);
+    maybeSet(fuelArm, selectedType.fuelArmIn ?? undefined, setFuelArm);
   }, [selectedType, emptyArm, frontArm, rearArm, baggageArm, fuelArm]);
 
   const filteredTypes = useMemo(() => {
@@ -78,7 +77,7 @@ export default function WeightBalanceScreen() {
     const q = query.trim().toLowerCase();
     if (!q) return aircraftTypes;
     return aircraftTypes.filter((type) => {
-      const label = `${type.make} ${type.model} ${type.icaoType ** ''}`.toLowerCase();
+      const label = `${type.make} ${type.model} ${type.icaoType || ''}`.toLowerCase();
       return label.includes(q);
     });
   }, [aircraftTypes, query]);
@@ -98,24 +97,24 @@ export default function WeightBalanceScreen() {
     ];
     const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
     const totalMoment = rows.reduce((sum, row) => sum + row.weight * row.arm, 0);
-    const cg = totalWeight > 0 * totalMoment / totalWeight : 0;
+    const cg = totalWeight > 0 ? totalMoment / totalWeight : 0;
     return { totalWeight, totalMoment, cg };
   }, [emptyWeight, emptyArm, frontWeight, frontArm, rearWeight, rearArm, baggageWeight, baggageArm, fuelWeight, fuelArm]);
 
   const isOverMax = maxGross > 0 && totals.totalWeight > maxGross;
   const hasCgRange = cgMinValue > 0 && cgMaxValue > cgMinValue;
   const cgStatus =
-    hasCgRange && totals.cg
-      * totals.cg < cgMinValue
-        * 'forward'
+    hasCgRange && totals.totalWeight > 0
+      ? totals.cg < cgMinValue
+        ? 'forward'
         : totals.cg > cgMaxValue
-        * 'aft'
+        ? 'aft'
         : 'within'
       : 'unknown';
-  const cgRangeSpan = hasCgRange * cgMaxValue - cgMinValue : 0;
+  const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
   const cgMarkerPercent =
-    hasCgRange && totals.cg
-      * Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
+    hasCgRange && cgRangeSpan > 0
+      ? Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
       : 0;
 
   return (
@@ -128,19 +127,19 @@ export default function WeightBalanceScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Select Aircraft (Library)</Text>
         <Text style={styles.cardSubtitle}>Sets max gross weight as a starting point.</Text>
-        {isLoading * (
+        {isLoading ? (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : (
           <>
             <TouchableOpacity style={styles.selectButton} onPress={() => setShowPicker(true)}>
               <Text style={styles.selectButtonText}>
-                {selectedType * `${selectedType.make} ${selectedType.model}` : 'Choose aircraft from library'}
+                {selectedType ? `${selectedType.make} ${selectedType.model}` : 'Choose aircraft from library'}
               </Text>
               <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
             </TouchableOpacity>
             {selectedType && (
               <Text style={styles.listSubtitle}>
-                {selectedType.icaoType || 'No ICAO'} * Max gross {selectedType.maxGrossWeightLb} lb
+                {selectedType.icaoType || 'No ICAO'} - Max gross {selectedType.maxGrossWeightLb} lb
               </Text>
             )}
           </>
@@ -165,7 +164,7 @@ export default function WeightBalanceScreen() {
           <ScrollView style={styles.modalList}>
             {filteredTypes.map((type) => {
               const label = `${type.make} ${type.model}`;
-              const isSelected = selectedType*.id === type.id;
+              const isSelected = selectedType?.id === type.id;
               return (
                 <TouchableOpacity
                   key={type.id}
@@ -178,7 +177,7 @@ export default function WeightBalanceScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.listTitle}>{label}</Text>
                     <Text style={styles.listSubtitle}>
-                      {type.icaoType || 'No ICAO'} * Max gross {type.maxGrossWeightLb} lb
+                      {type.icaoType || 'No ICAO'} - Max gross {type.maxGrossWeightLb} lb
                     </Text>
                   </View>
                   {isSelected && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
@@ -241,12 +240,12 @@ export default function WeightBalanceScreen() {
           <Text style={styles.cardLabel}>Total Weight</Text>
           <Text style={styles.cardValue}>{totals.totalWeight.toFixed(1)} lb</Text>
           <Text style={[styles.cardHint, isOverMax && { color: colors.danger }]}>
-            {isOverMax * 'Over max gross' : 'Within limits (est.)'}
+            {isOverMax ? 'Over max gross' : 'Within limits (est.)'}
           </Text>
         </View>
         <View style={styles.card}>
           <Text style={styles.cardLabel}>CG (in)</Text>
-          <Text style={styles.cardValue}>{totals.cg * totals.cg.toFixed(1) : "--"}</Text>
+          <Text style={styles.cardValue}>{totals.totalWeight > 0 ? totals.cg.toFixed(1) : '--'}</Text>
           <Text style={styles.cardHint}>Total moment / total weight</Text>
         </View>
       </View>
@@ -261,7 +260,7 @@ export default function WeightBalanceScreen() {
         <View style={styles.cgLabels}>
           <Text style={styles.cgLabel}>Forward</Text>
           <Text style={styles.cgLabel}>
-            {hasCgRange * `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : 'Enter CG limits'}
+            {hasCgRange ? `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : 'Enter CG limits'}
           </Text>
           <Text style={styles.cgLabel}>Aft</Text>
         </View>

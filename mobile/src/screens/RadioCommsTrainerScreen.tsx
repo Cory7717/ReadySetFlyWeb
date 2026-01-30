@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import * as Speech from 'expo-speech';
 
 const SCENARIOS = [
   {
@@ -33,7 +34,32 @@ export default function RadioCommsTrainerScreen() {
   const [selected, setSelected] = useState(SCENARIOS[0]);
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [voices, setVoices] = useState<Speech.Voice[]>([]);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
 
+  
+  useEffect(() => {
+    Speech.getAvailableVoicesAsync()
+      .then((allVoices) => {
+        const english = allVoices.filter((voice) =>
+          voice.language?.toLowerCase().startsWith('en')
+        );
+        setVoices(english);
+        if (!selectedVoiceId && english.length > 0) {
+          setSelectedVoiceId(english[0].identifier);
+        }
+      })
+      .catch(() => setVoices([]));
+  }, [selectedVoiceId]);
+  
+  const playSample = (textToSpeak: string) => {
+    Speech.stop();
+    Speech.speak(textToSpeak, {
+      voice: selectedVoiceId || undefined,
+      rate: 0.95,
+      pitch: 1.0,
+    });
+  };
   const evaluate = () => {
     const tokens = selected.expectedTokens.map((token) => normalize(token));
     const normalized = normalize(input);
@@ -58,6 +84,23 @@ export default function RadioCommsTrainerScreen() {
       )}
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Voice Selection</Text>
+        <Text style={styles.tips}>Choose an English voice for playback.</Text>
+        <View style={styles.voiceList}>
+          {voices.length === 0 && <Text style={styles.helperText}>No voices available on this device.</Text>}
+          {voices.map((voice) => (
+            <TouchableOpacity
+              key={voice.identifier}
+              style={[styles.voiceItem, selectedVoiceId === voice.identifier && styles.voiceItemActive]}
+              onPress={() => setSelectedVoiceId(voice.identifier)}
+            >
+              <Text style={styles.voiceText}>{voice.name} ({voice.language})</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Scenarios</Text>
         {SCENARIOS.map((scenario) => (
           <TouchableOpacity
@@ -80,6 +123,15 @@ export default function RadioCommsTrainerScreen() {
         <Text style={styles.tips}>Tip: {selected.tips}</Text>
         <Text style={styles.sampleLabel}>Sample call</Text>
         <Text style={styles.sample}>{selected.sample}</Text>
+        <View style={styles.audioRow}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => playSample(selected.sample)}>
+            <Text style={styles.secondaryButtonText}>Play Pilot</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => playSample('Tower, say again your request.')}
+          >
+            <Text style={styles.secondaryButtonText}>Play ATC</Text>
+          </TouchableOpacity>
+        </View>
 
         <TextInput
           style={styles.input}

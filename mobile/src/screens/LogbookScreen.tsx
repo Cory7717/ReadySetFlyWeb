@@ -20,6 +20,10 @@ export default function LogbookScreen({ navigation }: any) {
   const [entries, setEntries] = useState<LogbookEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const totalDay = entries.reduce((sum, entry) => sum + (Number(entry.timeDay) || 0), 0);
+  const totalNight = entries.reduce((sum, entry) => sum + (Number(entry.timeNight) || 0), 0);
+  const totalTime = totalDay + totalNight;
+
   const loadEntries = async () => {
     if (!isAuthenticated) return;
     setLoading(true);
@@ -50,12 +54,47 @@ export default function LogbookScreen({ navigation }: any) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Digital Logbook</Text>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => navigation.navigate('LogbookEntry')}
-        >
-          <Ionicons name="add" size={18} color="#fff" />
-          <Text style={styles.primaryButtonText}>New Entry</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={loadEntries}>
+            <Ionicons name="refresh" size={18} color={colors.primary} />
+            <Text style={styles.secondaryButtonText}>Refresh</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={() => navigation.navigate('LogbookEntry')}
+          >
+            <Ionicons name="add" size={18} color="#fff" />
+            <Text style={styles.primaryButtonText}>New Entry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.statsRow}>
+        <View style={styles.statsCard}>
+          <Text style={styles.statsLabel}>Entries</Text>
+          <Text style={styles.statsValue}>{entries.length}</Text>
+        </View>
+        <View style={styles.statsCard}>
+          <Text style={styles.statsLabel}>Total Time</Text>
+          <Text style={styles.statsValue}>{totalTime.toFixed(1)} hrs</Text>
+        </View>
+      </View>
+      <View style={styles.statsRow}>
+        <View style={styles.statsCard}>
+          <Text style={styles.statsLabel}>Day</Text>
+          <Text style={styles.statsValue}>{totalDay.toFixed(1)} hrs</Text>
+        </View>
+        <View style={styles.statsCard}>
+          <Text style={styles.statsLabel}>Night</Text>
+          <Text style={styles.statsValue}>{totalNight.toFixed(1)} hrs</Text>
+        </View>
+      </View>
+
+      <View style={styles.proCard}>
+        <Text style={styles.proTitle}>Logbook Pro</Text>
+        <Text style={styles.proText}>Unlock advanced reports, exports, and planning tools.</Text>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('LogbookPro')}>
+          <Text style={styles.secondaryButtonText}>Upgrade to Pro</Text>
         </TouchableOpacity>
       </View>
 

@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
@@ -90,6 +91,7 @@ function hasThunder(taf: any) {
 }
 
 export default function FlightPlannerScreen() {
+  const navigation = useNavigation<any>();
   const { isAuthenticated } = useIsAuthenticated();
   const [departure, setDeparture] = useState('KJFK');
   const [destination, setDestination] = useState('KBOS');
@@ -182,7 +184,7 @@ export default function FlightPlannerScreen() {
         (location) => {
           const speedKts = location.coords.speed ? location.coords.speed * 1.94384 : undefined;
           const altitudeFt = location.coords.altitude ? location.coords.altitude * 3.28084 : undefined;
-          const heading = location.coords.heading ?? undefined;
+          const heading = location.coords.heading ? undefined;
           setGpsData({
             lat: location.coords.latitude,
             lon: location.coords.longitude,
@@ -399,13 +401,32 @@ export default function FlightPlannerScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Flight Planner</Text>
+        <Text style={styles.sectionSubtitle}>Build a route, estimate time and fuel, then save to Logbook Pro.</Text>
+        <View style={styles.infoCard}>
+          <Text style={styles.infoTitle}>Logbook Pro</Text>
+          <Text style={styles.helperText}>Unlock saved plans, per-leg breakdowns, and export tools.</Text>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={() => navigation?.navigate?.('LogbookPro')}
+          >
+            <Text style={styles.secondaryButtonText}>Upgrade to Logbook Pro</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Route Builder</Text>
+        <Text style={styles.sectionSubtitle}>Enter ICAO codes or city/state to find airports.</Text>
+
+        <Text style={styles.fieldLabel}>Departure</Text>
+        <Text style={styles.fieldHelper}>Example: KAUS or Austin, TX</Text>
         <TextInput style={styles.input} value={departure} onChangeText={setDeparture} placeholder="Departure (ICAO or city/state)" />
         {departureSuggestions.length > 0 && (
           <View style={styles.suggestionList}>
             {departureSuggestions.slice(0, 6).map((airport) => (
               <TouchableOpacity
-                key={`${airport.icao}-${airport.name ?? ''}`}
+                key={`${airport.icao}-${airport.name ? ''}`}
                 style={styles.suggestionItem}
                 onPress={() => {
                   setDeparture(airport.icao);
@@ -413,18 +434,21 @@ export default function FlightPlannerScreen() {
                 }}
               >
                 <Text style={styles.suggestionItemText}>
-                  {airport.icao} {airport.name ? `• ${airport.name}` : ''}
+                  {airport.icao} {airport.name ? `* ${airport.name}` : ''}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
         )}
+
+        <Text style={styles.fieldLabel}>Destination</Text>
+        <Text style={styles.fieldHelper}>Example: KDAL or Dallas, TX</Text>
         <TextInput style={styles.input} value={destination} onChangeText={setDestination} placeholder="Destination (ICAO or city/state)" />
         {destinationSuggestions.length > 0 && (
           <View style={styles.suggestionList}>
             {destinationSuggestions.slice(0, 6).map((airport) => (
               <TouchableOpacity
-                key={`${airport.icao}-${airport.name ?? ''}`}
+                key={`${airport.icao}-${airport.name ? ''}`}
                 style={styles.suggestionItem}
                 onPress={() => {
                   setDestination(airport.icao);
@@ -432,27 +456,41 @@ export default function FlightPlannerScreen() {
                 }}
               >
                 <Text style={styles.suggestionItemText}>
-                  {airport.icao} {airport.name ? `• ${airport.name}` : ''}
+                  {airport.icao} {airport.name ? `* ${airport.name}` : ''}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
         )}
+
+        <Text style={styles.fieldLabel}>Waypoints (optional)</Text>
+        <Text style={styles.fieldHelper}>Space or comma separated ICAO codes.</Text>
         <TextInput
           style={styles.input}
           value={waypoints}
           onChangeText={setWaypoints}
-          placeholder="Waypoints (optional, space or comma separated)"
+          placeholder="Example: KACT KTYR"
         />
+
+        <Text style={styles.fieldLabel}>Planned fuel stops (optional)</Text>
+        <Text style={styles.fieldHelper}>Add airports for fuel or rest stops.</Text>
         <TextInput
           style={styles.input}
           value={plannedStops}
           onChangeText={setPlannedStops}
-          placeholder="Planned stops for fuel (optional)"
+          placeholder="Example: KGLS"
         />
-        <TextInput style={styles.input} value={alternate} onChangeText={setAlternate} placeholder="Alternate (optional)" />
-        <TextInput style={styles.input} value={tailNumber} onChangeText={setTailNumber} placeholder="Tail Number (optional)" />
-        <TextInput style={styles.input} value={fuelOnBoard} onChangeText={setFuelOnBoard} placeholder="Fuel on board (gal)" keyboardType="numeric" />
+
+        <Text style={styles.fieldLabel}>Alternate (optional)</Text>
+        <TextInput style={styles.input} value={alternate} onChangeText={setAlternate} placeholder="Alternate airport" />
+
+        <Text style={styles.fieldLabel}>Tail Number (optional)</Text>
+        <TextInput style={styles.input} value={tailNumber} onChangeText={setTailNumber} placeholder="N12345" />
+
+        <Text style={styles.fieldLabel}>Fuel on board (gal)</Text>
+        <TextInput style={styles.input} value={fuelOnBoard} onChangeText={setFuelOnBoard} placeholder="Example: 40" keyboardType="numeric" />
+
+        <Text style={styles.fieldLabel}>Notes</Text>
         <TextInput
           style={[styles.input, styles.textArea]}
           value={notes}
@@ -460,7 +498,7 @@ export default function FlightPlannerScreen() {
           placeholder="Notes or route details"
           multiline
         />
-        <View style={styles.suggestionBox}>
+<View style={styles.suggestionBox}>
           <Text style={styles.suggestionTitle}>Suggested routes</Text>
           <Text style={styles.suggestionText}>Midpoint adds a virtual waypoint for planning only.</Text>
           <View style={styles.suggestionRow}>
@@ -514,7 +552,7 @@ export default function FlightPlannerScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        <TouchableOpacity style={styles.helpLink} onPress={() => navigation?.navigate?.('ReceiverHelp')}>
+        <TouchableOpacity style={styles.helpLink} onPress={() => navigation.navigate('ReceiverHelp')}>
           <Ionicons name="help-circle-outline" size={16} color={colors.primary} />
           <Text style={styles.helpLinkText}>How to connect your ADS‑B receiver</Text>
         </TouchableOpacity>
@@ -745,6 +783,30 @@ export default function FlightPlannerScreen() {
           <View style={styles.gridItem}>
             <Text style={styles.label}>Avg Headwind (kt)</Text>
             <TextInput style={styles.input} value={headwind} onChangeText={setHeadwind} keyboardType="numeric" />
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Performance Summary</Text>
+        <View style={styles.statsRow}>
+          <View style={styles.statsCard}>
+            <Text style={styles.statsLabel}>ETE</Text>
+            <Text style={styles.statsValue}>{eteHours ? `${eteHours.toFixed(2)} hrs` : '-'}</Text>
+          </View>
+          <View style={styles.statsCard}>
+            <Text style={styles.statsLabel}>Trip Fuel</Text>
+            <Text style={styles.statsValue}>{fuelRequired ? `${fuelRequired.toFixed(1)} gal` : '-'}</Text>
+          </View>
+        </View>
+        <View style={styles.statsRow}>
+          <View style={styles.statsCard}>
+            <Text style={styles.statsLabel}>Fuel + Reserve</Text>
+            <Text style={styles.statsValue}>{totalFuel ? `${totalFuel.toFixed(1)} gal` : '-'}</Text>
+          </View>
+          <View style={styles.statsCard}>
+            <Text style={styles.statsLabel}>Effective Speed</Text>
+            <Text style={styles.statsValue}>{effectiveSpeed ? `${effectiveSpeed.toFixed(0)} kt` : '-'}</Text>
           </View>
         </View>
       </View>

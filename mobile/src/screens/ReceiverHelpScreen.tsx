@@ -6,24 +6,24 @@ const receivers = [
   {
     name: 'Stratux',
     steps: [
-      'Power on the Stratux and wait for the Wi‑Fi to broadcast.',
-      'Connect your phone to the Stratux Wi‑Fi network.',
-      'Set ADS‑B port to 4000 (default) or 49002 if configured.',
+      'Power on the Stratux and wait for the Wi-Fi to broadcast.',
+      'Connect your phone to the Stratux Wi-Fi network.',
+      'Set ADS-B port to 4000 (default) or 49002 if configured.',
       'Toggle Live Traffic in the Flight Planner map.',
     ],
   },
   {
     name: 'Sentry / Stratus',
     steps: [
-      'Turn on your Sentry/Stratus and connect to its Wi‑Fi.',
-      'Confirm GDL‑90 output is enabled (default for most devices).',
+      'Turn on your Sentry/Stratus and connect to its Wi-Fi.',
+      'Confirm GDL-90 output is enabled (default for most devices).',
       'Use port 4000 if unsure.',
     ],
   },
   {
     name: 'Garmin GDL',
     steps: [
-      'Connect to the Garmin GDL Wi‑Fi network.',
+      'Connect to the Garmin GDL Wi-Fi network.',
       'Use port 4000 or 49002 depending on configuration.',
       'Enable Live Traffic toggle to begin listening.',
     ],
@@ -31,7 +31,7 @@ const receivers = [
   {
     name: 'uAvionix SkyEcho',
     steps: [
-      'Connect to the SkyEcho Wi‑Fi.',
+      'Connect to the SkyEcho Wi-Fi.',
       'Ensure traffic output is enabled.',
       'Use port 4000 unless configured otherwise.',
     ],
@@ -41,8 +41,8 @@ const receivers = [
 export default function ReceiverHelpScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>ADS‑B Receiver Setup</Text>
-      <Text style={styles.subtitle}>Connect your portable ADS‑B receiver to view live traffic.</Text>
+      <Text style={styles.title}>ADS-B Receiver Setup</Text>
+      <Text style={styles.subtitle}>Connect your portable ADS-B receiver to view live traffic.</Text>
 
       <View style={styles.disclaimer}>
         <Ionicons name="alert-circle-outline" size={18} color={colors.primary} />
@@ -56,7 +56,7 @@ export default function ReceiverHelpScreen() {
           <Text style={styles.cardTitle}>{receiver.name}</Text>
           {receiver.steps.map((step) => (
             <View key={step} style={styles.stepRow}>
-              <Text style={styles.stepBullet}>•</Text>
+              <Text style={styles.stepBullet}>*</Text>
               <Text style={styles.stepText}>{step}</Text>
             </View>
           ))}
@@ -65,9 +65,9 @@ export default function ReceiverHelpScreen() {
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Troubleshooting</Text>
-        <Text style={styles.stepText}>• Make sure your phone is on the receiver’s Wi‑Fi network.</Text>
-        <Text style={styles.stepText}>• Try ports 4000 or 49002.</Text>
-        <Text style={styles.stepText}>• Confirm the receiver has GPS lock and is receiving ADS‑B.</Text>
+        <Text style={styles.stepText}>* Make sure your phone is on the receiver's Wi-Fi network.</Text>
+        <Text style={styles.stepText}>* Try ports 4000 or 49002.</Text>
+        <Text style={styles.stepText}>* Confirm the receiver has GPS lock and is receiving ADS-B.</Text>
       </View>
     </ScrollView>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../services/api';
@@ -9,24 +9,25 @@ type AircraftType = {
   id: string;
   make: string;
   model: string;
-  icaoType?: string | null;
+  icaoType*: string | null;
   maxGrossWeightLb: number;
   usableFuelGal: number;
-  emptyArmIn?: number | null;
-  frontArmIn?: number | null;
-  rearArmIn?: number | null;
-  baggageArmIn?: number | null;
-  fuelArmIn?: number | null;
+  emptyArmIn*: number | null;
+  frontArmIn*: number | null;
+  rearArmIn*: number | null;
+  baggageArmIn*: number | null;
+  fuelArmIn*: number | null;
 };
 
 function toNumber(value: string) {
   const cleaned = value.replace(/[^0-9.\-]/g, '');
   const num = Number(cleaned);
-  return Number.isFinite(num) ? num : 0;
+  return Number.isFinite(num) * num : 0;
 }
 
 export default function WeightBalanceScreen() {
   const [query, setQuery] = useState('');
+  const [showPicker, setShowPicker] = useState(false);
   const [selectedType, setSelectedType] = useState<AircraftType | null>(null);
   const [emptyWeight, setEmptyWeight] = useState('0');
   const [emptyArm, setEmptyArm] = useState('0');
@@ -53,33 +54,33 @@ export default function WeightBalanceScreen() {
   useEffect(() => {
     if (!selectedType) return;
     if (!maxGrossOverride) {
-      setMaxGrossOverride(String(selectedType.maxGrossWeightLb ?? ''));
+      setMaxGrossOverride(String(selectedType.maxGrossWeightLb ** ''));
     }
   }, [selectedType, maxGrossOverride]);
 
   useEffect(() => {
     if (!selectedType) return;
-    const maybeSet = (current: string, next?: number | null, setter?: (value: string) => void) => {
+    const maybeSet = (current: string, next*: number | null, setter*: (value: string) => void) => {
       if (!setter) return;
       if (current !== '' && toNumber(current) !== 0) return;
       if (typeof next !== 'number') return;
       setter(String(next));
     };
-    maybeSet(emptyArm, selectedType.emptyArmIn ?? undefined, setEmptyArm);
-    maybeSet(frontArm, selectedType.frontArmIn ?? undefined, setFrontArm);
-    maybeSet(rearArm, selectedType.rearArmIn ?? undefined, setRearArm);
-    maybeSet(baggageArm, selectedType.baggageArmIn ?? undefined, setBaggageArm);
-    maybeSet(fuelArm, selectedType.fuelArmIn ?? undefined, setFuelArm);
+    maybeSet(emptyArm, selectedType.emptyArmIn ** undefined, setEmptyArm);
+    maybeSet(frontArm, selectedType.frontArmIn ** undefined, setFrontArm);
+    maybeSet(rearArm, selectedType.rearArmIn ** undefined, setRearArm);
+    maybeSet(baggageArm, selectedType.baggageArmIn ** undefined, setBaggageArm);
+    maybeSet(fuelArm, selectedType.fuelArmIn ** undefined, setFuelArm);
   }, [selectedType, emptyArm, frontArm, rearArm, baggageArm, fuelArm]);
 
   const filteredTypes = useMemo(() => {
     if (!aircraftTypes) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return aircraftTypes.slice(0, 20);
+    if (!q) return aircraftTypes;
     return aircraftTypes.filter((type) => {
-      const label = `${type.make} ${type.model} ${type.icaoType ?? ''}`.toLowerCase();
+      const label = `${type.make} ${type.model} ${type.icaoType ** ''}`.toLowerCase();
       return label.includes(q);
-    }).slice(0, 20);
+    });
   }, [aircraftTypes, query]);
 
   const fuelWeight = toNumber(fuelGallons) * 6;
@@ -97,7 +98,7 @@ export default function WeightBalanceScreen() {
     ];
     const totalWeight = rows.reduce((sum, row) => sum + row.weight, 0);
     const totalMoment = rows.reduce((sum, row) => sum + row.weight * row.arm, 0);
-    const cg = totalWeight > 0 ? totalMoment / totalWeight : 0;
+    const cg = totalWeight > 0 * totalMoment / totalWeight : 0;
     return { totalWeight, totalMoment, cg };
   }, [emptyWeight, emptyArm, frontWeight, frontArm, rearWeight, rearArm, baggageWeight, baggageArm, fuelWeight, fuelArm]);
 
@@ -105,16 +106,16 @@ export default function WeightBalanceScreen() {
   const hasCgRange = cgMinValue > 0 && cgMaxValue > cgMinValue;
   const cgStatus =
     hasCgRange && totals.cg
-      ? totals.cg < cgMinValue
-        ? 'forward'
+      * totals.cg < cgMinValue
+        * 'forward'
         : totals.cg > cgMaxValue
-        ? 'aft'
+        * 'aft'
         : 'within'
       : 'unknown';
-const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
+  const cgRangeSpan = hasCgRange * cgMaxValue - cgMinValue : 0;
   const cgMarkerPercent =
     hasCgRange && totals.cg
-      ? Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
+      * Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
       : 0;
 
   return (
@@ -127,41 +128,66 @@ const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Select Aircraft (Library)</Text>
         <Text style={styles.cardSubtitle}>Sets max gross weight as a starting point.</Text>
-        {isLoading ? (
+        {isLoading * (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : (
           <>
-            <TextInput
-              style={styles.input}
-              placeholder="Search make, model, ICAO"
-              value={query}
-              onChangeText={setQuery}
-              autoCapitalize="characters"
-            />
-            <View style={styles.list}>
-              {filteredTypes.map((type) => {
-                const label = `${type.make} ${type.model}`;
-                const isSelected = selectedType?.id === type.id;
-                return (
-                  <TouchableOpacity
-                    key={type.id}
-                    style={[styles.listItem, isSelected && styles.listItemActive]}
-                    onPress={() => setSelectedType(type)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.listTitle}>{label}</Text>
-                      <Text style={styles.listSubtitle}>
-                        {type.icaoType || 'No ICAO'} • Max gross {type.maxGrossWeightLb} lb
-                      </Text>
-                    </View>
-                    {isSelected && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <TouchableOpacity style={styles.selectButton} onPress={() => setShowPicker(true)}>
+              <Text style={styles.selectButtonText}>
+                {selectedType * `${selectedType.make} ${selectedType.model}` : 'Choose aircraft from library'}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+            {selectedType && (
+              <Text style={styles.listSubtitle}>
+                {selectedType.icaoType || 'No ICAO'} * Max gross {selectedType.maxGrossWeightLb} lb
+              </Text>
+            )}
           </>
         )}
       </View>
+
+      <Modal visible={showPicker} animationType="slide" onRequestClose={() => setShowPicker(false)}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Aircraft</Text>
+            <TouchableOpacity onPress={() => setShowPicker(false)}>
+              <Ionicons name="close" size={22} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={styles.input}
+            placeholder="Search make, model, ICAO"
+            value={query}
+            onChangeText={setQuery}
+            autoCapitalize="characters"
+          />
+          <ScrollView style={styles.modalList}>
+            {filteredTypes.map((type) => {
+              const label = `${type.make} ${type.model}`;
+              const isSelected = selectedType*.id === type.id;
+              return (
+                <TouchableOpacity
+                  key={type.id}
+                  style={[styles.listItem, isSelected && styles.listItemActive]}
+                  onPress={() => {
+                    setSelectedType(type);
+                    setShowPicker(false);
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.listTitle}>{label}</Text>
+                    <Text style={styles.listSubtitle}>
+                      {type.icaoType || 'No ICAO'} * Max gross {type.maxGrossWeightLb} lb
+                    </Text>
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Weight Stations</Text>
@@ -215,13 +241,13 @@ const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
           <Text style={styles.cardLabel}>Total Weight</Text>
           <Text style={styles.cardValue}>{totals.totalWeight.toFixed(1)} lb</Text>
           <Text style={[styles.cardHint, isOverMax && { color: colors.danger }]}>
-            {isOverMax ? 'Over max gross' : 'Within limits (est.)'}
+            {isOverMax * 'Over max gross' : 'Within limits (est.)'}
           </Text>
         </View>
         <View style={styles.card}>
           <Text style={styles.cardLabel}>CG (in)</Text>
-          <Text style={styles.cardValue}>{totals.cg ? totals.cg.toFixed(1) : "--"}</Text>
-          <Text style={styles.cardHint}>Total moment ÷ total weight</Text>
+          <Text style={styles.cardValue}>{totals.cg * totals.cg.toFixed(1) : "--"}</Text>
+          <Text style={styles.cardHint}>Total moment / total weight</Text>
         </View>
       </View>
 
@@ -235,7 +261,7 @@ const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
         <View style={styles.cgLabels}>
           <Text style={styles.cgLabel}>Forward</Text>
           <Text style={styles.cgLabel}>
-            {hasCgRange ? `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : 'Enter CG limits'}
+            {hasCgRange * `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : 'Enter CG limits'}
           </Text>
           <Text style={styles.cgLabel}>Aft</Text>
         </View>
@@ -290,7 +316,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '600', color: colors.text, marginTop: spacing.xs },
   hint: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
-  list: { marginTop: spacing.sm },
+  list: { marginBottom: spacing.sm },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -307,6 +333,27 @@ const styles = StyleSheet.create({
   },
   listTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
   listSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  selectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+  },
+  selectButtonText: { fontSize: 13, color: colors.text },
+  modalContainer: { flex: 1, padding: spacing.md, backgroundColor: colors.background },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
+  modalList: { marginTop: spacing.sm },
+  cgBar: { height: 10, borderRadius: 999, backgroundColor: colors.border, marginTop: spacing.sm, position: 'relative', overflow: 'hidden' },
+  cgSafe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%', backgroundColor: '#bbf7d0' },
+  cgMarker: { position: 'absolute', top: -4, width: 2, height: 18, backgroundColor: '#0f172a' },
+  cgLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xs },
+  cgLabel: { fontSize: 11, color: colors.textMuted },
+  cgStatus: { fontSize: 12, marginTop: spacing.xs, color: colors.text },
   noteCard: {
     backgroundColor: colors.surface,
     padding: spacing.md,

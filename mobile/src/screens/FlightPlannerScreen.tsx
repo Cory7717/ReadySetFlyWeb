@@ -426,7 +426,7 @@ export default function FlightPlannerScreen() {
           <View style={styles.suggestionList}>
             {departureSuggestions.slice(0, 6).map((airport) => (
               <TouchableOpacity
-                key={`${airport.icao}-${airport.name ? ''}`}
+                key={`${airport.icao}-${airport.name || ''}`}
                 style={styles.suggestionItem}
                 onPress={() => {
                   setDeparture(airport.icao);

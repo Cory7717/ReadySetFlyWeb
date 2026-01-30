@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -13,6 +13,7 @@ import {
   Linking
 } from 'react-native';
 import { useLogin, useRegister } from '../utils/auth';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as SecureStore from 'expo-secure-store';
@@ -23,6 +24,7 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://readysetfly-api
 WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
+  const navigation = useNavigation<any>();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,43 +37,45 @@ export default function AuthScreen() {
   const loginMutation = useLogin();
   const registerMutation = useRegister();
 
-  useEffect(() => {
-    const handleDeepLink = async (event: { url: string }) => {
-      const url = event.url;
-      console.log('Deep link received:', url);
-      
-      if (url.startsWith('readysetfly://oauth-callback')) {
-        const params = new URLSearchParams(url.split('?')[1]);
-        const exchangeToken = params.get('token');
-        
-        if (exchangeToken) {
-          try {
-            setIsOAuthLoading(true);
-            const response = await fetch(`${API_BASE_URL}/api/auth/exchange-oauth-token`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ token: exchangeToken }),
-            });
-            
-            if (!response.ok) {
-              throw new Error('Failed to exchange OAuth token');
-            }
-            
-            const data = await response.json();
-            await SecureStore.setItemAsync('accessToken', data.accessToken);
-            await SecureStore.setItemAsync('refreshToken', data.refreshToken);
-            // The auth state will be updated automatically by the App component
-          } catch (error) {
-            console.error('OAuth exchange error:', error);
-            Alert.alert('Error', 'Failed to complete OAuth login');
-          } finally {
-            setIsOAuthLoading(false);
+  const handleDeepLink = useCallback(async (event: { url: string }) => {
+    const url = event.url;
+    console.log('Deep link received:', url);
+
+    if (url.startsWith('readysetfly://oauth-callback')) {
+      const params = new URLSearchParams(url.split('?')[1]);
+      const exchangeToken = params.get('token');
+
+      if (exchangeToken) {
+        try {
+          setIsOAuthLoading(true);
+          const response = await fetch(`${API_BASE_URL}/api/auth/exchange-oauth-token`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token: exchangeToken }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Failed to exchange OAuth token');
           }
+
+          const data = await response.json();
+          await SecureStore.setItemAsync('accessToken', data.accessToken);
+          await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+            // The auth state will be updated automatically by the App component
+            navigation.replace('ProfileHome');
+        } catch (error) {
+          console.error('OAuth exchange error:', error);
+          Alert.alert('Error', 'Failed to complete OAuth login');
+        } finally {
+          setIsOAuthLoading(false);
         }
       }
-    };
+    }
+  }, []);
+
+  useEffect(() => {
 
     const subscription = Linking.addEventListener('url', handleDeepLink);
     
@@ -84,15 +88,17 @@ export default function AuthScreen() {
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [handleDeepLink]);
 
   const handleGoogleLogin = async () => {
     try {
       setIsOAuthLoading(true);
       const authUrl = `${API_BASE_URL}/api/auth/google/mobile`;
       const result = await WebBrowser.openAuthSessionAsync(authUrl, 'readysetfly://oauth-callback');
-      
-      if (result.type === 'cancel') {
+
+      if (result.type === 'success' && result.url) {
+        await handleDeepLink({ url: result.url });
+      } else if (result.type === 'cancel') {
         Alert.alert('Cancelled', 'OAuth login was cancelled');
       } else if (result.type === 'dismiss') {
         console.log('OAuth browser dismissed');
@@ -126,6 +132,7 @@ export default function AuthScreen() {
     try {
       if (isLogin) {
         await loginMutation.mutateAsync({ email, password });
+        navigation.replace('ProfileHome');
       } else {
         await registerMutation.mutateAsync({
           email,
@@ -133,6 +140,7 @@ export default function AuthScreen() {
           firstName: firstName || undefined,
           lastName: lastName || undefined,
         });
+        navigation.replace('ProfileHome');
       }
       // Navigation handled by auth state change
     } catch (error: any) {

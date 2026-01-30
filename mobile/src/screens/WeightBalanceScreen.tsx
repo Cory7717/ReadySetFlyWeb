@@ -22,7 +22,7 @@ type AircraftType = {
 function toNumber(value: string) {
   const cleaned = value.replace(/[^0-9.\-]/g, '');
   const num = Number(cleaned);
-  return Number.isFinite(num) - num : 0;
+  return Number.isFinite(num) ? num : 0;
 }
 
 export default function WeightBalanceScreen() {

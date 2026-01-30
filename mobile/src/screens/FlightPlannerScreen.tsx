@@ -184,7 +184,7 @@ export default function FlightPlannerScreen() {
         (location) => {
           const speedKts = location.coords.speed ? location.coords.speed * 1.94384 : undefined;
           const altitudeFt = location.coords.altitude ? location.coords.altitude * 3.28084 : undefined;
-          const heading = location.coords.heading ? undefined;
+          const heading = typeof location.coords.heading === 'number' ? location.coords.heading : undefined;
           setGpsData({
             lat: location.coords.latitude,
             lon: location.coords.longitude,

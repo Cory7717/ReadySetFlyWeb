@@ -141,7 +141,7 @@ const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
               <SelectContent>
                 {aircraftTypes.map((type) => (
                   <SelectItem key={type.id} value={type.id}>
-                    {type.make} {type.model} {type.icaoType - `(${type.icaoType})` : ""}
+                    {type.make} {type.model} {type.icaoType ? `(${type.icaoType})` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -243,8 +243,8 @@ const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold">{totals.totalWeight.toFixed(1)} lb</div>
-              <p className={`text-sm ${isOverMax - "text-destructive" : "text-muted-foreground"}`}>
-                {isOverMax - "Over max gross" : "Within limits (est.)"}
+              <p className={`text-sm ${isOverMax ? "text-destructive" : "text-muted-foreground"}`}>
+                {isOverMax ? "Over max gross" : "Within limits (est.)"}
               </p>
             </CardContent>
           </Card>
@@ -262,7 +262,7 @@ const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
               <CardTitle>CG (in)</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">{totals.cg - totals.cg.toFixed(1) : "--"}</div>
+              <div className="text-2xl font-semibold">{totals.cg ? totals.cg.toFixed(1) : "--"}</div>
               <p className="text-sm text-muted-foreground">Moment ÷ weight</p>
             </CardContent>
           </Card>
@@ -289,7 +289,7 @@ const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
             <div className="flex flex-wrap items-center justify-between text-xs text-muted-foreground">
               <span>Forward</span>
               <span>
-                {hasCgRange - `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : "Enter CG limits"}
+                {hasCgRange ? `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : "Enter CG limits"}
               </span>
               <span>Aft</span>
             </div>

@@ -36,6 +36,16 @@ export default function AdminDashboard() {
     (adminRole ? ADMIN_ROLE_PERMISSIONS[adminRole]?.includes(permission) : false) ||
     adminPermissions.includes(permission);
 
+  const [userSearch, setUserSearch] = useState("");
+  const [activeTab, setActiveTab] = useState("analytics");
+  const [selectedSubmission, setSelectedSubmission] = useState<VerificationSubmission | null>(null);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [rejectionNotes, setRejectionNotes] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<AdminRole>("operations");
+
   useEffect(() => {
     const allowed = [
       canAccess("analytics") && "analytics",
@@ -57,16 +67,6 @@ export default function AdminDashboard() {
       setActiveTab(allowed[0]);
     }
   }, [adminRole, adminPermissions, isSuperAdmin, activeTab]);
-
-  const [userSearch, setUserSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("analytics");
-  const [selectedSubmission, setSelectedSubmission] = useState<VerificationSubmission | null>(null);
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
-  const [rejectionNotes, setRejectionNotes] = useState("");
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [userModalOpen, setUserModalOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<AdminRole>("operations");
   
   // CRM state
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);

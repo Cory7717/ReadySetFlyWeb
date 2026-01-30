@@ -105,16 +105,16 @@ export default function WeightBalanceScreen() {
   const hasCgRange = cgMinValue > 0 && cgMaxValue > cgMinValue;
   const cgStatus =
     hasCgRange && totals.cg
-      - totals.cg < cgMinValue
-        - 'forward'
+      ? totals.cg < cgMinValue
+        ? 'forward'
         : totals.cg > cgMaxValue
-        - 'aft'
+        ? 'aft'
         : 'within'
       : 'unknown';
-  const cgRangeSpan = hasCgRange - cgMaxValue - cgMinValue : 0;
+const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
   const cgMarkerPercent =
     hasCgRange && totals.cg
-      - Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
+      ? Math.min(100, Math.max(0, ((totals.cg - cgMinValue) / cgRangeSpan) * 100))
       : 0;
 
   return (
@@ -127,7 +127,7 @@ export default function WeightBalanceScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Select Aircraft (Library)</Text>
         <Text style={styles.cardSubtitle}>Sets max gross weight as a starting point.</Text>
-        {isLoading - (
+        {isLoading ? (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : (
           <>
@@ -215,12 +215,12 @@ export default function WeightBalanceScreen() {
           <Text style={styles.cardLabel}>Total Weight</Text>
           <Text style={styles.cardValue}>{totals.totalWeight.toFixed(1)} lb</Text>
           <Text style={[styles.cardHint, isOverMax && { color: colors.danger }]}>
-            {isOverMax - 'Over max gross' : 'Within limits (est.)'}
+            {isOverMax ? 'Over max gross' : 'Within limits (est.)'}
           </Text>
         </View>
         <View style={styles.card}>
           <Text style={styles.cardLabel}>CG (in)</Text>
-          <Text style={styles.cardValue}>{totals.cg - totals.cg.toFixed(1) : '--'}</Text>
+          <Text style={styles.cardValue}>{totals.cg ? totals.cg.toFixed(1) : "--"}</Text>
           <Text style={styles.cardHint}>Total moment ÷ total weight</Text>
         </View>
       </View>
@@ -235,7 +235,7 @@ export default function WeightBalanceScreen() {
         <View style={styles.cgLabels}>
           <Text style={styles.cgLabel}>Forward</Text>
           <Text style={styles.cgLabel}>
-            {hasCgRange - `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : 'Enter CG limits'}
+            {hasCgRange ? `${cgMinValue.toFixed(1)} - ${cgMaxValue.toFixed(1)} in` : 'Enter CG limits'}
           </Text>
           <Text style={styles.cgLabel}>Aft</Text>
         </View>

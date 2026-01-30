@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { ConfirmDeletionModal } from '../components/ConfirmDeletionModal';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
-import { certificationTypes } from '@shared/schema';
+const certificationTypes = ['PPL', 'IR', 'CPL', 'Multi-Engine', 'ATP', 'CFI', 'CFII', 'MEI'];
 
 export default function ProfileScreen({ navigation }: any) {
   const { isAuthenticated, user, isLoading } = useIsAuthenticated();

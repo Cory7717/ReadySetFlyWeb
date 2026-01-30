@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
@@ -36,6 +36,7 @@ export default function RadioCommsTrainerScreen() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [voices, setVoices] = useState<Speech.Voice[]>([]);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
 
   
   useEffect(() => {
@@ -86,19 +87,49 @@ export default function RadioCommsTrainerScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Voice Selection</Text>
         <Text style={styles.tips}>Choose an English voice for playback.</Text>
-        <View style={styles.voiceList}>
-          {voices.length === 0 && <Text style={styles.helperText}>No voices available on this device.</Text>}
-          {voices.map((voice) => (
-            <TouchableOpacity
-              key={voice.identifier}
-              style={[styles.voiceItem, selectedVoiceId === voice.identifier && styles.voiceItemActive]}
-              onPress={() => setSelectedVoiceId(voice.identifier)}
-            >
-              <Text style={styles.voiceText}>{voice.name} ({voice.language})</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {voices.length === 0 ? (
+          <Text style={styles.helperText}>No voices available on this device.</Text>
+        ) : (
+          <TouchableOpacity style={styles.selectButton} onPress={() => setShowVoicePicker(true)}>
+            <Text style={styles.selectButtonText}>
+              {voices.find((voice) => voice.identifier === selectedVoiceId)?.name || 'Select voice'}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
+
+      <Modal visible={showVoicePicker} animationType="slide" onRequestClose={() => setShowVoicePicker(false)}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Select Voice</Text>
+            <TouchableOpacity onPress={() => setShowVoicePicker(false)}>
+              <Ionicons name="close" size={22} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.modalList}>
+            {voices.map((voice) => {
+              const isSelected = selectedVoiceId === voice.identifier;
+              return (
+                <TouchableOpacity
+                  key={voice.identifier}
+                  style={[styles.listItem, isSelected && styles.listItemActive]}
+                  onPress={() => {
+                    setSelectedVoiceId(voice.identifier);
+                    setShowVoicePicker(false);
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.listTitle}>{voice.name}</Text>
+                    <Text style={styles.listSubtitle}>{voice.language}</Text>
+                  </View>
+                  {isSelected && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Scenarios</Text>
@@ -179,4 +210,44 @@ const styles = StyleSheet.create({
   primaryButton: { backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center', ...shadow.card },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
   feedback: { marginTop: spacing.xs, fontSize: 12, color: colors.text },
+  selectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+  },
+  selectButtonText: { color: colors.text, fontSize: 13 },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: spacing.sm,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
+  modalList: { marginTop: spacing.sm },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+  },
+  listItemActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  listTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
+  listSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
 });

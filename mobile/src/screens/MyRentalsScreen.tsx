@@ -2,8 +2,19 @@ import { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { apiEndpoints } from '../services/api';
-import type { Rental } from '@shared/schema';
+import { api } from '../services/api';
+type Rental = {
+  id: string;
+  aircraftId?: string | null;
+  status: string;
+  startDate?: string | null;
+  endDate?: string | null;
+  estimatedHours?: string | number | null;
+  actualHours?: string | number | null;
+  hourlyRate?: string | number | null;
+  totalCostRenter?: string | number | null;
+  ownerId?: string | null;
+};
 import { format, isValid } from 'date-fns';
 import { useIsAuthenticated } from '../utils/auth';
 import { ReviewDialog } from '../components/ReviewDialog';
@@ -14,12 +25,18 @@ export default function MyRentalsScreen({ navigation }: any) {
   const [selectedRental, setSelectedRental] = useState<Rental | null>(null);
   
   const { data: rentals, isLoading, error } = useQuery({
-    queryKey: ['/api/user/rentals'],
+    queryKey: ['/api/rentals/combined', user?.id],
     queryFn: async () => {
-      const response = await apiEndpoints.rentals.getByUser();
-      return response.data;
+      if (!user?.id) return [];
+      const [ownerRes, renterRes] = await Promise.all([
+        api.get(`/api/rentals/owner/${user.id}`),
+        api.get(`/api/rentals/renter/${user.id}`),
+      ]);
+      const ownerData = Array.isArray(ownerRes.data) ? ownerRes.data : [];
+      const renterData = Array.isArray(renterRes.data) ? renterRes.data : [];
+      return [...ownerData, ...renterData];
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!user?.id,
   });
 
   const formatDate = (dateValue: any): string => {
@@ -47,7 +64,7 @@ export default function MyRentalsScreen({ navigation }: any) {
         <View style={styles.cardHeader}>
           <View style={styles.headerLeft}>
             <Ionicons name="airplane" size={20} color="#1e40af" />
-            <Text style={styles.rentalId}>Rental #{item.id.slice(0, 8)}</Text>
+            <Text style={styles.rentalId}>Rental #{(item.id || '').slice(0, 8)}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
             <Text style={styles.statusText}>{item.status}</Text>

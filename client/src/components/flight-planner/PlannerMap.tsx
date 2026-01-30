@@ -28,13 +28,21 @@ function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "st
 
   useEffect(() => {
     if (points.length === 0) return;
+    if (!map.getPane("mapPane")) return;
     const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lon]));
-    map.fitBounds(bounds.pad(0.2));
-    if (mapStyle === "sectional") {
-      const zoom = map.getZoom();
-      if (zoom < 8) map.setZoom(8);
-      if (zoom > 12) map.setZoom(12);
-    }
+    const raf = requestAnimationFrame(() => {
+      try {
+        map.fitBounds(bounds.pad(0.2));
+        if (mapStyle === "sectional") {
+          const zoom = map.getZoom();
+          if (zoom < 8) map.setZoom(8);
+          if (zoom > 12) map.setZoom(12);
+        }
+      } catch {
+        // Map may be unmounted during transitions; ignore.
+      }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [map, points, mapStyle]);
 
   return null;
@@ -44,15 +52,23 @@ function MapStyleController({ mapStyle }: { mapStyle: "standard" | "sectional" }
   const map = useMap();
 
   useEffect(() => {
-    if (mapStyle === "sectional") {
-      map.setMinZoom(8);
-      map.setMaxZoom(12);
-      if (map.getZoom() < 8) map.setZoom(8);
-      if (map.getZoom() > 12) map.setZoom(12);
-      return;
-    }
-    map.setMinZoom(3);
-    map.setMaxZoom(18);
+    if (!map.getPane("mapPane")) return;
+    const raf = requestAnimationFrame(() => {
+      try {
+        if (mapStyle === "sectional") {
+          map.setMinZoom(8);
+          map.setMaxZoom(12);
+          if (map.getZoom() < 8) map.setZoom(8);
+          if (map.getZoom() > 12) map.setZoom(12);
+          return;
+        }
+        map.setMinZoom(3);
+        map.setMaxZoom(18);
+      } catch {
+        // Map may be unmounted during transitions; ignore.
+      }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [map, mapStyle]);
 
   return null;

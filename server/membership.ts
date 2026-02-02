@@ -6,6 +6,10 @@ export type BillingInterval = "monthly" | "biannual" | "annual";
 
 type MembershipPlanInfo = { tier: MembershipTier; interval: BillingInterval };
 
+const SUPER_ADMIN_EMAILS = new Set(
+  ["coryarmer@gmail.com", "bentley.amy24@gmail.com"].map((email) => email.toLowerCase())
+);
+
 const PLAN_ENV_MAP: Record<string, MembershipPlanInfo> = {};
 
 function addPlan(planId: string | undefined, tier: MembershipTier, interval: BillingInterval) {
@@ -114,6 +118,24 @@ export function getEffectiveMembership(user?: User | null) {
 
 export function getEntitlementsForUser(user?: User | null) {
   const isGuest = !user;
+  if (user) {
+    const email = (user.email || "").toLowerCase();
+    if (user.isSuperAdmin || SUPER_ADMIN_EMAILS.has(email)) {
+      return {
+        isGuest: false,
+        tier: "pro_plus" as MembershipTier,
+        canPersist: true,
+        canUseLogbook: true,
+        canUseAlerts: true,
+        canUseHistory: true,
+        canUseAnalytics: true,
+        canUseScenarioScoring: true,
+        canUseAdvancedTrends: true,
+        membershipEndsAt: undefined,
+      };
+    }
+  }
+
   const membership = getEffectiveMembership(user || null);
   const now = new Date();
   const hasTimeRemaining = membership.endsAt ? membership.endsAt > now : false;

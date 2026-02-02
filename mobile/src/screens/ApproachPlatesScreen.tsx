@@ -77,8 +77,14 @@ export default function ApproachPlatesScreen() {
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.card} onPress={() => openPlate(item.url)}>
             <View style={styles.cardText}>
-              <Text style={styles.cardTitle}>{item.name}</Text>
-              {!!item.type && <Text style={styles.cardSubtitle}>{item.type}</Text>}
+              <Text style={styles.cardTitle} numberOfLines={2} ellipsizeMode="tail">
+                {item.name}
+              </Text>
+              {!!item.type && (
+                <Text style={styles.cardSubtitle} numberOfLines={2} ellipsizeMode="tail">
+                  {item.type}
+                </Text>
+              )}
             </View>
             <Ionicons name="open-outline" size={20} color="#1e40af" />
           </TouchableOpacity>
@@ -107,8 +113,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     marginLeft: spacing.sm,
   },
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  metaText: { fontSize: 12, color: colors.textMuted },
+  metaRow: { flexDirection: 'column', gap: 4, marginBottom: spacing.sm },
+  metaText: { fontSize: 12, color: colors.textMuted, flexWrap: 'wrap' },
   listContent: { paddingBottom: 20 },
   card: {
     flexDirection: 'row',

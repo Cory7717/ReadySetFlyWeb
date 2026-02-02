@@ -11,7 +11,7 @@ export type MembershipPlanOption = {
 export const membershipTierInfo: Record<MembershipTier, { title: string; subtitle: string; features: string[] }> = {
   pro: {
     title: "RSF Pro (Core)",
-    subtitle: "Save, alerts, analytics, and pro training tools.",
+    subtitle: "Save, alerts, analytics, and pro training workflows.",
     features: [
       "Save logbook entries, flight plans, and training history with cloud sync.",
       "Currency tracking + expiration alerts (medical, flight review, IPC).",

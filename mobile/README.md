@@ -1,6 +1,7 @@
 # Ready Set Fly - Mobile App
 
 React Native Expo mobile application for iOS and Android.
+Last updated: 2026-02-02
 
 ## 📱 Features
 

@@ -60,6 +60,14 @@ export default function StudentHubScreen({ navigation }: any) {
           </View>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentSyllabi')}>
+          <Ionicons name="school-outline" size={24} color="#1e40af" />
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>Independent CFI Syllabi</Text>
+            <Text style={styles.cardSubtitle}>ACS-aligned Part 61 templates.</Text>
+          </View>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentChecklists')}>
           <Ionicons name="list-outline" size={24} color="#1e40af" />
           <View style={styles.cardText}>

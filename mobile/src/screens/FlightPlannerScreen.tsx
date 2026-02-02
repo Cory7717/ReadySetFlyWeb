@@ -402,15 +402,15 @@ export default function FlightPlannerScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Flight Planner</Text>
-        <Text style={styles.sectionSubtitle}>Build a route, estimate time and fuel, then save to Logbook Pro.</Text>
+        <Text style={styles.sectionSubtitle}>Build a route, estimate time and fuel, then save with RSF Pro.</Text>
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Logbook Pro</Text>
+          <Text style={styles.infoTitle}>RSF Pro</Text>
           <Text style={styles.helperText}>Unlock saved plans, per-leg breakdowns, and export tools.</Text>
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={() => navigation?.navigate?.('LogbookPro')}
           >
-            <Text style={styles.secondaryButtonText}>Upgrade to Logbook Pro</Text>
+            <Text style={styles.secondaryButtonText}>Upgrade to RSF Pro</Text>
           </TouchableOpacity>
         </View>
       </View>

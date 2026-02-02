@@ -35,6 +35,7 @@ export function JobApplicationModal({ listing, open, onOpenChange }: JobApplicat
   const { toast } = useToast();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const isExample = (listing as any).isExample;
 
   const form = useForm<JobApplicationFormData>({
     resolver: zodResolver(jobApplicationFormSchema),
@@ -122,6 +123,13 @@ export function JobApplicationModal({ listing, open, onOpenChange }: JobApplicat
   };
 
   const onSubmit = (data: JobApplicationFormData) => {
+    if (isExample) {
+      toast({
+        title: "Sample listing",
+        description: "This is a demo job listing. Applications are disabled.",
+      });
+      return;
+    }
     applicationMutation.mutate(data);
   };
 
@@ -151,6 +159,11 @@ export function JobApplicationModal({ listing, open, onOpenChange }: JobApplicat
 
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                {isExample && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                    This is a sample job listing. Applications are disabled here so you can explore the flow.
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -345,10 +358,10 @@ export function JobApplicationModal({ listing, open, onOpenChange }: JobApplicat
                   </Button>
                   <Button
                     type="submit"
-                    disabled={applicationMutation.isPending}
+                    disabled={applicationMutation.isPending || isExample}
                     data-testid="button-submit-application"
                   >
-                    {applicationMutation.isPending ? "Submitting..." : "Submit Application"}
+                    {applicationMutation.isPending ? "Submitting..." : isExample ? "Sample Listing" : "Submit Application"}
                   </Button>
                 </div>
               </form>

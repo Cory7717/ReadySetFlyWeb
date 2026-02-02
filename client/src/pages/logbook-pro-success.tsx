@@ -16,7 +16,7 @@ export default function LogbookProSuccess() {
       setStatus("Failed");
       return;
     }
-    apiRequest("GET", `/api/paypal/logbook/confirm?subscriptionId=${subscriptionId}`)
+    apiRequest("GET", `/api/paypal/membership/confirm?subscriptionId=${subscriptionId}`)
       .then((res) => res.json())
       .then((data) => {
         if (data?.status) {
@@ -35,7 +35,7 @@ export default function LogbookProSuccess() {
     <div className="container mx-auto py-10 px-4">
       <Card>
         <CardHeader>
-          <CardTitle>Logbook Pro Activated</CardTitle>
+          <CardTitle>RSF Pro Activated</CardTitle>
           <CardDescription>Thanks for upgrading!</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

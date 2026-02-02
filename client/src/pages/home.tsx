@@ -34,6 +34,15 @@ export default function Home() {
   useEffect(() => {
     trackEvent("rentals_view", { page: "/rentals" });
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const aircraftIdParam = params.get("aircraftId");
+    if (aircraftIdParam) {
+      setSelectedAircraftId(aircraftIdParam);
+    }
+  }, []);
   
   // Filter state
   const [keyword, setKeyword] = useState("");
@@ -280,6 +289,7 @@ export default function Home() {
                     responseTime={listing.responseTime || 24}
                     acceptanceRate={listing.acceptanceRate || 95}
                     viewCount={listing.viewCount || 0}
+                    isExample={(listing as any).isExample || false}
                     onCardClick={() => {
                       trackEvent("select_item", {
                         item_id: listing.id,

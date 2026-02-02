@@ -61,6 +61,13 @@ export function MarketplaceCard({
             alt={title}
             className="w-full h-full object-cover"
           />
+          {isExample && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="bg-black/60 text-white text-xs font-semibold uppercase tracking-[0.35em] px-4 py-1 -rotate-12">
+                Sample
+              </div>
+            </div>
+          )}
           <div className="absolute top-3 left-3">
             <Badge className={categoryColors[category]} data-testid={`badge-category-${category}`}>
               {categoryLabels[category]}
@@ -89,6 +96,13 @@ export function MarketplaceCard({
               {categoryLabels[category]}
             </Badge>
           </div>
+          {isExample && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="bg-black/60 text-white text-xs font-semibold uppercase tracking-[0.35em] px-4 py-1 -rotate-12">
+                Sample
+              </div>
+            </div>
+          )}
           <ImageIcon className="h-12 w-12 text-muted-foreground/30" />
         </div>
       )}

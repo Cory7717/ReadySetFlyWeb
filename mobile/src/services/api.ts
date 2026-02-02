@@ -169,7 +169,7 @@ export const apiEndpoints = {
     getByUser: (): ApiResponse<Rental[]> => api.get('/api/user/rentals'),
     getById: (id: string): ApiResponse<Rental> => api.get(`/api/rentals/${id}`),
     approve: (id: string): ApiResponse<Rental> => api.patch(`/api/rentals/${id}/approve`),
-    completePayment: (id: string, data: { transactionId: string }): ApiResponse<Rental> => 
+    completePayment: (id: string, data: { orderId: string }): ApiResponse<Rental> => 
       api.post(`/api/rentals/${id}/complete-payment`, data),
     getMessages: (id: string): ApiResponse<Message[]> => 
       api.get(`/api/rentals/${id}/messages`),
@@ -183,6 +183,8 @@ export const apiEndpoints = {
       api.get(`/api/marketplace/${id}`),
     create: (data: Partial<MarketplaceListing>): ApiResponse<MarketplaceListing> => 
       api.post('/api/marketplace', data),
+    completeCreate: (data: { orderId: string; listingData: Partial<MarketplaceListing> }): ApiResponse<MarketplaceListing> =>
+      api.post('/api/marketplace/complete-create', data),
     update: (id: string, data: Partial<MarketplaceListing>): ApiResponse<MarketplaceListing> => 
       api.patch(`/api/marketplace/${id}`, data),
     delete: (id: string): ApiResponse<void> => api.delete(`/api/marketplace/${id}`),

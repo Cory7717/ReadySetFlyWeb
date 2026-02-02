@@ -126,7 +126,8 @@ export default function Logbook() {
   const [isSignDialogOpen, setIsSignDialogOpen] = useState(false);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [signRole, setSignRole] = useState<"pilot" | "cfi">("pilot");
-  const isPro = user?.logbookProStatus === "active";
+  const entitlements = (user as any)?.entitlements;
+  const isPro = entitlements?.canUseLogbook ?? (user?.logbookProStatus === "active");
   const [proForm, setProForm] = useState({
     medicalClass: "",
     medicalIssuedAt: "",
@@ -268,13 +269,13 @@ export default function Logbook() {
       const res = await apiRequest("PUT", "/api/logbook/pro/settings", payload);
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to update Logbook Pro settings");
+        throw new Error(data.error || "Failed to update RSF Pro settings");
       }
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/logbook/pro/summary"] });
-      toast({ title: "Logbook Pro updated", description: "Your currency settings were saved." });
+      toast({ title: "RSF Pro updated", description: "Your currency settings were saved." });
     },
     onError: (error: any) => {
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
@@ -628,7 +629,7 @@ export default function Logbook() {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-primary" />
-              Logbook Pro Dashboard
+              RSF Pro Dashboard
             </CardTitle>
             <CardDescription>Currency tracking, expirations, and quick actions.</CardDescription>
           </CardHeader>
@@ -636,7 +637,7 @@ export default function Logbook() {
             {proSummaryLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading Logbook Pro summary...
+                Loading RSF Pro summary...
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-3">
@@ -694,7 +695,7 @@ export default function Logbook() {
                 </Button>
               </div>
               <div className="space-y-3">
-                <div className="text-sm font-semibold">Update Logbook Pro dates</div>
+                <div className="text-sm font-semibold">Update RSF Pro dates</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label>Medical Class</Label>
@@ -741,7 +742,7 @@ export default function Logbook() {
                   onClick={() => saveProSettingsMutation.mutate()}
                   disabled={saveProSettingsMutation.isPending}
                 >
-                  {saveProSettingsMutation.isPending ? "Saving..." : "Save Logbook Pro Settings"}
+                  {saveProSettingsMutation.isPending ? "Saving..." : "Save RSF Pro Settings"}
                 </Button>
               </div>
             </div>
@@ -756,7 +757,7 @@ export default function Logbook() {
               <Bell className="h-5 w-5 text-primary" />
               Alert Preferences
             </CardTitle>
-            <CardDescription>Choose how you receive Logbook Pro alerts (30 days before due).</CardDescription>
+            <CardDescription>Choose how you receive RSF Pro alerts (30 days before due).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -900,15 +901,15 @@ export default function Logbook() {
         </Card>
       )}
 
-      {/* Logbook Pro CTA */}
+      {/* RSF Pro CTA */}
       <Card className="mt-6 border-primary/20 bg-primary/5">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Award className="h-5 w-5 text-primary" />
-            Upgrade to Logbook Pro
+            Upgrade to RSF Pro
           </CardTitle>
           <CardDescription>
-            Unlock advanced automation, currency tracking, and pro tools.
+            Save, alerts, and analytics require RSF Pro.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -958,14 +959,14 @@ export default function Logbook() {
           </div>
           <Separator className="my-4" />
           <div className="flex flex-col items-center gap-3">
-            {user?.logbookProStatus === "active" && (
-              <Badge variant="default">Logbook Pro Active</Badge>
+            {isPro && (
+              <Badge variant="default">RSF Pro Active</Badge>
             )}
             <p className="text-xs text-muted-foreground text-center">
               Tip: <strong>Your logbook data will always be free and exportable.</strong> Pro adds intelligence and automation.
             </p>
             <Button variant="default" asChild>
-              <Link href="/logbook/pro">{user?.logbookProStatus === "active" ? "Manage Logbook Pro" : "Upgrade to Logbook Pro"}</Link>
+              <Link href="/logbook/pro">{isPro ? "Manage RSF Pro" : "Upgrade to RSF Pro"}</Link>
             </Button>
             <p className="text-[11px] text-muted-foreground text-center">
               Cancel anytime. Free logbook access stays available.

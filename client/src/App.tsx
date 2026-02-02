@@ -57,6 +57,7 @@ const StudentRoadmap = lazy(() => import("@/pages/student/roadmap"));
 const StudentCost = lazy(() => import("@/pages/student/cost"));
 const StudentProgress = lazy(() => import("@/pages/student/progress"));
 const StudentWritten = lazy(() => import("@/pages/student/written"));
+const StudentSyllabi = lazy(() => import("@/pages/student/syllabi"));
 const StudentChecklists = lazy(() => import("@/pages/student/checklists"));
 const StudentWeather = lazy(() => import("@/pages/student/weather"));
 
@@ -119,6 +120,7 @@ function Router() {
       <Route path="/student/cost" component={() => <StudentPageLoader component={StudentCost} />} />
       <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
       <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
+      <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
       <Route path="/student/checklists" component={() => <StudentPageLoader component={StudentChecklists} />} />
       <Route path="/student/weather" component={() => <StudentPageLoader component={StudentWeather} />} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />

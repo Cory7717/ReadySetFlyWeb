@@ -168,6 +168,36 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
     ? aircraft.images 
     : ["https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=1200"];
 
+  const handleSampleRedirect = async () => {
+    toast({
+      title: "Sample listing",
+      description: "This is a demo rental listing. Redirecting you to a live listing next.",
+    });
+    let listings = queryClient.getQueryData<AircraftListing[]>(["/api/aircraft"]);
+    if (!listings) {
+      try {
+        const response = await fetch(apiUrl("/api/aircraft"));
+        if (response.ok) {
+          listings = await response.json();
+        }
+      } catch (error) {
+        listings = undefined;
+      }
+    }
+    const liveListing = listings?.find((item) => !(item as any).isExample);
+    setShowRequestForm(false);
+    setShowBestPractices(false);
+    onOpenChange(false);
+    if (liveListing) {
+      window.location.href = `/rentals?aircraftId=${liveListing.id}`;
+      return;
+    }
+    toast({
+      title: "No live rentals yet",
+      description: "We will list live rental aircraft here as soon as they are available.",
+    });
+  };
+
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -178,6 +208,14 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
           </div>
         ) : aircraft ? (
           <>
+            {(aircraft as any).isExample && (
+              <div className="bg-amber-500 text-white px-6 py-3 -mx-6 -mt-6 mb-4 text-center font-semibold" data-testid="banner-example-rental">
+                SAMPLE RENTAL LISTING
+                <p className="text-sm font-normal mt-1 opacity-90">
+                  This is a demo listing. Submit a request to see a live rental instead.
+                </p>
+              </div>
+            )}
             <DialogHeader>
               <DialogTitle className="font-display text-3xl">
                 {aircraft.year} {aircraft.make} {aircraft.model}
@@ -302,7 +340,13 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                 <div className="flex gap-3">
                   <Button
                     className="flex-1"
-                    onClick={() => requestRentalMutation.mutate(formData)}
+                    onClick={() => {
+                      if ((aircraft as any).isExample) {
+                        handleSampleRedirect();
+                        return;
+                      }
+                      requestRentalMutation.mutate(formData);
+                    }}
                     disabled={!formData.startDate || !formData.endDate || !formData.estimatedHours || requestRentalMutation.isPending}
                     data-testid="button-submit-request"
                   >

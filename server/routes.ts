@@ -25,7 +25,10 @@ import registerMobileAuthRoutes from "./mobile-auth-routes";
 import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
-import { getUpgradeDelta, calculateTotalWithTax, isValidUpgrade, VALID_TIERS } from "@shared/config/listingPricing";
+import { getBasePrice, getUpgradeDelta, calculateTotalWithTax, isValidUpgrade, VALID_TIERS } from "@shared/config/listingPricing";
+import { paypalRequest } from "./paypal-client";
+import { getEntitlementsForUser, mapPayPalStatusToMembership, resolveMembershipFromPlanId, resolvePayPalPlanId } from "./membership";
+import { maybeSyncLogbookProSubscription } from "./paypal-subscription-sync";
 
 // Initialize OpenAI client with fallback to standard OpenAI if Replit integration vars are missing
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
@@ -63,10 +66,6 @@ const paypalClient = new Client({
 
 const ordersController = new OrdersController(paypalClient);
 
-const PAYPAL_API_BASE =
-  process.env.PAYPAL_ENV === "production" || process.env.NODE_ENV === "production"
-    ? "https://api-m.paypal.com"
-    : "https://api-m.sandbox.paypal.com";
 
 function getPublicBaseUrl() {
   const base =
@@ -75,6 +74,47 @@ function getPublicBaseUrl() {
     process.env.RENDER_EXTERNAL_URL ||
     "http://localhost:5000";
   return base.startsWith("http") ? base : `https://${base}`;
+}
+
+function parsePayPalCustomId(customId: string) {
+  const result: Record<string, string> = {};
+  if (!customId) return result;
+  const parts = customId.split("|").map((part) => part.trim()).filter(Boolean);
+  for (const part of parts) {
+    const [key, ...rest] = part.split(":");
+    if (!key || rest.length === 0) continue;
+    result[key] = rest.join(":");
+  }
+  return result;
+}
+
+function toCents(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(parsed * 100);
+}
+
+function extractPayPalOrderAmount(orderData: any): { value: string; currency: string } | null {
+  const unit = orderData?.purchase_units?.[0];
+  const amountValue =
+    unit?.amount?.value ??
+    unit?.payments?.captures?.[0]?.amount?.value ??
+    unit?.payments?.authorizations?.[0]?.amount?.value;
+  const currency =
+    unit?.amount?.currency_code ??
+    unit?.amount?.currencyCode ??
+    unit?.payments?.captures?.[0]?.amount?.currency_code ??
+    unit?.payments?.captures?.[0]?.amount?.currencyCode ??
+    unit?.payments?.authorizations?.[0]?.amount?.currency_code ??
+    unit?.payments?.authorizations?.[0]?.amount?.currencyCode;
+  if (!amountValue || !currency) return null;
+  return { value: String(amountValue), currency: String(currency) };
+}
+
+async function getPayPalOrder(orderId: string) {
+  const { body } = await ordersController.getOrder({ id: orderId } as any);
+  return JSON.parse(String(body));
 }
 
 function getAdminPermissionsForUser(user: any): AdminPermission[] {
@@ -117,53 +157,256 @@ const requirePromoCodesAdmin = requireAdminPermission("promo-codes");
 const requireNotificationsAdmin = requireAdminPermission("notifications");
 const requireBannersAdmin = requireAdminPermission("banners");
 
-async function getPayPalAccessToken() {
-  const clientId = process.env.PAYPAL_CLIENT_ID;
-  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
-    throw new Error("Missing PayPal credentials");
-  }
-  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-  const res = await fetch(`${PAYPAL_API_BASE}/v1/oauth2/token`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
+const SAMPLE_MARKETPLACE_LISTINGS = [
+  {
+    id: "sample-marketplace-aircraft-sale",
+    userId: "sample-user",
+    category: "aircraft-sale",
+    tier: "premium",
+    title: "2007 Cessna 182T Skylane G1000 - Low Time",
+    description:
+      "Pristine, hangared Cessna 182T with Garmin G1000 avionics and fresh annual. Perfect for IFR cross-country missions with a full utility load and recent upgrades.",
+    images: [
+      "https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=1200",
+      "https://images.unsplash.com/photo-1529078155058-5d716f45d604?w=1200",
+    ],
+    location: "Austin, TX",
+    city: "Austin",
+    state: "TX",
+    zipCode: "78701",
+    contactEmail: "listings@readysetfly.com",
+    contactPhone: "512-555-0182",
+    details: {
+      make: "Cessna",
+      model: "182T Skylane",
+      year: "2007",
+      registration: "N182RSF",
+      seats: "4",
+      totalTime: "1920",
+      engineTime: "320",
+      usefulLoad: "1120",
+      annualDue: "2026-10-01",
+      avionics: "Garmin G1000, GTX 345, GFC 700 Autopilot",
+      interiorCondition: "excellent",
+      exteriorCondition: "excellent",
+      damageHistory: "None",
+      engineType: "Single-Engine",
     },
-    body: "grant_type=client_credentials",
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`PayPal token error: ${res.status} ${errText}`);
-  }
-  const data = await res.json();
-  return data.access_token as string;
+    price: "289000",
+    isActive: true,
+    isPaid: true,
+    isFeatured: true,
+    isExample: true,
+    viewCount: 0,
+  },
+  {
+    id: "sample-marketplace-charter",
+    userId: "sample-user",
+    category: "charter",
+    title: "Lone Star Charter - Citation CJ3+",
+    description:
+      "On-demand charter with a CJ3+ based at KDAL. Ideal for business travel across Texas and the Gulf Coast. 24/7 dispatch and concierge support.",
+    images: ["https://images.unsplash.com/photo-1459603677915-a62079ffd002?w=1200"],
+    location: "Dallas, TX",
+    city: "Dallas",
+    state: "TX",
+    zipCode: "75235",
+    contactEmail: "charter@readysetfly.com",
+    contactPhone: "972-555-0140",
+    details: {
+      companyName: "Lone Star Charter",
+      aircraftAvailable: "Citation CJ3+ (7 pax), Pilatus PC-12 (8 pax)",
+      serviceArea: "Texas, Gulf Coast, Rocky Mountains",
+      pricingStructure: "Hourly + reposition; transparent estimates within 30 minutes",
+    },
+    isActive: true,
+    isPaid: true,
+    isExample: true,
+    viewCount: 0,
+  },
+  {
+    id: "sample-marketplace-cfi",
+    userId: "sample-user",
+    category: "cfi",
+    title: "Howard Hughes - Advanced CFI/CFII/MEI",
+    description:
+      "Yes, that Howard Hughes. Precision IFR training, complex aircraft checkouts, and multi-engine mentorship. Known for calm instruction and high standards.",
+    images: ["https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200"],
+    location: "Houston, TX",
+    city: "Houston",
+    state: "TX",
+    zipCode: "77002",
+    contactEmail: "cfi@readysetfly.com",
+    contactPhone: "713-555-0194",
+    details: {
+      instructorName: "Howard Hughes",
+      hourlyRate: "95",
+      certifications: ["CFI", "CFII", "MEI"],
+      specialties: "IFR proficiency, complex endorsements, multi-engine training",
+    },
+    price: "95",
+    isActive: true,
+    isPaid: true,
+    isExample: true,
+    viewCount: 0,
+  },
+  {
+    id: "sample-marketplace-flight-school",
+    userId: "sample-user",
+    category: "flight-school",
+    title: "Hill Country Flight Academy",
+    description:
+      "Accelerated programs for PPL, IR, and Commercial with a modern fleet and experienced instructors. Structured syllabi and flexible scheduling.",
+    images: ["https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200"],
+    location: "San Marcos, TX",
+    city: "San Marcos",
+    state: "TX",
+    zipCode: "78666",
+    contactEmail: "training@readysetfly.com",
+    contactPhone: "512-555-0178",
+    details: {
+      schoolName: "Hill Country Flight Academy",
+      aircraftFleet: "C172 G1000 (4), PA-28 (3), Seminole (1)",
+      programsOffered: "Private, Instrument, Commercial, Multi-Engine, CFI",
+      pricingInfo: "Flat-rate PPL packages and hourly pay-as-you-go options",
+    },
+    isActive: true,
+    isPaid: true,
+    isExample: true,
+    viewCount: 0,
+  },
+  {
+    id: "sample-marketplace-mechanic",
+    userId: "sample-user",
+    category: "mechanic",
+    title: "AeroCare A&P - Mobile Maintenance",
+    description:
+      "FAA-certified A&P/IA with mobile service across Central Texas. Annuals, pre-buys, and avionics troubleshooting with transparent estimates.",
+    images: ["https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1200"],
+    location: "Round Rock, TX",
+    city: "Round Rock",
+    state: "TX",
+    zipCode: "78664",
+    contactEmail: "maintenance@readysetfly.com",
+    contactPhone: "737-555-0168",
+    details: {
+      businessName: "AeroCare Maintenance",
+      specialties: "Annual inspections, pre-buys, avionics troubleshooting",
+      serviceArea: "Central Texas, Hill Country",
+    },
+    isActive: true,
+    isPaid: true,
+    isExample: true,
+    viewCount: 0,
+  },
+  {
+    id: "sample-marketplace-job",
+    userId: "sample-user",
+    category: "job",
+    title: "First Officer - Turboprop Charter (Full Time)",
+    description:
+      "Growing charter operator seeking a safety-focused First Officer. Competitive pay, schedule stability, and upgrade path to Captain within 12-18 months.",
+    images: ["https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200"],
+    location: "Fort Worth, TX",
+    city: "Fort Worth",
+    state: "TX",
+    zipCode: "76177",
+    contactEmail: "careers@readysetfly.com",
+    contactPhone: "817-555-0139",
+    details: {
+      jobTitle: "First Officer",
+      company: "SkyTrail Charter",
+      employmentType: "Full-time",
+      salaryRange: "$78k - $92k",
+      requirements: "Commercial ASEL, 500 TT, turbine time preferred.",
+    },
+    isActive: true,
+    isPaid: true,
+    isExample: true,
+    viewCount: 0,
+  },
+] as any[];
+
+const SAMPLE_AIRCRAFT_LISTING = {
+  id: "sample-aircraft-cessna-172",
+  ownerId: "sample-owner",
+  make: "Cessna",
+  model: "172S Skyhawk",
+  year: 2018,
+  registration: "N172RSF",
+  category: "Single-Engine",
+  totalTime: 1250,
+  engine: "Lycoming IO-360-L2A",
+  avionicsSuite: "Garmin G1000 NXi",
+  requiredCertifications: ["PPL", "IFR"],
+  minFlightHours: 50,
+  hourlyRate: "165",
+  insuranceIncluded: true,
+  wetRate: true,
+  images: [
+    "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?w=1200",
+    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1200",
+  ],
+  location: "Georgetown, TX",
+  city: "Georgetown",
+  state: "TX",
+  zipCode: "78628",
+  airportCode: "KGTU",
+  engineType: "Single-Engine",
+  engineCount: 1,
+  seatingCapacity: 4,
+  description:
+    "Sample rental listing with a modern G1000 NXi cockpit and freshly updated interior. Perfect for training, weekend trips, and instrument proficiency.",
+  isListed: true,
+  viewCount: 0,
+  responseTime: 6,
+  acceptanceRate: 98,
+  isExample: true,
+} as any;
+
+const SAMPLE_MARKETPLACE_INDEX = new Map(
+  SAMPLE_MARKETPLACE_LISTINGS.map((listing) => [listing.id, listing])
+);
+
+function getSampleMarketplaceListing(id: string) {
+  return SAMPLE_MARKETPLACE_INDEX.get(id) || null;
 }
 
-async function paypalRequest(path: string, options: RequestInit = {}) {
-  const token = await getPayPalAccessToken();
-  const res = await fetch(`${PAYPAL_API_BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(options.headers || {}),
-    },
-  });
-  const dataText = await res.text();
-  let data: any = {};
-  if (dataText) {
-    try {
-      data = JSON.parse(dataText);
-    } catch {
-      data = { raw: dataText };
-    }
-  }
-  if (!res.ok) {
-    throw new Error(data?.message || `PayPal API error ${res.status}`);
-  }
-  return data;
+function isSampleAircraftId(id: string) {
+  return id === SAMPLE_AIRCRAFT_LISTING.id;
 }
+
+function matchesMarketplaceSampleFilters(listing: any, filters: any) {
+  if (filters.category && listing.category !== filters.category) return false;
+  if (filters.city) {
+    const city = String(listing.city || listing.location || "").toLowerCase();
+    if (!city.includes(String(filters.city).toLowerCase())) return false;
+  }
+  if (filters.keyword) {
+    const haystack = `${listing.title || ""} ${listing.description || ""}`.toLowerCase();
+    if (!haystack.includes(String(filters.keyword).toLowerCase())) return false;
+  }
+  const priceValue = listing.price !== null && listing.price !== undefined ? Number(listing.price) : null;
+  if (filters.minPrice !== undefined && (priceValue === null || priceValue < filters.minPrice)) return false;
+  if (filters.maxPrice !== undefined && (priceValue === null || priceValue > filters.maxPrice)) return false;
+  if (filters.engineType && filters.engineType !== "all") {
+    const details = listing.details || {};
+    if (details.engineType !== filters.engineType) return false;
+  }
+  if (filters.cfiRating && filters.cfiRating !== "all") {
+    const details = listing.details || {};
+    if (!details.certifications || !details.certifications.includes(filters.cfiRating)) return false;
+  }
+  return true;
+}
+
+function getSampleMarketplaceListings(filters?: any) {
+  if (!filters) return SAMPLE_MARKETPLACE_LISTINGS;
+  return SAMPLE_MARKETPLACE_LISTINGS.filter((listing) =>
+    matchesMarketplaceSampleFilters(listing, filters)
+  );
+}
+
 
 async function walkDir(dir: string): Promise<string[]> {
   const entries = await fs.promises.readdir(dir, { withFileTypes: true });
@@ -858,8 +1101,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         user = await storage.getUser(user.id); // Refetch updated user
       }
-      
-      res.json(user);
+
+      if (user) {
+        user = await maybeSyncLogbookProSubscription(storage, user);
+      }
+
+      const entitlements = getEntitlementsForUser(user);
+      res.json({ ...user, entitlements });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -938,62 +1186,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // PayPal - Create Logbook Pro subscription
-  app.post("/api/paypal/logbook/subscribe", isAuthenticated, async (req: any, res) => {
+  const parseBillingInterval = (value?: string | null): "monthly" | "biannual" | "annual" | null => {
+    if (!value) return null;
+    const normalized = value.toLowerCase();
+    if (normalized === "monthly") return "monthly";
+    if (normalized === "biannual" || normalized === "semiannual" || normalized === "6-months") return "biannual";
+    if (normalized === "annual" || normalized === "yearly") return "annual";
+    return null;
+  };
+
+  const buildSubscriptionReturnUrls = () => {
+    const baseUrl = getPublicBaseUrl();
+    return {
+      return_url: `${baseUrl}/logbook/pro/success`,
+      cancel_url: `${baseUrl}/logbook/pro/cancel`,
+    };
+  };
+
+  const createMembershipSubscription = async (userId: string, tier: "pro" | "pro_plus", interval: "monthly" | "biannual" | "annual") => {
+    const user = await storage.getUser(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const planId = resolvePayPalPlanId(tier, interval);
+    const { return_url, cancel_url } = buildSubscriptionReturnUrls();
+    const subscription = await paypalRequest("/v1/billing/subscriptions", {
+      method: "POST",
+      body: JSON.stringify({
+        plan_id: planId,
+        custom_id: `user:${userId}|tier:${tier}|interval:${interval}|purpose:membership`,
+        subscriber: user.email ? { email_address: user.email } : undefined,
+        application_context: {
+          brand_name: "Ready Set Fly",
+          user_action: "SUBSCRIBE_NOW",
+          return_url,
+          cancel_url,
+        },
+      }),
+    });
+
+    const approveUrl =
+      subscription?.links?.find((l: any) => l.rel === "approve")?.href ||
+      subscription?.links?.[0]?.href;
+
+    await storage.updateUser(userId, {
+      membershipTier: tier,
+      membershipStatus: "inactive",
+      membershipProvider: "paypal",
+      paypalSubscriptionId: subscription.id,
+      paypalPlanId: planId,
+      logbookProStatus: "pending",
+      logbookProPlan: interval,
+      logbookProSubscriptionId: subscription.id,
+    });
+
+    return { subscription, approveUrl };
+  };
+
+  const confirmMembershipSubscription = async (userId: string, subscriptionId: string) => {
+    const subscription = await paypalRequest(`/v1/billing/subscriptions/${subscriptionId}`, {
+      method: "GET",
+    });
+
+    const customIdRaw = subscription?.custom_id;
+    const customData = parsePayPalCustomId(customIdRaw || "");
+    if (customData.user && customData.user !== userId) {
+      throw new Error("Subscription does not belong to this user");
+    }
+    if (!customData.user && customIdRaw && customIdRaw !== userId) {
+      throw new Error("Subscription does not belong to this user");
+    }
+
+    const status = (subscription?.status || "UNKNOWN").toLowerCase();
+    const planId = subscription?.plan_id;
+    const planInfo = resolveMembershipFromPlanId(planId);
+    if (!planInfo) {
+      throw new Error("Unknown PayPal plan ID");
+    }
+
+    const startedAt = subscription?.start_time ? new Date(subscription.start_time) : new Date();
+    const endsAt = subscription?.billing_info?.next_billing_time
+      ? new Date(subscription.billing_info.next_billing_time)
+      : null;
+
+    const membershipStatus = mapPayPalStatusToMembership(status);
+    await storage.updateUser(userId, {
+      membershipTier: planInfo.tier,
+      membershipStatus,
+      membershipProvider: "paypal",
+      membershipEndsAt: endsAt || undefined,
+      paypalSubscriptionId: subscriptionId,
+      paypalPlanId: planId,
+      logbookProStatus: membershipStatus === "active" ? "active" : status,
+      logbookProPlan: planInfo.interval,
+      logbookProSubscriptionId: subscriptionId,
+      logbookProStartedAt: startedAt,
+      logbookProEndsAt: endsAt || undefined,
+    });
+
+    return subscription;
+  };
+
+  const cancelMembershipSubscription = async (userId: string, reason?: string) => {
+    const user = await storage.getUser(userId);
+    const subscriptionId = user?.paypalSubscriptionId || user?.logbookProSubscriptionId;
+    if (!user || !subscriptionId) {
+      throw new Error("No active subscription found");
+    }
+
+    await paypalRequest(`/v1/billing/subscriptions/${subscriptionId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason || "User requested cancellation" }),
+    });
+
+    await storage.updateUser(userId, {
+      membershipStatus: "cancelled",
+      membershipProvider: "paypal",
+      logbookProStatus: "cancelled",
+      logbookProCanceledAt: new Date(),
+      logbookProCancelAtPeriodEnd: false,
+    });
+  };
+
+  // PayPal - Create RSF Membership subscription
+  app.post("/api/paypal/membership/subscribe", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
+      const tier = req.body?.tier === "pro_plus" ? "pro_plus" : req.body?.tier === "pro" ? "pro" : null;
+      const interval = parseBillingInterval(req.body?.interval);
+      if (!tier || !interval) {
+        return res.status(400).json({ error: "Invalid membership tier or interval" });
       }
-
-      const plan = (req.body?.plan || "MONTHLY").toUpperCase();
-      const planId =
-        plan === "YEARLY"
-          ? process.env.PAYPAL_LOGBOOK_PLAN_YEARLY_ID
-          : plan === "BIANNUAL"
-          ? process.env.PAYPAL_LOGBOOK_PLAN_BIANNUAL_ID
-          : process.env.PAYPAL_LOGBOOK_PLAN_MONTHLY_ID;
-
-      if (!planId) {
-        return res.status(500).json({ error: "Missing PayPal plan ID for selected interval" });
-      }
-
-      const baseUrl = getPublicBaseUrl();
-      const subscription = await paypalRequest("/v1/billing/subscriptions", {
-        method: "POST",
-        body: JSON.stringify({
-          plan_id: planId,
-          custom_id: userId,
-          subscriber: user.email ? { email_address: user.email } : undefined,
-          application_context: {
-            brand_name: "Ready Set Fly",
-            user_action: "SUBSCRIBE_NOW",
-            return_url: `${baseUrl}/logbook/pro/success`,
-            cancel_url: `${baseUrl}/logbook/pro/cancel`,
-          },
-        }),
-      });
-
-      const approveUrl =
-        subscription?.links?.find((l: any) => l.rel === "approve")?.href ||
-        subscription?.links?.[0]?.href;
-
-      await storage.updateUser(userId, {
-        logbookProStatus: "pending",
-        logbookProPlan: plan.toLowerCase(),
-        logbookProSubscriptionId: subscription.id,
-      });
-
+      const { subscription, approveUrl } = await createMembershipSubscription(userId, tier, interval);
       res.json({ id: subscription.id, approveUrl });
     } catch (error: any) {
-      console.error("Logbook subscription create error:", error);
+      console.error("Membership subscription create error:", error);
       res.status(500).json({ error: error.message || "Failed to create subscription" });
     }
   });
 
-  // PayPal - Confirm Logbook Pro subscription after approval
-  app.get("/api/paypal/logbook/confirm", isAuthenticated, async (req: any, res) => {
+  // PayPal - Confirm RSF Membership subscription after approval
+  app.get("/api/paypal/membership/confirm", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const subscriptionId = req.query.subscriptionId as string;
@@ -1001,74 +1335,210 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Missing subscriptionId" });
       }
 
-      const subscription = await paypalRequest(`/v1/billing/subscriptions/${subscriptionId}`, {
-        method: "GET",
-      });
-
-      if (subscription?.custom_id && subscription.custom_id !== userId) {
-        return res.status(403).json({ error: "Subscription does not belong to this user" });
-      }
-
-      const status = (subscription?.status || "UNKNOWN").toLowerCase();
-      const planId = subscription?.plan_id;
-      const plan =
-        planId === process.env.PAYPAL_LOGBOOK_PLAN_YEARLY_ID
-          ? "yearly"
-          : planId === process.env.PAYPAL_LOGBOOK_PLAN_BIANNUAL_ID
-          ? "biannual"
-          : "monthly";
-
-      const startedAt = subscription?.start_time ? new Date(subscription.start_time) : new Date();
-      const endsAt = subscription?.billing_info?.next_billing_time
-        ? new Date(subscription.billing_info.next_billing_time)
-        : null;
-
-      await storage.updateUser(userId, {
-        logbookProStatus: status === "active" ? "active" : status,
-        logbookProPlan: plan,
-        logbookProSubscriptionId: subscriptionId,
-        logbookProStartedAt: startedAt,
-        logbookProEndsAt: endsAt || undefined,
-      });
-
+      const subscription = await confirmMembershipSubscription(userId, subscriptionId);
       res.json({ status: subscription.status, subscription });
     } catch (error: any) {
-      console.error("Logbook subscription confirm error:", error);
+      console.error("Membership subscription confirm error:", error);
       res.status(500).json({ error: error.message || "Failed to confirm subscription" });
     }
   });
 
-  // PayPal - Cancel Logbook Pro subscription
+  // PayPal - Cancel RSF Membership subscription
+  app.post("/api/paypal/membership/cancel", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await cancelMembershipSubscription(userId, req.body?.reason);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Membership subscription cancel error:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel subscription" });
+    }
+  });
+
+  // Legacy Logbook Pro endpoints (mapped to RSF Pro core monthly)
+  app.post("/api/paypal/logbook/subscribe", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { subscription, approveUrl } = await createMembershipSubscription(userId, "pro", "monthly");
+      res.json({ id: subscription.id, approveUrl });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to create subscription" });
+    }
+  });
+
+  app.get("/api/paypal/logbook/confirm", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const subscriptionId = req.query.subscriptionId as string;
+      if (!subscriptionId) {
+        return res.status(400).json({ error: "Missing subscriptionId" });
+      }
+      const subscription = await confirmMembershipSubscription(userId, subscriptionId);
+      res.json({ status: subscription.status, subscription });
+    } catch (error: any) {
+      console.error("Legacy confirm error:", error);
+      res.status(500).json({ error: error.message || "Failed to confirm subscription" });
+    }
+  });
+
   app.post("/api/paypal/logbook/cancel", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      if (!user || !user.logbookProSubscriptionId) {
-        return res.status(400).json({ error: "No active subscription found" });
-      }
-      const reason = req.body?.reason || "User requested cancellation";
-      await paypalRequest(`/v1/billing/subscriptions/${user.logbookProSubscriptionId}/cancel`, {
-        method: "POST",
-        body: JSON.stringify({ reason }),
-      });
-
-      await storage.updateUser(userId, {
-        logbookProStatus: "cancelled",
-        logbookProCanceledAt: new Date(),
-        logbookProCancelAtPeriodEnd: false,
-      });
-
+      await cancelMembershipSubscription(userId, req.body?.reason);
       res.json({ success: true });
     } catch (error: any) {
-      console.error("Logbook subscription cancel error:", error);
+      console.error("Legacy cancel error:", error);
       res.status(500).json({ error: error.message || "Failed to cancel subscription" });
+    }
+  });
+
+  // PayPal - Webhook (subscription lifecycle + payment status)
+  app.post("/api/paypal/webhook", async (req, res) => {
+    try {
+      const webhookId = process.env.PAYPAL_WEBHOOK_ID;
+      if (!webhookId) {
+        return res.status(500).json({ error: "Missing PayPal webhook ID" });
+      }
+
+      const transmissionId = req.header("paypal-transmission-id");
+      const transmissionTime = req.header("paypal-transmission-time");
+      const transmissionSig = req.header("paypal-transmission-sig");
+      const certUrl = req.header("paypal-cert-url");
+      const authAlgo = req.header("paypal-auth-algo");
+
+      if (!transmissionId || !transmissionTime || !transmissionSig || !certUrl || !authAlgo) {
+        return res.status(400).json({ error: "Missing PayPal signature headers" });
+      }
+
+      const verification = await paypalRequest("/v1/notifications/verify-webhook-signature", {
+        method: "POST",
+        body: JSON.stringify({
+          auth_algo: authAlgo,
+          cert_url: certUrl,
+          transmission_id: transmissionId,
+          transmission_sig: transmissionSig,
+          transmission_time: transmissionTime,
+          webhook_id: webhookId,
+          webhook_event: req.body,
+        }),
+      });
+
+      if (verification?.verification_status !== "SUCCESS") {
+        return res.status(400).json({ error: "Invalid webhook signature" });
+      }
+
+      const eventType = req.body?.event_type;
+      const resource = req.body?.resource;
+
+      if (!eventType || !resource) {
+        return res.json({ received: true });
+      }
+
+      const subscriptionId = resource?.id;
+      let user = null;
+
+      if (resource?.custom_id) {
+        const customData = parsePayPalCustomId(String(resource.custom_id));
+        if (customData.user) {
+          user = await storage.getUser(String(customData.user));
+        }
+      }
+
+      if (!user && subscriptionId) {
+        user = await storage.getUserByPayPalSubscriptionId(String(subscriptionId));
+      }
+
+      if (!user && subscriptionId) {
+        user = await storage.getUserByLogbookSubscriptionId(String(subscriptionId));
+      }
+
+      if (!user && resource?.subscriber?.email_address) {
+        user = await storage.getUserByEmail(String(resource.subscriber.email_address));
+      }
+
+      if (!user) {
+        console.warn("PayPal webhook: user not found for subscription", subscriptionId);
+        return res.json({ received: true });
+      }
+
+      const planId = resource?.plan_id;
+      const planInfo = resolveMembershipFromPlanId(planId);
+      const planInterval = planInfo?.interval || user.logbookProPlan;
+
+      const startedAt = resource?.start_time ? new Date(resource.start_time) : undefined;
+      const endsAt = resource?.billing_info?.next_billing_time
+        ? new Date(resource.billing_info.next_billing_time)
+        : undefined;
+
+      const updates: any = {
+        membershipProvider: "paypal",
+        paypalSubscriptionId: subscriptionId || user.paypalSubscriptionId,
+        paypalPlanId: planId || user.paypalPlanId,
+        logbookProSubscriptionId: subscriptionId || user.logbookProSubscriptionId,
+        logbookProPlan: planInterval,
+      };
+
+      if (planInfo?.tier) {
+        updates.membershipTier = planInfo.tier;
+      }
+      if (endsAt) {
+        updates.membershipEndsAt = endsAt;
+      }
+
+      switch (eventType) {
+        case "BILLING.SUBSCRIPTION.ACTIVATED":
+        case "BILLING.SUBSCRIPTION.RE-ACTIVATED":
+          updates.membershipStatus = "active";
+          updates.logbookProStatus = "active";
+          if (startedAt) updates.logbookProStartedAt = startedAt;
+          if (endsAt) updates.logbookProEndsAt = endsAt;
+          updates.logbookProCancelAtPeriodEnd = false;
+          break;
+        case "BILLING.SUBSCRIPTION.CREATED":
+          updates.membershipStatus = "inactive";
+          updates.logbookProStatus = "pending";
+          if (startedAt) updates.logbookProStartedAt = startedAt;
+          break;
+        case "BILLING.SUBSCRIPTION.CANCELLED":
+        case "BILLING.SUBSCRIPTION.EXPIRED":
+          updates.membershipStatus = "cancelled";
+          updates.logbookProStatus = "cancelled";
+          updates.logbookProCanceledAt = resource?.status_update_time
+            ? new Date(resource.status_update_time)
+            : new Date();
+          updates.logbookProCancelAtPeriodEnd = false;
+          if (endsAt) updates.logbookProEndsAt = endsAt;
+          break;
+        case "BILLING.SUBSCRIPTION.SUSPENDED":
+          updates.membershipStatus = "cancelled";
+          updates.logbookProStatus = "suspended";
+          break;
+        case "BILLING.SUBSCRIPTION.PAYMENT.FAILED":
+          updates.membershipStatus = "past_due";
+          updates.logbookProStatus = "payment_failed";
+          break;
+        case "BILLING.SUBSCRIPTION.PAYMENT.SUCCEEDED":
+          updates.membershipStatus = "active";
+          updates.logbookProStatus = "active";
+          if (endsAt) updates.logbookProEndsAt = endsAt;
+          break;
+        default:
+          break;
+      }
+
+      await storage.updateUser(user.id, updates);
+
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error("PayPal webhook error:", error);
+      res.status(500).json({ error: "Webhook handling failed" });
     }
   });
 
   // PayPal - Create order for marketplace listing fees
   app.post("/api/paypal/create-order-listing", isAuthenticated, async (req: any, res) => {
     try {
-      const { category, tier, promoCode, discountAmount, finalAmount } = req.body;
+      const { category, tier, promoCode, finalAmount } = req.body;
       const userId = req.user.claims.sub;
       
       if (!category) {
@@ -1076,50 +1546,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Server-side pricing calculation - NEVER trust client
-      // Category-specific pricing (base price before tax)
-      const CATEGORY_PRICING: Record<string, Record<string, number> | number> = {
-        'aircraft-sale': {
-          basic: 25,
-          standard: 40,
-          premium: 100,
-        },
-        'charter': 250,
-        'cfi': 30,
-        'flight-school': 250,
-        'mechanic': 40,
-        'jobs': 40,
-      };
-      
-      // Calculate base amount based on category and tier
-      let baseAmount: number;
-      const categoryPricing = CATEGORY_PRICING[category];
-      
-      if (typeof categoryPricing === 'object' && tier) {
-        // Tier-based pricing (aircraft-sale)
-        baseAmount = categoryPricing[tier] || categoryPricing.basic || 25;
-      } else if (typeof categoryPricing === 'number') {
-        // Fixed pricing for category
-        baseAmount = categoryPricing;
-      } else {
-        // Fallback
-        baseAmount = 25;
-      }
-      
-      // Add 8.25% sales tax to base amount
-      const salesTax = baseAmount * 0.0825;
-      const fullAmount = baseAmount + salesTax;
+      const baseAmount = getBasePrice(category, tier);
+      const fullAmount = calculateTotalWithTax(baseAmount);
       
       // If promo code applied, validate and use discounted amount
       let amount = fullAmount;
-      if (promoCode && finalAmount !== undefined) {
-        // Validate numeric input from client
-        const parsedFinal = parseFloat(finalAmount);
-        
-        if (!Number.isFinite(parsedFinal) || parsedFinal < 0) {
-          console.error(`Invalid final amount: ${finalAmount}`);
-          return res.status(400).json({ error: "Invalid final amount" });
-        }
-        
+      if (promoCode) {
         // Re-validate promo code server-side and get promo details
         const validatedPromo = await storage.validatePromoCodeForContext(promoCode, 'marketplace');
         
@@ -1132,8 +1564,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (validatedPromo.discountType === 'percentage') {
           const discountPercent = parseFloat(validatedPromo.discountValue || "0");
           serverCalculatedDiscount = (fullAmount * discountPercent) / 100;
-        } else if (validatedPromo.discountType === 'fixed') {
+        } else if (validatedPromo.discountType === 'fixed' || validatedPromo.discountType === 'fixed_amount') {
           serverCalculatedDiscount = parseFloat(validatedPromo.discountValue || "0");
+        } else if (validatedPromo.discountType === 'free_7_day' || validatedPromo.discountType === 'waive_creation_fee') {
+          serverCalculatedDiscount = fullAmount;
         }
         
         // Clamp discount to not exceed full amount
@@ -1141,17 +1575,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Calculate expected final amount from SERVER-CALCULATED discount
         const expectedFinal = Math.max(0, fullAmount - serverCalculatedDiscount);
-        
-        // Normalize to cents (integers) for precise comparison
-        const expectedFinalCents = Math.round(expectedFinal * 100);
-        const providedFinalCents = Math.round(parsedFinal * 100);
-        
-        // Verify client-provided finalAmount matches server calculation (exact match in cents)
-        if (expectedFinalCents !== providedFinalCents) {
-          console.error(`Amount mismatch: expected ${expectedFinal.toFixed(2)} ($${expectedFinalCents}¢), got ${parsedFinal.toFixed(2)} ($${providedFinalCents}¢)`);
-          return res.status(400).json({ error: "Amount verification failed - promo discount mismatch" });
+        if (finalAmount !== undefined) {
+          const parsedFinal = parseFloat(finalAmount);
+          
+          if (!Number.isFinite(parsedFinal) || parsedFinal < 0) {
+            console.error(`Invalid final amount: ${finalAmount}`);
+            return res.status(400).json({ error: "Invalid final amount" });
+          }
+          
+          // Normalize to cents (integers) for precise comparison
+          const expectedFinalCents = Math.round(expectedFinal * 100);
+          const providedFinalCents = Math.round(parsedFinal * 100);
+          
+          // Verify client-provided finalAmount matches server calculation (exact match in cents)
+          if (expectedFinalCents !== providedFinalCents) {
+            console.error(`Amount mismatch: expected ${expectedFinal.toFixed(2)} ($${expectedFinalCents}??), got ${parsedFinal.toFixed(2)} ($${providedFinalCents}??)`);
+            return res.status(400).json({ error: "Amount verification failed - promo discount mismatch" });
+          }
         }
-        
+
         // Use server-calculated amount (normalized to 2 decimals)
         amount = expectedFinal;
       }
@@ -1246,7 +1688,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 value: amount.toFixed(2),
               },
               description: `Ready Set Fly - Listing Upgrade (${listing.tier} → ${newTier})`,
-              customId: `upgrade:${listingId}|user:${userId}|tier:${newTier}`,
+              customId: `upgrade:${listingId}|user:${userId}|tier:${newTier}|purpose:marketplace_upgrade_fee`,
             },
           ],
         },
@@ -1266,11 +1708,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PayPal - Create order for rental payments
   app.post("/api/paypal/create-order-rental", isAuthenticated, isVerified, async (req: any, res) => {
     try {
-      const { amount, rentalId } = req.body;
+      const { rentalId } = req.body;
       const userId = req.user.claims.sub;
       
-      if (!amount || !rentalId) {
+      if (!rentalId) {
         return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      const rental = await storage.getRental(rentalId);
+      if (!rental) {
+        return res.status(404).json({ error: "Rental not found" });
+      }
+      
+      if (rental.renterId !== userId) {
+        return res.status(403).json({ error: "Not authorized to pay for this rental" });
+      }
+      
+      if (rental.isPaid) {
+        return res.status(400).json({ error: "Rental is already paid" });
+      }
+      
+      if (rental.status !== "approved") {
+        return res.status(400).json({ error: "Rental must be in approved status" });
+      }
+      
+      const expectedAmount = parseFloat(rental.totalCostRenter || "0");
+      if (!Number.isFinite(expectedAmount) || expectedAmount <= 0) {
+        return res.status(400).json({ error: "Invalid rental amount" });
       }
       
       const collect = {
@@ -1280,10 +1744,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             {
               amount: {
                 currencyCode: "USD",
-                value: parseFloat(amount).toFixed(2),
+                value: expectedAmount.toFixed(2),
               },
               description: `Ready Set Fly - Aircraft rental payment`,
-              customId: `rental:${rentalId}|user:${userId}`,
+              customId: `user:${userId}|purpose:rental_payment|rental:${rentalId}`,
             },
           ],
         },
@@ -1615,6 +2079,176 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Complete marketplace listing creation after PayPal payment
+  app.post("/api/marketplace/complete-create", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { orderId, listingData } = req.body;
+
+      if (!orderId || !listingData) {
+        return res.status(400).json({ error: "orderId and listingData are required" });
+      }
+
+      const {
+        userId: _ignoredUserId,
+        isPaid: _ignoredPaid,
+        expiresAt: _ignoredExpires,
+        monthlyFee: _ignoredMonthlyFee,
+        paymentIntentId: _ignoredPaymentIntentId,
+        promoCodeUsed,
+        promoCode,
+        discountAmount,
+        originalAmount,
+        finalAmount,
+        ...safeListingData
+      } = listingData;
+
+      const category = safeListingData.category;
+      const tier = safeListingData.tier || "basic";
+      if (!category) {
+        return res.status(400).json({ error: "Listing category is required" });
+      }
+
+      const baseAmount = getBasePrice(category, tier);
+      const fullAmount = calculateTotalWithTax(baseAmount);
+      let expectedAmount = fullAmount;
+      let validatedPromo: any = null;
+
+      const promoToApply = (promoCode || promoCodeUsed || "").toString().trim();
+      if (promoToApply) {
+        validatedPromo = await storage.validatePromoCodeForContext(promoToApply, 'marketplace');
+        if (!validatedPromo) {
+          return res.status(400).json({ error: "Invalid or expired promo code" });
+        }
+
+        let serverCalculatedDiscount = 0;
+        if (validatedPromo.discountType === 'percentage') {
+          const discountPercent = parseFloat(validatedPromo.discountValue || "0");
+          serverCalculatedDiscount = (fullAmount * discountPercent) / 100;
+        } else if (validatedPromo.discountType === 'fixed' || validatedPromo.discountType === 'fixed_amount') {
+          serverCalculatedDiscount = parseFloat(validatedPromo.discountValue || "0");
+        } else if (validatedPromo.discountType === 'free_7_day' || validatedPromo.discountType === 'waive_creation_fee') {
+          serverCalculatedDiscount = fullAmount;
+        }
+
+        serverCalculatedDiscount = Math.min(serverCalculatedDiscount, fullAmount);
+        expectedAmount = Math.max(0, fullAmount - serverCalculatedDiscount);
+      }
+
+      if (expectedAmount <= 0) {
+        return res.status(400).json({ error: "Use free completion endpoint for $0 orders" });
+      }
+
+      // Verify PayPal order
+      let orderData: any;
+      try {
+        orderData = await getPayPalOrder(orderId);
+      } catch (paypalError: any) {
+        console.error("PayPal order verification error:", paypalError);
+        return res.status(400).json({ error: "Failed to verify payment" });
+      }
+
+      if (orderData.status !== 'COMPLETED') {
+        return res.status(400).json({ error: "Payment not completed" });
+      }
+
+      const customId = orderData.purchase_units?.[0]?.custom_id || orderData.purchase_units?.[0]?.customId || "";
+      const customData = parsePayPalCustomId(customId);
+      if (customData.user !== userId || customData.purpose !== "marketplace_listing_fee") {
+        return res.status(400).json({ error: "Payment order mismatch" });
+      }
+      if (customData.category && customData.category !== category) {
+        return res.status(400).json({ error: "Listing category does not match payment" });
+      }
+      if (customData.tier && customData.tier !== tier) {
+        return res.status(400).json({ error: "Listing tier does not match payment" });
+      }
+
+      const orderAmount = extractPayPalOrderAmount(orderData);
+      if (!orderAmount) {
+        return res.status(400).json({ error: "Payment amount not found" });
+      }
+
+      if (orderAmount.currency !== "USD") {
+        return res.status(400).json({ error: "Unsupported payment currency" });
+      }
+
+      const expectedCents = toCents(expectedAmount);
+      const orderCents = toCents(orderAmount.value);
+      if (!expectedCents || !orderCents || expectedCents !== orderCents) {
+        return res.status(400).json({ error: "Payment amount mismatch" });
+      }
+
+      // Validate the base listing data
+      const validatedData = insertMarketplaceListingSchema.parse({
+        ...safeListingData,
+        userId,
+        monthlyFee: baseAmount.toFixed(2),
+      });
+
+      const listing = await storage.createMarketplaceListing({
+        ...validatedData,
+        isPaid: true,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      });
+
+      const consumption = await storage.consumePayPalOrder({
+        orderId,
+        userId,
+        purpose: "marketplace_listing_fee",
+        resourceType: "listing",
+        resourceId: listing.id,
+        amount: orderAmount.value,
+        currency: orderAmount.currency,
+      });
+
+      if (!consumption) {
+        await storage.deleteMarketplaceListing(listing.id);
+        return res.status(400).json({ error: "This payment has already been processed" });
+      }
+
+      // Record promo code usage if applied
+      if (validatedPromo) {
+        try {
+          await storage.recordPromoCodeUsage({
+            promoCodeId: validatedPromo.id,
+            userId: userId,
+            marketplaceListingId: listing.id,
+          });
+          console.log(`✅ Promo code ${validatedPromo.code} usage recorded for marketplace listing ${listing.id}`);
+        } catch (error) {
+          console.error(`⚠️ Failed to record promo code usage for ${validatedPromo.code}:`, error);
+        }
+      }
+
+      // Check listing threshold and create notification if needed
+      try {
+        const categoryListings = await storage.getMarketplaceListingsByCategory(listing.category);
+        const activeCount = categoryListings.filter((l: any) => l.isActive).length;
+        
+        if (activeCount === 25 || activeCount === 30) {
+          await storage.createAdminNotification({
+            type: "listing_threshold",
+            category: listing.category,
+            title: `${listing.category.replace('-', ' ').toUpperCase()} Listings Threshold Reached`,
+            message: `The ${listing.category.replace('-', ' ')} category now has ${activeCount} active listings.`,
+            isRead: false,
+            isActionable: true,
+            listingCount: activeCount,
+            threshold: activeCount,
+          });
+        }
+      } catch (notifError) {
+        console.error("Failed to create threshold notification:", notifError);
+      }
+
+      res.status(201).json(listing);
+    } catch (error: any) {
+      console.error("Marketplace listing completion error:", error);
+      res.status(400).json({ error: error.message || "Failed to complete listing creation" });
+    }
+  });
+
   // Complete FREE marketplace listing (100% promo discount - no PayPal payment required)
   // SECURITY: Requires cryptographically signed token to prevent unauthorized completion
   app.post("/api/marketplace/complete-free-listing", isAuthenticated, async (req: any, res) => {
@@ -1767,8 +2401,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mobile PayPal Payment Page - Rental Payments
-  app.get("/mobile-paypal-rental-payment", (req, res) => {
-    const { amount, rentalId } = req.query;
+  app.get("/mobile-paypal-rental-payment", async (req, res) => {
+    const { rentalId } = req.query;
+    if (!rentalId) {
+      return res.status(400).send("Rental ID is required");
+    }
+    const rental = await storage.getRental(String(rentalId));
+    if (!rental) {
+      return res.status(404).send("Rental not found");
+    }
+    const amountValue = Number.parseFloat(rental.totalCostRenter || "0");
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      return res.status(400).send("Invalid rental amount");
+    }
+    const amountDisplay = amountValue.toFixed(2);
     res.send(`
 <!DOCTYPE html>
 <html>
@@ -1803,7 +2449,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     </div>
     
     <div class="card">
-      <div class="amount">$${amount}</div>
+      <div class="amount">$${amountDisplay}</div>
       
       <div id="error-message"></div>
       
@@ -1843,7 +2489,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
-            amount: '${amount}',
             rentalId: '${rentalId}'
           })
         });
@@ -1872,7 +2517,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error) {
           errorDiv.innerHTML = '<div class="error">Payment failed. Please try again.</div>';
           button.disabled = false;
-          button.textContent = 'Pay $${amount}';
+          button.textContent = 'Pay $${amountDisplay}';
         }
       },
       onError: (error) => {
@@ -1906,7 +2551,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Mobile PayPal Payment Page - Marketplace Listings
   app.get("/mobile-paypal-marketplace-payment", (req, res) => {
-    const { amount, category, tier } = req.query;
+    const { category, tier } = req.query;
+    if (!category) {
+      return res.status(400).send("Category is required");
+    }
+    const amountValue = calculateTotalWithTax(getBasePrice(String(category), String(tier || 'basic')));
+    const amountDisplay = amountValue.toFixed(2);
     res.send(`
 <!DOCTYPE html>
 <html>
@@ -1941,7 +2591,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     </div>
     
     <div class="card">
-      <div class="amount">$${amount}</div>
+      <div class="amount">$${amountDisplay}</div>
       
       <div id="error-message"></div>
       
@@ -2010,7 +2660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (error) {
           errorDiv.innerHTML = '<div class="error">Payment failed. Please try again.</div>';
           button.disabled = false;
-          button.textContent = 'Pay $${amount}';
+          button.textContent = 'Pay $${amountDisplay}';
         }
       },
       onError: (error) => {
@@ -2026,7 +2676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cardFields.CVVField().render('#card-cvv-field');
       
       button.disabled = false;
-      button.textContent = 'Pay $${amount}';
+      button.textContent = 'Pay $${amountDisplay}';
       
       button.addEventListener('click', async () => {
         button.disabled = true;
@@ -2454,7 +3104,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cardFields.CVVField().render('#card-cvv-field');
         
         button.disabled = false;
-        button.textContent = 'Pay $${amount}';
+          button.textContent = 'Pay $${amountDisplay}';
         
         button.addEventListener('click', async () => {
           startProcessing();
@@ -2982,7 +3632,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/aircraft", async (req, res) => {
     try {
       const listings = await storage.getAllAircraftListings();
-      res.json(listings);
+      res.json([SAMPLE_AIRCRAFT_LISTING, ...listings]);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch aircraft listings" });
     }
@@ -2990,6 +3640,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/aircraft/:id", async (req, res) => {
     try {
+      if (isSampleAircraftId(req.params.id)) {
+        return res.json(SAMPLE_AIRCRAFT_LISTING);
+      }
       const listing = await storage.getAircraftListing(req.params.id);
       if (!listing) {
         return res.status(404).json({ error: "Aircraft not found" });
@@ -3003,6 +3656,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Increment aircraft listing view count
   app.post("/api/aircraft/:id/view", async (req, res) => {
     try {
+      if (isSampleAircraftId(req.params.id)) {
+        return res.json({ success: true, sample: true });
+      }
       const listing = await storage.getAircraftListing(req.params.id);
       if (!listing) {
         return res.status(404).json({ error: "Aircraft not found" });
@@ -3203,7 +3859,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // If no filters provided, use the old method
       if (!city && !category && !minPrice && !maxPrice && !engineType && !keyword && !radius && !cfiRating) {
         const listings = await storage.getAllMarketplaceListings();
-        return res.json(listings);
+        const samples = getSampleMarketplaceListings();
+        return res.json([...samples, ...listings]);
       }
 
       // Use filtered query with validation
@@ -3232,7 +3889,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const listings = await storage.getFilteredMarketplaceListings(filters);
-      res.json(listings);
+      const samples = getSampleMarketplaceListings(filters);
+      res.json([...samples, ...listings]);
     } catch (error) {
       console.error("Failed to fetch marketplace listings:", error);
       res.status(500).json({ error: "Failed to fetch marketplace listings" });
@@ -3242,7 +3900,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/marketplace/category/:category", async (req, res) => {
     try {
       const listings = await storage.getMarketplaceListingsByCategory(req.params.category);
-      res.json(listings);
+      const samples = getSampleMarketplaceListings({ category: req.params.category });
+      res.json([...samples, ...listings]);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch category listings" });
     }
@@ -3270,6 +3929,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/marketplace/:id", async (req: any, res) => {
     try {
+      const sampleListing = getSampleMarketplaceListing(req.params.id);
+      if (sampleListing) {
+        return res.json({ ...sampleListing, userHasFlagged: false });
+      }
       const listing = await storage.getMarketplaceListing(req.params.id);
       if (!listing) {
         return res.status(404).json({ error: "Listing not found" });
@@ -3291,6 +3954,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Increment marketplace listing view count
   app.post("/api/marketplace/:id/view", async (req: any, res) => {
     try {
+      const sampleListing = getSampleMarketplaceListing(req.params.id);
+      if (sampleListing) {
+        return res.json({ success: true, sample: true });
+      }
       const listing = await storage.getMarketplaceListing(req.params.id);
       if (!listing) {
         return res.status(404).json({ error: "Listing not found" });
@@ -3415,96 +4082,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to reactivate listing" });
     }
   });
-
   app.post("/api/marketplace", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { promoCode, paymentIntentId, ...listingData } = req.body;
+      const { paymentIntentId, isPaid, expiresAt, monthlyFee, ...listingData } = req.body;
 
-      let monthlyFee = 25; // Default fee
-      let isPaid = false;
-      let expiresAt: Date | null = null;
-      
-      // Check if promo code is LAUNCH2025 for free 7-day listing
-      if (promoCode && promoCode.toUpperCase() === "LAUNCH2025") {
-        monthlyFee = 0;
-        isPaid = true; // Mark as paid since it's free
-        expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-      }
-      // All other cases require a paid transaction
-      else if (paymentIntentId) {
-        // Verify payment was successful with PayPal (via /api/paypal/verify-order)
-        // For now, we assume payment is verified before reaching this point
-        /*
-        const transaction = await gateway.transaction.find(paymentIntentId);
-        
-        if (transaction.status !== 'settled' && transaction.status !== 'submitted_for_settlement') {
-          return res.status(402).json({ 
-            error: "Payment required",
-            message: "Payment has not been completed. Please complete your payment first."
-          });
-        }
-        
-        // Verify the payment matches the user
-        if (transaction.customFields?.user_id !== userId) {
-          return res.status(403).json({ 
-            error: "Unauthorized",
-            message: "Payment verification failed"
-          });
-        }
-        
-        // Calculate monthlyFee from payment amount
-        monthlyFee = parseFloat(transaction.amount);
-        */
-        isPaid = true;
-        expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
-      }
-      // No payment method provided and not super admin or promo
-      else {
-        return res.status(402).json({ 
-          error: "Payment required",
-          message: "Please complete payment to create a listing."
+      if (paymentIntentId || isPaid || expiresAt) {
+        return res.status(400).json({
+          error: "Payment completion required",
+          message: "Use /api/marketplace/complete-create after PayPal payment"
         });
       }
-      
+
+      const baseAmount = getBasePrice(listingData.category, listingData.tier);
+
       // Validate the base listing data first
-      const validatedData = insertMarketplaceListingSchema.parse({ 
-        ...listingData, 
+      const validatedData = insertMarketplaceListingSchema.parse({
+        ...listingData,
         userId,
-        monthlyFee: monthlyFee.toString(),
+        monthlyFee: baseAmount.toFixed(2),
       });
-      
-      // Create listing with promo code benefits directly in storage
+
+      // Create as draft (unpaid + inactive)
       const listing = await storage.createMarketplaceListing({
         ...validatedData,
-        isPaid,
-        expiresAt,
+        isPaid: false,
+        isActive: false,
+        expiresAt: null,
       });
-      
-      // Check listing threshold and create notification if needed
-      try {
-        const categoryListings = await storage.getMarketplaceListingsByCategory(listing.category);
-        const activeCount = categoryListings.filter((l: any) => l.isActive).length;
-        
-        // Create notification when reaching 25 or 30 active listings
-        if (activeCount === 25 || activeCount === 30) {
-          await storage.createAdminNotification({
-            type: "listing_threshold",
-            category: listing.category,
-            title: `${listing.category.replace('-', ' ').toUpperCase()} Listings Threshold Reached`,
-            message: `The ${listing.category.replace('-', ' ')} category now has ${activeCount} active listings. Consider monitoring this category for capacity.`,
-            isRead: false,
-            isActionable: true,
-            listingCount: activeCount,
-            threshold: activeCount,
-          });
-        }
-      } catch (notifError) {
-        // Don't fail the listing creation if notification fails
-        console.error("Failed to create threshold notification:", notifError);
-      }
-      
-      res.status(201).json(listing);
+
+      res.status(201).json({ status: 'draft', listing });
     } catch (error: any) {
       console.error("Marketplace listing creation error:", error);
       console.error("Error details:", JSON.stringify(error, null, 2));
@@ -3547,90 +4154,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: error.message || "Failed to update listing" });
     }
   });
-
-  // Upgrade marketplace listing tier
-  app.post("/api/marketplace/:id/upgrade", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const listingId = req.params.id;
-      const { newTier, transactionId } = req.body;
-      
-      // Validate new tier
-      if (!['basic', 'standard', 'premium'].includes(newTier)) {
-        return res.status(400).json({ error: "Invalid tier" });
-      }
-      
-      // Fetch the existing listing
-      const existingListing = await storage.getMarketplaceListing(listingId);
-      if (!existingListing) {
-        return res.status(404).json({ error: "Listing not found" });
-      }
-      
-      // Prevent upgrading sample listings
-      if ((existingListing as any).isExample) {
-        return res.status(403).json({ error: "Sample listings cannot be upgraded" });
-      }
-      
-      // Verify ownership
-      if (existingListing.userId !== userId) {
-        return res.status(403).json({ error: "Unauthorized - you can only upgrade your own listings" });
-      }
-      
-      // Check if already at this tier
-      if (existingListing.tier === newTier) {
-        return res.status(400).json({ error: "Listing is already at this tier" });
-      }
-      
-      // Define tier pricing based on category
-      const getTierPrice = (category: string, tier: string): number => {
-        const CATEGORY_PRICING: Record<string, Record<string, number> | number> = {
-          'aircraft-sale': { basic: 25, standard: 40, premium: 100 },
-          'charter': 250,
-          'cfi': 30,
-          'flight-school': 250,
-          'mechanic': 40,
-          'jobs': 40,
-        };
-        
-        const categoryPricing = CATEGORY_PRICING[category];
-        if (typeof categoryPricing === 'object') {
-          return categoryPricing[tier] || 25;
-        }
-        return typeof categoryPricing === 'number' ? categoryPricing : 25;
-      };
-      
-      const tierPrices: Record<string, number> = {
-        basic: getTierPrice(existingListing.category, 'basic'),
-        standard: getTierPrice(existingListing.category, 'standard'),
-        premium: getTierPrice(existingListing.category, 'premium'),
-      };
-      
-      // Calculate price difference
-      const currentPrice = tierPrices[existingListing.tier || 'basic'] || 25;
-      const newPrice = tierPrices[newTier];
-      const priceDifference = newPrice - currentPrice;
-      
-      // Verify upgrade is to a higher tier
-      if (priceDifference <= 0) {
-        return res.status(400).json({ error: "Can only upgrade to a higher tier" });
-      }
-      
-      // For now, we'll update the tier immediately (payment verification would go here)
-      // In production, you'd verify the Braintree transaction before updating
-      const updatedListing = await storage.updateMarketplaceListing(listingId, {
-        tier: newTier,
-        monthlyFee: newPrice.toString(),
-      });
-      
-      res.json({
-        message: "Listing upgraded successfully",
-        listing: updatedListing,
-        upgradeCost: priceDifference,
-      });
-    } catch (error: any) {
-      console.error("Marketplace listing upgrade error:", error);
-      res.status(500).json({ error: error.message || "Failed to upgrade listing" });
-    }
+  // Upgrade marketplace listing tier (deprecated - use complete-upgrade)
+  app.post("/api/marketplace/:id/upgrade", isAuthenticated, async (_req: any, res) => {
+    return res.status(400).json({
+      error: "Upgrade requires PayPal payment",
+      message: "Use /api/marketplace/:id/complete-upgrade after payment capture"
+    });
   });
 
   // Complete marketplace listing upgrade after PayPal payment
@@ -3669,35 +4198,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!isValidUpgrade(listing.tier || 'basic', newTier)) {
         return res.status(400).json({ error: "Invalid upgrade - must upgrade to a higher tier" });
       }
-      
       // Verify PayPal order was captured
+      let orderData: any;
       try {
-        const { body } = await ordersController.getOrder({ id: orderId });
-        const orderData = JSON.parse(String(body));
-        
-        if (orderData.status !== 'COMPLETED') {
-          return res.status(400).json({ error: "Payment not completed" });
-        }
-        
-        // Verify the order is for this listing upgrade
-        const customId = orderData.purchase_units?.[0]?.custom_id || '';
-        if (!customId.includes(`upgrade:${listingId}`)) {
-          return res.status(400).json({ error: "Payment order mismatch" });
-        }
+        orderData = await getPayPalOrder(orderId);
       } catch (paypalError: any) {
         console.error("PayPal order verification error:", paypalError);
         return res.status(400).json({ error: "Failed to verify payment" });
       }
-      
-      // Check for replay attacks - verify this order hasn't been used before
-      // This is a simple check - in production you'd store used orderIds in the database
-      const transactionHistory = (listing as any).upgradeTransactions || [];
-      if (transactionHistory.includes(orderId)) {
+
+      if (orderData.status !== 'COMPLETED') {
+        return res.status(400).json({ error: "Payment not completed" });
+      }
+
+      const customId = orderData.purchase_units?.[0]?.custom_id || orderData.purchase_units?.[0]?.customId || '';
+      const customData = parsePayPalCustomId(customId);
+      if (customData.user !== userId || customData.purpose !== 'marketplace_upgrade_fee') {
+        return res.status(400).json({ error: "Payment order mismatch" });
+      }
+      if (customData.upgrade && customData.upgrade !== listingId) {
+        return res.status(400).json({ error: "Payment order mismatch" });
+      }
+      if (customData.tier && customData.tier !== newTier) {
+        return res.status(400).json({ error: "Payment tier mismatch" });
+      }
+
+      const orderAmount = extractPayPalOrderAmount(orderData);
+      if (!orderAmount) {
+        return res.status(400).json({ error: "Payment amount not found" });
+      }
+
+      if (orderAmount.currency !== 'USD') {
+        return res.status(400).json({ error: "Unsupported payment currency" });
+      }
+
+      const upgradeDelta = getUpgradeDelta(listing.category, listing.tier || 'basic', newTier);
+      const expectedAmount = calculateTotalWithTax(upgradeDelta);
+      if (expectedAmount <= 0) {
+        return res.status(400).json({ error: "Upgrade amount must be greater than $0" });
+      }
+
+      const expectedCents = toCents(expectedAmount);
+      const orderCents = toCents(orderAmount.value);
+      if (!expectedCents || !orderCents || expectedCents !== orderCents) {
+        return res.status(400).json({ error: "Payment amount mismatch" });
+      }
+
+      const consumption = await storage.consumePayPalOrder({
+        orderId,
+        userId,
+        purpose: 'marketplace_upgrade_fee',
+        resourceType: 'listing',
+        resourceId: listingId,
+        amount: orderAmount.value,
+        currency: orderAmount.currency,
+      });
+
+      if (!consumption) {
         return res.status(400).json({ error: "This payment has already been processed" });
       }
+
+      const transactionHistory = (listing as any).upgradeTransactions || [];
       
       // Calculate new monthly fee using shared pricing helper
-      const upgradeDelta = getUpgradeDelta(listing.category, listing.tier || 'basic', newTier);
       const newMonthlyFee = (parseFloat(listing.monthlyFee || '25') + upgradeDelta).toString();
       
       // Update the listing with new tier and track the transaction
@@ -3744,6 +4307,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Flag marketplace listing as spam/fraud
   app.post("/api/marketplace/:id/flag", isAuthenticated, async (req: any, res) => {
     try {
+      const sampleListing = getSampleMarketplaceListing(req.params.id);
+      if (sampleListing) {
+        return res.json({ flagCount: 0, sample: true });
+      }
       const userId = req.user.claims.sub;
       const listingId = req.params.id;
       const { reason } = req.body;
@@ -3861,10 +4428,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/rentals/:id/complete-payment", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { transactionId } = req.body;
+      const { orderId, transactionId } = req.body;
+      const paypalOrderId = orderId || transactionId;
 
-      if (!transactionId) {
-        return res.status(400).json({ error: "Transaction ID required" });
+      if (!paypalOrderId) {
+        return res.status(400).json({ error: "Order ID required" });
       }
 
       const rental = await storage.getRental(req.params.id);
@@ -3878,14 +4446,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Not authorized to complete this rental" });
       }
 
+      if (rental.isPaid) {
+        return res.status(400).json({ error: "Rental is already paid" });
+      }
+
       // Verify rental is in approved status
       if (rental.status !== "approved") {
         return res.status(400).json({ error: "Rental must be in approved status" });
       }
 
-      // NOTE: Payment was already captured by PayPal in the frontend before reaching this endpoint
-      // The transactionId is the PayPal order ID that was successfully captured
-      console.log(`[RENTAL PAYMENT] PayPal order ${transactionId} captured for rental ${rental.id}`);
+      // Verify PayPal order
+      let orderData: any;
+      try {
+        orderData = await getPayPalOrder(paypalOrderId);
+      } catch (paypalError: any) {
+        console.error("PayPal order verification error:", paypalError);
+        return res.status(400).json({ error: "Failed to verify payment" });
+      }
+
+      if (orderData.status !== 'COMPLETED') {
+        return res.status(400).json({ error: "Payment not completed" });
+      }
+
+      const customId = orderData.purchase_units?.[0]?.custom_id || orderData.purchase_units?.[0]?.customId || "";
+      const customData = parsePayPalCustomId(customId);
+      if (
+        customData.user !== userId ||
+        customData.purpose !== "rental_payment" ||
+        customData.rental !== rental.id
+      ) {
+        return res.status(400).json({ error: "Payment order mismatch" });
+      }
+
+      const orderAmount = extractPayPalOrderAmount(orderData);
+      if (!orderAmount) {
+        return res.status(400).json({ error: "Payment amount not found" });
+      }
+
+      if (orderAmount.currency !== "USD") {
+        return res.status(400).json({ error: "Unsupported payment currency" });
+      }
+
+      const expectedAmount = parseFloat(rental.totalCostRenter || "0");
+      const expectedCents = toCents(expectedAmount);
+      const orderCents = toCents(orderAmount.value);
+
+      if (!expectedCents || !orderCents || expectedCents !== orderCents) {
+        return res.status(400).json({ error: "Payment amount mismatch" });
+      }
+
+      const consumption = await storage.consumePayPalOrder({
+        orderId: paypalOrderId,
+        userId,
+        purpose: "rental_payment",
+        resourceType: "rental",
+        resourceId: rental.id,
+        amount: orderAmount.value,
+        currency: orderAmount.currency,
+      });
+
+      if (!consumption) {
+        return res.status(400).json({ error: "This payment has already been processed" });
+      }
 
       // Update rental to mark as paid and active
       const updatedRental = await storage.updateRental(req.params.id, {
@@ -5944,6 +6566,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   app.post("/api/job-applications", upload.single('resume'), async (req: any, res) => {
     try {
       const { listingId, firstName, lastName, email, phone, currentJobTitle, yearsOfExperience, coverLetter } = req.body;
+
+      if (getSampleMarketplaceListing(listingId)) {
+        return res.status(400).json({ error: "Sample listing - applications are disabled." });
+      }
       
       if (!req.file) {
         return res.status(400).json({ error: "Resume file is required" });
@@ -6645,13 +7271,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      if (user.logbookProStatus !== "active") {
-        return res.status(403).json({ error: "Logbook Pro subscription required" });
+      const entitlements = getEntitlementsForUser(user);
+      if (!entitlements.canUseLogbook) {
+        return res.status(403).json({ error: "RSF Pro membership required" });
       }
       req.logbookProUser = user;
       next();
     } catch (error) {
-      console.error("Logbook Pro guard error:", error);
+      console.error("RSF Pro guard error:", error);
       res.status(500).json({ error: "Failed to validate subscription" });
     }
   };
@@ -7088,7 +7715,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.put("/api/notifications/preferences", isAuthenticated, async (req: any, res) => {
+  app.put("/api/notifications/preferences", isAuthenticated, requireLogbookPro, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const result = insertNotificationPreferencesSchema.partial().safeParse(req.body);
@@ -7364,7 +7991,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             {
               type: "medical_expiration",
               title: "Medical certificate expiring",
-              message: "Your medical certificate expires soon. Update your Logbook Pro settings.",
+              message: "Your medical certificate expires soon. Update your RSF Pro settings.",
               dueAt: settings?.medicalExpiresAt ? new Date(settings.medicalExpiresAt) : null,
             },
             {
@@ -7412,7 +8039,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
                 await client.emails.send({
                   from: fromEmail,
                   to: user.email!,
-                  subject: `Logbook Pro Alert: ${candidate.title}`,
+                  subject: `RSF Pro Alert: ${candidate.title}`,
                   html,
                   text,
                 });
@@ -7433,7 +8060,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
                     body: JSON.stringify(
                       tokens.map((token) => ({
                         to: token.token,
-                        title: "Logbook Pro Alert",
+                        title: "RSF Pro Alert",
                         body: candidate.title,
                         data: { type: candidate.type, dueAt: dueDate.toISOString() },
                       }))

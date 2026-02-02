@@ -4,11 +4,11 @@ import { WebView } from 'react-native-webview';
 import { apiEndpoints } from '../services/api';
 
 export default function MarketplacePaymentScreen({ route, navigation }: any) {
-  const { amount, listingData } = route.params;
+  const { listingData } = route.params;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const paymentUrl = `${apiEndpoints.baseURL}/mobile-paypal-marketplace-payment?amount=${amount}&category=${listingData.category}&tier=${listingData.tier || 'basic'}`;
+  const paymentUrl = `${apiEndpoints.baseURL}/mobile-paypal-marketplace-payment?category=${listingData.category}&tier=${listingData.tier || 'basic'}`;
 
   const handleWebViewMessage = async (event: any) => {
     try {
@@ -31,12 +31,10 @@ export default function MarketplacePaymentScreen({ route, navigation }: any) {
 
   const submitListingWithPayment = async (orderID: string) => {
     try {
-      const fullListingData = {
-        ...listingData,
-        transactionId: orderID,
-      };
-
-      await apiEndpoints.marketplace.create(fullListingData);
+      await apiEndpoints.marketplace.completeCreate({
+        orderId: orderID,
+        listingData: listingData,
+      });
       
       Alert.alert(
         'Success!',

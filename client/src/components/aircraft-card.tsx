@@ -18,6 +18,7 @@ interface AircraftCardProps {
   responseTime: number;
   acceptanceRate: number;
   viewCount?: number;
+  isExample?: boolean;
   onCardClick?: () => void;
 }
 
@@ -36,6 +37,7 @@ export function AircraftCard({
   responseTime,
   acceptanceRate,
   viewCount = 0,
+  isExample,
   onCardClick,
 }: AircraftCardProps) {
   return (
@@ -50,6 +52,13 @@ export function AircraftCard({
           alt={`${year} ${make} ${model}`}
           className="w-full h-full object-cover"
         />
+        {isExample && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="bg-black/60 text-white text-xs font-semibold uppercase tracking-[0.35em] px-4 py-1 -rotate-12">
+              Sample
+            </div>
+          </div>
+        )}
         <div className="absolute top-3 left-3 flex gap-2">
           {certifications.map((cert) => (
             <Badge key={cert} className="bg-chart-2 text-white text-xs font-semibold" data-testid={`badge-cert-${cert}`}>

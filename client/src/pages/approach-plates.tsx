@@ -98,11 +98,13 @@ export default function ApproachPlates() {
   useEffect(() => {
     if (!plates.length) return;
     const ordered = ["approaches", "departures", "arrivals", "airport", "other"];
+    const hasActive = groupedPlates[activeCategory as keyof typeof groupedPlates]?.length > 0;
+    if (hasActive) return;
     const next = ordered.find((key) => groupedPlates[key as keyof typeof groupedPlates].length > 0);
     if (next && next !== activeCategory) {
       setActiveCategory(next);
     }
-  }, [normalizedQuery, plates.length, groupedPlates, activeCategory]);
+  }, [plates.length, groupedPlates, activeCategory]);
 
   const renderPlateList = (items: PlateRecord[]) => {
     if (items.length === 0) {

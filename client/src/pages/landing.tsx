@@ -326,7 +326,7 @@ export default function Landing() {
                     Demo Included
                   </Badge>
                   <p className="text-muted-foreground">
-                    Practice ATC phraseology with guided scenarios. Try the demo and unlock full scenarios with Logbook Pro.
+                    Practice ATC phraseology with guided scenarios. Try the demo and unlock full scenarios with RSF Pro.
                   </p>
                   <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
                     <li className="flex items-start gap-2">
@@ -352,7 +352,7 @@ export default function Landing() {
                     </Link>
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    Demo available - full access with Logbook Pro
+                    Demo available - full access with RSF Pro
                   </p>
                 </div>
               </CardContent>

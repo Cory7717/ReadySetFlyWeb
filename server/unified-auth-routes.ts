@@ -6,6 +6,8 @@ import { IStorage } from './storage';
 import { generateAccessToken, generateRefreshToken, verifyAccessToken } from './jwt';
 import { getUncachableResendClient } from './resendClient';
 import { sendWelcomeEmail } from './email-templates';
+import { maybeSyncLogbookProSubscription } from './paypal-subscription-sync';
+import { getEntitlementsForUser } from './membership';
 
 const router = Router();
 
@@ -557,9 +559,12 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
+      const syncedUser = await maybeSyncLogbookProSubscription(storage, user);
+
       // Return user data (excluding password)
-      const { hashedPassword: _, passwordCreatedAt: __, ...userResponse } = user;
-      res.status(200).json(userResponse);
+      const entitlements = getEntitlementsForUser(syncedUser);
+      const { hashedPassword: _, passwordCreatedAt: __, ...userResponse } = syncedUser;
+      res.status(200).json({ ...userResponse, entitlements });
     } catch (error) {
       console.error('Get user error:', error);
       res.status(500).json({ error: 'Failed to get user' });

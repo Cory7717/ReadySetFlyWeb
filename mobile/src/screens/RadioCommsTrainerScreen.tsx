@@ -152,7 +152,8 @@ function normalize(text: string) {
 
 export default function RadioCommsTrainerScreen() {
   const { user } = useIsAuthenticated();
-  const isPro = user?.logbookProStatus === 'active';
+  const entitlements = (user as any)?.entitlements;
+  const isPro = entitlements?.canUseScenarioScoring ?? (user?.logbookProStatus === 'active');
   const [selectedScenarioId, setSelectedScenarioId] = useState(SCENARIOS[0].id);
   const [stepIndex, setStepIndex] = useState(0);
   const [input, setInput] = useState('');
@@ -279,7 +280,7 @@ export default function RadioCommsTrainerScreen() {
         <View style={styles.alert}>
           <Ionicons name="lock-closed-outline" size={18} color="#1e40af" />
           <Text style={styles.alertText}>
-            Demo mode on mobile. Logbook Pro unlocks full scenarios, audio practice, and scoring history.
+            Demo mode on mobile. RSF Pro unlocks full scenarios, audio practice, and scoring history.
           </Text>
         </View>
       )}

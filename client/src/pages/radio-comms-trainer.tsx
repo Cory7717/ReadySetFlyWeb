@@ -184,7 +184,8 @@ function normalize(text: string) {
 
 export default function RadioCommsTrainer() {
   const { user } = useAuth();
-  const isPro = user?.logbookProStatus === "active";
+  const entitlements = (user as any)?.entitlements;
+  const isPro = entitlements?.canUseScenarioScoring ?? (user?.logbookProStatus === "active");
   const queryClient = useQueryClient();
   const [selectedScenarioId, setSelectedScenarioId] = useState(SCENARIOS[0].id);
   const [stepIndex, setStepIndex] = useState(0);
@@ -363,7 +364,7 @@ export default function RadioCommsTrainer() {
       {!isPro && (
         <Alert>
           <AlertDescription>
-            Demo mode includes one scenario with limited steps. Logbook Pro unlocks full scenarios, scoring, audio practice, saved history, and advanced flight planning tools.
+            Demo mode includes one scenario with limited steps. RSF Pro unlocks full scenarios, scoring, audio practice, saved history, and advanced flight planning tools.
           </AlertDescription>
         </Alert>
       )}
@@ -500,7 +501,7 @@ export default function RadioCommsTrainer() {
         <Card>
           <CardHeader>
             <CardTitle>Practice history</CardTitle>
-            <CardDescription>Saved Logbook Pro sessions and scores.</CardDescription>
+            <CardDescription>Saved RSF Pro sessions and scores.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {sessions.length === 0 ? (
@@ -532,7 +533,7 @@ export default function RadioCommsTrainer() {
         <CardHeader>
           <CardTitle>Sample radio calls</CardTitle>
           <CardDescription>
-            Hear and read example calls. Available in full with Logbook Pro.
+            Hear and read example calls. Available in full with RSF Pro.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -560,7 +561,7 @@ export default function RadioCommsTrainer() {
           {!isPro && (
             <Alert>
               <AlertDescription>
-                Upgrade to Logbook Pro to unlock full scenario examples, scoring, and practice history.
+                Upgrade to RSF Pro to unlock full scenario examples, scoring, and practice history. Save, alerts, analytics require RSF Pro.
               </AlertDescription>
             </Alert>
           )}
@@ -571,12 +572,12 @@ export default function RadioCommsTrainer() {
         <CardHeader>
           <CardTitle>Want more practice?</CardTitle>
           <CardDescription>
-            Logbook Pro unlocks all scenarios, advanced scoring, saved practice history, and full access to pilot tools.
+            RSF Pro unlocks all scenarios, advanced scoring, saved practice history, and full access to pilot tools.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild>
-            <Link href="/logbook/pro">Upgrade to Logbook Pro</Link>
+            <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
           </Button>
         </CardContent>
       </Card>

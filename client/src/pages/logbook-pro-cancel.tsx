@@ -8,7 +8,7 @@ export default function LogbookProCancel() {
       <Card>
         <CardHeader>
           <CardTitle>Subscription Cancelled</CardTitle>
-          <CardDescription>You can continue using the free logbook anytime.</CardDescription>
+          <CardDescription>You can continue using the free tools anytime.</CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild>

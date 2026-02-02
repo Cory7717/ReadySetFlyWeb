@@ -17,7 +17,8 @@ type LogbookEntry = {
 
 export default function LogbookScreen({ navigation }: any) {
   const { isAuthenticated, user } = useIsAuthenticated();
-  const isPro = user?.logbookProStatus === 'active';
+  const entitlements = (user as any)?.entitlements;
+  const isPro = entitlements?.canUseLogbook ?? (user?.logbookProStatus === 'active');
   const [entries, setEntries] = useState<LogbookEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -92,14 +93,14 @@ export default function LogbookScreen({ navigation }: any) {
       </View>
 
       <View style={styles.proCard}>
-        <Text style={styles.proTitle}>Logbook Pro</Text>
+        <Text style={styles.proTitle}>RSF Pro</Text>
         <Text style={styles.proText}>
           {isPro
-            ? 'Your Logbook Pro tools are active.'
+            ? 'Your RSF Pro tools are active.'
             : 'Unlock currency alerts, endorsements, radio comms training, and advanced tools.'}
         </Text>
         <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('LogbookPro')}>
-          <Text style={styles.secondaryButtonText}>{isPro ? 'Open Pro Dashboard' : 'Upgrade to Pro'}</Text>
+          <Text style={styles.secondaryButtonText}>{isPro ? 'Open Pro Dashboard' : 'Upgrade to RSF Pro'}</Text>
         </TouchableOpacity>
       </View>
 

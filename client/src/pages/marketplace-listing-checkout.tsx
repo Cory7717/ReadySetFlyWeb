@@ -166,10 +166,6 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
                 description: "Your listing is being created!",
               });
               
-              // Update listing data with transaction ID in localStorage
-              const updatedData = { ...listingData, transactionId: data.orderID };
-              localStorage.setItem('pendingListingData', JSON.stringify(updatedData));
-              
               // Pass transaction ID to parent component
               onSuccess(data.orderID);
             } catch (error: any) {
@@ -560,17 +556,16 @@ export default function MarketplaceListingCheckout() {
       const taxAmount = baseAmount * TAX_RATE;
       const totalAmount = baseAmount + taxAmount;
       
-      // Create the listing with payment verification and promo data
+      // Complete listing creation with PayPal verification
       const listingPayload = {
         ...listingData,
-        paymentIntentId: transactionId,
-        promoCodeUsed: appliedPromo?.code || null,
-        discountAmount: discountAmount.toString(),
-        originalAmount: totalAmount.toString(),
-        finalAmount: (finalAmount || totalAmount).toString(),
+        promoCode: appliedPromo?.code || listingData?.promoCode,
       };
       
-      await apiRequest("POST", "/api/marketplace", listingPayload);
+      await apiRequest("POST", "/api/marketplace/complete-create", {
+        orderId: transactionId,
+        listingData: listingPayload,
+      });
       
       // Clear pending data
       localStorage.removeItem('pendingListingData');

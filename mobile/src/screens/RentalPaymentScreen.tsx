@@ -25,7 +25,6 @@ export default function RentalPaymentScreen({ route, navigation }: Props) {
 
   // Construct the PayPal payment URL
   const paymentUrl = `${apiEndpoints.baseURL}/mobile-paypal-rental-payment?` +
-    `amount=${paymentData.amount}&` +
     `rentalId=${paymentData.rentalId}`;
 
   const handleMessage = async (event: WebViewMessageEvent) => {
@@ -38,7 +37,7 @@ export default function RentalPaymentScreen({ route, navigation }: Props) {
         // Complete the rental payment on the backend
         try {
           await apiEndpoints.rentals.completePayment(paymentData.rentalId, {
-            transactionId: data.orderID
+            orderId: data.orderID
           });
 
           Alert.alert(

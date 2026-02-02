@@ -918,7 +918,7 @@ export function getLogbookProAlertEmailHtml(data: {
   <div class="container">
     <div class="card">
       <div class="header">
-        <h2 style="margin:0;">Logbook Pro Alert</h2>
+        <h2 style="margin:0;">RSF Pro Alert</h2>
       </div>
       <p style="margin-top: 20px;">Hi ${data.firstName},</p>
       <p><strong>${data.title}</strong></p>
@@ -926,10 +926,10 @@ export function getLogbookProAlertEmailHtml(data: {
       <p class="muted">Due date: ${dueDate}</p>
       <div style="margin-top: 20px;">
         <a class="cta" href="${process.env.FRONTEND_BASE_URL || "https://readysetfly.us"}/logbook">
-          Review in Logbook Pro
+          Review in RSF Pro
         </a>
       </div>
-      <p class="muted" style="margin-top: 20px;">You’re receiving this email because Logbook Pro alerts are enabled on your account.</p>
+      <p class="muted" style="margin-top: 20px;">You’re receiving this email because RSF Pro alerts are enabled on your account.</p>
     </div>
   </div>
 </body>
@@ -945,7 +945,7 @@ export function getLogbookProAlertEmailText(data: {
 }): string {
   const dueDate = data.dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   return `
-Logbook Pro Alert
+RSF Pro Alert
 
 Hi ${data.firstName},
 
@@ -954,9 +954,9 @@ ${data.message}
 
 Due date: ${dueDate}
 
-Review in Logbook Pro: ${(process.env.FRONTEND_BASE_URL || "https://readysetfly.us")}/logbook
+Review in RSF Pro: ${(process.env.FRONTEND_BASE_URL || "https://readysetfly.us")}/logbook
 
-You’re receiving this email because Logbook Pro alerts are enabled on your account.
+You’re receiving this email because RSF Pro alerts are enabled on your account.
   `.trim();
 }
 

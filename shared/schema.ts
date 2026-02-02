@@ -129,6 +129,14 @@ export const users = pgTable("users", {
   logbookProEndsAt: timestamp("logbook_pro_ends_at"),
   logbookProCanceledAt: timestamp("logbook_pro_canceled_at"),
   logbookProCancelAtPeriodEnd: boolean("logbook_pro_cancel_at_period_end").default(false),
+
+  // RSF Membership (new - keep legacy Logbook Pro fields for compatibility)
+  membershipTier: text("membership_tier").default("free"), // free, pro, pro_plus
+  membershipStatus: text("membership_status").default("inactive"), // active, inactive, cancelled, past_due
+  membershipProvider: text("membership_provider"), // paypal or null
+  membershipEndsAt: timestamp("membership_ends_at"),
+  paypalSubscriptionId: text("paypal_subscription_id"),
+  paypalPlanId: text("paypal_plan_id"),
   
   // Mobile app authentication (optional - for users who sign up via mobile)
   hashedPassword: text("hashed_password"), // bcrypt hash, null for Replit Auth only users
@@ -529,6 +537,23 @@ export const transactions = pgTable("transactions", {
   
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// PayPal Order Consumption (replay protection)
+export const paypalOrderConsumptions = pgTable("paypal_order_consumptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: text("order_id").notNull(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  purpose: text("purpose").notNull(), // rental_payment, marketplace_listing_fee, marketplace_upgrade_fee, etc.
+  resourceType: text("resource_type"), // rental, listing, etc.
+  resourceId: text("resource_id"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").default("USD"),
+  status: text("status").default("consumed"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_paypal_order_consumptions_order").on(table.orderId),
+  index("idx_paypal_order_consumptions_user").on(table.userId),
+]);
 
 // Withdrawal Requests (PayPal Payouts for aircraft owners)
 export const withdrawalRequests = pgTable("withdrawal_requests", {
@@ -1552,6 +1577,12 @@ export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalReques
   paypalEmail: z.string().email("Valid PayPal email is required"),
 });
 
+export const insertPaypalOrderConsumptionSchema = createInsertSchema(paypalOrderConsumptions).omit({
+  id: true,
+  createdAt: true,
+  status: true,
+});
+
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -1585,6 +1616,9 @@ export type Favorite = typeof favorites.$inferSelect;
 export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
 
 export type Transaction = typeof transactions.$inferSelect;
+
+export type PaypalOrderConsumption = typeof paypalOrderConsumptions.$inferSelect;
+export type InsertPaypalOrderConsumption = z.infer<typeof insertPaypalOrderConsumptionSchema>;
 
 export type VerificationSubmission = typeof verificationSubmissions.$inferSelect;
 export type InsertVerificationSubmission = Omit<VerificationSubmission, 'id' | 'createdAt' | 'updatedAt'>;

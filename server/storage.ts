@@ -15,6 +15,8 @@ import {
   type Favorite,
   type InsertFavorite,
   type Transaction,
+  type PaypalOrderConsumption,
+  type InsertPaypalOrderConsumption,
   type VerificationSubmission,
   type InsertVerificationSubmission,
   type CrmLead,
@@ -84,6 +86,7 @@ import {
   reviews,
   favorites,
   transactions,
+  paypalOrderConsumptions,
   withdrawalRequests,
   verificationSubmissions,
   crmLeads,
@@ -122,6 +125,8 @@ export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByLogbookSubscriptionId(subscriptionId: string): Promise<User | undefined>;
+  getUserByPayPalSubscriptionId(subscriptionId: string): Promise<User | undefined>;
   getUserByVerificationToken(token: string): Promise<User | undefined>;
   getAdminInviteByEmail(email: string): Promise<AdminInvite | undefined>;
   getAdminInviteByToken(token: string): Promise<AdminInvite | undefined>;
@@ -246,6 +251,10 @@ export interface IStorage {
   getTransactionsByUser(userId: string): Promise<Transaction[]>;
   createTransaction(transaction: Omit<Transaction, 'id' | 'createdAt'>): Promise<Transaction>;
   updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction | undefined>;
+
+  // PayPal Order Consumption (replay protection)
+  isPayPalOrderConsumed(orderId: string): Promise<boolean>;
+  consumePayPalOrder(consumption: InsertPaypalOrderConsumption): Promise<PaypalOrderConsumption | null>;
 
   // Verification Submissions
   createVerificationSubmission(submission: InsertVerificationSubmission): Promise<VerificationSubmission>;
@@ -470,6 +479,24 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(users)
       .where(ilike(users.email, email))
+      .limit(1);
+    return result[0];
+  }
+
+  async getUserByLogbookSubscriptionId(subscriptionId: string): Promise<User | undefined> {
+    const result = await db
+      .select()
+      .from(users)
+      .where(eq(users.logbookProSubscriptionId, subscriptionId))
+      .limit(1);
+    return result[0];
+  }
+
+  async getUserByPayPalSubscriptionId(subscriptionId: string): Promise<User | undefined> {
+    const result = await db
+      .select()
+      .from(users)
+      .where(eq(users.paypalSubscriptionId, subscriptionId))
       .limit(1);
     return result[0];
   }
@@ -1709,6 +1736,25 @@ export class DatabaseStorage implements IStorage {
       .where(eq(transactions.id, id))
       .returning();
     return transaction;
+  }
+
+  // PayPal Order Consumption (replay protection)
+  async isPayPalOrderConsumed(orderId: string): Promise<boolean> {
+    const [consumption] = await db
+      .select({ id: paypalOrderConsumptions.id })
+      .from(paypalOrderConsumptions)
+      .where(eq(paypalOrderConsumptions.orderId, orderId))
+      .limit(1);
+    return !!consumption;
+  }
+
+  async consumePayPalOrder(consumption: InsertPaypalOrderConsumption): Promise<PaypalOrderConsumption | null> {
+    const [record] = await db
+      .insert(paypalOrderConsumptions)
+      .values(consumption)
+      .onConflictDoNothing({ target: paypalOrderConsumptions.orderId })
+      .returning();
+    return record ?? null;
   }
 
   // Verification Submissions

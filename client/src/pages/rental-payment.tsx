@@ -81,7 +81,6 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
               body: JSON.stringify({
-                amount: parseFloat(rental.totalCostRenter),
                 rentalId: rental.id
               })
             });
@@ -110,7 +109,7 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 credentials: "include",
-                body: JSON.stringify({ transactionId: data.orderID }),
+                body: JSON.stringify({ orderId: data.orderID }),
               });
 
               if (!completeResponse.ok) {

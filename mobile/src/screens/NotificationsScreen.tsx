@@ -7,7 +7,8 @@ import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 export default function NotificationsScreen() {
   const { isAuthenticated, user } = useIsAuthenticated();
-  const isPro = user?.logbookProStatus === 'active';
+  const entitlements = (user as any)?.entitlements;
+  const isPro = entitlements?.canUseAlerts ?? (user?.logbookProStatus === 'active');
   const [prefs, setPrefs] = useState({
     emailEnabled: true,
     pushEnabled: true,
@@ -78,11 +79,11 @@ export default function NotificationsScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Notifications</Text>
-      <Text style={styles.subtitle}>Logbook Pro alerts and device notification settings.</Text>
+      <Text style={styles.subtitle}>RSF Pro alerts and device notification settings.</Text>
 
       {isAuthenticated && isPro ? (
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Logbook Pro Alerts</Text>
+          <Text style={styles.sectionTitle}>RSF Pro Alerts</Text>
           <Text style={styles.sectionSubtitle}>Alerts go out 30 days before due.</Text>
           <View style={styles.row}>
             <View style={styles.rowText}>
@@ -111,8 +112,8 @@ export default function NotificationsScreen() {
         </View>
       ) : (
         <View style={styles.card}>
-          <Text style={styles.rowTitle}>Logbook Pro Alerts</Text>
-          <Text style={styles.rowSubtitle}>Upgrade to Logbook Pro to receive currency and expiration alerts.</Text>
+          <Text style={styles.rowTitle}>RSF Pro Alerts</Text>
+          <Text style={styles.rowSubtitle}>Upgrade to RSF Pro to receive currency and expiration alerts.</Text>
         </View>
       )}
 

@@ -1,16 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
-
-const SALES_TAX_RATE = 0.0825;
-const PLANS = [
-  { key: 'MONTHLY', label: 'Monthly', price: 5.99 },
-  { key: 'BIANNUAL', label: '6 Months', price: 34.99 },
-  { key: 'YEARLY', label: 'Yearly', price: 49.99 },
-] as const;
+import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, type MembershipTier } from '@shared/membership-plans';
 
 function formatDate(value?: string | null) {
   if (!value) return 'â€”';
@@ -23,7 +17,8 @@ function formatDate(value?: string | null) {
 
 export default function LogbookProScreen({ navigation }: any) {
   const { isAuthenticated, user } = useIsAuthenticated();
-  const [selectedPlan, setSelectedPlan] = useState<(typeof PLANS)[number]['key']>('MONTHLY');
+  const [selectedTier, setSelectedTier] = useState<MembershipTier>('pro');
+  const [selectedInterval, setSelectedInterval] = useState<MembershipInterval>('annual');
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<any>(null);
   const [prefs, setPrefs] = useState({
@@ -41,15 +36,20 @@ export default function LogbookProScreen({ navigation }: any) {
   });
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const entitlements = (user as any)?.entitlements;
+  const hasAccess = entitlements?.tier ? entitlements.tier !== 'free' : user?.logbookProStatus === 'active';
 
   const handleSubscribe = async () => {
     if (!isAuthenticated) {
-      Alert.alert('Sign in required', 'Please sign in to upgrade to Logbook Pro.');
+      Alert.alert('Sign in required', 'Please sign in to upgrade to RSF Pro.');
       return;
     }
     setLoading(true);
     try {
-      const res = await api.post('/api/paypal/logbook/subscribe', { plan: selectedPlan });
+      const res = await api.post('/api/paypal/membership/subscribe', {
+        tier: selectedTier,
+        interval: selectedInterval,
+      });
       const approveUrl = res.data?.approveUrl;
       if (!approveUrl) {
         throw new Error('Missing approval link.');
@@ -63,7 +63,7 @@ export default function LogbookProScreen({ navigation }: any) {
   };
 
   const loadProData = async () => {
-    if (!isAuthenticated || user?.logbookProStatus !== 'active') return;
+    if (!isAuthenticated || !hasAccess) return;
     try {
       const [summaryRes, prefsRes] = await Promise.all([
         api.get('/api/logbook/pro/summary'),
@@ -88,13 +88,13 @@ export default function LogbookProScreen({ navigation }: any) {
         });
       }
     } catch (error: any) {
-      Alert.alert('Logbook Pro', error?.response?.data?.error || 'Unable to load Logbook Pro data.');
+      Alert.alert('RSF Pro', error?.response?.data?.error || 'Unable to load RSF Pro data.');
     }
   };
 
   useEffect(() => {
     loadProData();
-  }, [isAuthenticated, user?.logbookProStatus]);
+  }, [isAuthenticated, hasAccess]);
 
   const handleSavePrefs = async () => {
     setSavingPrefs(true);
@@ -119,23 +119,25 @@ export default function LogbookProScreen({ navigation }: any) {
         ipcDate: proForm.ipcDate || null,
       });
       await loadProData();
-      Alert.alert('Saved', 'Logbook Pro settings updated.');
+      Alert.alert('Saved', 'RSF Pro settings updated.');
     } catch (error: any) {
-      Alert.alert('Update failed', error?.response?.data?.error || 'Unable to save Logbook Pro settings.');
+      Alert.alert('Update failed', error?.response?.data?.error || 'Unable to save RSF Pro settings.');
     } finally {
       setSavingSettings(false);
     }
   };
 
-  const plan = PLANS.find((p) => p.key === selectedPlan)!;
-  const tax = plan.price * SALES_TAX_RATE;
-  const total = plan.price + tax;
+  const planOptions = membershipPlanOptions[selectedTier];
+  const selectedPlan = useMemo(
+    () => planOptions.find((plan) => plan.interval === selectedInterval) || planOptions[0],
+    [planOptions, selectedInterval]
+  );
 
-  if (isAuthenticated && user?.logbookProStatus === 'active') {
+  if (isAuthenticated && hasAccess) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Logbook Pro Dashboard</Text>
+          <Text style={styles.title}>RSF Pro Dashboard</Text>
           <Text style={styles.subtitle}>Currency tracking, expirations, and alerts.</Text>
         </View>
 
@@ -223,7 +225,7 @@ export default function LogbookProScreen({ navigation }: any) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Alert preferences</Text>
-          <Text style={styles.helperText}>Choose how Logbook Pro notifies you.</Text>
+          <Text style={styles.helperText}>Choose how RSF Pro notifies you.</Text>
 
           <View style={styles.toggleRow}>
             <View>
@@ -271,18 +273,18 @@ export default function LogbookProScreen({ navigation }: any) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>Logbook Pro</Text>
+        <Text style={styles.title}>RSF Pro</Text>
         <Text style={styles.subtitle}>
-          Advanced flight planning, radio comms training, and premium logbook tools.
+          Save, alerts, analytics require RSF Pro.
         </Text>
       </View>
 
       <View style={styles.featureList}>
         {[
-          'Advanced flight planning with aircraft profiles and route risk flags.',
-          'Saved plans, per-leg breakdowns, and unlimited route storage.',
-          'Radio Comms Trainer: full scenarios, audio practice, and scoring feedback.',
-          'Pro currency tools, exports, and priority support.',
+          'Advanced flight planning, saved routes, and performance profiles.',
+          'Currency tracking, expiration alerts, and notification history.',
+          'Radio Comms Trainer with scenario scoring.',
+          'Analytics, exports, and premium pilot tools.',
         ].map((item) => (
           <View key={item} style={styles.featureRow}>
             <Ionicons name="checkmark-circle" size={18} color="#10b981" />
@@ -291,20 +293,36 @@ export default function LogbookProScreen({ navigation }: any) {
         ))}
       </View>
 
-      <View style={styles.planGrid}>
-        {PLANS.map((p) => {
-          const isSelected = p.key === selectedPlan;
-          const pTax = p.price * SALES_TAX_RATE;
-          const pTotal = p.price + pTax;
+      <View style={styles.tierGrid}>
+        {(Object.keys(membershipTierInfo) as MembershipTier[]).map((tier) => {
+          const isSelected = tier === selectedTier;
           return (
             <TouchableOpacity
-              key={p.key}
-              style={[styles.planCard, isSelected && styles.planCardActive]}
-              onPress={() => setSelectedPlan(p.key)}
+              key={tier}
+              style={[styles.tierCard, isSelected && styles.tierCardActive]}
+              onPress={() => setSelectedTier(tier)}
             >
-              <Text style={styles.planLabel}>{p.label}</Text>
-              <Text style={styles.planPrice}>${p.price.toFixed(2)}</Text>
-              <Text style={styles.planMeta}>+ tax ${pTax.toFixed(2)} = ${pTotal.toFixed(2)}</Text>
+              <Text style={styles.tierTitle}>{membershipTierInfo[tier].title}</Text>
+              <Text style={styles.tierSubtitle}>{membershipTierInfo[tier].subtitle}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View style={styles.planGrid}>
+        {planOptions.map((plan) => {
+          const isSelected = plan.interval === selectedInterval;
+          return (
+            <TouchableOpacity
+              key={plan.interval}
+              style={[styles.planCard, isSelected && styles.planCardActive]}
+              onPress={() => setSelectedInterval(plan.interval)}
+            >
+              <View style={styles.planRow}>
+                <Text style={styles.planLabel}>{plan.label}</Text>
+                {plan.badge && <Text style={styles.planBadge}>{plan.badge}</Text>}
+              </View>
+              <Text style={styles.planPrice}>${plan.price.toFixed(2)}</Text>
             </TouchableOpacity>
           );
         })}
@@ -312,15 +330,15 @@ export default function LogbookProScreen({ navigation }: any) {
 
       <View style={styles.totalRow}>
         <Text style={styles.totalLabel}>Total today</Text>
-        <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
+        <Text style={styles.totalValue}>${selectedPlan.price.toFixed(2)}</Text>
       </View>
 
       <TouchableOpacity style={styles.primaryButton} onPress={handleSubscribe} disabled={loading}>
         <Text style={styles.primaryButtonText}>{loading ? 'Redirecting...' : 'Upgrade with PayPal'}</Text>
       </TouchableOpacity>
 
-      {user?.logbookProStatus && (
-        <Text style={styles.statusText}>Current status: {user.logbookProStatus}</Text>
+      {user?.membershipStatus && (
+        <Text style={styles.statusText}>Current status: {user.membershipStatus}</Text>
       )}
     </ScrollView>
   );
@@ -387,12 +405,18 @@ const styles = StyleSheet.create({
   featureList: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   featureRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
   featureText: { flex: 1, fontSize: 13, color: colors.text },
+  tierGrid: { gap: 10, marginBottom: spacing.md },
+  tierCard: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  tierCardActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  tierTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+  tierSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   planGrid: { gap: 10 },
   planCard: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   planCardActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  planRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   planLabel: { fontSize: 13, color: colors.textMuted },
   planPrice: { fontSize: 20, fontWeight: '700', color: colors.text, marginTop: 4 },
-  planMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  planBadge: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
   totalLabel: { fontSize: 14, color: colors.textMuted },
   totalValue: { fontSize: 16, fontWeight: '600', color: colors.text },

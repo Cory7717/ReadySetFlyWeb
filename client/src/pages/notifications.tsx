@@ -49,7 +49,7 @@ export default function NotificationsPage() {
             <Bell className="h-5 w-5 text-primary" />
             Notifications
           </CardTitle>
-          <CardDescription>Logbook Pro alerts and account updates.</CardDescription>
+          <CardDescription>RSF Pro alerts and account updates.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (

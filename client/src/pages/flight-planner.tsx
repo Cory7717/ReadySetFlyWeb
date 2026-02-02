@@ -113,7 +113,8 @@ export default function FlightPlanner() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const isPro = user?.logbookProStatus === "active";
+  const entitlements = (user as any)?.entitlements;
+  const isPro = entitlements?.canPersist ?? (user?.logbookProStatus === "active");
 
   useEffect(() => {
     trackEvent("planner_page_view", { page: "flight-planner" });
@@ -658,10 +659,10 @@ export default function FlightPlanner() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-bold">Flight Planner</h1>
-          <p className="text-muted-foreground">Build a route, estimate time and fuel, then save to Logbook Pro.</p>
+          <p className="text-muted-foreground">Build a route, estimate time and fuel, then save with RSF Pro.</p>
           {!isPro && (
             <p className="text-xs text-muted-foreground mt-2">
-              Logbook Pro adds saved plans, per-leg breakdowns, wind-adjusted ETE, advanced reports, and the Radio Comms Trainer.
+              RSF Pro adds saved plans, per-leg breakdowns, wind-adjusted ETE, advanced reports, and the Radio Comms Trainer. Save, alerts, analytics require RSF Pro.
             </p>
           )}
         </div>
@@ -672,7 +673,7 @@ export default function FlightPlanner() {
             variant="outline"
             onClick={() => trackEvent("planner_upgrade_click", { target: "/logbook/pro" })}
           >
-            <Link href="/logbook/pro">Upgrade to Logbook Pro</Link>
+            <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
           </Button>
         </div>
       </div>
@@ -949,7 +950,7 @@ export default function FlightPlanner() {
                 disabled={!isPro}
                 placeholder="0"
               />
-              {!isPro && <p className="text-xs text-muted-foreground">Logbook Pro unlocks wind-adjusted ETE.</p>}
+              {!isPro && <p className="text-xs text-muted-foreground">RSF Pro unlocks wind-adjusted ETE.</p>}
             </div>
           </div>
 
@@ -1151,7 +1152,7 @@ export default function FlightPlanner() {
       <Card>
         <CardHeader>
           <CardTitle>Save & Sync</CardTitle>
-          <CardDescription>Save plans and send routes to your logbook (Logbook Pro only).</CardDescription>
+          <CardDescription>Save plans and send routes to your logbook (RSF Pro only).</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -1208,7 +1209,7 @@ export default function FlightPlanner() {
             <Button
               onClick={() => {
                 if (!isPro) {
-                  toast({ title: "Upgrade to save", description: "Logbook Pro is required to save flight plans." });
+                  toast({ title: "Upgrade to save", description: "RSF Pro is required to save flight plans." });
                   trackEvent("planner_upgrade_prompt", { action: "save_plan" });
                   window.location.href = "/logbook/pro";
                   return;
@@ -1229,7 +1230,7 @@ export default function FlightPlanner() {
               variant="outline"
               onClick={() => {
                 if (!isPro) {
-                  toast({ title: "Upgrade to sync", description: "Logbook Pro is required to sync to logbook." });
+                  toast({ title: "Upgrade to sync", description: "RSF Pro is required to sync to logbook." });
                   trackEvent("planner_upgrade_prompt", { action: "send_to_logbook" });
                   window.location.href = "/logbook/pro";
                   return;
@@ -1255,7 +1256,7 @@ export default function FlightPlanner() {
         <CardContent className="space-y-4">
           {!isPro && (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              Logbook Pro unlocks saved plans, per-leg breakdowns, and unlimited route storage.
+              RSF Pro unlocks saved plans, per-leg breakdowns, and unlimited route storage.
             </div>
           )}
           {plansLoading ? (

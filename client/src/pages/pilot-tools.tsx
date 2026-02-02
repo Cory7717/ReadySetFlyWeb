@@ -118,6 +118,8 @@ function extractRunwayInUse(metar: any): string | null {
 
 export default function PilotTools() {
   const { user } = useAuth();
+  const entitlements = (user as any)?.entitlements;
+  const isPro = entitlements?.tier ? entitlements.tier !== "free" : user?.logbookProStatus === "active";
   const [icao, setIcao] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
   const [runwayHeading, setRunwayHeading] = useState("180");
@@ -225,17 +227,17 @@ export default function PilotTools() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Plane className="h-5 w-5" />
-              Flight Planner (Logbook Pro)
+              Flight Planner (RSF Pro)
             </CardTitle>
             <CardDescription>Save common routes, fuel notes, and timing.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
             <Button asChild>
               <Link href="/flight-planner">
-                {user?.logbookProStatus === "active" ? "Open Flight Planner" : "Preview Flight Planner"}
+                {isPro ? "Open Flight Planner" : "Preview Flight Planner"}
               </Link>
             </Button>
-            <Badge variant="outline">{user?.logbookProStatus === "active" ? "Active" : "Preview available"}</Badge>
+            <Badge variant="outline">{isPro ? "Active" : "Preview available"}</Badge>
           </CardContent>
         </Card>
 
@@ -243,17 +245,17 @@ export default function PilotTools() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Radio className="h-5 w-5" />
-              Radio Comms Trainer (Logbook Pro)
+              Radio Comms Trainer (RSF Pro)
             </CardTitle>
             <CardDescription>Practice ATC phraseology with guided scenarios.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
             <Button asChild>
               <Link href="/radio-comms-trainer">
-                {user?.logbookProStatus === "active" ? "Open Trainer" : "Try Demo"}
+                {isPro ? "Open Trainer" : "Try Demo"}
               </Link>
             </Button>
-            <Badge variant="outline">{user?.logbookProStatus === "active" ? "Active" : "Demo available"}</Badge>
+            <Badge variant="outline">{isPro ? "Active" : "Demo available"}</Badge>
           </CardContent>
         </Card>
 

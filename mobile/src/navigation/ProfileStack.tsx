@@ -20,6 +20,7 @@ import StudentCostScreen from '../screens/StudentCostScreen';
 import StudentProgressScreen from '../screens/StudentProgressScreen';
 import StudentWrittenScreen from '../screens/StudentWrittenScreen';
 import StudentSyllabiScreen from '../screens/StudentSyllabiScreen';
+import StudentVorTrainerScreen from '../screens/StudentVorTrainerScreen';
 import StudentChecklistsScreen from '../screens/StudentChecklistsScreen';
 import StudentWeatherScreen from '../screens/StudentWeatherScreen';
 import OwnershipCostCalculatorScreen from '../screens/OwnershipCostCalculatorScreen';
@@ -57,6 +58,7 @@ export type ProfileStackParamList = {
   StudentProgress: undefined;
   StudentWritten: undefined;
   StudentSyllabi: undefined;
+  StudentVorTrainer: undefined;
   StudentChecklists: undefined;
   StudentWeather: undefined;
   OwnershipCost: undefined;
@@ -182,6 +184,11 @@ export default function ProfileStack() {
         name="StudentSyllabi" 
         component={StudentSyllabiScreen}
         options={{ title: 'CFI Syllabi' }}
+      />
+      <Stack.Screen
+        name="StudentVorTrainer"
+        component={StudentVorTrainerScreen}
+        options={{ title: 'VOR Trainer' }}
       />
       <Stack.Screen 
         name="StudentChecklists" 

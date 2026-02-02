@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "./theme-toggle";
 import { useAuth } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { apiUrl } from "@/lib/api";
 import {
@@ -15,10 +16,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
+import { trackEvent } from "@/lib/analytics";
 
 export function Header() {
   const [location] = useLocation();
   const { user } = useAuth();
+  const { data: unreadNotifications } = useQuery<{ count: number }>({
+    queryKey: ["/api/notifications/unread"],
+    enabled: !!user,
+  });
+  const unreadCount = unreadNotifications?.count ?? 0;
   
   const isRentals = location === "/rentals" || location.startsWith("/aircraft");
   const isMarketplace = location.startsWith("/marketplace");
@@ -50,6 +57,7 @@ export function Header() {
                 variant="ghost"
                 size="sm"
                 className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isRentals ? "bg-background shadow-sm" : ""}`}
+                onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}
               >
                 Rentals
               </Button>
@@ -59,6 +67,7 @@ export function Header() {
                 variant="ghost"
                 size="sm"
                 className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isMarketplace ? "bg-background shadow-sm" : ""}`}
+                onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}
               >
                 Marketplace
               </Button>
@@ -85,6 +94,14 @@ export function Header() {
 
           {/* Right side actions */}
           <div className="flex items-center gap-1 sm:gap-2">
+            <Link href="/create-marketplace-listing" className="hidden lg:block" data-testid="link-post-listing">
+              <Button
+                variant="outline"
+                onClick={() => trackEvent("cta_click", { label: "post_listing_header", target: "/create-marketplace-listing" })}
+              >
+                Post Listing
+              </Button>
+            </Link>
             {user && (
               <Link href="/list-aircraft" data-testid="link-list-aircraft" className="hidden sm:block">
                 <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent" data-testid="button-list-aircraft">
@@ -94,12 +111,16 @@ export function Header() {
             )}
 
             {user && (
-              <Button variant="ghost" size="icon" className="relative hidden sm:flex" data-testid="button-notifications" aria-label="Notifications">
-                <Bell className="h-5 w-5" />
-                <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
-                  3
-                </Badge>
-              </Button>
+              <Link href="/notifications" className="hidden sm:flex" data-testid="link-notifications">
+                <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications" aria-label="Notifications">
+                  <Bell className="h-5 w-5" />
+                  {unreadCount > 0 && (
+                    <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                      {unreadCount}
+                    </Badge>
+                  )}
+                </Button>
+              </Link>
             )}
 
             <ThemeToggle />

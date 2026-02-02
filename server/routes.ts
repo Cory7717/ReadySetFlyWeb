@@ -16,7 +16,7 @@ import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
 import { storage } from "./storage";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
 import { sendContactFormEmail } from "./email-templates";
@@ -6888,8 +6888,21 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const landingsNight = sum(entriesLast90.map((e) => e.landingsNight ?? 0));
       const totalLandings = landingsDay + landingsNight;
 
-      const lastLandingEntry = entriesLast90.find((e) => (e.landingsDay ?? 0) + (e.landingsNight ?? 0) > 0);
-      const lastNightLandingEntry = entriesLast90.find((e) => (e.landingsNight ?? 0) > 0);
+      const getLatestDate = (entries: any[], predicate: (entry: any) => boolean) => {
+        let latest: Date | null = null;
+        for (const entry of entries) {
+          if (!predicate(entry)) continue;
+          if (!entry.flightDate) continue;
+          const date = new Date(entry.flightDate);
+          if (!Number.isNaN(date.getTime()) && (!latest || date > latest)) {
+            latest = date;
+          }
+        }
+        return latest;
+      };
+
+      const lastLandingDate = getLatestDate(entriesLast90, (e) => (e.landingsDay ?? 0) + (e.landingsNight ?? 0) > 0);
+      const lastNightLandingDate = getLatestDate(entriesLast90, (e) => (e.landingsNight ?? 0) > 0);
 
       const addDays = (date: Date, days: number) => {
         const next = new Date(date);
@@ -6902,14 +6915,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return next;
       };
 
-      const dayCurrencyDueAt = lastLandingEntry?.flightDate ? addDays(new Date(lastLandingEntry.flightDate), 90) : null;
-      const nightCurrencyDueAt = lastNightLandingEntry?.flightDate ? addDays(new Date(lastNightLandingEntry.flightDate), 90) : null;
+      const dayCurrencyDueAt = lastLandingDate ? addDays(lastLandingDate, 90) : null;
+      const nightCurrencyDueAt = lastNightLandingDate ? addDays(lastNightLandingDate, 90) : null;
 
       const approaches = sum(entriesLast6.map((e) => e.approaches ?? 0));
       const holds = sum(entriesLast6.map((e) => e.holds ?? 0));
       const instrumentTotal = approaches + holds;
-      const lastInstrumentEntry = entriesLast6.find((e) => (e.approaches ?? 0) + (e.holds ?? 0) > 0);
-      const instrumentDueAt = lastInstrumentEntry?.flightDate ? addMonths(new Date(lastInstrumentEntry.flightDate), 6) : null;
+      const lastInstrumentDate = getLatestDate(entriesLast6, (e) => (e.approaches ?? 0) + (e.holds ?? 0) > 0);
+      const instrumentDueAt = lastInstrumentDate ? addMonths(lastInstrumentDate, 6) : null;
 
       const flightReviewDueAt = settings?.flightReviewDate ? addMonths(new Date(settings.flightReviewDate), 24) : null;
 
@@ -6938,6 +6951,170 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to fetch logbook pro summary:", error);
       res.status(500).json({ error: "Failed to fetch logbook pro summary" });
+    }
+  });
+
+  // Logbook Pro - Endorsements
+  app.get("/api/endorsements", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const endorsements = await storage.getEndorsementsByUser(userId);
+      res.json(endorsements);
+    } catch (error) {
+      console.error("Failed to fetch endorsements:", error);
+      res.status(500).json({ error: "Failed to fetch endorsements" });
+    }
+  });
+
+  app.post("/api/endorsements", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = insertEndorsementSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const endorsement = await storage.createEndorsement({ ...(result.data as any), userId });
+      res.status(201).json(endorsement);
+    } catch (error) {
+      console.error("Failed to create endorsement:", error);
+      res.status(500).json({ error: "Failed to create endorsement" });
+    }
+  });
+
+  app.patch("/api/endorsements/:id", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = insertEndorsementSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updated = await storage.updateEndorsement(req.params.id, userId, result.data as any);
+      if (!updated) {
+        return res.status(404).json({ error: "Endorsement not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update endorsement:", error);
+      res.status(500).json({ error: "Failed to update endorsement" });
+    }
+  });
+
+  app.delete("/api/endorsements/:id", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const success = await storage.deleteEndorsement(req.params.id, userId);
+      if (!success) {
+        return res.status(404).json({ error: "Endorsement not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete endorsement:", error);
+      res.status(500).json({ error: "Failed to delete endorsement" });
+    }
+  });
+
+  // Logbook Pro - Radio Comms Sessions
+  app.get("/api/radio-comms/sessions", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const sessions = await storage.getRadioCommsSessionsByUser(userId);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Failed to fetch radio comms sessions:", error);
+      res.status(500).json({ error: "Failed to fetch radio comms sessions" });
+    }
+  });
+
+  app.post("/api/radio-comms/sessions", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = insertRadioCommsSessionSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const session = await storage.createRadioCommsSession({ ...(result.data as any), userId });
+      res.status(201).json(session);
+    } catch (error) {
+      console.error("Failed to create radio comms session:", error);
+      res.status(500).json({ error: "Failed to create radio comms session" });
+    }
+  });
+
+  // User Notifications + Preferences
+  app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const notifications = await storage.getUserNotifications(userId);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Failed to fetch notifications:", error);
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  app.get("/api/notifications/unread", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const notifications = await storage.getUnreadUserNotifications(userId);
+      res.json({ count: notifications.length });
+    } catch (error) {
+      console.error("Failed to fetch unread notifications:", error);
+      res.status(500).json({ error: "Failed to fetch unread notifications" });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const updated = await storage.markUserNotificationRead(req.params.id, userId);
+      if (!updated) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to mark notification read:", error);
+      res.status(500).json({ error: "Failed to update notification" });
+    }
+  });
+
+  app.get("/api/notifications/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const prefs = await storage.getNotificationPreferences(userId);
+      res.json(prefs || { emailEnabled: true, pushEnabled: true, inAppEnabled: true, alertDaysBefore: 30 });
+    } catch (error) {
+      console.error("Failed to fetch notification preferences:", error);
+      res.status(500).json({ error: "Failed to fetch notification preferences" });
+    }
+  });
+
+  app.put("/api/notifications/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = insertNotificationPreferencesSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const prefs = await storage.upsertNotificationPreferences(userId, result.data as any);
+      res.json(prefs);
+    } catch (error) {
+      console.error("Failed to update notification preferences:", error);
+      res.status(500).json({ error: "Failed to update notification preferences" });
+    }
+  });
+
+  app.post("/api/notifications/push-token", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = insertPushTokenSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const token = await storage.upsertPushToken(userId, result.data as any);
+      res.status(201).json(token);
+    } catch (error) {
+      console.error("Failed to register push token:", error);
+      res.status(500).json({ error: "Failed to register push token" });
     }
   });
 
@@ -7080,6 +7257,228 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         console.error('WebSocket message error:', error);
       }
     });
+
+  // Cron endpoint: Logbook Pro alerts (currency + expirations)
+  app.post("/api/cron/logbook-pro-alerts", async (req, res) => {
+    try {
+      const cronSecret = req.headers["x-cron-secret"];
+      const expectedSecret = process.env.CRON_SECRET || process.env.SESSION_SECRET;
+      if (!cronSecret || cronSecret !== expectedSecret) {
+        console.warn("Unauthorized logbook pro cron attempt from IP:", req.ip);
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const leadDays = Number(process.env.LOGBOOK_PRO_ALERT_DAYS ?? 30);
+      const { getLogbookProAlertEmailHtml, getLogbookProAlertEmailText } = await import("./email-templates");
+      const { client, fromEmail } = await getUncachableResendClient();
+
+      const users = await storage.getActiveLogbookProUsers();
+      const today = new Date();
+      const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const msPerDay = 1000 * 60 * 60 * 24;
+
+      const getLatestDate = (entries: any[], predicate: (entry: any) => boolean) => {
+        let latest: Date | null = null;
+        for (const entry of entries) {
+          if (!predicate(entry)) continue;
+          if (!entry.flightDate) continue;
+          const date = new Date(entry.flightDate);
+          if (!Number.isNaN(date.getTime()) && (!latest || date > latest)) {
+            latest = date;
+          }
+        }
+        return latest;
+      };
+
+      const addDays = (date: Date, days: number) => {
+        const next = new Date(date);
+        next.setDate(next.getDate() + days);
+        return next;
+      };
+      const addMonths = (date: Date, months: number) => {
+        const next = new Date(date);
+        next.setMonth(next.getMonth() + months);
+        return next;
+      };
+
+      let processed = 0;
+      let notificationsCreated = 0;
+      let emailsSent = 0;
+      let pushesSent = 0;
+      const errors: string[] = [];
+
+      for (const user of users) {
+        processed += 1;
+        try {
+          const [settings, entries, prefs] = await Promise.all([
+            storage.getLogbookProSettings(user.id),
+            storage.getLogbookEntriesByUser(user.id),
+            storage.getNotificationPreferences(user.id),
+          ]);
+
+          const preferences = prefs || { emailEnabled: true, pushEnabled: true, inAppEnabled: true, alertDaysBefore: leadDays };
+          const last90 = new Date(today);
+          last90.setDate(last90.getDate() - 90);
+          const last6 = new Date(today);
+          last6.setMonth(last6.getMonth() - 6);
+
+          const entriesLast90 = entries.filter((entry) => entry.flightDate && new Date(entry.flightDate) >= last90);
+          const entriesLast6 = entries.filter((entry) => entry.flightDate && new Date(entry.flightDate) >= last6);
+
+          const sum = (vals: Array<number | null | undefined>) => vals.reduce((total, val) => total + (typeof val === "number" ? val : 0), 0);
+          const landingsDay = sum(entriesLast90.map((e) => e.landingsDay ?? 0));
+          const landingsNight = sum(entriesLast90.map((e) => e.landingsNight ?? 0));
+          const totalLandings = landingsDay + landingsNight;
+          const approaches = sum(entriesLast6.map((e) => e.approaches ?? 0));
+          const holds = sum(entriesLast6.map((e) => e.holds ?? 0));
+          const instrumentTotal = approaches + holds;
+
+          const lastLandingDate = getLatestDate(entriesLast90, (e) => (e.landingsDay ?? 0) + (e.landingsNight ?? 0) > 0);
+          const lastNightLandingDate = getLatestDate(entriesLast90, (e) => (e.landingsNight ?? 0) > 0);
+          const lastInstrumentDate = getLatestDate(entriesLast6, (e) => (e.approaches ?? 0) + (e.holds ?? 0) > 0);
+
+          const dayCurrencyDueAt = lastLandingDate ? addDays(lastLandingDate, 90) : null;
+          const nightCurrencyDueAt = lastNightLandingDate ? addDays(lastNightLandingDate, 90) : null;
+          const instrumentDueAt = lastInstrumentDate ? addMonths(lastInstrumentDate, 6) : null;
+          const flightReviewDueAt = settings?.flightReviewDate ? addMonths(new Date(settings.flightReviewDate), 24) : null;
+
+          const candidates: Array<{ type: string; title: string; message: string; dueAt: Date | null }> = [
+            {
+              type: "currency_day_due",
+              title: "90-day currency due soon",
+              message: `Your day currency is due soon. Total landings: ${totalLandings}.`,
+              dueAt: dayCurrencyDueAt,
+            },
+            {
+              type: "currency_night_due",
+              title: "Night currency due soon",
+              message: `Your night currency is due soon. Night landings: ${landingsNight}.`,
+              dueAt: nightCurrencyDueAt,
+            },
+            {
+              type: "currency_instrument_due",
+              title: "IFR currency due soon",
+              message: `Your instrument currency is due soon. Approaches + holds: ${instrumentTotal}.`,
+              dueAt: instrumentDueAt,
+            },
+            {
+              type: "medical_expiration",
+              title: "Medical certificate expiring",
+              message: "Your medical certificate expires soon. Update your Logbook Pro settings.",
+              dueAt: settings?.medicalExpiresAt ? new Date(settings.medicalExpiresAt) : null,
+            },
+            {
+              type: "flight_review_due",
+              title: "Flight review due soon",
+              message: "Your flight review is coming due. Schedule your review.",
+              dueAt: flightReviewDueAt,
+            },
+            {
+              type: "ipc_due",
+              title: "IPC due soon",
+              message: "Your instrument proficiency check is coming due.",
+              dueAt: settings?.ipcDate ? new Date(settings.ipcDate) : null,
+            },
+          ];
+
+          for (const candidate of candidates) {
+            if (!candidate.dueAt) continue;
+            const dueDate = startOfDay(candidate.dueAt);
+            const diffDays = Math.round((dueDate.getTime() - startOfDay(today).getTime()) / msPerDay);
+            if (diffDays < 0 || diffDays > (preferences.alertDaysBefore ?? leadDays)) continue;
+
+            const existing = await storage.getUserNotificationByTypeAndDate(user.id, candidate.type, dueDate);
+            if (existing) continue;
+
+            const channels: string[] = [];
+            const shouldInApp = preferences.inAppEnabled !== false;
+            const shouldEmail = preferences.emailEnabled !== false && !!user.email;
+            const shouldPush = preferences.pushEnabled !== false;
+
+            if (shouldEmail) {
+              try {
+                const html = getLogbookProAlertEmailHtml({
+                  firstName: user.firstName || user.email?.split("@")[0] || "Pilot",
+                  title: candidate.title,
+                  message: candidate.message,
+                  dueDate,
+                });
+                const text = getLogbookProAlertEmailText({
+                  firstName: user.firstName || user.email?.split("@")[0] || "Pilot",
+                  title: candidate.title,
+                  message: candidate.message,
+                  dueDate,
+                });
+                await client.emails.send({
+                  from: fromEmail,
+                  to: user.email!,
+                  subject: `Logbook Pro Alert: ${candidate.title}`,
+                  html,
+                  text,
+                });
+                channels.push("email");
+                emailsSent += 1;
+              } catch (emailError: any) {
+                errors.push(`Email failed for ${user.email}: ${emailError.message}`);
+              }
+            }
+
+            if (shouldPush) {
+              try {
+                const tokens = await storage.getPushTokensByUser(user.id);
+                if (tokens.length > 0) {
+                  await fetch("https://exp.host/--/api/v2/push/send", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(
+                      tokens.map((token) => ({
+                        to: token.token,
+                        title: "Logbook Pro Alert",
+                        body: candidate.title,
+                        data: { type: candidate.type, dueAt: dueDate.toISOString() },
+                      }))
+                    ),
+                  });
+                  channels.push("push");
+                  pushesSent += tokens.length;
+                }
+              } catch (pushError: any) {
+                errors.push(`Push failed for user ${user.id}: ${pushError.message}`);
+              }
+            }
+
+            const notification = await storage.createUserNotification({
+              userId: user.id,
+              type: candidate.type,
+              title: candidate.title,
+              message: candidate.message,
+              referenceDate: dueDate,
+              channels,
+              isRead: !shouldInApp,
+              readAt: shouldInApp ? null : new Date(),
+              meta: { dueAt: dueDate.toISOString() },
+            } as any);
+            if (notification) {
+              notificationsCreated += 1;
+            }
+          }
+        } catch (userError: any) {
+          errors.push(`User ${user.id} failed: ${userError.message}`);
+        }
+      }
+
+      res.json({
+        usersProcessed: processed,
+        notificationsCreated,
+        emailsSent,
+        pushesSent,
+        errors,
+      });
+    } catch (error: any) {
+      console.error("Logbook pro alerts cron error:", error);
+      res.status(500).json({ error: "Failed to send logbook pro alerts" });
+    }
+  });
     
     ws.on('close', () => {
       console.log('WebSocket client disconnected');

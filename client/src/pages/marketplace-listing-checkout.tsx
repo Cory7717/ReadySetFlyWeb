@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useLocation, useRoute, useRouter } from 'wouter';
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -236,6 +237,12 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
     }
 
     setIsProcessing(true);
+    trackEvent("add_payment_info", {
+      item_category: isUpgradeMode ? "marketplace_upgrade" : "marketplace_listing",
+      item_id: isUpgradeMode ? upgradeContext?.listingId : listingData?.category,
+      value: Number(finalAmount || originalAmount || 0),
+      currency: "USD",
+    });
 
     try {
       await cardFieldsRef.current.submit();
@@ -260,6 +267,12 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
       toast({
         title: "Success",
         description: "Your free listing has been created!",
+      });
+
+      trackEvent("generate_lead", {
+        lead_type: "marketplace_listing",
+        category: listingData?.category,
+        tier: listingData?.tier,
       });
       
       // Trigger success callback with a free order indicator
@@ -363,6 +376,7 @@ export default function MarketplaceListingCheckout() {
   const [isUpgradeMode, setIsUpgradeMode] = useState(false);
   const [upgradeContext, setUpgradeContext] = useState<any>(null);
   const { toast } = useToast();
+  const [checkoutTracked, setCheckoutTracked] = useState(false);
   
   // Promo code state
   const [promoCode, setPromoCode] = useState("");
@@ -417,6 +431,33 @@ export default function MarketplaceListingCheckout() {
       setListingData(data);
     }
   }, [navigate, toast]);
+
+  useEffect(() => {
+    if (checkoutTracked) return;
+    if (isUpgradeMode && upgradeContext) {
+      trackEvent("begin_checkout", {
+        item_category: "marketplace_upgrade",
+        item_id: upgradeContext.listingId,
+        value: Number(upgradeContext.totalWithTax || 0),
+        currency: "USD",
+      });
+      setCheckoutTracked(true);
+      return;
+    }
+    if (!isUpgradeMode && listingData) {
+      const baseAmount = getBasePrice(listingData.category, listingData.tier);
+      const taxAmount = baseAmount * TAX_RATE;
+      const totalAmount = baseAmount + taxAmount;
+      const value = Number(finalAmount || totalAmount);
+      trackEvent("begin_checkout", {
+        item_category: "marketplace_listing",
+        item_id: listingData.category,
+        value,
+        currency: "USD",
+      });
+      setCheckoutTracked(true);
+    }
+  }, [checkoutTracked, isUpgradeMode, upgradeContext, listingData, finalAmount]);
 
   // Auto-apply admin free grant token (admin starts flow from dashboard)
   useEffect(() => {
@@ -476,6 +517,14 @@ export default function MarketplaceListingCheckout() {
           title: "Upgrade Successful",
           description: "Your listing has been upgraded to " + upgradeContext.newTier + " tier!",
         });
+
+        trackEvent("purchase", {
+          transaction_id: transactionId,
+          value: Number(upgradeContext.totalWithTax || 0),
+          currency: "USD",
+          item_category: "marketplace_upgrade",
+          item_id: upgradeContext.listingId,
+        });
         
         navigate("/my-listings");
       } catch (error: any) {
@@ -532,6 +581,14 @@ export default function MarketplaceListingCheckout() {
       toast({
         title: "Success",
         description: "Your marketplace listing has been created!",
+      });
+
+      trackEvent("purchase", {
+        transaction_id: transactionId,
+        value: Number((finalAmount || totalAmount).toFixed(2)),
+        currency: "USD",
+        item_category: "marketplace_listing",
+        item_id: listingData.category,
       });
       
       navigate("/marketplace");

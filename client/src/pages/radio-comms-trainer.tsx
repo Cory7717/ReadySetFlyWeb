@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +8,24 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
+import { apiRequest } from "@/lib/queryClient";
+
+type RadioCommsSession = {
+  id: string;
+  scenarioId: string;
+  scoreCorrect?: number | null;
+  scoreTotal?: number | null;
+  durationSec?: number | null;
+  createdAt?: string | null;
+};
+
+type ScenarioAttempt = {
+  stepId: string;
+  input: string;
+  expectedTokens: string[];
+  hit: boolean;
+  atcReply: string;
+};
 
 type ScenarioStep = {
   id: string;
@@ -166,6 +185,7 @@ function normalize(text: string) {
 export default function RadioCommsTrainer() {
   const { user } = useAuth();
   const isPro = user?.logbookProStatus === "active";
+  const queryClient = useQueryClient();
   const [selectedScenarioId, setSelectedScenarioId] = useState(SCENARIOS[0].id);
   const [stepIndex, setStepIndex] = useState(0);
   const [input, setInput] = useState("");
@@ -175,10 +195,34 @@ export default function RadioCommsTrainer() {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceUri, setSelectedVoiceUri] = useState<string>("");
   const [selectedVoiceName, setSelectedVoiceName] = useState<string>("");
+  const [attempts, setAttempts] = useState<ScenarioAttempt[]>([]);
+  const [sessionSaved, setSessionSaved] = useState(false);
+  const sessionStartRef = useRef<number | null>(null);
+
+  const { data: sessions = [] } = useQuery<RadioCommsSession[]>({
+    queryKey: ["/api/radio-comms/sessions"],
+    enabled: isPro,
+  });
+
+  const saveSessionMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const res = await apiRequest("POST", "/api/radio-comms/sessions", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/radio-comms/sessions"] });
+    },
+  });
 
   useEffect(() => {
     trackEvent("radio_comms_view", { pro: isPro });
   }, [isPro]);
+
+  useEffect(() => {
+    if (!sessionStartRef.current) {
+      sessionStartRef.current = Date.now();
+    }
+  }, []);
 
   useEffect(() => {
     if (!("speechSynthesis" in window)) return;
@@ -219,6 +263,9 @@ export default function RadioCommsTrainer() {
     setInput("");
     setScore({ correct: 0, total: 0 });
     setShowFeedback(null);
+    setAttempts([]);
+    setSessionSaved(false);
+    sessionStartRef.current = Date.now();
   };
 
   const resolveVoice = (availableVoices: SpeechSynthesisVoice[]) => {
@@ -264,6 +311,16 @@ export default function RadioCommsTrainer() {
     };
     setScore(nextScore);
     setShowFeedback(hit ? "Correct" : "Needs work");
+    setAttempts((prev) => [
+      ...prev,
+      {
+        stepId: currentStep.id,
+        input,
+        expectedTokens: currentStep.expectedTokens,
+        hit,
+        atcReply: currentStep.atcReply,
+      },
+    ]);
     trackEvent("radio_comms_attempt", { scenario: scenario.id, hit });
     speakLine(currentStep.atcReply);
   };
@@ -276,6 +333,19 @@ export default function RadioCommsTrainer() {
       return;
     }
     setShowFeedback("Scenario complete");
+    if (isPro && !sessionSaved) {
+      setSessionSaved(true);
+      const durationSec = sessionStartRef.current
+        ? Math.round((Date.now() - sessionStartRef.current) / 1000)
+        : null;
+      saveSessionMutation.mutate({
+        scenarioId: scenario.id,
+        scoreCorrect: score.correct,
+        scoreTotal: score.total || scenario.steps.length,
+        durationSec,
+        attempts,
+      });
+    }
   };
 
   return (
@@ -416,12 +486,47 @@ export default function RadioCommsTrainer() {
                 </span>
               )}
               {showFeedback === "Scenario complete" && (
-                <span className="text-primary">Scenario complete. Great work!</span>
+                <span className="text-primary">
+                  Scenario complete. Great work!
+                  {saveSessionMutation.isPending && isPro ? " Saving session..." : ""}
+                </span>
               )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {isPro && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Practice history</CardTitle>
+            <CardDescription>Saved Logbook Pro sessions and scores.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {sessions.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                Complete a scenario to save your first session.
+              </div>
+            ) : (
+              sessions.map((session) => {
+                const scenarioTitle = SCENARIOS.find((s) => s.id === session.scenarioId)?.title || session.scenarioId;
+                const scoreLine = session.scoreTotal
+                  ? `${session.scoreCorrect ?? 0}/${session.scoreTotal}`
+                  : session.scoreCorrect ?? "â€”";
+                return (
+                  <div key={session.id} className="rounded-lg border p-3 text-sm space-y-1">
+                    <div className="font-semibold">{scenarioTitle}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {session.createdAt ? new Date(session.createdAt).toLocaleDateString() : "â€”"} â€¢ Score {scoreLine}
+                      {session.durationSec ? ` â€¢ ${Math.round(session.durationSec / 60)}m` : ""}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

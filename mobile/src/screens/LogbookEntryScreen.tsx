@@ -13,6 +13,14 @@ export default function LogbookEntryScreen({ navigation, route }: any) {
     route: '',
     timeDay: '',
     timeNight: '',
+    pic: '',
+    sic: '',
+    dual: '',
+    instrumentActual: '',
+    landingsDay: '',
+    landingsNight: '',
+    approaches: '',
+    holds: '',
     remarks: '',
   });
 
@@ -29,6 +37,14 @@ export default function LogbookEntryScreen({ navigation, route }: any) {
         route: entry.route || '',
         timeDay: String(entry.timeDay || ''),
         timeNight: String(entry.timeNight || ''),
+        pic: String(entry.pic || ''),
+        sic: String(entry.sic || ''),
+        dual: String(entry.dual || ''),
+        instrumentActual: String(entry.instrumentActual || ''),
+        landingsDay: String(entry.landingsDay || ''),
+        landingsNight: String(entry.landingsNight || ''),
+        approaches: String(entry.approaches || ''),
+        holds: String(entry.holds || ''),
         remarks: entry.remarks || '',
       });
     } catch (error: any) {
@@ -56,6 +72,14 @@ export default function LogbookEntryScreen({ navigation, route }: any) {
         route: form.route || null,
         timeDay: form.timeDay ? Number(form.timeDay) : 0,
         timeNight: form.timeNight ? Number(form.timeNight) : 0,
+        pic: form.pic ? Number(form.pic) : 0,
+        sic: form.sic ? Number(form.sic) : 0,
+        dual: form.dual ? Number(form.dual) : 0,
+        instrumentActual: form.instrumentActual ? Number(form.instrumentActual) : 0,
+        landingsDay: form.landingsDay ? Number(form.landingsDay) : 0,
+        landingsNight: form.landingsNight ? Number(form.landingsNight) : 0,
+        approaches: form.approaches ? Number(form.approaches) : 0,
+        holds: form.holds ? Number(form.holds) : 0,
         remarks: form.remarks || null,
       };
       if (entryId) {
@@ -119,6 +143,86 @@ export default function LogbookEntryScreen({ navigation, route }: any) {
             style={styles.input}
             value={form.timeNight}
             onChangeText={(value) => setForm((prev) => ({ ...prev, timeNight: value }))}
+            keyboardType="numeric"
+          />
+        </View>
+      </View>
+      <View style={styles.row}>
+        <View style={styles.rowItem}>
+          <Text style={styles.label}>PIC (hrs)</Text>
+          <TextInput
+            style={styles.input}
+            value={form.pic}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, pic: value }))}
+            keyboardType="numeric"
+          />
+        </View>
+        <View style={styles.rowItem}>
+          <Text style={styles.label}>SIC (hrs)</Text>
+          <TextInput
+            style={styles.input}
+            value={form.sic}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, sic: value }))}
+            keyboardType="numeric"
+          />
+        </View>
+      </View>
+      <View style={styles.row}>
+        <View style={styles.rowItem}>
+          <Text style={styles.label}>Dual (hrs)</Text>
+          <TextInput
+            style={styles.input}
+            value={form.dual}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, dual: value }))}
+            keyboardType="numeric"
+          />
+        </View>
+        <View style={styles.rowItem}>
+          <Text style={styles.label}>Instrument (hrs)</Text>
+          <TextInput
+            style={styles.input}
+            value={form.instrumentActual}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, instrumentActual: value }))}
+            keyboardType="numeric"
+          />
+        </View>
+      </View>
+      <View style={styles.row}>
+        <View style={styles.rowItem}>
+          <Text style={styles.label}>Landings (Day)</Text>
+          <TextInput
+            style={styles.input}
+            value={form.landingsDay}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, landingsDay: value }))}
+            keyboardType="numeric"
+          />
+        </View>
+        <View style={styles.rowItem}>
+          <Text style={styles.label}>Landings (Night)</Text>
+          <TextInput
+            style={styles.input}
+            value={form.landingsNight}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, landingsNight: value }))}
+            keyboardType="numeric"
+          />
+        </View>
+      </View>
+      <View style={styles.row}>
+        <View style={styles.rowItem}>
+          <Text style={styles.label}>Approaches</Text>
+          <TextInput
+            style={styles.input}
+            value={form.approaches}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, approaches: value }))}
+            keyboardType="numeric"
+          />
+        </View>
+        <View style={styles.rowItem}>
+          <Text style={styles.label}>Holds</Text>
+          <TextInput
+            style={styles.input}
+            value={form.holds}
+            onChangeText={(value) => setForm((prev) => ({ ...prev, holds: value }))}
             keyboardType="numeric"
           />
         </View>

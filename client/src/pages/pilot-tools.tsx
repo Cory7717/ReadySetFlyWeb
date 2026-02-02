@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, CloudSun, Plane, Wind, Gauge, Scale } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { trackEvent } from "@/lib/analytics";
 
 interface WeatherData {
   icao: string;
@@ -170,6 +171,10 @@ export default function PilotTools() {
   const atisInfo = extractAtisIdentifier(weather?.metar);
   const runwayInUse = extractRunwayInUse(weather?.metar);
 
+  useEffect(() => {
+    trackEvent("pilot_tools_view", { page: "/pilot-tools" });
+  }, []);
+
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-5xl">
@@ -184,6 +189,37 @@ export default function PilotTools() {
             Aviation weather, NOTAMs, and airport information
           </p>
         </div>
+
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plane className="h-5 w-5 text-primary" />
+              Need an aircraft?
+            </CardTitle>
+            <CardDescription>
+              Browse rentals or explore the marketplace for CFIs, schools, and services.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button asChild onClick={() => trackEvent("cta_click", { label: "browse_rentals", target: "/rentals" })}>
+              <Link href="/rentals">Browse Rentals</Link>
+            </Button>
+            <Button
+              variant="outline"
+              asChild
+              onClick={() => trackEvent("cta_click", { label: "browse_marketplace", target: "/marketplace" })}
+            >
+              <Link href="/marketplace">Explore Marketplace</Link>
+            </Button>
+            <Button
+              variant="outline"
+              asChild
+              onClick={() => trackEvent("cta_click", { label: "post_listing", target: "/create-marketplace-listing" })}
+            >
+              <Link href="/create-marketplace-listing">Post a Listing</Link>
+            </Button>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

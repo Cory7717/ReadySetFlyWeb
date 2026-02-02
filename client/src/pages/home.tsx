@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Search, MapPin, Calendar, Shield } from "lucide-react";
 import type { AircraftListing, BannerAd as BannerAdType } from "@shared/schema";
 import { Button } from "@/components/ui/button";
@@ -12,12 +13,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { AircraftCard } from "@/components/aircraft-card";
 import { AircraftFilters } from "@/components/aircraft-filters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import wingtipImage from "@assets/wingtip_featured_1761494838973.jpg";
+import { trackEvent } from "@/lib/analytics";
 
 const quickFilters = [
   { label: "IFR Equipped", value: "ifr" },
@@ -28,6 +30,10 @@ const quickFilters = [
 export default function Home() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | null>(null);
+
+  useEffect(() => {
+    trackEvent("rentals_view", { page: "/rentals" });
+  }, []);
   
   // Filter state
   const [keyword, setKeyword] = useState("");
@@ -157,7 +163,12 @@ export default function Home() {
                   </Badge>
                 ))}
               </div>
-              <Button className="bg-accent text-accent-foreground hover:bg-accent rounded-full w-full sm:w-auto" size="lg" data-testid="button-search">
+              <Button
+                className="bg-accent text-accent-foreground hover:bg-accent rounded-full w-full sm:w-auto"
+                size="lg"
+                data-testid="button-search"
+                onClick={() => trackEvent("rentals_search_click", { keyword, city, state, radius })}
+              >
                 <Search className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                 Find Aircraft
               </Button>
@@ -170,6 +181,34 @@ export default function Home() {
         placement="rentals" 
         className="container mx-auto px-4 py-8"
       />
+
+      <section className="container mx-auto px-4">
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold">Need training or services?</div>
+              <p className="text-sm text-muted-foreground">
+                Explore CFIs, flight schools, mechanics, and aviation services in the marketplace.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="outline"
+                onClick={() => trackEvent("cta_click", { label: "rentals_to_marketplace", target: "/marketplace" })}
+                asChild
+              >
+                <Link href="/marketplace">Explore Marketplace</Link>
+              </Button>
+              <Button
+                onClick={() => trackEvent("cta_click", { label: "rentals_post_listing", target: "/create-marketplace-listing" })}
+                asChild
+              >
+                <Link href="/create-marketplace-listing">Post a Listing</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
 
       {/* Filters & Results */}
       <section className="container mx-auto px-4 py-12">
@@ -241,7 +280,15 @@ export default function Home() {
                     responseTime={listing.responseTime || 24}
                     acceptanceRate={listing.acceptanceRate || 95}
                     viewCount={listing.viewCount || 0}
-                    onCardClick={() => setSelectedAircraftId(listing.id)}
+                    onCardClick={() => {
+                      trackEvent("select_item", {
+                        item_id: listing.id,
+                        item_name: `${listing.make} ${listing.model}`,
+                        item_category: "rental_aircraft",
+                        location: listing.location,
+                      });
+                      setSelectedAircraftId(listing.id);
+                    }}
                   />
                 ))}
               </div>

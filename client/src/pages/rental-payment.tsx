@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Plane, Calendar, Clock } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 declare global {
   interface Window {
@@ -120,6 +121,14 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
                 title: "Payment successful!",
                 description: "Your rental is now active. Safe flying!",
               });
+
+              trackEvent("purchase", {
+                transaction_id: data.orderID,
+                value: Number(parseFloat(rental.totalCostRenter).toFixed(2)),
+                currency: "USD",
+                item_category: "rental_aircraft",
+                item_id: rental.aircraftId,
+              });
               
               onSuccess();
             } catch (err: any) {
@@ -187,6 +196,12 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
     }
 
     setIsProcessing(true);
+    trackEvent("add_payment_info", {
+      item_category: "rental_aircraft",
+      item_id: rental.aircraftId,
+      value: Number(parseFloat(rental.totalCostRenter).toFixed(2)),
+      currency: "USD",
+    });
 
     try {
       await cardFieldsRef.current.submit();
@@ -279,6 +294,16 @@ export default function RentalPayment() {
     },
     enabled: !!rental?.aircraftId,
   });
+
+  useEffect(() => {
+    if (!rental || !aircraft) return;
+    trackEvent("rental_payment_view", {
+      rental_id: rental.id,
+      aircraft_id: aircraft.id,
+      value: Number(parseFloat(rental.totalCostRenter).toFixed(2)),
+      currency: "USD",
+    });
+  }, [rental, aircraft]);
 
   if (!rental || !aircraft) {
     return (

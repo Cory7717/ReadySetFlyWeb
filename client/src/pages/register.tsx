@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Plane } from 'lucide-react';
+import { trackEvent } from "@/lib/analytics";
 
 const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -61,6 +62,7 @@ export default function RegisterPage() {
     onSuccess: (data) => {
       // Invalidate user query to refetch with new session
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      trackEvent("sign_up", { method: "email" });
       toast({
         title: 'Account created!',
         description: data.message || 'Please check your email to verify your account.',
@@ -205,7 +207,10 @@ export default function RegisterPage() {
             type="button"
             variant="outline"
             className="w-full"
-            onClick={() => window.location.href = apiUrl('/api/auth/google')}
+            onClick={() => {
+              trackEvent("sign_up", { method: "google", source: "register_page" });
+              window.location.href = apiUrl('/api/auth/google');
+            }}
             data-testid="button-oauth-register"
           >
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">

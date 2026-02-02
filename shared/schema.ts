@@ -1045,6 +1045,87 @@ export const logbookProSettings = pgTable("logbook_pro_settings", {
   index("idx_logbook_pro_settings_user").on(table.userId),
 ]);
 
+// Notification Preferences (per user)
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emailEnabled: boolean("email_enabled").default(true),
+  pushEnabled: boolean("push_enabled").default(true),
+  inAppEnabled: boolean("in_app_enabled").default(true),
+  alertDaysBefore: integer("alert_days_before").default(30),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_notification_preferences_user").on(table.userId),
+  index("idx_notification_preferences_user").on(table.userId),
+]);
+
+// Push tokens (Expo)
+export const pushTokens = pgTable("push_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  platform: text("platform"),
+  deviceName: text("device_name"),
+  isActive: boolean("is_active").default(true),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_push_tokens_user").on(table.userId),
+]);
+
+// User notifications (in-app history)
+export const userNotifications = pgTable("user_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  referenceDate: date("reference_date"),
+  channels: text("channels").array().notNull().default(sql`ARRAY[]::text[]`),
+  isRead: boolean("is_read").default(false),
+  readAt: timestamp("read_at"),
+  meta: jsonb("meta"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_user_notifications_reference").on(table.userId, table.type, table.referenceDate),
+  index("idx_user_notifications_user").on(table.userId),
+  index("idx_user_notifications_unread").on(table.userId, table.isRead),
+]);
+
+// Endorsements (Logbook Pro)
+export const endorsements = pgTable("endorsements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  endorsementType: text("endorsement_type"),
+  issuedAt: date("issued_at").notNull(),
+  expiresAt: date("expires_at"),
+  instructorName: text("instructor_name"),
+  instructorCertificate: text("instructor_certificate"),
+  aircraftType: text("aircraft_type"),
+  notes: text("notes"),
+  documentUrl: text("document_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_endorsements_user").on(table.userId),
+]);
+
+// Radio comms sessions (Logbook Pro)
+export const radioCommsSessions = pgTable("radio_comms_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  scenarioId: text("scenario_id").notNull(),
+  scoreCorrect: integer("score_correct").default(0),
+  scoreTotal: integer("score_total").default(0),
+  durationSec: integer("duration_sec"),
+  attempts: jsonb("attempts"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const studentProfiles = pgTable("student_profiles", {
   userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   wizardJson: jsonb("wizard_json"),
@@ -1176,6 +1257,45 @@ export const insertLogbookProSettingsSchema = createInsertSchema(logbookProSetti
   medicalExpiresAt: z.string().optional().nullable(),
   flightReviewDate: z.string().optional().nullable(),
   ipcDate: z.string().optional().nullable(),
+});
+
+export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPushTokenSchema = createInsertSchema(pushTokens).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+  lastUsedAt: true,
+}).extend({
+  token: z.string().min(10),
+});
+
+export const insertUserNotificationSchema = createInsertSchema(userNotifications).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEndorsementSchema = createInsertSchema(endorsements).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  issuedAt: z.coerce.date(),
+  expiresAt: z.coerce.date().optional().nullable(),
+});
+
+export const insertRadioCommsSessionSchema = createInsertSchema(radioCommsSessions).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
 });
 
 export const insertStudentProfileSchema = createInsertSchema(studentProfiles).omit({
@@ -1511,6 +1631,16 @@ export type LogbookEntry = typeof logbookEntries.$inferSelect;
 export type InsertLogbookEntry = z.infer<typeof insertLogbookEntrySchema>;
 export type LogbookProSettings = typeof logbookProSettings.$inferSelect;
 export type InsertLogbookProSettings = z.infer<typeof insertLogbookProSettingsSchema>;
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
+export type PushToken = typeof pushTokens.$inferSelect;
+export type InsertPushToken = z.infer<typeof insertPushTokenSchema>;
+export type UserNotification = typeof userNotifications.$inferSelect;
+export type InsertUserNotification = z.infer<typeof insertUserNotificationSchema>;
+export type Endorsement = typeof endorsements.$inferSelect;
+export type InsertEndorsement = z.infer<typeof insertEndorsementSchema>;
+export type RadioCommsSession = typeof radioCommsSessions.$inferSelect;
+export type InsertRadioCommsSession = z.infer<typeof insertRadioCommsSessionSchema>;
 export type StudentProfile = typeof studentProfiles.$inferSelect;
 export type InsertStudentProfile = z.infer<typeof insertStudentProfileSchema>;
 export type FlightPlan = typeof flightPlans.$inferSelect;

@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award } from "lucide-react";
+import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award, Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import type { LogbookEntry, InsertLogbookEntry } from "@shared/schema";
+import type { LogbookEntry, InsertLogbookEntry, Endorsement } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { Switch } from "@/components/ui/switch";
 
 // Helper function to calculate totals from entries
 function calculateTotals(entries: LogbookEntry[]) {
@@ -133,6 +134,26 @@ export default function Logbook() {
     flightReviewDate: "",
     ipcDate: "",
   });
+  const [notificationPrefs, setNotificationPrefs] = useState({
+    emailEnabled: true,
+    pushEnabled: true,
+    inAppEnabled: true,
+    alertDaysBefore: 30,
+  });
+  const [endorsementForm, setEndorsementForm] = useState({
+    title: "",
+    endorsementType: "",
+    issuedAt: "",
+    expiresAt: "",
+    instructorName: "",
+    instructorCertificate: "",
+    aircraftType: "",
+    notes: "",
+    documentUrl: "",
+  });
+  const [isEndorsementDialogOpen, setIsEndorsementDialogOpen] = useState(false);
+  const [editingEndorsement, setEditingEndorsement] = useState<Endorsement | null>(null);
+  const endorsementSaveDisabled = !endorsementForm.title.trim() || !endorsementForm.issuedAt;
 
   const { data: entries = [], isLoading } = useQuery<LogbookEntry[]>({
     queryKey: ["/api/logbook"],
@@ -140,6 +161,16 @@ export default function Logbook() {
 
   const { data: proSummary, isLoading: proSummaryLoading } = useQuery<any>({
     queryKey: ["/api/logbook/pro/summary"],
+    enabled: isPro,
+  });
+
+  const { data: endorsements = [], isLoading: endorsementsLoading } = useQuery<Endorsement[]>({
+    queryKey: ["/api/endorsements"],
+    enabled: isPro,
+  });
+
+  const { data: preferenceData } = useQuery<any>({
+    queryKey: ["/api/notifications/preferences"],
     enabled: isPro,
   });
 
@@ -154,6 +185,16 @@ export default function Logbook() {
       });
     }
   }, [proSummary]);
+
+  useEffect(() => {
+    if (!preferenceData) return;
+    setNotificationPrefs({
+      emailEnabled: preferenceData.emailEnabled ?? true,
+      pushEnabled: preferenceData.pushEnabled ?? true,
+      inAppEnabled: preferenceData.inAppEnabled ?? true,
+      alertDaysBefore: preferenceData.alertDaysBefore ?? 30,
+    });
+  }, [preferenceData]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertLogbookEntry) => {
@@ -237,6 +278,73 @@ export default function Logbook() {
     },
     onError: (error: any) => {
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const saveNotificationPrefsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", "/api/notifications/preferences", notificationPrefs);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to update notification preferences");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications/preferences"] });
+      toast({ title: "Preferences updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const saveEndorsementMutation = useMutation({
+    mutationFn: async ({ id, data }: { id?: string; data: any }) => {
+      const payload = {
+        ...data,
+        issuedAt: data.issuedAt || null,
+        expiresAt: data.expiresAt || null,
+        title: data.title,
+      };
+      const res = id
+        ? await apiRequest("PATCH", `/api/endorsements/${id}`, payload)
+        : await apiRequest("POST", "/api/endorsements", payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/endorsements"] });
+      setIsEndorsementDialogOpen(false);
+      setEditingEndorsement(null);
+      setEndorsementForm({
+        title: "",
+        endorsementType: "",
+        issuedAt: "",
+        expiresAt: "",
+        instructorName: "",
+        instructorCertificate: "",
+        aircraftType: "",
+        notes: "",
+        documentUrl: "",
+      });
+      toast({ title: "Endorsement saved" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteEndorsementMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/endorsements/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/endorsements"] });
+      toast({ title: "Endorsement deleted" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
     },
   });
 
@@ -641,6 +749,157 @@ export default function Logbook() {
         </Card>
       )}
 
+      {isPro && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Bell className="h-5 w-5 text-primary" />
+              Alert Preferences
+            </CardTitle>
+            <CardDescription>Choose how you receive Logbook Pro alerts (30 days before due).</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold">Email alerts</p>
+                <p className="text-xs text-muted-foreground">Get reminders in your inbox.</p>
+              </div>
+              <Switch
+                checked={notificationPrefs.emailEnabled}
+                onCheckedChange={(checked) => setNotificationPrefs((prev) => ({ ...prev, emailEnabled: checked }))}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold">Push alerts</p>
+                <p className="text-xs text-muted-foreground">Mobile push notifications (Expo).</p>
+              </div>
+              <Switch
+                checked={notificationPrefs.pushEnabled}
+                onCheckedChange={(checked) => setNotificationPrefs((prev) => ({ ...prev, pushEnabled: checked }))}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold">In-app alerts</p>
+                <p className="text-xs text-muted-foreground">Show in your notifications list.</p>
+              </div>
+              <Switch
+                checked={notificationPrefs.inAppEnabled}
+                onCheckedChange={(checked) => setNotificationPrefs((prev) => ({ ...prev, inAppEnabled: checked }))}
+              />
+            </div>
+            <Button
+              onClick={() => saveNotificationPrefsMutation.mutate()}
+              disabled={saveNotificationPrefsMutation.isPending}
+            >
+              {saveNotificationPrefsMutation.isPending ? "Saving..." : "Save Preferences"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {isPro && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Award className="h-5 w-5 text-primary" />
+              Endorsements
+            </CardTitle>
+            <CardDescription>Track instructor endorsements and sign-offs.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-muted-foreground">
+                {endorsementsLoading ? "Loading endorsements..." : `${endorsements.length} endorsement${endorsements.length === 1 ? "" : "s"}`}
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingEndorsement(null);
+                  setEndorsementForm({
+                    title: "",
+                    endorsementType: "",
+                    issuedAt: "",
+                    expiresAt: "",
+                    instructorName: "",
+                    instructorCertificate: "",
+                    aircraftType: "",
+                    notes: "",
+                    documentUrl: "",
+                  });
+                  setIsEndorsementDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add endorsement
+              </Button>
+            </div>
+
+            {endorsements.length === 0 && !endorsementsLoading ? (
+              <div className="text-sm text-muted-foreground">No endorsements yet.</div>
+            ) : (
+              <div className="space-y-3">
+                {endorsements.map((endorsement) => (
+                  <div key={endorsement.id} className="rounded-lg border p-3 space-y-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">{endorsement.title}</p>
+                        <p className="text-xs text-muted-foreground">{endorsement.endorsementType || "General endorsement"}</p>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Issued: {formatDisplayDate(endorsement.issuedAt?.toString() || null)}
+                      </div>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Instructor: {endorsement.instructorName || "—"} {endorsement.instructorCertificate ? `(${endorsement.instructorCertificate})` : ""}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Aircraft: {endorsement.aircraftType || "—"}</div>
+                    {endorsement.expiresAt && (
+                      <div className="text-xs text-muted-foreground">Expires: {formatDisplayDate(endorsement.expiresAt?.toString() || null)}</div>
+                    )}
+                    {endorsement.notes && <div className="text-xs text-muted-foreground">Notes: {endorsement.notes}</div>}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingEndorsement(endorsement);
+                          setEndorsementForm({
+                            title: endorsement.title || "",
+                            endorsementType: endorsement.endorsementType || "",
+                            issuedAt: formatDateInput(endorsement.issuedAt?.toString() || ""),
+                            expiresAt: formatDateInput(endorsement.expiresAt?.toString() || ""),
+                            instructorName: endorsement.instructorName || "",
+                            instructorCertificate: endorsement.instructorCertificate || "",
+                            aircraftType: endorsement.aircraftType || "",
+                            notes: endorsement.notes || "",
+                            documentUrl: endorsement.documentUrl || "",
+                          });
+                          setIsEndorsementDialogOpen(true);
+                        }}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => deleteEndorsementMutation.mutate(endorsement.id)}
+                        disabled={deleteEndorsementMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Logbook Pro CTA */}
       <Card className="mt-6 border-primary/20 bg-primary/5">
         <CardHeader>
@@ -836,6 +1095,114 @@ export default function Logbook() {
                 disabled={unlockMutation.isPending}
               >
                 {viewingEntry.isLocked ? "Edit & Re-sign" : "Edit Entry"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {isEndorsementDialogOpen && (
+        <Dialog
+          open={isEndorsementDialogOpen}
+          onOpenChange={(open) => {
+            setIsEndorsementDialogOpen(open);
+            if (!open) {
+              setEditingEndorsement(null);
+            }
+          }}
+        >
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editingEndorsement ? "Edit Endorsement" : "Add Endorsement"}</DialogTitle>
+              <DialogDescription>Track instructor sign-offs and expiration dates.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3">
+              <div className="space-y-1">
+                <Label>Title</Label>
+                <Input
+                  value={endorsementForm.title}
+                  onChange={(e) => setEndorsementForm({ ...endorsementForm, title: e.target.value })}
+                  placeholder="Complex endorsement, high performance, etc."
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Endorsement Type</Label>
+                <Input
+                  value={endorsementForm.endorsementType}
+                  onChange={(e) => setEndorsementForm({ ...endorsementForm, endorsementType: e.target.value })}
+                  placeholder="61.31(e), tailwheel, IPC, etc."
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Issued Date</Label>
+                  <Input
+                    type="date"
+                    value={endorsementForm.issuedAt}
+                    onChange={(e) => setEndorsementForm({ ...endorsementForm, issuedAt: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Expires Date</Label>
+                  <Input
+                    type="date"
+                    value={endorsementForm.expiresAt}
+                    onChange={(e) => setEndorsementForm({ ...endorsementForm, expiresAt: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Instructor Name</Label>
+                  <Input
+                    value={endorsementForm.instructorName}
+                    onChange={(e) => setEndorsementForm({ ...endorsementForm, instructorName: e.target.value })}
+                    placeholder="Jane Smith, CFI"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Instructor Certificate #</Label>
+                  <Input
+                    value={endorsementForm.instructorCertificate}
+                    onChange={(e) => setEndorsementForm({ ...endorsementForm, instructorCertificate: e.target.value })}
+                    placeholder="CFI-1234567"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Aircraft Type/Class</Label>
+                <Input
+                  value={endorsementForm.aircraftType}
+                  onChange={(e) => setEndorsementForm({ ...endorsementForm, aircraftType: e.target.value })}
+                  placeholder="C172, PA-28, ASEL"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Document URL (optional)</Label>
+                <Input
+                  value={endorsementForm.documentUrl}
+                  onChange={(e) => setEndorsementForm({ ...endorsementForm, documentUrl: e.target.value })}
+                  placeholder="https://..."
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Notes</Label>
+                <Textarea
+                  value={endorsementForm.notes}
+                  onChange={(e) => setEndorsementForm({ ...endorsementForm, notes: e.target.value })}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEndorsementDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => saveEndorsementMutation.mutate({ id: editingEndorsement?.id, data: endorsementForm })}
+                disabled={saveEndorsementMutation.isPending || endorsementSaveDisabled}
+              >
+                {saveEndorsementMutation.isPending ? "Saving..." : "Save Endorsement"}
               </Button>
             </DialogFooter>
           </DialogContent>

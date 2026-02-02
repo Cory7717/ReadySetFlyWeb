@@ -16,7 +16,8 @@ type LogbookEntry = {
 };
 
 export default function LogbookScreen({ navigation }: any) {
-  const { isAuthenticated } = useIsAuthenticated();
+  const { isAuthenticated, user } = useIsAuthenticated();
+  const isPro = user?.logbookProStatus === 'active';
   const [entries, setEntries] = useState<LogbookEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -92,9 +93,13 @@ export default function LogbookScreen({ navigation }: any) {
 
       <View style={styles.proCard}>
         <Text style={styles.proTitle}>Logbook Pro</Text>
-        <Text style={styles.proText}>Unlock advanced reports, exports, and planning tools.</Text>
+        <Text style={styles.proText}>
+          {isPro
+            ? 'Your Logbook Pro tools are active.'
+            : 'Unlock currency alerts, endorsements, radio comms training, and advanced tools.'}
+        </Text>
         <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('LogbookPro')}>
-          <Text style={styles.secondaryButtonText}>Upgrade to Pro</Text>
+          <Text style={styles.secondaryButtonText}>{isPro ? 'Open Pro Dashboard' : 'Upgrade to Pro'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -135,8 +140,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { padding: spacing.md, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
   title: { ...typography.h2 },
+  headerActions: { flexDirection: 'row', gap: spacing.sm },
   primaryButton: { flexDirection: 'row', backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, alignItems: 'center', gap: 6 },
   primaryButtonText: { color: '#fff', fontWeight: '600' },
+  secondaryButton: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, backgroundColor: colors.primarySoft },
+  secondaryButtonText: { color: colors.primary, fontWeight: '600' },
+  statsRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.sm },
+  statsCard: { flex: 1, backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  statsLabel: { fontSize: 12, color: colors.textMuted },
+  statsValue: { fontSize: 16, fontWeight: '700', color: colors.text, marginTop: 4 },
+  proCard: { margin: spacing.md, backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  proTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+  proText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.sm },
   listContent: { padding: spacing.md },
   card: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   cardTitle: { fontSize: 14, fontWeight: '600', color: colors.text },

@@ -13,6 +13,7 @@ import { Upload, X, ShieldAlert, Sparkles } from "lucide-react";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
 import type { AircraftListing } from "@shared/schema";
+import { trackEvent } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -74,6 +75,10 @@ export default function ListAircraft() {
   // Check if we're in edit mode
   const [isEditMode, params] = useRoute("/edit-aircraft/:id");
   const aircraftId = isEditMode ? params?.id : null;
+
+  useEffect(() => {
+    trackEvent("rental_listing_start", { mode: isEditMode ? "edit" : "create" });
+  }, [isEditMode]);
 
   // Fetch existing aircraft if in edit mode
   const { data: existingAircraft, isLoading: loadingAircraft } = useQuery<AircraftListing>({
@@ -279,6 +284,12 @@ export default function ListAircraft() {
       queryClient.invalidateQueries({ queryKey: ["/api/aircraft"] });
       if (aircraftId) {
         queryClient.invalidateQueries({ queryKey: ["/api/aircraft", aircraftId] });
+      }
+
+      if (isEditMode) {
+        trackEvent("rental_listing_update", { listing_id: aircraftId });
+      } else {
+        trackEvent("generate_lead", { lead_type: "rental_listing" });
       }
       
       // Show different message based on whether verification docs were uploaded

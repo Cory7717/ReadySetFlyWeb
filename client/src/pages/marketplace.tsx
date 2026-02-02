@@ -16,6 +16,7 @@ import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { Search, SlidersHorizontal, Gift, X } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
 import { apiUrl } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 
 const categories = [
   { id: "aircraft-sale", label: "Aircraft For Sale", fee: "$25-100/mo" },
@@ -49,6 +50,10 @@ export default function Marketplace() {
   
   const [appliedQueryParams, setAppliedQueryParams] = useState(false);
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    trackEvent("marketplace_view", { page: "/marketplace" });
+  }, []);
 
   // Apply query params from Student Pilot CTAs
   useEffect(() => {
@@ -106,6 +111,7 @@ export default function Marketplace() {
   useEffect(() => {
     if (previousCategory !== selectedCategory) {
       setPreviousCategory(selectedCategory);
+      trackEvent("marketplace_category_select", { category: selectedCategory });
       
       // Check if user has seen promo for this category
       const seenKey = `promo-seen-${selectedCategory}`;
@@ -161,6 +167,26 @@ export default function Marketplace() {
           <p className="text-base sm:text-lg text-muted-foreground max-w-3xl">
             Connect with the aviation community. Buy, sell, and find professional services.
           </p>
+          <div className="flex flex-wrap gap-3 mt-4">
+            <Button
+              variant="default"
+              onClick={() => {
+                trackEvent("cta_click", { label: "marketplace_to_rentals", target: "/rentals" });
+                navigate("/rentals");
+              }}
+            >
+              Browse Rentals
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                trackEvent("cta_click", { label: "marketplace_post_listing", target: "/create-marketplace-listing" });
+                navigate("/create-marketplace-listing");
+              }}
+            >
+              Post a Listing
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -249,7 +275,10 @@ export default function Marketplace() {
             </Button>
             <Button 
               variant="default" 
-              onClick={() => navigate("/create-marketplace-listing")}
+              onClick={() => {
+                trackEvent("marketplace_create_listing_click", { category: selectedCategory });
+                navigate("/create-marketplace-listing");
+              }}
               className="flex-1 sm:flex-initial"
               data-testid="button-create-listing"
             >
@@ -514,7 +543,19 @@ export default function Marketplace() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {categoryListings.map((listing) => (
-              <div key={listing.id} onClick={() => setSelectedListingId(listing.id)} className="cursor-pointer">
+              <div
+                key={listing.id}
+                onClick={() => {
+                  trackEvent("select_item", {
+                    item_id: listing.id,
+                    item_name: listing.title,
+                    item_category: listing.category,
+                    location: listing.city && listing.state ? `${listing.city}, ${listing.state}` : listing.location,
+                  });
+                  setSelectedListingId(listing.id);
+                }}
+                className="cursor-pointer"
+              >
                 <MarketplaceCard
                   id={listing.id}
                   category={listing.category}

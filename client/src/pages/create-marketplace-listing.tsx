@@ -22,6 +22,7 @@ import { z } from "zod";
 import type { MarketplaceListing } from "@shared/schema";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
+import { trackEvent } from "@/lib/analytics";
 
 // Base form schema
 const baseFormSchema = insertMarketplaceListingSchema.omit({ userId: true }).extend({
@@ -121,6 +122,10 @@ export default function CreateMarketplaceListing() {
   // Check if we're in edit mode
   const [isEditMode, params] = useRoute("/edit-marketplace-listing/:id");
   const listingId = isEditMode ? params?.id : null;
+
+  useEffect(() => {
+    trackEvent("marketplace_listing_start", { mode: isEditMode ? "edit" : "create" });
+  }, [isEditMode]);
 
   // Fetch existing listing if in edit mode
   const { data: existingListing, isLoading: loadingListing } = useQuery<MarketplaceListing>({
@@ -463,6 +468,14 @@ export default function CreateMarketplaceListing() {
       queryClient.invalidateQueries({ queryKey: ["/api/marketplace"] });
       if (listingId) {
         queryClient.invalidateQueries({ queryKey: ["/api/marketplace", listingId] });
+      }
+      if (isEditMode) {
+        trackEvent("marketplace_listing_update", { listing_id: listingId });
+      } else {
+        trackEvent("generate_lead", {
+          lead_type: "marketplace_listing",
+          category: form.getValues("category"),
+        });
       }
       toast({
         title: "Success",

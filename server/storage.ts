@@ -55,6 +55,16 @@ import {
   type InsertLogbookEntry,
   type LogbookProSettings,
   type InsertLogbookProSettings,
+  type NotificationPreferences,
+  type InsertNotificationPreferences,
+  type PushToken,
+  type InsertPushToken,
+  type UserNotification,
+  type InsertUserNotification,
+  type Endorsement,
+  type InsertEndorsement,
+  type RadioCommsSession,
+  type InsertRadioCommsSession,
   type StudentProfile,
   type InsertStudentProfile,
   type FlightPlan,
@@ -93,6 +103,11 @@ import {
   contactSubmissions,
   logbookEntries,
   logbookProSettings,
+  notificationPreferences,
+  pushTokens,
+  userNotifications,
+  endorsements,
+  radioCommsSessions,
   studentProfiles,
   flightPlans,
   aircraftTypes,
@@ -375,6 +390,30 @@ export interface IStorage {
   // Logbook Pro Settings
   getLogbookProSettings(userId: string): Promise<LogbookProSettings | undefined>;
   upsertLogbookProSettings(userId: string, updates: InsertLogbookProSettings): Promise<LogbookProSettings>;
+  getActiveLogbookProUsers(): Promise<User[]>;
+
+  // Notification Preferences + User Notifications
+  getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
+  upsertNotificationPreferences(userId: string, updates: InsertNotificationPreferences): Promise<NotificationPreferences>;
+  getUserNotifications(userId: string, limit?: number): Promise<UserNotification[]>;
+  getUnreadUserNotifications(userId: string): Promise<UserNotification[]>;
+  getUserNotificationByTypeAndDate(userId: string, type: string, referenceDate: Date | null): Promise<UserNotification | undefined>;
+  createUserNotification(notification: InsertUserNotification & { userId: string }): Promise<UserNotification>;
+  markUserNotificationRead(id: string, userId: string): Promise<UserNotification | undefined>;
+
+  // Push Tokens
+  upsertPushToken(userId: string, token: InsertPushToken): Promise<PushToken>;
+  getPushTokensByUser(userId: string): Promise<PushToken[]>;
+
+  // Endorsements
+  getEndorsementsByUser(userId: string): Promise<Endorsement[]>;
+  createEndorsement(endorsement: InsertEndorsement & { userId: string }): Promise<Endorsement>;
+  updateEndorsement(id: string, userId: string, updates: Partial<Endorsement>): Promise<Endorsement | undefined>;
+  deleteEndorsement(id: string, userId: string): Promise<boolean>;
+
+  // Radio Comms Sessions
+  getRadioCommsSessionsByUser(userId: string, limit?: number): Promise<RadioCommsSession[]>;
+  createRadioCommsSession(session: InsertRadioCommsSession & { userId: string }): Promise<RadioCommsSession>;
 
   // Student Profiles
   getStudentProfile(userId: string): Promise<StudentProfile | undefined>;
@@ -2494,6 +2533,167 @@ export class DatabaseStorage implements IStorage {
     }
     const [settings] = await db.insert(logbookProSettings).values({ ...updates, userId }).returning();
     return settings;
+  }
+
+  async getActiveLogbookProUsers(): Promise<User[]> {
+    return await db.select().from(users).where(eq(users.logbookProStatus, "active"));
+  }
+
+  // Notification Preferences + User Notifications
+  async getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined> {
+    const [prefs] = await db
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId));
+    return prefs;
+  }
+
+  async upsertNotificationPreferences(userId: string, updates: InsertNotificationPreferences): Promise<NotificationPreferences> {
+    const existing = await this.getNotificationPreferences(userId);
+    if (existing) {
+      const [prefs] = await db
+        .update(notificationPreferences)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(notificationPreferences.userId, userId))
+        .returning();
+      return prefs;
+    }
+    const [prefs] = await db
+      .insert(notificationPreferences)
+      .values({ ...updates, userId })
+      .returning();
+    return prefs;
+  }
+
+  async getUserNotifications(userId: string, limit = 50): Promise<UserNotification[]> {
+    return await db
+      .select()
+      .from(userNotifications)
+      .where(eq(userNotifications.userId, userId))
+      .orderBy(desc(userNotifications.createdAt))
+      .limit(limit);
+  }
+
+  async getUnreadUserNotifications(userId: string): Promise<UserNotification[]> {
+    return await db
+      .select()
+      .from(userNotifications)
+      .where(and(eq(userNotifications.userId, userId), eq(userNotifications.isRead, false)))
+      .orderBy(desc(userNotifications.createdAt));
+  }
+
+  async getUserNotificationByTypeAndDate(userId: string, type: string, referenceDate: Date | null): Promise<UserNotification | undefined> {
+    const [notification] = await db
+      .select()
+      .from(userNotifications)
+      .where(
+        and(
+          eq(userNotifications.userId, userId),
+          eq(userNotifications.type, type),
+          referenceDate ? eq(userNotifications.referenceDate, referenceDate as any) : isNull(userNotifications.referenceDate)
+        )
+      )
+      .limit(1);
+    return notification;
+  }
+
+  async createUserNotification(notification: InsertUserNotification & { userId: string }): Promise<UserNotification> {
+    const [created] = await db.insert(userNotifications).values(notification).returning();
+    return created;
+  }
+
+  async markUserNotificationRead(id: string, userId: string): Promise<UserNotification | undefined> {
+    const [updated] = await db
+      .update(userNotifications)
+      .set({ isRead: true, readAt: new Date() })
+      .where(and(eq(userNotifications.id, id), eq(userNotifications.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  // Push Tokens
+  async upsertPushToken(userId: string, token: InsertPushToken): Promise<PushToken> {
+    const existing = await db.select().from(pushTokens).where(eq(pushTokens.token, token.token)).limit(1);
+    if (existing[0]) {
+      const [updated] = await db
+        .update(pushTokens)
+        .set({
+          userId,
+          platform: token.platform,
+          deviceName: token.deviceName,
+          isActive: token.isActive ?? true,
+          lastUsedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(pushTokens.token, token.token))
+        .returning();
+      return updated;
+    }
+    const [created] = await db
+      .insert(pushTokens)
+      .values({
+        userId,
+        token: token.token,
+        platform: token.platform,
+        deviceName: token.deviceName,
+        isActive: token.isActive ?? true,
+        lastUsedAt: new Date(),
+      })
+      .returning();
+    return created;
+  }
+
+  async getPushTokensByUser(userId: string): Promise<PushToken[]> {
+    return await db
+      .select()
+      .from(pushTokens)
+      .where(and(eq(pushTokens.userId, userId), eq(pushTokens.isActive, true)))
+      .orderBy(desc(pushTokens.lastUsedAt));
+  }
+
+  // Endorsements
+  async getEndorsementsByUser(userId: string): Promise<Endorsement[]> {
+    return await db
+      .select()
+      .from(endorsements)
+      .where(eq(endorsements.userId, userId))
+      .orderBy(desc(endorsements.issuedAt), desc(endorsements.createdAt));
+  }
+
+  async createEndorsement(endorsement: InsertEndorsement & { userId: string }): Promise<Endorsement> {
+    const [created] = await db.insert(endorsements).values(endorsement).returning();
+    return created;
+  }
+
+  async updateEndorsement(id: string, userId: string, updates: Partial<Endorsement>): Promise<Endorsement | undefined> {
+    const [updated] = await db
+      .update(endorsements)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(endorsements.id, id), eq(endorsements.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteEndorsement(id: string, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(endorsements)
+      .where(and(eq(endorsements.id, id), eq(endorsements.userId, userId)));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Radio Comms Sessions
+  async getRadioCommsSessionsByUser(userId: string, limit = 20): Promise<RadioCommsSession[]> {
+    return await db
+      .select()
+      .from(radioCommsSessions)
+      .where(eq(radioCommsSessions.userId, userId))
+      .orderBy(desc(radioCommsSessions.createdAt))
+      .limit(limit);
+  }
+
+  async createRadioCommsSession(session: InsertRadioCommsSession & { userId: string }): Promise<RadioCommsSession> {
+    const [created] = await db.insert(radioCommsSessions).values(session).returning();
+    return created;
   }
 
   // Student Profiles

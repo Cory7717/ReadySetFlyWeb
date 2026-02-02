@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AppNavigator from './src/navigation/AppNavigator';
+import PushTokenRegistrar from './src/components/PushTokenRegistrar';
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -16,6 +17,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AppNavigator />
+      <PushTokenRegistrar />
       <StatusBar style="auto" />
     </QueryClientProvider>
   );

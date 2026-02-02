@@ -49,6 +49,7 @@ import MyAircraft from "@/pages/my-aircraft";
 import AdminAircraftLibrary from "@/pages/admin-aircraft-library";
 import RadioCommsTrainer from "@/pages/radio-comms-trainer";
 import AdsbReceiverHelp from "@/pages/adsb-receiver-help";
+import NotificationsPage from "@/pages/notifications";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -153,6 +154,7 @@ function Router() {
           <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
           <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
           <Route path="/my-aircraft" component={MyAircraft} />
+          <Route path="/notifications" component={NotificationsPage} />
           <Route path="/admin/aircraft-library" component={AdminAircraftLibrary} />
         </>
       ) : (
@@ -183,6 +185,7 @@ function Router() {
           <Route path="/radio-comms-trainer" component={RequireAuth} />
           <Route path="/adsb-receiver-help" component={RequireAuth} />
           <Route path="/my-aircraft" component={RequireAuth} />
+          <Route path="/notifications" component={RequireAuth} />
           <Route path="/admin/aircraft-library" component={RequireAuth} />
         </>
       )}

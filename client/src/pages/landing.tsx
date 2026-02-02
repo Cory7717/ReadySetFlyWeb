@@ -6,6 +6,7 @@ import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, Boo
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
@@ -40,7 +41,12 @@ export default function Landing() {
                 asChild
                 data-testid="button-student-hub"
               >
-                <Link href="/student">Start Flying</Link>
+                <Link
+                  href="/student"
+                  onClick={() => trackEvent("cta_click", { label: "start_flying", target: "/student" })}
+                >
+                  Start Flying
+                </Link>
               </Button>
               <Button 
                 size="lg" 
@@ -48,7 +54,10 @@ export default function Landing() {
                 asChild
                 data-testid="button-pilot-tools"
               >
-                <Link href="/pilot-tools">
+                <Link
+                  href="/pilot-tools"
+                  onClick={() => trackEvent("cta_click", { label: "pilot_tools", target: "/pilot-tools" })}
+                >
                   <BookOpen className="h-4 w-4 mr-2" />
                   Explore Pilot Tools
                 </Link>
@@ -59,7 +68,12 @@ export default function Landing() {
                 asChild
                 data-testid="button-marketplace"
               >
-                <Link href="/marketplace">Visit Marketplace</Link>
+                <Link
+                  href="/marketplace"
+                  onClick={() => trackEvent("cta_click", { label: "marketplace", target: "/marketplace" })}
+                >
+                  Visit Marketplace
+                </Link>
               </Button>
             </div>
           </div>
@@ -70,6 +84,70 @@ export default function Landing() {
         placement="home" 
         className="container mx-auto px-4 py-8 max-w-7xl"
       />
+
+      {/* Marketplace + Rentals Spotlight */}
+      <div className="py-12 sm:py-16">
+        <div className="container mx-auto px-4">
+          <div className="max-w-5xl mx-auto">
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card className="border-primary/20">
+                <CardContent className="p-6 sm:p-8 space-y-4">
+                  <Badge variant="outline" className="text-xs w-fit">Rentals</Badge>
+                  <h3 className="text-2xl font-semibold">Book verified aircraft fast</h3>
+                  <p className="text-muted-foreground">
+                    Browse rental-ready aircraft from trusted owners with transparent pricing and messaging.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <Button asChild>
+                      <Link
+                        href="/rentals"
+                        onClick={() => trackEvent("cta_click", { label: "browse_rentals_home", target: "/rentals" })}
+                      >
+                        Browse Rentals
+                      </Link>
+                    </Button>
+                    <Button variant="outline" asChild>
+                      <Link
+                        href="/list-aircraft"
+                        onClick={() => trackEvent("cta_click", { label: "list_aircraft_home", target: "/list-aircraft" })}
+                      >
+                        List Your Aircraft
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-primary/20">
+                <CardContent className="p-6 sm:p-8 space-y-4">
+                  <Badge variant="outline" className="text-xs w-fit">Marketplace</Badge>
+                  <h3 className="text-2xl font-semibold">Find CFIs, schools, jobs, and services</h3>
+                  <p className="text-muted-foreground">
+                    Explore the aviation marketplace for training, maintenance, and career opportunities.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <Button asChild>
+                      <Link
+                        href="/marketplace"
+                        onClick={() => trackEvent("cta_click", { label: "browse_marketplace_home", target: "/marketplace" })}
+                      >
+                        Explore Marketplace
+                      </Link>
+                    </Button>
+                    <Button variant="outline" asChild>
+                      <Link
+                        href="/create-marketplace-listing"
+                        onClick={() => trackEvent("cta_click", { label: "post_listing_home", target: "/create-marketplace-listing" })}
+                      >
+                        Post a Listing
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Student Pilot Hub Section */}
       <div className="bg-primary/5 py-12 sm:py-16">
@@ -89,10 +167,20 @@ export default function Landing() {
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3">
                       <Button asChild>
-                        <Link href="/student">Open Student Pilot Hub</Link>
+                        <Link
+                          href="/student"
+                          onClick={() => trackEvent("cta_click", { label: "student_hub", target: "/student" })}
+                        >
+                          Open Student Pilot Hub
+                        </Link>
                       </Button>
                       <Button variant="outline" asChild>
-                        <Link href="/marketplace?type=flight-school">Find a Flight School</Link>
+                        <Link
+                          href="/marketplace?type=flight-school"
+                          onClick={() => trackEvent("cta_click", { label: "find_flight_school", target: "/marketplace" })}
+                        >
+                          Find a Flight School
+                        </Link>
                       </Button>
                     </div>
                   </div>
@@ -510,7 +598,10 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               size="lg"
-              onClick={() => window.location.href = apiUrl('/api/auth/google')}
+              onClick={() => {
+                trackEvent("cta_click", { label: "create_account", target: "/api/auth/google" });
+                window.location.href = apiUrl('/api/auth/google');
+              }}
               data-testid="button-cta-login"
             >
               Create Your Account
@@ -518,7 +609,10 @@ export default function Landing() {
             <Button 
               size="lg"
               variant="outline"
-              onClick={() => window.location.href = '/rentals'}
+              onClick={() => {
+                trackEvent("cta_click", { label: "browse_listings", target: "/rentals" });
+                window.location.href = '/rentals';
+              }}
               data-testid="button-cta-browse"
             >
               Browse Listings

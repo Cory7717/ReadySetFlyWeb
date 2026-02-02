@@ -27,6 +27,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { trackEvent } from "@/lib/analytics";
 
 export default function AircraftDetail() {
   const [, params] = useRoute("/aircraft/:id");
@@ -69,6 +70,12 @@ export default function AircraftDetail() {
     apiRequest("POST", `/api/aircraft/${aircraft.id}/view`, {}).catch(() => {
       // Silent fail
     });
+    trackEvent("view_item", {
+      item_id: aircraft.id,
+      item_name: `${aircraft.year} ${aircraft.make} ${aircraft.model}`,
+      item_category: "rental_aircraft",
+      location: aircraft.location,
+    });
   }, [aircraft?.id]);
 
   // Rental request mutation
@@ -77,6 +84,10 @@ export default function AircraftDetail() {
       return await apiRequest("POST", "/api/rentals", rentalData);
     },
     onSuccess: (data: any) => {
+      trackEvent("booking_request_created", {
+        rental_id: data.id,
+        aircraft_id: aircraft?.id,
+      });
       // Redirect to payment page with the rental ID
       navigate(`/rental-payment/${data.id}`);
       toast({
@@ -148,6 +159,14 @@ export default function AircraftDetail() {
     const processingFee = subtotal * 0.03; // 3%
     const totalCostRenter = subtotal + processingFee;
     const ownerPayout = baseCost - platformFeeOwner;
+
+    trackEvent("begin_checkout", {
+      item_id: aircraft!.id,
+      item_name: `${aircraft!.year} ${aircraft!.make} ${aircraft!.model}`,
+      item_category: "rental_aircraft",
+      value: Number(totalCostRenter.toFixed(2)),
+      currency: "USD",
+    });
 
     createRentalMutation.mutate({
       aircraftId: aircraft!.id,

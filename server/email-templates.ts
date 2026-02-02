@@ -893,4 +893,71 @@ Questions? Contact support@readysetfly.us
   `.trim();
 }
 
+export function getLogbookProAlertEmailHtml(data: {
+  firstName: string;
+  title: string;
+  message: string;
+  dueDate: Date;
+}): string {
+  const dueDate = data.dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+    .card { background: white; border-radius: 12px; padding: 28px; border: 1px solid #e5e7eb; }
+    .header { background: #1e40af; color: #fff; padding: 18px 24px; border-radius: 10px; }
+    .cta { display: inline-block; background: #1e40af; color: #fff !important; padding: 12px 18px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+    .muted { color: #6b7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <h2 style="margin:0;">Logbook Pro Alert</h2>
+      </div>
+      <p style="margin-top: 20px;">Hi ${data.firstName},</p>
+      <p><strong>${data.title}</strong></p>
+      <p>${data.message}</p>
+      <p class="muted">Due date: ${dueDate}</p>
+      <div style="margin-top: 20px;">
+        <a class="cta" href="${process.env.FRONTEND_BASE_URL || "https://readysetfly.us"}/logbook">
+          Review in Logbook Pro
+        </a>
+      </div>
+      <p class="muted" style="margin-top: 20px;">You’re receiving this email because Logbook Pro alerts are enabled on your account.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+export function getLogbookProAlertEmailText(data: {
+  firstName: string;
+  title: string;
+  message: string;
+  dueDate: Date;
+}): string {
+  const dueDate = data.dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  return `
+Logbook Pro Alert
+
+Hi ${data.firstName},
+
+${data.title}
+${data.message}
+
+Due date: ${dueDate}
+
+Review in Logbook Pro: ${(process.env.FRONTEND_BASE_URL || "https://readysetfly.us")}/logbook
+
+You’re receiving this email because Logbook Pro alerts are enabled on your account.
+  `.trim();
+}
+
 

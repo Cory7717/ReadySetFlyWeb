@@ -12,6 +12,7 @@ import RadioCommsTrainerScreen from '../screens/RadioCommsTrainerScreen';
 import LogbookScreen from '../screens/LogbookScreen';
 import LogbookEntryScreen from '../screens/LogbookEntryScreen';
 import LogbookProScreen from '../screens/LogbookProScreen';
+import EndorsementsScreen from '../screens/EndorsementsScreen';
 import StudentHubScreen from '../screens/StudentHubScreen';
 import StudentWizardScreen from '../screens/StudentWizardScreen';
 import StudentRoadmapScreen from '../screens/StudentRoadmapScreen';
@@ -47,6 +48,7 @@ export type ProfileStackParamList = {
   Logbook: undefined;
   LogbookEntry: { entryId?: string } | undefined;
   LogbookPro: undefined;
+  Endorsements: undefined;
   StudentHub: undefined;
   StudentWizard: undefined;
   StudentRoadmap: undefined;
@@ -138,6 +140,11 @@ export default function ProfileStack() {
         name="LogbookPro" 
         component={LogbookProScreen}
         options={{ title: 'Logbook Pro' }}
+      />
+      <Stack.Screen
+        name="Endorsements"
+        component={EndorsementsScreen}
+        options={{ title: 'Endorsements' }}
       />
       <Stack.Screen 
         name="StudentHub" 

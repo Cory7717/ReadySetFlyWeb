@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { Plane } from 'lucide-react';
 import { apiFetch, apiUrl } from '@/lib/api';
+import { trackEvent } from "@/lib/analytics";
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -87,6 +88,7 @@ export default function LoginPage() {
     onSuccess: () => {
       // Invalidate user query to refetch with new session
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      trackEvent("login", { method: "email" });
       toast({
         title: 'Welcome back!',
         description: 'You have successfully logged in.',
@@ -182,7 +184,10 @@ export default function LoginPage() {
             type="button"
             variant="outline"
             className="w-full"
-            onClick={() => window.location.href = apiUrl('/api/auth/google')}
+            onClick={() => {
+              trackEvent("login", { method: "google", source: "login_page" });
+              window.location.href = apiUrl('/api/auth/google');
+            }}
             data-testid="button-oauth-login"
           >
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">

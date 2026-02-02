@@ -8,14 +8,27 @@ export type MembershipPlanOption = {
   badge?: string;
 };
 
-export const membershipTierInfo: Record<MembershipTier, { title: string; subtitle: string }> = {
+export const membershipTierInfo: Record<MembershipTier, { title: string; subtitle: string; features: string[] }> = {
   pro: {
     title: "RSF Pro (Core)",
     subtitle: "Save, alerts, analytics, and pro training tools.",
+    features: [
+      "Save logbook entries, flight plans, and training history.",
+      "Currency tracking + expiration alerts (medical, flight review, IPC).",
+      "Endorsement tracking and instructor sign-offs.",
+      "Radio Comms Trainer with full scenarios and scoring.",
+      "Core analytics and export-ready summaries.",
+    ],
   },
   pro_plus: {
     title: "RSF Pro+ (Advanced / Power Pilot)",
     subtitle: "Advanced analytics, trends, and power-user tooling.",
+    features: [
+      "Everything in RSF Pro (Core).",
+      "Advanced analytics, trend analysis, and deeper performance insights.",
+      "Expanded reporting and long-range proficiency tracking.",
+      "Priority access to power-user tooling as it ships.",
+    ],
   },
 };
 

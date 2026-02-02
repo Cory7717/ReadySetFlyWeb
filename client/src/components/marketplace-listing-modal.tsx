@@ -200,6 +200,9 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="modal-marketplace-listing">
+        <DialogDescription className="sr-only">
+          Marketplace listing details and actions.
+        </DialogDescription>
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
@@ -765,12 +768,14 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 flex-wrap">
-                  <Link href={`/edit-marketplace-listing/${listing.id}`}>
-                    <Button variant="outline" data-testid="button-edit-listing">
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Listing
-                    </Button>
-                  </Link>
+                  {!(listing as any).isExample && (
+                    <Link href={`/edit-marketplace-listing/${listing.id}`}>
+                      <Button variant="outline" data-testid="button-edit-listing">
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Listing
+                      </Button>
+                    </Link>
+                  )}
                   
                   <Button
                     variant="destructive"

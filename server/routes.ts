@@ -4123,6 +4123,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const listingId = req.params.id;
+
+      const sampleListing = getSampleMarketplaceListing(listingId);
+      if (sampleListing) {
+        return res.status(403).json({ error: "Sample listings cannot be edited" });
+      }
       
       // First, fetch the existing listing to verify ownership
       const existingListing = await storage.getMarketplaceListing(listingId);

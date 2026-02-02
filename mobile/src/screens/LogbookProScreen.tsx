@@ -280,12 +280,10 @@ export default function LogbookProScreen({ navigation }: any) {
       </View>
 
       <View style={styles.featureList}>
-        {[
-          'Advanced flight planning, saved routes, and performance profiles.',
-          'Currency tracking, expiration alerts, and notification history.',
-          'Radio Comms Trainer with scenario scoring.',
-          'Analytics, exports, and premium pilot tools.',
-        ].map((item) => (
+        <Text style={styles.featureTitle}>
+          Included with {membershipTierInfo[selectedTier].title}
+        </Text>
+        {membershipTierInfo[selectedTier].features.map((item) => (
           <View key={item} style={styles.featureRow}>
             <Ionicons name="checkmark-circle" size={18} color="#10b981" />
             <Text style={styles.featureText}>{item}</Text>
@@ -296,6 +294,7 @@ export default function LogbookProScreen({ navigation }: any) {
       <View style={styles.tierGrid}>
         {(Object.keys(membershipTierInfo) as MembershipTier[]).map((tier) => {
           const isSelected = tier === selectedTier;
+          const monthly = membershipPlanOptions[tier].find((plan) => plan.interval === 'monthly')?.price;
           return (
             <TouchableOpacity
               key={tier}
@@ -304,6 +303,9 @@ export default function LogbookProScreen({ navigation }: any) {
             >
               <Text style={styles.tierTitle}>{membershipTierInfo[tier].title}</Text>
               <Text style={styles.tierSubtitle}>{membershipTierInfo[tier].subtitle}</Text>
+              {monthly !== undefined && (
+                <Text style={styles.tierPrice}>From ${monthly.toFixed(2)}/mo</Text>
+              )}
             </TouchableOpacity>
           );
         })}
@@ -323,6 +325,7 @@ export default function LogbookProScreen({ navigation }: any) {
                 {plan.badge && <Text style={styles.planBadge}>{plan.badge}</Text>}
               </View>
               <Text style={styles.planPrice}>${plan.price.toFixed(2)}</Text>
+              <Text style={styles.planSubtitle}>{membershipTierInfo[selectedTier].subtitle}</Text>
             </TouchableOpacity>
           );
         })}
@@ -403,6 +406,7 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: { color: colors.text, fontWeight: '600' },
   featureList: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  featureTitle: { fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 8 },
   featureRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
   featureText: { flex: 1, fontSize: 13, color: colors.text },
   tierGrid: { gap: 10, marginBottom: spacing.md },
@@ -410,12 +414,14 @@ const styles = StyleSheet.create({
   tierCardActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   tierTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
   tierSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  tierPrice: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
   planGrid: { gap: 10 },
   planCard: { backgroundColor: colors.surface, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   planCardActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   planRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   planLabel: { fontSize: 13, color: colors.textMuted },
   planPrice: { fontSize: 20, fontWeight: '700', color: colors.text, marginTop: 4 },
+  planSubtitle: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
   planBadge: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
   totalLabel: { fontSize: 14, color: colors.textMuted },

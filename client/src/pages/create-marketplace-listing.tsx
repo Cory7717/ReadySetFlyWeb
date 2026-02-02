@@ -137,6 +137,7 @@ export default function CreateMarketplaceListing() {
     },
     enabled: !!listingId && isEditMode,
   });
+  const isSampleListing = Boolean((existingListing as any)?.isExample);
 
   const form = useForm<FormData>({
     resolver: zodResolver(baseFormSchema),
@@ -523,6 +524,15 @@ export default function CreateMarketplaceListing() {
     console.log("Form submitted with data:", data);
     console.log("Form errors:", form.formState.errors);
     console.log("User data:", user);
+
+    if (isSampleListing) {
+      toast({
+        title: "Sample listing",
+        description: "Sample listings are read-only. Create a new listing to publish changes.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // NOTE: Verification is NOT required for marketplace listings
     // Verification is only required for rental listings
@@ -622,6 +632,11 @@ export default function CreateMarketplaceListing() {
             ? "Update your listing details below" 
             : "List your services, aircraft for sale, job openings, or other aviation-related offerings"}
         </p>
+        {isSampleListing && (
+          <div className="mt-4 rounded-lg border border-amber-400/50 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            This is a sample listing for reference only. Sample listings are read-only.
+          </div>
+        )}
       </div>
 
       <Form {...form}>
@@ -1672,14 +1687,16 @@ export default function CreateMarketplaceListing() {
               type="submit"
               size="lg"
               className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
-              disabled={createListingMutation.isPending || (isEditMode && loadingListing)}
+              disabled={createListingMutation.isPending || (isEditMode && loadingListing) || isSampleListing}
               data-testid="button-submit-listing"
             >
               {loadingListing
                 ? "Loading..." 
                 : createListingMutation.isPending 
                   ? (isEditMode ? "Updating..." : "Creating...") 
-                  : (isEditMode ? "Update Listing" : "Create Listing")}
+                  : isSampleListing
+                    ? "Sample Listing (Read Only)"
+                    : (isEditMode ? "Update Listing" : "Create Listing")}
             </Button>
             <Button
               type="button"

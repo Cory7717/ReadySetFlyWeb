@@ -94,14 +94,16 @@ export default function LogbookProPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc pl-5">
-            <li>
-              Advanced flight planning, saved routes, and performance profiles.
-            </li>
-            <li>Currency tracking, expiration alerts, and notification history.</li>
-            <li>Radio Comms Trainer with scenario scoring.</li>
-            <li>Analytics, exports, and premium pilot tools.</li>
-          </ul>
+          <div className="rounded-lg border bg-muted/30 p-4">
+            <div className="text-sm font-semibold mb-2">
+              Included with {membershipTierInfo[selectedTier].title}
+            </div>
+            <ul className="space-y-2 text-sm text-muted-foreground list-disc pl-5">
+              {membershipTierInfo[selectedTier].features.map((feature) => (
+                <li key={feature}>{feature}</li>
+              ))}
+            </ul>
+          </div>
           <div className="flex items-center gap-2">
             <Badge variant={hasAccess ? "default" : "outline"}>
               Status: {hasAccess ? "active" : membershipStatus}
@@ -122,7 +124,9 @@ export default function LogbookProPage() {
           ) : (
             <>
               <div className="flex flex-wrap gap-3">
-                {(Object.keys(membershipTierInfo) as MembershipTier[]).map((tier) => (
+                {(Object.keys(membershipTierInfo) as MembershipTier[]).map((tier) => {
+                  const monthly = membershipPlanOptions[tier].find((plan) => plan.interval === "monthly")?.price;
+                  return (
                   <button
                     key={tier}
                     className={`rounded-xl border px-4 py-3 text-left transition-all ${
@@ -132,8 +136,12 @@ export default function LogbookProPage() {
                   >
                     <div className="text-sm text-muted-foreground">{membershipTierInfo[tier].title}</div>
                     <div className="text-xs text-muted-foreground">{membershipTierInfo[tier].subtitle}</div>
+                    {monthly !== undefined && (
+                      <div className="text-xs text-muted-foreground mt-2">From ${monthly.toFixed(2)}/mo</div>
+                    )}
                   </button>
-                ))}
+                );
+              })}
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
@@ -152,6 +160,9 @@ export default function LogbookProPage() {
                         {plan.badge && <Badge variant="outline">{plan.badge}</Badge>}
                       </div>
                       <div className="text-2xl font-semibold">${plan.price.toFixed(2)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {membershipTierInfo[selectedTier].subtitle}
+                      </div>
                     </button>
                   );
                 })}

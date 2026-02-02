@@ -97,7 +97,7 @@ export default function StudentVorTrainer() {
   return (
     <StudentLayout
       title="VOR Trainer"
-      subtitle="Quick drills to build confidence with radials, OBS, and TO/FROM flags."
+      subtitle="Quick drills for radials, OBS, TO/FROM flags, and intercept basics."
     >
       <Alert>
         <AlertTitle>Training aid only</AlertTitle>

@@ -64,7 +64,7 @@ export default function StudentHubScreen({ navigation }: any) {
           <Ionicons name="radio-outline" size={24} color="#1e40af" />
           <View style={styles.cardText}>
             <Text style={styles.cardTitle}>VOR Trainer</Text>
-            <Text style={styles.cardSubtitle}>Radials, OBS, and TO/FROM drills.</Text>
+            <Text style={styles.cardSubtitle}>Radials, OBS, and intercept drills.</Text>
           </View>
         </TouchableOpacity>
 

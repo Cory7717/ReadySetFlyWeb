@@ -63,7 +63,7 @@ export default function StudentVorTrainerScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.title}>VOR Trainer</Text>
-        <Text style={styles.subtitle}>Radials, OBS, and TO/FROM flag drills.</Text>
+        <Text style={styles.subtitle}>Radials, OBS, and intercept drills.</Text>
       </View>
 
       <View style={styles.card}>

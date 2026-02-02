@@ -200,6 +200,9 @@ export default function ApproachPlates() {
                   );
                 })}
               </TabsList>
+              <div className="text-xs text-muted-foreground mt-2">
+                Tap a category to filter plates.
+              </div>
               {visibleCategories.map((category) => (
                 <TabsContent key={category.id} value={category.id} className="mt-4">
                   {renderPlateList(groupedPlates[category.id as keyof typeof groupedPlates])}

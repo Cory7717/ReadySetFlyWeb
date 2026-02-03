@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +34,12 @@ export default function GpsSimsUnit() {
   const [stepProgress, setStepProgress] = useState<Record<string, boolean[]>>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [loadedFromProfile, setLoadedFromProfile] = useState(false);
+  const [actionLog, setActionLog] = useState<Array<{ id: string; label: string; matched: boolean }>>(
+    []
+  );
+  const [knobValues, setKnobValues] = useState<Record<string, number>>({});
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const knobDragRef = useRef<{ hotspotId: string; lastAngle: number } | null>(null);
 
   useEffect(() => {
     if (unit) {
@@ -57,6 +63,11 @@ export default function GpsSimsUnit() {
 
   useEffect(() => {
     setLoadedFromProfile(false);
+  }, [unit?.id]);
+
+  useEffect(() => {
+    setActionLog([]);
+    setKnobValues({});
   }, [unit?.id]);
 
   useEffect(() => {
@@ -115,6 +126,8 @@ export default function GpsSimsUnit() {
   }, [panelImage]);
 
   const completedCount = progress.filter(Boolean).length;
+  const actionHints = selectedTask.actionHints ?? [];
+  const rotationStep = 18;
 
   const handleToggleStep = (index: number) => {
     setStepProgress((prev) => {
@@ -130,6 +143,85 @@ export default function GpsSimsUnit() {
       [selectedTask.id]: createStepState(selectedTask),
     }));
     setRevealed((prev) => ({ ...prev, [selectedTask.id]: false }));
+  };
+
+  const describeHotspot = (hotspotId: string) =>
+    unit.panel.hotspots.find((item) => item.id === hotspotId)?.label ?? hotspotId;
+
+  const recordAction = (action: {
+    type: "press" | "rotate";
+    hotspotId: string;
+    direction?: "cw" | "ccw";
+  }) => {
+    const baseKey = `${action.type}:${action.hotspotId}`;
+    const key = action.direction ? `${baseKey}:${action.direction}` : baseKey;
+    const matched =
+      actionHints.includes(key) ||
+      (action.type === "rotate" && actionHints.includes(baseKey));
+    const label =
+      action.type === "press"
+        ? `Pressed ${describeHotspot(action.hotspotId)}`
+        : `Rotated ${describeHotspot(action.hotspotId)} ${
+            action.direction === "cw" ? "clockwise" : "counterclockwise"
+          }`;
+    setActionLog((prev) => [{ id: key, label, matched }, ...prev].slice(0, 6));
+  };
+
+  const handleButtonPress = (hotspotId: string) => {
+    setSelectedHotspotId(hotspotId);
+    recordAction({ type: "press", hotspotId });
+  };
+
+  const getHotspotCenter = (hotspotId: string) => {
+    const container = panelRef.current;
+    const hotspot = unit.panel.hotspots.find((item) => item.id === hotspotId);
+    if (!container || !hotspot) return null;
+    const rect = container.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width * (hotspot.x + hotspot.width / 2) / 100,
+      y: rect.top + rect.height * (hotspot.y + hotspot.height / 2) / 100,
+    };
+  };
+
+  const calculateAngle = (x: number, y: number, center: { x: number; y: number }) =>
+    (Math.atan2(y - center.y, x - center.x) * 180) / Math.PI;
+
+  const handleKnobPointerDown = (event: React.PointerEvent, hotspotId: string) => {
+    const center = getHotspotCenter(hotspotId);
+    if (!center) return;
+    const angle = calculateAngle(event.clientX, event.clientY, center);
+    knobDragRef.current = { hotspotId, lastAngle: angle };
+    setSelectedHotspotId(hotspotId);
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  };
+
+  const handleKnobPointerMove = (event: React.PointerEvent, hotspotId: string) => {
+    const dragState = knobDragRef.current;
+    if (!dragState || dragState.hotspotId !== hotspotId) return;
+    const center = getHotspotCenter(hotspotId);
+    if (!center) return;
+    const angle = calculateAngle(event.clientX, event.clientY, center);
+    let delta = angle - dragState.lastAngle;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    if (Math.abs(delta) >= rotationStep) {
+      const direction = delta > 0 ? "cw" : "ccw";
+      knobDragRef.current = { hotspotId, lastAngle: angle };
+      setKnobValues((prev) => ({
+        ...prev,
+        [hotspotId]: (prev[hotspotId] ?? 0) + (direction === "cw" ? 1 : -1),
+      }));
+      recordAction({ type: "rotate", hotspotId, direction });
+    }
+  };
+
+  const handleKnobPointerUp = (event: React.PointerEvent) => {
+    knobDragRef.current = null;
+    try {
+      (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    } catch {
+      // ignore if pointer capture was not set
+    }
   };
 
   const handleSaveProgress = () => {
@@ -222,6 +314,7 @@ export default function GpsSimsUnit() {
           </CardHeader>
           <CardContent className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div
+              ref={panelRef}
               className="relative overflow-hidden rounded-2xl border bg-slate-950/10"
               style={{ aspectRatio: "2 / 1" }}
             >
@@ -248,8 +341,29 @@ export default function GpsSimsUnit() {
                     top: `${hotspot.y}%`,
                     width: `${hotspot.width}%`,
                     height: `${hotspot.height}%`,
+                    touchAction: "none",
                   }}
-                  onClick={() => setSelectedHotspotId(hotspot.id)}
+                  onClick={() =>
+                    hotspot.interaction?.type === "knob"
+                      ? undefined
+                      : handleButtonPress(hotspot.id)
+                  }
+                  onPointerDown={(event) =>
+                    hotspot.interaction?.type === "knob"
+                      ? handleKnobPointerDown(event, hotspot.id)
+                      : undefined
+                  }
+                  onPointerMove={(event) =>
+                    hotspot.interaction?.type === "knob"
+                      ? handleKnobPointerMove(event, hotspot.id)
+                      : undefined
+                  }
+                  onPointerUp={(event) =>
+                    hotspot.interaction?.type === "knob" ? handleKnobPointerUp(event) : undefined
+                  }
+                  onPointerLeave={(event) =>
+                    hotspot.interaction?.type === "knob" ? handleKnobPointerUp(event) : undefined
+                  }
                   aria-label={hotspot.label}
                 >
                   <span className="sr-only">{hotspot.label}</span>
@@ -277,11 +391,32 @@ export default function GpsSimsUnit() {
                     type="button"
                     variant={hotspot.id === selectedHotspot?.id ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setSelectedHotspotId(hotspot.id)}
+                    onClick={() => handleButtonPress(hotspot.id)}
                   >
                     {hotspot.label}
                   </Button>
                 ))}
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+                <div className="text-xs font-semibold text-foreground mb-2">Action feedback</div>
+                {actionLog.length ? (
+                  <div className="space-y-1">
+                    <div className={actionLog[0].matched ? "text-emerald-600" : ""}>
+                      {actionLog[0].label} {actionLog[0].matched ? "(OK)" : ""}
+                    </div>
+                    {Object.keys(knobValues).length > 0 && (
+                      <div className="text-xs text-muted-foreground">
+                        {Object.entries(knobValues).map(([id, value]) => (
+                          <span key={id} className="mr-3">
+                            {describeHotspot(id)}: {value > 0 ? `+${value}` : value}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs">Try a button or knob to see feedback.</div>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 Want more realism? Drop in actual panel artwork and we can remap hotspots.

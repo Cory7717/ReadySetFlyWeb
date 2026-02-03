@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Image, PanResponder, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { gpsTrainerDisclaimer, gpsTrainerUnits } from '@shared/gps-sims';
@@ -30,6 +30,13 @@ export default function GpsSimsUnitScreen({ route }: any) {
   const [stepProgress, setStepProgress] = useState<Record<string, boolean[]>>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [loaded, setLoaded] = useState(false);
+  const [actionLog, setActionLog] = useState<Array<{ id: string; label: string; matched: boolean }>>(
+    []
+  );
+  const [knobValues, setKnobValues] = useState<Record<string, number>>({});
+  const [panelLayout, setPanelLayout] = useState<{ width: number; height: number } | null>(null);
+  const knobDragRef = useRef<{ hotspotId: string; lastAngle: number } | null>(null);
+  const knobRespondersRef = useRef<Record<string, any>>({});
 
   useEffect(() => {
     if (!unit?.tasks?.length) return;
@@ -47,6 +54,11 @@ export default function GpsSimsUnitScreen({ route }: any) {
 
   useEffect(() => {
     setLoaded(false);
+  }, [unit?.id]);
+
+  useEffect(() => {
+    setActionLog([]);
+    setKnobValues({});
   }, [unit?.id]);
 
   useEffect(() => {
@@ -81,6 +93,8 @@ export default function GpsSimsUnitScreen({ route }: any) {
   const showSteps = mode === 'learn' || revealed[selectedTask.id];
   const selectedHotspot =
     unit.panel.hotspots.find((hotspot) => hotspot.id === selectedHotspotId) || unit.panel.hotspots[0];
+  const actionHints = selectedTask.actionHints ?? [];
+  const rotationStep = 18;
   const panelBaseUrl = process.env.EXPO_PUBLIC_GPS_PANEL_BASE_URL;
   const panelImage = panelBaseUrl
     ? `${panelBaseUrl.replace(/\/$/, '')}/${unit.panel.imageKey}.png`
@@ -91,6 +105,91 @@ export default function GpsSimsUnitScreen({ route }: any) {
   useEffect(() => {
     setPanelSrc(panelImage);
   }, [panelImage]);
+
+  const describeHotspot = (hotspotId: string) =>
+    unit.panel.hotspots.find((item) => item.id === hotspotId)?.label ?? hotspotId;
+
+  const recordAction = (action: {
+    type: 'press' | 'rotate';
+    hotspotId: string;
+    direction?: 'cw' | 'ccw';
+  }) => {
+    const baseKey = `${action.type}:${action.hotspotId}`;
+    const key = action.direction ? `${baseKey}:${action.direction}` : baseKey;
+    const matched =
+      actionHints.includes(key) || (action.type === 'rotate' && actionHints.includes(baseKey));
+    const label =
+      action.type === 'press'
+        ? `Pressed ${describeHotspot(action.hotspotId)}`
+        : `Rotated ${describeHotspot(action.hotspotId)} ${
+            action.direction === 'cw' ? 'clockwise' : 'counterclockwise'
+          }`;
+    setActionLog((prev) => [{ id: key, label, matched }, ...prev].slice(0, 6));
+  };
+
+  const handleButtonPress = (hotspotId: string) => {
+    setSelectedHotspotId(hotspotId);
+    recordAction({ type: 'press', hotspotId });
+  };
+
+  const getHotspotSize = (hotspotId: string) => {
+    if (!panelLayout) return null;
+    const hotspot = unit.panel.hotspots.find((item) => item.id === hotspotId);
+    if (!hotspot) return null;
+    return {
+      width: panelLayout.width * (hotspot.width / 100),
+      height: panelLayout.height * (hotspot.height / 100),
+    };
+  };
+
+  const calculateAngle = (x: number, y: number, size: { width: number; height: number }) =>
+    (Math.atan2(y - size.height / 2, x - size.width / 2) * 180) / Math.PI;
+
+  const handleKnobStart = (hotspotId: string, evt: any) => {
+    const size = getHotspotSize(hotspotId);
+    if (!size) return;
+    const angle = calculateAngle(evt.nativeEvent.locationX, evt.nativeEvent.locationY, size);
+    knobDragRef.current = { hotspotId, lastAngle: angle };
+    setSelectedHotspotId(hotspotId);
+  };
+
+  const handleKnobMove = (hotspotId: string, evt: any) => {
+    const dragState = knobDragRef.current;
+    if (!dragState || dragState.hotspotId !== hotspotId) return;
+    const size = getHotspotSize(hotspotId);
+    if (!size) return;
+    const angle = calculateAngle(evt.nativeEvent.locationX, evt.nativeEvent.locationY, size);
+    let delta = angle - dragState.lastAngle;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    if (Math.abs(delta) >= rotationStep) {
+      const direction = delta > 0 ? 'cw' : 'ccw';
+      knobDragRef.current = { hotspotId, lastAngle: angle };
+      setKnobValues((prev) => ({
+        ...prev,
+        [hotspotId]: (prev[hotspotId] ?? 0) + (direction === 'cw' ? 1 : -1),
+      }));
+      recordAction({ type: 'rotate', hotspotId, direction });
+    }
+  };
+
+  const handleKnobEnd = () => {
+    knobDragRef.current = null;
+  };
+
+  const getKnobResponder = (hotspotId: string) => {
+    if (!knobRespondersRef.current[hotspotId]) {
+      knobRespondersRef.current[hotspotId] = PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (evt) => handleKnobStart(hotspotId, evt),
+        onPanResponderMove: (evt) => handleKnobMove(hotspotId, evt),
+        onPanResponderRelease: handleKnobEnd,
+        onPanResponderTerminate: handleKnobEnd,
+      });
+    }
+    return knobRespondersRef.current[hotspotId];
+  };
 
   const handleToggleStep = (index: number) => {
     setStepProgress((prev) => {
@@ -173,7 +272,15 @@ export default function GpsSimsUnitScreen({ route }: any) {
         <Text style={styles.helperText}>
           Tap a hotspot to rehearse the related action before running the checklist.
         </Text>
-        <View style={styles.panelContainer}>
+        <View
+          style={styles.panelContainer}
+          onLayout={(event) =>
+            setPanelLayout({
+              width: event.nativeEvent.layout.width,
+              height: event.nativeEvent.layout.height,
+            })
+          }
+        >
           <Image
             source={{ uri: panelSrc }}
             style={styles.panelImage}
@@ -183,6 +290,7 @@ export default function GpsSimsUnitScreen({ route }: any) {
           />
           {unit.panel.hotspots.map((hotspot) => {
             const isActive = hotspot.id === selectedHotspot?.id;
+            const isKnob = hotspot.interaction?.type === 'knob';
             return (
               <TouchableOpacity
                 key={hotspot.id}
@@ -196,7 +304,8 @@ export default function GpsSimsUnitScreen({ route }: any) {
                     height: `${hotspot.height}%`,
                   },
                 ]}
-                onPress={() => setSelectedHotspotId(hotspot.id)}
+                onPress={() => (isKnob ? setSelectedHotspotId(hotspot.id) : handleButtonPress(hotspot.id))}
+                {...(isKnob ? getKnobResponder(hotspot.id).panHandlers : {})}
               >
                 {isActive && <Text style={styles.hotspotLabel}>{hotspot.label}</Text>}
               </TouchableOpacity>
@@ -207,6 +316,27 @@ export default function GpsSimsUnitScreen({ route }: any) {
           <Text style={styles.hotspotTitle}>{selectedHotspot?.label}</Text>
           <Text style={styles.hotspotDescription}>{selectedHotspot?.description}</Text>
         </View>
+        <View style={styles.actionBox}>
+          <Text style={styles.actionTitle}>Action feedback</Text>
+          {actionLog.length ? (
+            <>
+              <Text style={[styles.actionText, actionLog[0].matched && styles.actionTextGood]}>
+                {actionLog[0].label} {actionLog[0].matched ? '(OK)' : ''}
+              </Text>
+              {Object.keys(knobValues).length > 0 && (
+                <View style={styles.knobRow}>
+                  {Object.entries(knobValues).map(([id, value]) => (
+                    <Text key={id} style={styles.knobText}>
+                      {describeHotspot(id)}: {value > 0 ? `+${value}` : value}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            <Text style={styles.actionText}>Try a button or knob to see feedback.</Text>
+          )}
+        </View>
         <View style={styles.hotspotPillRow}>
           {unit.panel.hotspots.map((hotspot) => (
             <TouchableOpacity
@@ -215,7 +345,7 @@ export default function GpsSimsUnitScreen({ route }: any) {
                 styles.hotspotPill,
                 hotspot.id === selectedHotspot?.id && styles.hotspotPillActive,
               ]}
-              onPress={() => setSelectedHotspotId(hotspot.id)}
+              onPress={() => handleButtonPress(hotspot.id)}
             >
               <Text
                 style={[
@@ -429,6 +559,19 @@ const styles = StyleSheet.create({
   hotspotTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
   hotspotDescription: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   hotspotPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  actionBox: {
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  actionTitle: { fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  actionText: { fontSize: 12, color: colors.textMuted },
+  actionTextGood: { color: '#16a34a', fontWeight: '600' },
+  knobRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: 4 },
+  knobText: { fontSize: 11, color: colors.textMuted },
   hotspotPill: {
     paddingHorizontal: 10,
     paddingVertical: 6,

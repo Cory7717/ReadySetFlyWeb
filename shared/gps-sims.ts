@@ -4,6 +4,7 @@ export type GpsTrainerTask = {
   goal: string;
   steps: string[];
   tips?: string[];
+  actionHints?: string[];
 };
 
 export type GpsTrainerScenario = {
@@ -22,6 +23,9 @@ export type GpsTrainerHotspot = {
   y: number;
   width: number;
   height: number;
+  interaction?: {
+    type: "button" | "knob";
+  };
 };
 
 export type GpsTrainerPanel = {
@@ -119,6 +123,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 18,
           width: 8,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "flight-plan",
@@ -128,6 +133,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 27,
           width: 8,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "procedures",
@@ -137,6 +143,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 36,
           width: 8,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "menu",
@@ -146,6 +153,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 45,
           width: 8,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "range",
@@ -155,6 +163,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 40,
           width: 7,
           height: 10,
+          interaction: { type: "button" },
         },
         {
           id: "fms-knob-left",
@@ -164,6 +173,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 70,
           width: 10,
           height: 16,
+          interaction: { type: "knob" },
         },
         {
           id: "fms-knob-right",
@@ -173,6 +183,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 70,
           width: 10,
           height: 16,
+          interaction: { type: "knob" },
         },
         {
           id: "softkeys",
@@ -182,6 +193,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 70,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "cdi-softkey",
@@ -191,6 +203,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 6,
+          interaction: { type: "button" },
         },
         {
           id: "altitude-select",
@@ -200,6 +213,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 64,
           width: 10,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "autopilot",
@@ -209,6 +223,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 74,
           width: 26,
           height: 8,
+          interaction: { type: "button" },
         },
       ],
     },
@@ -227,6 +242,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Verify the correct waypoint and distance before activating.",
           "Check the flight director/source for GPS.",
         ],
+        actionHints: ["press:direct-to", "rotate:fms-knob-right"],
       },
       {
         id: "build-flight-plan",
@@ -238,6 +254,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Insert one enroute fix between departure and destination.",
           "Activate the first leg and verify the sequence.",
         ],
+        actionHints: ["press:flight-plan", "rotate:fms-knob-right"],
       },
       {
         id: "load-approach",
@@ -249,6 +266,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Select Load (not Activate) to keep enroute guidance.",
           "Review the approach fixes in the flight plan.",
         ],
+        actionHints: ["press:procedures", "rotate:fms-knob-right"],
       },
       {
         id: "activate-approach",
@@ -260,6 +278,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Confirm activation and monitor CDI scaling.",
           "Brief the missed approach before the final approach fix.",
         ],
+        actionHints: ["press:procedures"],
       },
       {
         id: "cdi-obs",
@@ -271,6 +290,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Set the course or OBS as briefed.",
           "Cross-check with the approach plate.",
         ],
+        actionHints: ["press:cdi-softkey"],
       },
       {
         id: "holds",
@@ -282,6 +302,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Activate the hold and verify the entry.",
           "Monitor timing and wind corrections.",
         ],
+        actionHints: ["press:procedures", "rotate:fms-knob-right"],
       },
     ],
     scenarios: [
@@ -345,6 +366,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 18,
           width: 8,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "fpl",
@@ -354,6 +376,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 27,
           width: 8,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "proc",
@@ -363,6 +386,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 36,
           width: 8,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "menu",
@@ -372,6 +396,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 45,
           width: 8,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "range",
@@ -381,6 +406,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 40,
           width: 7,
           height: 10,
+          interaction: { type: "button" },
         },
         {
           id: "fms-knob-left",
@@ -390,6 +416,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 70,
           width: 10,
           height: 16,
+          interaction: { type: "knob" },
         },
         {
           id: "fms-knob-right",
@@ -399,6 +426,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 70,
           width: 10,
           height: 16,
+          interaction: { type: "knob" },
         },
         {
           id: "softkeys",
@@ -408,6 +436,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 70,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "cdi",
@@ -417,6 +446,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 6,
+          interaction: { type: "button" },
         },
         {
           id: "obs",
@@ -426,6 +456,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 6,
+          interaction: { type: "button" },
         },
         {
           id: "autopilot",
@@ -435,6 +466,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 74,
           width: 26,
           height: 8,
+          interaction: { type: "button" },
         },
       ],
     },
@@ -449,6 +481,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Verify the magenta course and active leg on the map.",
           "Confirm GPS is selected as the CDI source.",
         ],
+        actionHints: ["press:direct-to", "rotate:fms-knob-right"],
       },
       {
         id: "build-flight-plan",
@@ -460,6 +493,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Insert one enroute fix.",
           "Activate the first leg.",
         ],
+        actionHints: ["press:fpl", "rotate:fms-knob-right"],
       },
       {
         id: "load-approach",
@@ -471,6 +505,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Select Load.",
           "Review fixes on the FPL page.",
         ],
+        actionHints: ["press:proc", "rotate:fms-knob-right"],
       },
       {
         id: "activate-approach",
@@ -481,6 +516,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Confirm the inbound course.",
           "Activate and monitor CDI scaling.",
         ],
+        actionHints: ["press:proc"],
       },
       {
         id: "cdi-obs",
@@ -491,6 +527,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Verify source annunciation.",
           "Set course or OBS as briefed.",
         ],
+        actionHints: ["press:cdi", "press:obs"],
       },
       {
         id: "holds",
@@ -501,6 +538,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Set inbound course and leg length.",
           "Activate hold and verify the entry.",
         ],
+        actionHints: ["press:fpl", "rotate:fms-knob-right"],
       },
     ],
     scenarios: [
@@ -545,6 +583,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 22,
           width: 9,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "clr",
@@ -554,6 +593,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 32,
           width: 9,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "menu",
@@ -563,6 +603,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 42,
           width: 9,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "fpl",
@@ -572,6 +613,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 84,
           width: 10,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "proc",
@@ -581,6 +623,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 84,
           width: 10,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "cdi",
@@ -590,6 +633,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 84,
           width: 10,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "obs",
@@ -599,6 +643,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 84,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "msg",
@@ -608,6 +653,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 84,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "left-knob",
@@ -617,6 +663,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 66,
           width: 10,
           height: 16,
+          interaction: { type: "knob" },
         },
         {
           id: "right-knob",
@@ -626,6 +673,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 66,
           width: 10,
           height: 16,
+          interaction: { type: "knob" },
         },
         {
           id: "range",
@@ -635,6 +683,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 68,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
       ],
     },
@@ -648,6 +697,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Press ENT twice to activate.",
           "Verify the active leg and distance.",
         ],
+        actionHints: ["press:direct-to", "rotate:right-knob"],
       },
       {
         id: "build-flight-plan",
@@ -659,6 +709,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Insert one enroute fix.",
           "Activate the leg from the FPL menu.",
         ],
+        actionHints: ["press:fpl", "rotate:right-knob"],
       },
       {
         id: "load-approach",
@@ -670,6 +721,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Select Load and press ENT.",
           "Review the approach fixes.",
         ],
+        actionHints: ["press:proc", "rotate:right-knob"],
       },
       {
         id: "activate-approach",
@@ -680,6 +732,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Confirm and press ENT.",
           "Monitor CDI scaling and course guidance.",
         ],
+        actionHints: ["press:proc"],
       },
       {
         id: "cdi-obs",
@@ -690,6 +743,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Set the inbound course with the OBS knob.",
           "Verify the CDI source annunciation.",
         ],
+        actionHints: ["press:cdi", "press:obs"],
       },
       {
         id: "holds",
@@ -700,6 +754,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Set inbound course and leg length.",
           "Activate and verify hold entry.",
         ],
+        actionHints: ["press:fpl", "rotate:right-knob"],
       },
     ],
     scenarios: [
@@ -735,6 +790,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 18,
           width: 60,
           height: 46,
+          interaction: { type: "button" },
         },
         {
           id: "tab-flight-plan",
@@ -744,6 +800,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 12,
           width: 12,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "tab-procedures",
@@ -753,6 +810,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 12,
           width: 12,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "direct-to",
@@ -762,6 +820,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 20,
           width: 9,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "fpl",
@@ -771,6 +830,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 30,
           width: 9,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "proc",
@@ -780,6 +840,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 40,
           width: 9,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "home",
@@ -789,6 +850,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "fpl-key",
@@ -798,6 +860,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "proc-key",
@@ -807,6 +870,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "range-knob",
@@ -816,6 +880,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 68,
           width: 10,
           height: 14,
+          interaction: { type: "knob" },
         },
         {
           id: "direct-keypad",
@@ -825,6 +890,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 66,
           width: 40,
           height: 12,
+          interaction: { type: "button" },
         },
         {
           id: "cdi",
@@ -834,6 +900,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "alt-sel",
@@ -843,6 +910,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
       ],
     },
@@ -856,6 +924,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Confirm the waypoint and tap Activate.",
           "Verify the active leg on the map.",
         ],
+        actionHints: ["press:direct-to"],
       },
       {
         id: "build-flight-plan",
@@ -867,6 +936,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Add an enroute fix.",
           "Activate the leg.",
         ],
+        actionHints: ["press:tab-flight-plan", "press:fpl"],
       },
       {
         id: "load-approach",
@@ -878,6 +948,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Select Load.",
           "Review fixes on the flight plan.",
         ],
+        actionHints: ["press:tab-procedures", "press:proc"],
       },
       {
         id: "activate-approach",
@@ -888,6 +959,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Confirm the inbound course.",
           "Activate and monitor CDI scaling.",
         ],
+        actionHints: ["press:proc"],
       },
       {
         id: "cdi-obs",
@@ -898,6 +970,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Verify annunciations on the PFD.",
           "Set OBS/course as briefed.",
         ],
+        actionHints: ["press:cdi"],
       },
       {
         id: "holds",
@@ -908,6 +981,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Tap Hold and set inbound course.",
           "Activate and verify the entry.",
         ],
+        actionHints: ["press:proc"],
       },
     ],
     scenarios: [
@@ -943,6 +1017,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 18,
           width: 58,
           height: 46,
+          interaction: { type: "button" },
         },
         {
           id: "direct-to",
@@ -952,6 +1027,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 22,
           width: 9,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "fpl",
@@ -961,6 +1037,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 30,
           width: 9,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "proc",
@@ -970,6 +1047,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 38,
           width: 9,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "menu",
@@ -979,6 +1057,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 46,
           width: 9,
           height: 7,
+          interaction: { type: "button" },
         },
         {
           id: "cdi",
@@ -988,6 +1067,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "obs",
@@ -997,6 +1077,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "msg",
@@ -1006,6 +1087,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 86,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
         {
           id: "fms-knob",
@@ -1015,6 +1097,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 66,
           width: 10,
           height: 16,
+          interaction: { type: "knob" },
         },
         {
           id: "left-knob",
@@ -1024,6 +1107,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 66,
           width: 10,
           height: 16,
+          interaction: { type: "knob" },
         },
         {
           id: "keypad",
@@ -1033,6 +1117,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 66,
           width: 40,
           height: 12,
+          interaction: { type: "button" },
         },
         {
           id: "range",
@@ -1042,6 +1127,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           y: 68,
           width: 8,
           height: 8,
+          interaction: { type: "button" },
         },
       ],
     },
@@ -1055,6 +1141,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Confirm the waypoint and activate.",
           "Verify the active leg on the map.",
         ],
+        actionHints: ["press:direct-to", "rotate:fms-knob"],
       },
       {
         id: "build-flight-plan",
@@ -1065,6 +1152,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Enter destination and enroute fix.",
           "Activate the leg.",
         ],
+        actionHints: ["press:fpl", "rotate:fms-knob"],
       },
       {
         id: "load-approach",
@@ -1075,6 +1163,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Choose runway and transition.",
           "Select Load and review fixes.",
         ],
+        actionHints: ["press:proc", "rotate:fms-knob"],
       },
       {
         id: "activate-approach",
@@ -1084,6 +1173,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Open Procedures and choose Activate.",
           "Confirm and monitor CDI scaling.",
         ],
+        actionHints: ["press:proc"],
       },
       {
         id: "cdi-obs",
@@ -1093,6 +1183,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Toggle CDI between GPS and VLOC.",
           "Set OBS/course and verify annunciations.",
         ],
+        actionHints: ["press:cdi", "press:obs"],
       },
       {
         id: "holds",
@@ -1103,6 +1194,7 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
           "Set inbound course and leg length.",
           "Activate and verify the hold entry.",
         ],
+        actionHints: ["press:proc", "rotate:fms-knob"],
       },
     ],
     scenarios: [

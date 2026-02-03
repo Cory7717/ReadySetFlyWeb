@@ -21,6 +21,17 @@ interface WeatherData {
   cached: boolean;
 }
 
+interface AirportSearchResult {
+  icao: string;
+  name?: string | null;
+  city?: string | null;
+  state?: string | null;
+  lat?: number;
+  lon?: number;
+}
+
+const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+
 function parseFlightCategory(metar: any): { category: string; color: string } {
   if (!metar) return { category: "UNKNOWN", color: "gray" };
 
@@ -122,6 +133,8 @@ export default function PilotTools() {
   const isPro = entitlements?.tier ? entitlements.tier !== "free" : user?.logbookProStatus === "active";
   const [icao, setIcao] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
+  const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [runwayHeading, setRunwayHeading] = useState("180");
   const [windDirection, setWindDirection] = useState("210");
   const [windSpeed, setWindSpeed] = useState("12");
@@ -204,9 +217,49 @@ export default function PilotTools() {
     enabled: !!searchIcao,
   });
 
+  useEffect(() => {
+    const trimmed = icao.trim();
+    const normalized = trimmed.toUpperCase();
+    if (trimmed.length < 2 || ICAO_REGEX.test(normalized)) {
+      setAirportSuggestions([]);
+      setLoadingSuggestions(false);
+      return;
+    }
+
+    const handle = window.setTimeout(async () => {
+      setLoadingSuggestions(true);
+      try {
+        const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(trimmed)}`));
+        if (!res.ok) throw new Error("Failed to search airports");
+        const results = (await res.json()) as AirportSearchResult[];
+        setAirportSuggestions(results.slice(0, 8));
+      } catch {
+        setAirportSuggestions([]);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(handle);
+  }, [icao]);
+
+  const handleSelectAirport = (airport: AirportSearchResult) => {
+    const next = airport.icao.toUpperCase();
+    setIcao(next);
+    setSearchIcao(next);
+    setAirportSuggestions([]);
+  };
+
   const handleSearch = () => {
-    if (icao.trim().length >= 3) {
-      setSearchIcao(icao.toUpperCase().trim());
+    const trimmed = icao.trim();
+    if (!trimmed) return;
+    const normalized = trimmed.toUpperCase();
+    if (ICAO_REGEX.test(normalized)) {
+      setSearchIcao(normalized);
+      return;
+    }
+    if (airportSuggestions.length > 0) {
+      handleSelectAirport(airportSuggestions[0]);
     }
   };
 
@@ -426,7 +479,7 @@ export default function PilotTools() {
                 <Input value={altimeterSetting} onChange={(e) => setAltimeterSetting(e.target.value)} placeholder="29.92" />
               </div>
               <div className="space-y-2">
-                <Label>OAT ({tempUnit === "F" ? "°F" : "°C"})</Label>
+                <Label>OAT ({tempUnit === "F" ? "F" : "C"})</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     value={oatValue}
@@ -440,7 +493,7 @@ export default function PilotTools() {
                       size="sm"
                       onClick={() => setTempUnit("C")}
                     >
-                      °C
+                      C
                     </Button>
                     <Button
                       type="button"
@@ -448,7 +501,7 @@ export default function PilotTools() {
                       size="sm"
                       onClick={() => setTempUnit("F")}
                     >
-                      °F
+                      F
                     </Button>
                   </div>
                 </div>
@@ -492,21 +545,41 @@ export default function PilotTools() {
         <Card id="airport-weather">
           <CardHeader>
             <CardTitle>Airport Weather</CardTitle>
-            <CardDescription>Enter an ICAO code (e.g., KAUS, KJFK, KDFW)</CardDescription>
+            <CardDescription>Enter an ICAO code or city/state to find nearby airports.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
             <div className="flex gap-2">
-              <div className="flex-1">
+              <div className="flex-1 space-y-2">
                 <Label htmlFor="icao" className="sr-only">ICAO Code</Label>
                 <Input
                   id="icao"
                   value={icao}
-                  onChange={(e) => setIcao(e.target.value.toUpperCase())}
+                  onChange={(e) => setIcao(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  placeholder="ICAO (e.g., KAUS)"
-                  maxLength={4}
-                  className="uppercase"
+                  placeholder="ICAO or city (e.g., KAUS or Dallas, TX)"
                 />
+                {loadingSuggestions && (
+                  <div className="text-xs text-muted-foreground">Searching airports...</div>
+                )}
+                {airportSuggestions.length > 0 && (
+                  <div className="rounded-lg border bg-background shadow-sm">
+                    {airportSuggestions.map((airport) => (
+                      <button
+                        key={`${airport.icao}-${airport.name ?? ""}`}
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                        onClick={() => handleSelectAirport(airport)}
+                      >
+                        <div className="font-medium">{airport.icao}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {airport.name || "Unknown airport"}
+                          {airport.city ? ` - ${airport.city}` : ""}
+                          {airport.state ? `, ${airport.state}` : ""}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <Button onClick={handleSearch} disabled={isLoading}>
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
@@ -633,7 +706,7 @@ export default function PilotTools() {
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">Recommended: {runwayBriefing.advisory.runway}</Badge>
                         <span className="text-muted-foreground">
-                          Headwind {runwayBriefing.advisory.headwind} kt · Crosswind {runwayBriefing.advisory.crosswind} kt
+                          Headwind {runwayBriefing.advisory.headwind} kt - Crosswind {runwayBriefing.advisory.crosswind} kt
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-2">
@@ -654,7 +727,7 @@ export default function PilotTools() {
                             {runway.leIdent || "--"} / {runway.heIdent || "--"}
                           </div>
                           <div className="text-muted-foreground">
-                            {runway.surface || "Surface N/A"} · {runway.lengthFt ? `${runway.lengthFt} ft` : "Length N/A"}
+                            {runway.surface || "Surface N/A"} - {runway.lengthFt ? `${runway.lengthFt} ft` : "Length N/A"}
                           </div>
                         </div>
                       ))}
@@ -679,7 +752,7 @@ export default function PilotTools() {
                           {(item.effective || item.expires) && (
                             <div className="text-muted-foreground">
                               {item.effective ? `Effective ${item.effective}` : ""}{" "}
-                              {item.expires ? `· Expires ${item.expires}` : ""}
+                              {item.expires ? `- Expires ${item.expires}` : ""}
                             </div>
                           )}
                         </div>

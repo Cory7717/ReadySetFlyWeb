@@ -16,10 +16,23 @@ interface PlateRecord {
   url: string;
 }
 
+const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+
+interface AirportSearchResult {
+  icao: string;
+  name: string | null;
+  city?: string | null;
+  state?: string | null;
+  lat: number;
+  lon: number;
+}
+
 export default function ApproachPlates() {
   const [query, setQuery] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState("approaches");
+  const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const { data, isLoading } = useQuery<{ plates: PlateRecord[]; icao?: string }>(
     {
@@ -106,6 +119,52 @@ export default function ApproachPlates() {
     }
   }, [plates.length, groupedPlates, activeCategory]);
 
+  useEffect(() => {
+    const trimmed = query.trim();
+    const normalized = trimmed.toUpperCase();
+    if (trimmed.length < 2 || ICAO_REGEX.test(normalized)) {
+      setAirportSuggestions([]);
+      setLoadingSuggestions(false);
+      return;
+    }
+
+    const handle = window.setTimeout(async () => {
+      setLoadingSuggestions(true);
+      try {
+        const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(trimmed)}`));
+        if (!res.ok) throw new Error("Failed to search airports");
+        const results = (await res.json()) as AirportSearchResult[];
+        setAirportSuggestions(results.slice(0, 8));
+      } catch {
+        setAirportSuggestions([]);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(handle);
+  }, [query]);
+
+  const handleSelectAirport = (airport: AirportSearchResult) => {
+    const next = airport.icao.toUpperCase();
+    setQuery(next);
+    setSearchTerm(next);
+    setAirportSuggestions([]);
+  };
+
+  const handleSearch = () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    const normalized = trimmed.toUpperCase();
+    if (ICAO_REGEX.test(normalized)) {
+      setSearchTerm(normalized);
+      return;
+    }
+    if (airportSuggestions.length > 0) {
+      handleSelectAirport(airportSuggestions[0]);
+    }
+  };
+
   const renderPlateList = (items: PlateRecord[]) => {
     if (items.length === 0) {
       return (
@@ -159,15 +218,39 @@ export default function ApproachPlates() {
       <Card>
         <CardHeader>
           <CardTitle>Search</CardTitle>
-          <CardDescription>Enter an ICAO code (e.g., KJFK).</CardDescription>
+          <CardDescription>Enter an ICAO code or search by city/state.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col sm:flex-row gap-3">
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search plates"
-          />
-          <Button onClick={() => setSearchTerm(query)}>
+          <div className="flex-1 space-y-2">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Airport or city (e.g., KJFK or Dallas, TX)"
+            />
+            {loadingSuggestions && (
+              <div className="text-xs text-muted-foreground">Searching airports...</div>
+            )}
+            {airportSuggestions.length > 0 && (
+              <div className="rounded-lg border bg-background shadow-sm">
+                {airportSuggestions.map((airport) => (
+                  <button
+                    key={`${airport.icao}-${airport.name}`}
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => handleSelectAirport(airport)}
+                  >
+                    <div className="font-medium">{airport.icao}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {airport.name || "Unknown airport"}
+                      {airport.city ? ` - ${airport.city}` : ""}
+                      {airport.state ? `, ${airport.state}` : ""}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Button onClick={handleSearch}>
             <Search className="h-4 w-4 mr-2" />
             Search
           </Button>

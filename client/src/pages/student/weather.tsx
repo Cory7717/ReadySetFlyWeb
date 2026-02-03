@@ -8,8 +8,21 @@ import { trackEvent } from "@/lib/analytics";
 import { NextStepCTA } from "@/components/student/NextStepCTA";
 import { apiUrl } from "@/lib/api";
 
+type AirportSearchResult = {
+  icao: string;
+  name?: string | null;
+  city?: string | null;
+  state?: string | null;
+  lat?: number;
+  lon?: number;
+};
+
+const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+
 export default function StudentWeather() {
   const [icao, setIcao] = useState("");
+  const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -17,11 +30,12 @@ export default function StudentWeather() {
     trackEvent("student_page_view", { page: "weather" });
   }, []);
 
-  const fetchWeather = async () => {
-    if (!icao) return;
+  const fetchWeather = async (override?: string) => {
+    const target = (override ?? icao).trim();
+    if (!target) return;
     setLoading(true);
     try {
-      const res = await fetch(apiUrl(`/api/aviation-weather/${icao.toUpperCase()}`));
+      const res = await fetch(apiUrl(`/api/aviation-weather/${target.toUpperCase()}`));
       const data = await res.json();
       setResult(data);
     } catch {
@@ -31,6 +45,54 @@ export default function StudentWeather() {
     }
   };
 
+  useEffect(() => {
+    const trimmed = icao.trim();
+    const normalized = trimmed.toUpperCase();
+    if (trimmed.length < 2 || ICAO_REGEX.test(normalized)) {
+      setAirportSuggestions([]);
+      setLoadingSuggestions(false);
+      return;
+    }
+
+    const handle = window.setTimeout(async () => {
+      setLoadingSuggestions(true);
+      try {
+        const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(trimmed)}`));
+        if (!res.ok) throw new Error("Failed to search airports");
+        const results = (await res.json()) as AirportSearchResult[];
+        setAirportSuggestions(results.slice(0, 8));
+      } catch {
+        setAirportSuggestions([]);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(handle);
+  }, [icao]);
+
+  const handleSelectAirport = (airport: AirportSearchResult) => {
+    const next = airport.icao.toUpperCase();
+    setIcao(next);
+    setAirportSuggestions([]);
+    fetchWeather(next);
+  };
+
+  const handleSearch = () => {
+    const trimmed = icao.trim();
+    if (!trimmed) return;
+    const normalized = trimmed.toUpperCase();
+    if (ICAO_REGEX.test(normalized)) {
+      fetchWeather(normalized);
+      return;
+    }
+    if (airportSuggestions.length > 0) {
+      const next = airportSuggestions[0].icao.toUpperCase();
+      setIcao(next);
+      setAirportSuggestions([]);
+      fetchWeather(next);
+    }
+  };
 
   const status = (() => {
     const raw = result?.metar?.rawOb || "";
@@ -58,15 +120,42 @@ export default function StudentWeather() {
         </AlertDescription>
       </Alert>
 
-      <Card className="p-4 flex flex-col sm:flex-row gap-3">
-        <Input
-          placeholder="Enter ICAO (e.g., KJFK)"
-          value={icao}
-          onChange={(e) => setIcao(e.target.value)}
-        />
-        <Button onClick={fetchWeather} disabled={loading}>
-          {loading ? "Loading..." : "Check Weather"}
-        </Button>
+      <Card className="p-4 space-y-2">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 space-y-2">
+            <Input
+              placeholder="ICAO or city (e.g., KJFK or Dallas, TX)"
+              value={icao}
+              onChange={(e) => setIcao(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            />
+            {loadingSuggestions && (
+              <div className="text-xs text-muted-foreground">Searching airports...</div>
+            )}
+            {airportSuggestions.length > 0 && (
+              <div className="rounded-lg border bg-background shadow-sm">
+                {airportSuggestions.map((airport) => (
+                  <button
+                    key={`${airport.icao}-${airport.name ?? ""}`}
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={() => handleSelectAirport(airport)}
+                  >
+                    <div className="font-medium">{airport.icao}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {airport.name || "Unknown airport"}
+                      {airport.city ? ` - ${airport.city}` : ""}
+                      {airport.state ? `, ${airport.state}` : ""}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Button onClick={handleSearch} disabled={loading}>
+            {loading ? "Loading..." : "Check Weather"}
+          </Button>
+        </div>
       </Card>
 
       {result && !result.error && (

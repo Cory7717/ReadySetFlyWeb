@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import * as stompit from "stompit";
+import stompit from "stompit";
 import { XMLParser } from "fast-xml-parser";
 import { db } from "./db";
 import { notams as notamsTable } from "@shared/schema";
@@ -169,7 +169,13 @@ export function startSwimNotamWorker() {
     },
   };
 
-  const start = () => stompit.connect(connectOptions, (error, client) => {
+  const stompClient: any = (stompit as any)?.connect ? stompit : (stompit as any)?.default;
+  if (!stompClient?.connect) {
+    console.error("STOMP client missing connect(). Check stompit import.");
+    return false;
+  }
+
+  const start = () => stompClient.connect(connectOptions, (error: any, client: any) => {
     if (error) {
       console.error("SWIM STOMP connect failed:", error.message);
       setTimeout(start, 5000);

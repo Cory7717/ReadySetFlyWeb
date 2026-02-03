@@ -1,8 +1,13 @@
 import crypto from "crypto";
-import stompit from "stompit";
+import { createRequire } from "module";
 import { XMLParser } from "fast-xml-parser";
 import { db } from "./db";
 import { notams as notamsTable } from "@shared/schema";
+
+const require = createRequire(import.meta.url);
+const solclientModule = require("solclientjs");
+const solclientjs = solclientModule?.debug || solclientModule;
+let solaceInitialized = false;
 
 type NormalizedNotam = {
   icao: string;
@@ -138,154 +143,145 @@ function parsePayload(body: string) {
   }
 }
 
+function resolveSolaceLogLevel() {
+  const raw = (process.env.SWIM_SOLACE_LOG_LEVEL || "WARN").toUpperCase();
+  return solclientjs.LogLevel?.[raw] ?? solclientjs.LogLevel.WARN;
+}
+
+function initSolace() {
+  if (solaceInitialized) return;
+  solclientjs.SolclientFactory.init({
+    profile: solclientjs.SolclientFactoryProfiles.version10,
+    logLevel: resolveSolaceLogLevel(),
+  });
+  solaceInitialized = true;
+}
+
+function messageToString(message: any): string {
+  if (!message) return "";
+  try {
+    const binary = message.getBinaryAttachment?.();
+    if (binary) {
+      if (typeof binary === "string") return binary;
+      if (binary instanceof Uint8Array) {
+        return Buffer.from(binary).toString("utf-8");
+      }
+      if (binary instanceof ArrayBuffer) {
+        return Buffer.from(new Uint8Array(binary)).toString("utf-8");
+      }
+      if (Buffer.isBuffer(binary)) {
+        return binary.toString("utf-8");
+      }
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const text = message.getText?.();
+    if (text) return text;
+  } catch {
+    // ignore
+  }
+  try {
+    const xml = message.getXmlContent?.();
+    if (xml) return xml;
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
 export function startSwimNotamWorker() {
   const queueName = process.env.SWIM_JMS_QUEUE;
   const username = process.env.SWIM_JMS_USERNAME;
   const password = process.env.SWIM_JMS_PASSWORD;
-  const connectionUrl = process.env.SWIM_STOMP_URL || process.env.SWIM_JMS_URL;
-  const connectionFactory = process.env.SWIM_JMS_CONNECTION_FACTORY;
+  const connectionUrl = process.env.SWIM_JMS_URL;
   const vpn = process.env.SWIM_JMS_VPN;
-  const hostHeader = process.env.SWIM_STOMP_HOST || vpn;
-  const clientId = process.env.SWIM_STOMP_CLIENT_ID || connectionFactory || username;
   const allowInsecure = String(process.env.SWIM_TLS_INSECURE ?? "").toLowerCase() === "true";
-  const acceptVersion = process.env.SWIM_STOMP_ACCEPT_VERSION || "1.1,1.0";
-  const forceLoginWithVpn = String(process.env.SWIM_STOMP_LOGIN_WITH_VPN ?? "").toLowerCase() === "true";
 
   if (!queueName || !username || !password || !connectionUrl || !vpn) {
     console.warn("SWIM JMS env vars missing. NOTAM worker will not start.");
     return false;
   }
 
-  const destination =
-    process.env.SWIM_STOMP_DESTINATION ||
-    (process.env.SWIM_QUEUE_PREFIX ? `${process.env.SWIM_QUEUE_PREFIX}${queueName}` : queueName);
+  initSolace();
 
-  const url = new URL(connectionUrl);
-  if (url.protocol === "ws:" || url.protocol === "wss:") {
-    console.error("SWIM STOMP URL must be a TCP/TLS endpoint (ws/wss not supported).");
-    return false;
-  }
-
-  const baseOptions: Omit<stompit.ConnectOptions, "connectHeaders"> = {
-    host: url.hostname,
-    port: Number(url.port) || 55443,
-    ssl: url.protocol === "tcps:" || url.protocol === "ssl:" || url.protocol === "tls:" || url.protocol === "stomp+ssl:" || url.protocol === "stomp+tls:",
-    sslOptions: {
-      servername: url.hostname,
-      rejectUnauthorized: !allowInsecure,
-    },
+  const sessionProps = {
+    url: connectionUrl,
+    vpnName: vpn,
+    userName: username,
+    password,
+    connectRetries: 2,
+    reconnectRetries: -1,
+    reconnectRetryWaitInMsecs: 5000,
+    keepAliveIntervalInMsecs: 10000,
+    keepAliveIntervalsLimit: 3,
+    sslValidateCertificate: !allowInsecure,
   };
 
-  const profiles = forceLoginWithVpn
-    ? [{ name: "login-with-vpn", login: `${username}@${vpn}` }]
-    : [
-        { name: "standard", login: username },
-        { name: "login-with-vpn", login: `${username}@${vpn}` },
-      ];
+  const session = solclientjs.SolclientFactory.createSession(sessionProps);
+  let consumer: any = null;
 
-  let profileIndex = 0;
-  let attempt = 0;
-
-  const stompClient: any = (stompit as any)?.connect ? stompit : (stompit as any)?.default;
-  if (!stompClient?.connect) {
-    console.error("STOMP client missing connect(). Check stompit import.");
-    return false;
-  }
-
-  const buildHeaders = (login: string): stompit.ConnectHeaders => {
-    const headers: stompit.ConnectHeaders = {
-      login,
-      passcode: password,
-      host: hostHeader,
-      "accept-version": acceptVersion,
-      "heart-beat": "10000,10000",
-    };
-    if (clientId) {
-      headers["client-id"] = clientId;
-    }
-    return headers;
-  };
-
-  const scheduleReconnect = (reason: string) => {
-    attempt += 1;
-    profileIndex = (profileIndex + 1) % profiles.length;
-    const backoff = Math.min(60000, 1000 * Math.pow(2, Math.min(attempt, 6)));
-    const jitter = Math.floor(Math.random() * 500);
-    console.warn(`SWIM STOMP reconnecting in ${backoff + jitter}ms (${reason}).`);
-    setTimeout(start, backoff + jitter);
-  };
-
-  const start = () => {
-    const profile = profiles[profileIndex];
-    const connectOptions: stompit.ConnectOptions = {
-      ...baseOptions,
-      connectHeaders: buildHeaders(profile.login),
-    };
-
-    stompClient.connect(connectOptions, (error: any, client: any) => {
-      if (error) {
-        console.error("SWIM STOMP connect failed:", {
-          message: error.message,
-          code: error.code,
-          name: error.name,
-          profile: profile.name,
-        });
-        scheduleReconnect(error.message || "connect-error");
-        return;
-      }
-
-      attempt = 0;
-
-      console.log("SWIM STOMP connected. Listening on:", destination);
-
-      const subscribeHeaders: stompit.SubscribeHeaders = {
-        destination,
-        ack: "client-individual",
-      };
-
-      client.subscribe(subscribeHeaders, (err, message) => {
-        if (err) {
-          console.error("SWIM subscribe error:", err.message);
-          return;
-        }
-
-        message.readString("utf-8", async (readErr, body) => {
-          if (readErr) {
-            console.error("SWIM message read error:", readErr.message);
-            client.ack(message);
-            return;
-          }
-
-          try {
-            const payload = parsePayload(body);
-            const normalized = normalizePayload(payload);
-            if (normalized.length === 0 && typeof payload === "string") {
-              const fallback = normalizeNotamItem(payload);
-              if (fallback) {
-                normalized.push(fallback);
-              }
-            }
-            await upsertNotams(normalized);
-          } catch (ingestError: any) {
-            console.error("NOTAM ingest error:", ingestError?.message || ingestError);
-          } finally {
-            client.ack(message);
-          }
-        });
+  session.on(solclientjs.SessionEventCode.UP_NOTICE, () => {
+    console.log("SWIM Solace session up. Subscribing to queue:", queueName);
+    if (consumer) return;
+    try {
+      consumer = session.createMessageConsumer({
+        queueDescriptor: { name: queueName, type: solclientjs.QueueType.QUEUE },
+        acknowledgeMode: solclientjs.MessageConsumerAcknowledgeMode.CLIENT,
       });
+    } catch (err: any) {
+      console.error("SWIM consumer create failed:", err?.message || err);
+      return;
+    }
 
-      client.on("error", (clientError) => {
-        console.error("SWIM STOMP client error:", clientError?.message || clientError);
+    consumer.on(solclientjs.MessageConsumerEventName.MESSAGE, async (message: any) => {
+      try {
+        const body = messageToString(message);
+        const payload = parsePayload(body);
+        const normalized = normalizePayload(payload);
+        if (normalized.length === 0 && typeof payload === "string") {
+          const fallback = normalizeNotamItem(payload);
+          if (fallback) {
+            normalized.push(fallback);
+          }
+        }
+        await upsertNotams(normalized);
+      } catch (ingestError: any) {
+        console.error("NOTAM ingest error:", ingestError?.message || ingestError);
+      } finally {
         try {
-          client.disconnect();
+          message.acknowledge?.();
         } catch {
           // ignore
         }
-        scheduleReconnect(clientError?.message || "client-error");
-      });
+      }
     });
-  };
-  start();
+
+    consumer.on(solclientjs.MessageConsumerEventName.CONNECT_FAILED_ERROR, (err: any) => {
+      console.error("SWIM consumer connect failed:", err?.message || err);
+    });
+
+    consumer.on(solclientjs.MessageConsumerEventName.DOWN_ERROR, (err: any) => {
+      console.error("SWIM consumer down:", err?.message || err);
+    });
+
+    consumer.connect();
+  });
+
+  session.on(solclientjs.SessionEventCode.CONNECT_FAILED_ERROR, (err: any) => {
+    console.error("SWIM session connect failed:", err?.message || err);
+  });
+
+  session.on(solclientjs.SessionEventCode.DISCONNECTED, () => {
+    console.warn("SWIM session disconnected.");
+  });
+
+  session.on(solclientjs.SessionEventCode.RECONNECTING, () => {
+    console.warn("SWIM session reconnecting...");
+  });
+
+  session.connect();
   return true;
 }
 

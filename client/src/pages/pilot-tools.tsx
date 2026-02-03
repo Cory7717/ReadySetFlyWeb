@@ -266,7 +266,11 @@ export default function PilotTools() {
   const flightCategory = parseFlightCategory(weather?.metar);
   const atisInfo = extractAtisIdentifier(weather?.metar);
   const runwayInUse = extractRunwayInUse(weather?.metar);
-  const runwayInUseDisplay = runwayBriefing?.runwayInUse || runwayInUse;
+  const runwayInUseDisplay =
+    runwayBriefing?.runwayInUse ||
+    runwayInUse ||
+    runwayBriefing?.advisory?.runway ||
+    null;
 
   useEffect(() => {
     trackEvent("pilot_tools_view", { page: "/pilot-tools" });
@@ -629,7 +633,7 @@ export default function PilotTools() {
                     )}
                     {atisInfo && (
                       <Badge variant="outline" className="bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200">
-                        {atisInfo}
+                        ATIS: {atisInfo}
                       </Badge>
                     )}
                   </div>
@@ -701,6 +705,20 @@ export default function PilotTools() {
                     <Label className="text-sm font-semibold">Runway Advisory</Label>
                     {runwayLoading && <Badge variant="secondary">Loading runways</Badge>}
                   </div>
+                  {(runwayInUseDisplay || atisInfo) && (
+                    <div className="flex flex-wrap gap-2">
+                      {runwayInUseDisplay && (
+                        <Badge variant="outline" className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200">
+                          Active RWY: {runwayInUseDisplay}
+                        </Badge>
+                      )}
+                      {atisInfo && (
+                        <Badge variant="outline" className="bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200">
+                          ATIS: {atisInfo}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                   {runwayBriefing?.advisory ? (
                     <div className="rounded-lg border p-3 text-sm">
                       <div className="flex flex-wrap items-center gap-2">

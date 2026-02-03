@@ -7839,12 +7839,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       if (useDbNotams) {
         const now = new Date();
+        const altIcao =
+          requestedIcao.length === 4 && requestedIcao.startsWith("K")
+            ? requestedIcao.slice(1)
+            : null;
+        const icaoClause = altIcao
+          ? or(eq(notamsTable.icao, requestedIcao), eq(notamsTable.icao, altIcao))
+          : eq(notamsTable.icao, requestedIcao);
         const rows = await db
           .select()
           .from(notamsTable)
           .where(
             and(
-              eq(notamsTable.icao, requestedIcao),
+              icaoClause,
               or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, now))
             )
           )
@@ -7925,6 +7932,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.json(cached.data);
       }
 
+      const altIcao =
+        cacheKey.length === 4 && cacheKey.startsWith("K") ? cacheKey.slice(1) : null;
       const now = new Date();
       const rows = await db
         .select()
@@ -7936,7 +7945,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const features = rows
         .filter((row) => row.text && isTfrNotam(row.text, row.notamId))
         .map((row) => {
-          if (cacheKey !== "ALL" && row.icao !== cacheKey) return null;
+          if (
+            cacheKey !== "ALL" &&
+            row.icao !== cacheKey &&
+            (!altIcao || row.icao !== altIcao)
+          ) {
+            return null;
+          }
           const points = parseTfrPolygon(row.text || "");
           if (!points || points.length < 3) return null;
 

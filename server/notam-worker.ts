@@ -62,19 +62,87 @@ function stableNotamId(text: string) {
   return crypto.createHash("sha256").update(text).digest("hex").slice(0, 24);
 }
 
+const TEXT_KEYS = [
+  "text",
+  "notamText",
+  "notam_text",
+  "rawText",
+  "message",
+  "body",
+  "NOTAM_TEXT",
+  "NOTAM-TEXT",
+  "notam-text",
+];
+
+const ICAO_KEYS = [
+  "icao",
+  "ICAO",
+  "location",
+  "Location",
+  "locationIndicator",
+  "location_indicator",
+  "locationIndicatorICAO",
+  "facilityDesignator",
+  "facility_designator",
+  "aerodrome",
+  "airport",
+  "facility",
+];
+
+function extractIcaoFromValue(value: any): string | undefined {
+  if (!value) return undefined;
+  if (typeof value === "string") {
+    const match = value.toUpperCase().match(/\b[A-Z]{3,4}\b/);
+    return match?.[0];
+  }
+  if (typeof value === "object") {
+    const nested =
+      value?.icao ||
+      value?.ICAO ||
+      value?.designator ||
+      value?.locationIndicator ||
+      value?.location_indicator ||
+      value?.identifier ||
+      value?.id ||
+      value?.code;
+    if (typeof nested === "string") {
+      return extractIcaoFromValue(nested);
+    }
+  }
+  return undefined;
+}
+
+function pickText(item: any): string | null {
+  for (const key of TEXT_KEYS) {
+    const value = item?.[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  const nested =
+    item?.notam?.text ||
+    item?.notam?.notamText ||
+    item?.NOTAM?.text ||
+    item?.NOTAM?.notamText ||
+    item?.NOTAM?.["NOTAM_TEXT"];
+  if (typeof nested === "string" && nested.trim()) return nested;
+  return null;
+}
+
+function pickIcao(item: any): string | undefined {
+  for (const key of ICAO_KEYS) {
+    const value = item?.[key];
+    const extracted = extractIcaoFromValue(value);
+    if (extracted) return extracted;
+  }
+  return undefined;
+}
+
 function normalizeNotamItem(item: any): NormalizedNotam | null {
-  const text =
-    item?.text ||
-    item?.notamText ||
-    item?.rawText ||
-    item?.message ||
-    item?.body ||
-    (typeof item === "string" ? item : null);
+  const text = pickText(item) || (typeof item === "string" ? item : null);
   if (!text) return null;
 
   const extracted = extractFromText(text);
   const notamId = item?.notamId || item?.id || extracted.notamId || stableNotamId(text);
-  const icao = (item?.icao || item?.location || extracted.icao || "").toUpperCase();
+  const icao = (pickIcao(item) || extracted.icao || "").toUpperCase();
   if (!icao) return null;
 
   return {
@@ -105,7 +173,27 @@ function normalizePayload(payload: any): NormalizedNotam[] {
   }
 
   const single = normalizeNotamItem(list);
-  return single ? [single] : [];
+  if (single) return [single];
+
+  const candidates: any[] = [];
+  const seen = new Set<any>();
+  const walk = (value: any, depth: number) => {
+    if (!value || depth > 6) return;
+    if (seen.has(value)) return;
+    if (Array.isArray(value)) {
+      value.forEach((entry) => walk(entry, depth + 1));
+      return;
+    }
+    if (typeof value !== "object") return;
+    seen.add(value);
+    const hasText = TEXT_KEYS.some((key) => typeof value?.[key] === "string");
+    const hasIcao = ICAO_KEYS.some((key) => value?.[key]);
+    if (hasText || hasIcao) candidates.push(value);
+    Object.values(value).forEach((entry) => walk(entry, depth + 1));
+  };
+  walk(payload, 0);
+
+  return candidates.map(normalizeNotamItem).filter(Boolean) as NormalizedNotam[];
 }
 
 async function upsertNotams(items: NormalizedNotam[]) {

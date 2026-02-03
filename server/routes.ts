@@ -15,8 +15,10 @@ import OpenAI from "openai";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
+import { and, desc, eq, gte, isNull, or } from "drizzle-orm";
 import { storage } from "./storage";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema } from "@shared/schema";
+import { db } from "./db";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, notams as notamsTable } from "@shared/schema";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
 import { sendContactFormEmail } from "./email-templates";
@@ -480,6 +482,15 @@ type AirportSearchResult = {
   lon: number;
 };
 
+type RunwayMeta = {
+  leIdent: string | null;
+  heIdent: string | null;
+  leHeading: number | null;
+  heHeading: number | null;
+  lengthFt: number | null;
+  surface: string | null;
+};
+
 function toNumber(value: any): number | null {
   if (value === null || value === undefined) return null;
   const num = Number(value);
@@ -512,9 +523,82 @@ const airportMetaCache = new Map<string, { data: AirportMeta; expiresAt: number 
 const STATION_CACHE_URL = "https://aviationweather.gov/data/cache/stations.cache.json.gz";
 const STATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let stationCache: { data: AirportSearchResult[]; expiresAt: number } | null = null;
+const RUNWAY_CACHE_URL = "https://ourairports.com/data/runways.csv";
+const RUNWAY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+let runwayCache: { data: Map<string, RunwayMeta[]>; expiresAt: number } | null = null;
+const NOTAM_CACHE_TTL_MS = 2 * 60 * 1000;
+const notamCache = new Map<string, { data: any; expiresAt: number }>();
+let swimTokenCache: { token: string; expiresAt: number } | null = null;
 
 function normalizeIcao(value: string) {
   return value.trim().toUpperCase();
+}
+
+function extractRunwayInUseFromMetar(metar: any): string | null {
+  const raw = metar?.rawOb;
+  if (!raw) return null;
+  const rwyMatch = raw.match(/\b(?:RWY|RUNWAY)\s+(\d{2}[LCR]?(?:\s*(?:AND|\/|&)\s*\d{2}[LCR]?)*)/i);
+  if (rwyMatch) {
+    return rwyMatch[1].replace(/\s+/g, " ").trim();
+  }
+  const arrRwyMatch = raw.match(/\bARR\s+(?:RWY|RUNWAY)\s+(\d{2}[LCR]?)/i);
+  const depRwyMatch = raw.match(/\bDEP\s+(?:RWY|RUNWAY)\s+(\d{2}[LCR]?)/i);
+  if (arrRwyMatch || depRwyMatch) {
+    const runways = [];
+    if (arrRwyMatch) runways.push(`${arrRwyMatch[1]} (arr)`);
+    if (depRwyMatch) runways.push(`${depRwyMatch[1]} (dep)`);
+    return runways.join(", ");
+  }
+  return null;
+}
+
+function parseMetarWind(metar: any): { direction: number | null; speed: number | null; gust: number | null } {
+  const wdir = Number(metar?.wdir);
+  const wspd = Number(metar?.wspd);
+  const wgst = Number(metar?.wgst);
+  if (Number.isFinite(wdir) && Number.isFinite(wspd)) {
+    return { direction: wdir, speed: wspd, gust: Number.isFinite(wgst) ? wgst : null };
+  }
+  const raw = metar?.rawOb;
+  if (!raw) return { direction: null, speed: null, gust: null };
+  const match = raw.match(/\b(\d{3}|VRB)(\d{2,3})(G(\d{2,3}))?KT\b/);
+  if (!match) return { direction: null, speed: null, gust: null };
+  if (match[1] === "VRB") {
+    return { direction: null, speed: Number(match[2]), gust: match[4] ? Number(match[4]) : null };
+  }
+  return { direction: Number(match[1]), speed: Number(match[2]), gust: match[4] ? Number(match[4]) : null };
+}
+
+function normalizeHeading(value: number) {
+  const heading = value % 360;
+  return heading < 0 ? heading + 360 : heading;
+}
+
+function computeRunwayAdvisory(runways: RunwayMeta[], windDir: number, windSpeed: number) {
+  let best: {
+    runway: string;
+    heading: number;
+    headwind: number;
+    crosswind: number;
+  } | null = null;
+
+  const evaluate = (ident: string | null, heading: number | null) => {
+    if (!ident || heading === null) return;
+    const angle = ((windDir - heading + 540) % 360) - 180;
+    const angleRad = (Math.PI / 180) * angle;
+    const headwind = windSpeed * Math.cos(angleRad);
+    const crosswind = Math.abs(windSpeed * Math.sin(angleRad));
+    if (!best || headwind > best.headwind) {
+      best = { runway: ident, heading, headwind, crosswind };
+    }
+  };
+
+  runways.forEach((runway) => {
+    if (runway.leHeading !== null) evaluate(runway.leIdent, normalizeHeading(runway.leHeading));
+    if (runway.heHeading !== null) evaluate(runway.heIdent, normalizeHeading(runway.heHeading));
+  });
+
+  return best;
 }
 
 function buildIcaoCandidates(value: string) {
@@ -571,6 +655,183 @@ async function loadStationCache(): Promise<AirportSearchResult[]> {
 
   stationCache = { data: mapped, expiresAt: now + STATION_CACHE_TTL_MS };
   return mapped;
+}
+
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    if (char === '"') {
+      const nextChar = line[i + 1];
+      if (inQuotes && nextChar === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (char === "," && !inQuotes) {
+      result.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  result.push(current);
+  return result;
+}
+
+async function loadRunwayCache(): Promise<Map<string, RunwayMeta[]>> {
+  const now = Date.now();
+  if (runwayCache && runwayCache.expiresAt > now) return runwayCache.data;
+
+  const response = await fetch(RUNWAY_CACHE_URL, {
+    headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load runways data: ${response.status}`);
+  }
+
+  const csvText = await response.text();
+  const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (lines.length === 0) return new Map();
+
+  const header = parseCsvLine(lines[0]);
+  const idx = (name: string) => header.indexOf(name);
+
+  const airportIdentIdx = idx("airport_ident");
+  const lengthIdx = idx("length_ft");
+  const surfaceIdx = idx("surface");
+  const closedIdx = idx("closed");
+  const leIdentIdx = idx("le_ident");
+  const heIdentIdx = idx("he_ident");
+  const leHeadingIdx = idx("le_heading_degT");
+  const heHeadingIdx = idx("he_heading_degT");
+
+  const dataMap = new Map<string, RunwayMeta[]>();
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const row = parseCsvLine(lines[i]);
+    const airportIdent = row[airportIdentIdx]?.toUpperCase();
+    if (!airportIdent) continue;
+    const isClosed = row[closedIdx] === "1";
+    if (isClosed) continue;
+
+    const runway: RunwayMeta = {
+      leIdent: row[leIdentIdx] || null,
+      heIdent: row[heIdentIdx] || null,
+      leHeading: row[leHeadingIdx] ? Number(row[leHeadingIdx]) : null,
+      heHeading: row[heHeadingIdx] ? Number(row[heHeadingIdx]) : null,
+      lengthFt: row[lengthIdx] ? Number(row[lengthIdx]) : null,
+      surface: row[surfaceIdx] || null,
+    };
+
+    if (!dataMap.has(airportIdent)) {
+      dataMap.set(airportIdent, []);
+    }
+    dataMap.get(airportIdent)!.push(runway);
+  }
+
+  runwayCache = { data: dataMap, expiresAt: now + RUNWAY_CACHE_TTL_MS };
+  return dataMap;
+}
+
+function buildNotamUrl(template: string, icao: string) {
+  if (template.includes("{{icao}}")) {
+    return template.replace(/{{icao}}/g, icao);
+  }
+  if (template.includes("{icao}")) {
+    return template.replace(/{icao}/g, icao);
+  }
+  const joinChar = template.includes("?") ? "&" : "?";
+  return `${template}${joinChar}icao=${icao}`;
+}
+
+async function getSwimAccessToken(): Promise<string> {
+  const now = Date.now();
+  if (swimTokenCache && swimTokenCache.expiresAt > now) {
+    return swimTokenCache.token;
+  }
+
+  const tokenUrl = process.env.SWIM_TOKEN_URL;
+  const clientId = process.env.SWIM_CLIENT_ID;
+  const clientSecret = process.env.SWIM_CLIENT_SECRET;
+  if (!tokenUrl || !clientId || !clientSecret) {
+    throw new Error("SWIM token configuration missing");
+  }
+
+  const body = new URLSearchParams();
+  body.append("grant_type", "client_credentials");
+  const scope = process.env.SWIM_SCOPE;
+  if (scope) body.append("scope", scope);
+
+  const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+  const response = await fetch(tokenUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: body.toString(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`SWIM token request failed: ${response.status}`);
+  }
+
+  const json = await response.json();
+  const accessToken = json?.access_token;
+  const expiresIn = Number(json?.expires_in ?? 3600);
+  if (!accessToken) {
+    throw new Error("SWIM token response missing access_token");
+  }
+
+  swimTokenCache = {
+    token: accessToken,
+    expiresAt: now + Math.max(60, expiresIn - 60) * 1000,
+  };
+
+  return accessToken;
+}
+
+function normalizeNotams(payload: any): Array<{ id: string; text: string; effective?: string; expires?: string }> {
+  if (!payload) return [];
+  const candidate =
+    payload.notams ||
+    payload.data ||
+    payload.items ||
+    payload.results ||
+    payload.Notam ||
+    payload.NOTAM ||
+    payload;
+
+  if (Array.isArray(candidate)) {
+    return candidate.map((item, index) => ({
+      id: item?.id || item?.notam_id || item?.notamId || `notam-${index}`,
+      text: item?.text || item?.notamText || item?.raw || JSON.stringify(item),
+      effective: item?.effective || item?.start || item?.startDate,
+      expires: item?.expires || item?.end || item?.endDate,
+    }));
+  }
+
+  if (typeof candidate === "object") {
+    const text = candidate?.text || candidate?.notamText || candidate?.raw;
+    if (text) {
+      return [
+        {
+          id: candidate?.id || "notam-0",
+          text,
+          effective: candidate?.effective || candidate?.start,
+          expires: candidate?.expires || candidate?.end,
+        },
+      ];
+    }
+  }
+
+  return [];
 }
 
 function getDtppMetaUrl() {
@@ -1434,11 +1695,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ received: true });
       }
 
-      const subscriptionId = resource?.id;
+      const subscriptionId =
+        resource?.billing_agreement_id ||
+        resource?.subscription_id ||
+        resource?.id;
       let user = null;
+      let customData: Record<string, string> = {};
 
       if (resource?.custom_id) {
-        const customData = parsePayPalCustomId(String(resource.custom_id));
+        customData = parsePayPalCustomId(String(resource.custom_id));
         if (customData.user) {
           user = await storage.getUser(String(customData.user));
         }
@@ -1527,6 +1792,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       await storage.updateUser(user.id, updates);
+
+      const isSubscriptionPaymentEvent =
+        eventType === "BILLING.SUBSCRIPTION.PAYMENT.SUCCEEDED" ||
+        eventType === "BILLING.SUBSCRIPTION.PAYMENT.COMPLETED" ||
+        eventType === "PAYMENT.SALE.COMPLETED";
+      const hasMembershipPurpose = customData.purpose === "membership";
+      const subscriptionPaymentId =
+        req.body?.id ||
+        resource?.id ||
+        resource?.resource_id ||
+        `${eventType}:${subscriptionId ?? "unknown"}`;
+
+      if (isSubscriptionPaymentEvent && (hasMembershipPurpose || subscriptionId)) {
+        const amountValue =
+          resource?.amount?.value ??
+          resource?.amount?.total ??
+          resource?.amount?.amount?.value ??
+          resource?.amount?.gross_amount?.value ??
+          resource?.amount?.grossAmount?.value;
+        if (amountValue) {
+          const amountNumber = Number(amountValue);
+          if (Number.isFinite(amountNumber) && amountNumber > 0) {
+            const description = `membership_fee:${String(subscriptionPaymentId)}`;
+            const existing = await storage.getTransactionsByUser(user.id);
+            const alreadyRecorded = existing.some(
+              (transaction) =>
+                transaction.type === "membership_fee" && transaction.description === description
+            );
+            if (!alreadyRecorded) {
+              await storage.createTransaction({
+                userId: user.id,
+                type: "membership_fee",
+                amount: amountNumber.toFixed(2),
+                status: "completed",
+                description,
+              });
+            }
+          }
+        }
+      }
 
       res.json({ received: true });
     } catch (error: any) {
@@ -2202,13 +2507,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currency: orderAmount.currency,
       });
 
-      if (!consumption) {
-        await storage.deleteMarketplaceListing(listing.id);
-        return res.status(400).json({ error: "This payment has already been processed" });
-      }
+        if (!consumption) {
+          await storage.deleteMarketplaceListing(listing.id);
+          return res.status(400).json({ error: "This payment has already been processed" });
+        }
 
-      // Record promo code usage if applied
-      if (validatedPromo) {
+        // Record marketplace listing fee transaction (admin analytics)
+        try {
+          await storage.createTransaction({
+            userId,
+            type: "marketplace_listing_fee",
+            amount: orderAmount.value,
+            marketplaceListingId: listing.id,
+            status: "completed",
+            description: `Marketplace listing fee (${category}, ${tier}) (PayPal ${orderId})`,
+          });
+        } catch (error) {
+          console.error("Failed to record listing fee transaction:", error);
+        }
+
+        // Record promo code usage if applied
+        if (validatedPromo) {
         try {
           await storage.recordPromoCodeUsage({
             promoCodeId: validatedPromo.id,
@@ -4259,11 +4578,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currency: orderAmount.currency,
       });
 
-      if (!consumption) {
-        return res.status(400).json({ error: "This payment has already been processed" });
-      }
+        if (!consumption) {
+          return res.status(400).json({ error: "This payment has already been processed" });
+        }
 
-      const transactionHistory = (listing as any).upgradeTransactions || [];
+        // Record marketplace upgrade fee transaction (admin analytics)
+        try {
+          await storage.createTransaction({
+            userId,
+            type: "marketplace_upgrade_fee",
+            amount: orderAmount.value,
+            marketplaceListingId: listingId,
+            status: "completed",
+            description: `Marketplace upgrade ${listing.tier || "basic"} → ${newTier} (PayPal ${orderId})`,
+          });
+        } catch (error) {
+          console.error("Failed to record upgrade fee transaction:", error);
+        }
+
+        const transactionHistory = (listing as any).upgradeTransactions || [];
       
       // Calculate new monthly fee using shared pricing helper
       const newMonthlyFee = (parseFloat(listing.monthlyFee || '25') + upgradeDelta).toString();
@@ -4510,15 +4843,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currency: orderAmount.currency,
       });
 
-      if (!consumption) {
-        return res.status(400).json({ error: "This payment has already been processed" });
-      }
+        if (!consumption) {
+          return res.status(400).json({ error: "This payment has already been processed" });
+        }
 
-      // Update rental to mark as paid and active
-      const updatedRental = await storage.updateRental(req.params.id, {
-        isPaid: true,
-        status: "active",
-      });
+        // Record platform fee revenue transaction (admin analytics)
+        try {
+          const platformFeeRenter = parseFloat(rental.platformFeeRenter || "0");
+          const platformFeeOwner = parseFloat(rental.platformFeeOwner || "0");
+          const platformFeeTotal = platformFeeRenter + platformFeeOwner;
+          if (platformFeeTotal > 0) {
+            await storage.createTransaction({
+              userId,
+              type: "platform_fee",
+              amount: platformFeeTotal.toFixed(2),
+              rentalId: rental.id,
+              status: "completed",
+              description: `Platform fee for rental ${rental.id} (PayPal ${paypalOrderId})`,
+            });
+          }
+        } catch (error) {
+          console.error("Failed to record platform fee transaction:", error);
+        }
+
+        // Update rental to mark as paid and active
+        const updatedRental = await storage.updateRental(req.params.id, {
+          isPaid: true,
+          status: "active",
+        });
 
       // Credit owner's balance with their payout amount
       const ownerPayoutAmount = parseFloat(rental.ownerPayout);
@@ -4753,16 +5105,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Transactions
-  app.get("/api/transactions/user/:userId", async (req, res) => {
+  app.get("/api/transactions/user/:userId", isAuthenticated, async (req: any, res) => {
     try {
-      const transactions = await storage.getTransactionsByUser(req.params.userId);
+      const requesterId = req.user?.claims?.sub || req.session?.userId;
+      const requestedUserId = req.params.userId;
+
+      if (!requesterId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      if (String(requesterId) !== String(requestedUserId)) {
+        const requester = await storage.getUser(String(requesterId));
+        if (!requester || (!requester.isAdmin && !requester.isSuperAdmin)) {
+          return res.status(403).json({ error: "Forbidden" });
+        }
+      }
+
+      const transactions = await storage.getTransactionsByUser(requestedUserId);
       res.json(transactions);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch transactions" });
     }
   });
 
-  app.post("/api/transactions", async (req, res) => {
+  app.post("/api/transactions", isAuthenticated, requireAnalyticsAdmin, async (req, res) => {
     try {
       const transaction = await storage.createTransaction(req.body);
       res.status(201).json(transaction);
@@ -4771,7 +5137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/transactions/:id", async (req, res) => {
+  app.patch("/api/transactions/:id", isAuthenticated, requireAnalyticsAdmin, async (req, res) => {
     try {
       const transaction = await storage.updateTransaction(req.params.id, req.body);
       if (!transaction) {
@@ -7126,6 +7492,180 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Aviation weather fetch error:", error);
       res.status(500).json({ error: "Failed to fetch aviation weather data" });
+    }
+  });
+
+  app.get("/api/airports/:icao/runways", async (req, res) => {
+    try {
+      const requestedIcao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z]{3,4}$/.test(requestedIcao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const runwayMap = await loadRunwayCache();
+      const runways = runwayMap.get(requestedIcao) || [];
+      return res.json({ icao: requestedIcao, runways });
+    } catch (error) {
+      console.error("Runway lookup failed:", error);
+      res.status(500).json({ error: "Failed to fetch runway data" });
+    }
+  });
+
+  app.get("/api/airports/:icao/runway-briefing", async (req, res) => {
+    try {
+      const requestedIcao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z]{3,4}$/.test(requestedIcao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const runwayMap = await loadRunwayCache();
+      const runways = runwayMap.get(requestedIcao) || [];
+
+      const candidates = buildIcaoCandidates(requestedIcao);
+      let metar: any | null = null;
+      for (const candidate of candidates) {
+        const cached = weatherCache.get(candidate);
+        if (cached) {
+          metar = cached.data?.metar || null;
+          if (metar) break;
+        }
+      }
+
+      if (!metar) {
+        const metarRes = await fetch(
+          `https://aviationweather.gov/api/data/metar?ids=${requestedIcao}&format=json`,
+          { headers: { "User-Agent": "ReadySetFly/1.0" } }
+        );
+        if (metarRes.ok) {
+          const metarData = await metarRes.json();
+          metar = metarData.length > 0 ? metarData[0] : null;
+        }
+      }
+
+      const runwayInUse = extractRunwayInUseFromMetar(metar);
+      const wind = parseMetarWind(metar);
+      const hasWind =
+        wind.direction !== null &&
+        wind.speed !== null &&
+        Number.isFinite(wind.direction) &&
+        Number.isFinite(wind.speed);
+
+      const advisory = hasWind && runways.length > 0 && wind.speed !== null
+        ? computeRunwayAdvisory(runways, wind.direction!, wind.speed)
+        : null;
+
+      res.json({
+        icao: requestedIcao,
+        runwayInUse,
+        wind: {
+          direction: wind.direction,
+          speed: wind.speed,
+          gust: wind.gust,
+        },
+        advisory: advisory
+          ? {
+              runway: advisory.runway,
+              heading: advisory.heading,
+              headwind: Number(advisory.headwind.toFixed(1)),
+              crosswind: Number(advisory.crosswind.toFixed(1)),
+            }
+          : null,
+        runways,
+      });
+    } catch (error) {
+      console.error("Runway briefing failed:", error);
+      res.status(500).json({ error: "Failed to fetch runway briefing" });
+    }
+  });
+
+  app.get("/api/notams/:icao", async (req, res) => {
+    try {
+      const requestedIcao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z]{3,4}$/.test(requestedIcao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const useDbNotams =
+        Boolean(process.env.SWIM_JMS_QUEUE) ||
+        String(process.env.NOTAM_DB_ENABLED ?? "").toLowerCase() === "true";
+
+      if (useDbNotams) {
+        const now = new Date();
+        const rows = await db
+          .select()
+          .from(notamsTable)
+          .where(
+            and(
+              eq(notamsTable.icao, requestedIcao),
+              or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, now))
+            )
+          )
+          .orderBy(desc(notamsTable.effectiveAt), desc(notamsTable.createdAt))
+          .limit(50);
+
+        return res.json({
+          icao: requestedIcao,
+          source: "swim",
+          notams: rows.map((row) => ({
+            id: row.notamId,
+            text: row.text,
+            effective: row.effectiveAt ? row.effectiveAt.toISOString() : undefined,
+            expires: row.expiresAt ? row.expiresAt.toISOString() : undefined,
+          })),
+        });
+      }
+
+      const cached = notamCache.get(requestedIcao);
+      if (cached && cached.expiresAt > Date.now()) {
+        return res.json({ icao: requestedIcao, source: "swim", ...cached.data });
+      }
+
+      const endpointTemplate = process.env.SWIM_NOTAM_ENDPOINT;
+      if (!endpointTemplate) {
+        return res.status(503).json({ error: "NOTAM feed not configured" });
+      }
+
+      const accessToken = await getSwimAccessToken();
+      const url = buildNotamUrl(endpointTemplate, requestedIcao);
+
+      let extraHeaders: Record<string, string> = {};
+      const extraHeadersRaw = process.env.SWIM_NOTAM_HEADERS_JSON;
+      if (extraHeadersRaw) {
+        try {
+          extraHeaders = JSON.parse(extraHeadersRaw);
+        } catch (error) {
+          console.warn("SWIM_NOTAM_HEADERS_JSON is not valid JSON");
+        }
+      }
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+          ...extraHeaders,
+        },
+      });
+
+      if (!response.ok) {
+        return res.status(response.status).json({ error: `NOTAM fetch failed (${response.status})` });
+      }
+
+      let payload: any = null;
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        payload = await response.json();
+      } else {
+        payload = await response.text();
+      }
+
+      const notams = normalizeNotams(payload);
+      const data = { notams, raw: notams.length === 0 ? payload : undefined };
+      notamCache.set(requestedIcao, { data, expiresAt: Date.now() + NOTAM_CACHE_TTL_MS });
+
+      res.json({ icao: requestedIcao, source: "swim", ...data });
+    } catch (error: any) {
+      console.error("NOTAM fetch failed:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch NOTAMs" });
     }
   });
 

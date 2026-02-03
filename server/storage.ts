@@ -769,20 +769,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   // User Metrics (Admin Analytics)
-  async getUserMetrics(): Promise<{
-    totalUsers: number;
-    verifiedUsers: number;
-    newUsersToday: number;
-    newUsersThisWeek: number;
-    newUsersThisMonth: number;
-    activeListingOwners: number;
-    activeRenters: number;
-    verificationRate: number;
-  }> {
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    async getUserMetrics(): Promise<{
+      totalUsers: number;
+      verifiedUsers: number;
+      newUsersToday: number;
+      newUsersThisWeek: number;
+      newUsersThisMonth: number;
+      activeListingOwners: number;
+      activeRenters: number;
+      verificationRate: number;
+    }> {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     // Total users count
     const totalUsersResult = await db.select({ count: sql<number>`count(*)::int` }).from(users);
@@ -809,11 +809,11 @@ export class DatabaseStorage implements IStorage {
       .where(gte(users.createdAt, weekAgo));
     const newUsersThisWeek = newUsersThisWeekResult[0]?.count || 0;
 
-    // New users this month
-    const newUsersThisMonthResult = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(users)
-      .where(gte(users.createdAt, monthAgo));
+      // New users this month
+      const newUsersThisMonthResult = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(gte(users.createdAt, firstOfMonth));
     const newUsersThisMonth = newUsersThisMonthResult[0]?.count || 0;
 
     // Active listing owners (users with at least one aircraft or marketplace listing)
@@ -1840,31 +1840,58 @@ export class DatabaseStorage implements IStorage {
     const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const firstOfYear = new Date(now.getFullYear(), 0, 1);
 
-    // Get all transactions
-    const allTransactions = await db.select().from(transactions);
-    
-    // Filter only completed platform_fee transactions for both counts and revenue
-    const platformFeeTransactions = allTransactions.filter(
-      t => t.type === 'platform_fee' && t.status === 'completed'
-    );
-
-    // Count transactions by time periods (only completed platform fees)
-    const transactionsToday = platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= today).length;
-    const transactionsWeek = platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= weekAgo).length;
-    const transactionsMonth = platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= firstOfMonth).length;
-    const transactionsYear = platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= firstOfYear).length;
-
-    // Calculate RSF revenue (15% commission = 7.5% from renter + 7.5% from owner)
-    const calculateRevenue = (txs: typeof platformFeeTransactions) => {
-      return txs
-        .reduce((sum, t) => sum + parseFloat(t.amount || "0"), 0)
-        .toFixed(2);
-    };
-
-    const revenueToday = calculateRevenue(platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= today));
-    const revenueWeek = calculateRevenue(platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= weekAgo));
-    const revenueMonth = calculateRevenue(platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= firstOfMonth));
-    const revenueYear = calculateRevenue(platformFeeTransactions.filter(t => t.createdAt && t.createdAt >= firstOfYear));
+      // Get all transactions
+      const allTransactions = await db.select().from(transactions);
+      
+      // Revenue transactions (completed only)
+      const revenueTypes = new Set([
+        'platform_fee',
+        'marketplace_listing_fee',
+        'marketplace_upgrade_fee',
+        'listing_fee',
+        'banner_ad_fee',
+        'membership_fee',
+      ]);
+      const revenueTransactions = allTransactions.filter(
+        t => revenueTypes.has(t.type) && t.status === 'completed'
+      );
+  
+      const sumTransactions = (txs: typeof revenueTransactions) =>
+        txs.reduce((sum, t) => sum + parseFloat(t.amount || "0"), 0);
+  
+      // Count transactions by time periods (revenue types only)
+      const revenueTransactionsToday = revenueTransactions.filter(t => t.createdAt && t.createdAt >= today);
+      const revenueTransactionsWeek = revenueTransactions.filter(t => t.createdAt && t.createdAt >= weekAgo);
+      const revenueTransactionsMonth = revenueTransactions.filter(t => t.createdAt && t.createdAt >= firstOfMonth);
+      const revenueTransactionsYear = revenueTransactions.filter(t => t.createdAt && t.createdAt >= firstOfYear);
+  
+      // Banner ad revenue (derived from paid orders, not transactions)
+      const allBannerOrders = await db.select().from(bannerAdOrders);
+      const paidBannerOrders = allBannerOrders.filter(o => o.paymentStatus === 'paid');
+      const bannerOrderAmount = (order: typeof paidBannerOrders[number]) => {
+        const original = parseFloat(order.grandTotal || "0");
+        const discount = parseFloat(order.discountAmount || "0");
+        return Math.max(0, original - discount);
+      };
+      const bannerOrdersToday = paidBannerOrders.filter(o => o.paypalPaymentDate && o.paypalPaymentDate >= today);
+      const bannerOrdersWeek = paidBannerOrders.filter(o => o.paypalPaymentDate && o.paypalPaymentDate >= weekAgo);
+      const bannerOrdersMonth = paidBannerOrders.filter(o => o.paypalPaymentDate && o.paypalPaymentDate >= firstOfMonth);
+      const bannerOrdersYear = paidBannerOrders.filter(o => o.paypalPaymentDate && o.paypalPaymentDate >= firstOfYear);
+  
+      const bannerRevenueToday = bannerOrdersToday.reduce((sum, o) => sum + bannerOrderAmount(o), 0);
+      const bannerRevenueWeek = bannerOrdersWeek.reduce((sum, o) => sum + bannerOrderAmount(o), 0);
+      const bannerRevenueMonth = bannerOrdersMonth.reduce((sum, o) => sum + bannerOrderAmount(o), 0);
+      const bannerRevenueYear = bannerOrdersYear.reduce((sum, o) => sum + bannerOrderAmount(o), 0);
+  
+      const revenueToday = (sumTransactions(revenueTransactionsToday) + bannerRevenueToday).toFixed(2);
+      const revenueWeek = (sumTransactions(revenueTransactionsWeek) + bannerRevenueWeek).toFixed(2);
+      const revenueMonth = (sumTransactions(revenueTransactionsMonth) + bannerRevenueMonth).toFixed(2);
+      const revenueYear = (sumTransactions(revenueTransactionsYear) + bannerRevenueYear).toFixed(2);
+  
+      const transactionsToday = revenueTransactionsToday.length + bannerOrdersToday.length;
+      const transactionsWeek = revenueTransactionsWeek.length + bannerOrdersWeek.length;
+      const transactionsMonth = revenueTransactionsMonth.length + bannerOrdersMonth.length;
+      const transactionsYear = revenueTransactionsYear.length + bannerOrdersYear.length;
 
     // Get all expenses
     const allExpenses = await db.select().from(expenses);

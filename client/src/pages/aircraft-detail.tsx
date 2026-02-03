@@ -36,8 +36,10 @@ export default function AircraftDetail() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showBestPractices, setShowBestPractices] = useState(false);
+  const [showVerificationNotice, setShowVerificationNotice] = useState(false);
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const verificationNoticeKey = "rsf-verification-renter-v1";
   
   // Mock active rental for demo - in real app would fetch from /api/rentals
   const [mockActiveRental] = useState({
@@ -64,6 +66,15 @@ export default function AircraftDetail() {
     }
   }, [isLoading, error, aircraft, navigate]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const lastSeen = Number(window.localStorage.getItem(verificationNoticeKey) || 0);
+    const thirtyDays = 1000 * 60 * 60 * 24 * 30;
+    if (!lastSeen || Date.now() - lastSeen > thirtyDays) {
+      setShowVerificationNotice(true);
+    }
+  }, []);
+
   // Track aircraft detail view
   useEffect(() => {
     if (!aircraft?.id) return;
@@ -77,6 +88,13 @@ export default function AircraftDetail() {
       location: aircraft.location,
     });
   }, [aircraft?.id]);
+
+  const handleVerificationNoticeClose = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(verificationNoticeKey, String(Date.now()));
+    }
+    setShowVerificationNotice(false);
+  };
 
   // Rental request mutation
   const createRentalMutation = useMutation({
@@ -214,6 +232,38 @@ export default function AircraftDetail() {
 
   return (
     <div className="min-h-screen bg-background">
+      <AlertDialog
+        open={showVerificationNotice}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleVerificationNoticeClose();
+          } else {
+            setShowVerificationNotice(true);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Verification required for rentals</AlertDialogTitle>
+            <AlertDialogDescription>
+              To keep Ready Set Fly safe and fraud-resistant, renters and owners must complete ID,
+              pilot certificate, and insurance verification (when applicable). This protects both
+              parties and helps speed up approvals.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleVerificationNoticeClose}>Got it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                handleVerificationNoticeClose();
+                navigate("/verify-identity");
+              }}
+            >
+              Start Verification
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* Image Gallery Carousel */}
       <section className="container mx-auto px-4 py-8">
         <div className="relative mb-6">

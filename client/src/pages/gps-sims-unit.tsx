@@ -27,6 +27,9 @@ export default function GpsSimsUnit() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
     unit?.tasks[0]?.id ?? null
   );
+  const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(
+    unit?.panel?.hotspots[0]?.id ?? null
+  );
   const [stepProgress, setStepProgress] = useState<Record<string, boolean[]>>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [loadedFromProfile, setLoadedFromProfile] = useState(false);
@@ -43,6 +46,13 @@ export default function GpsSimsUnit() {
       setSelectedTaskId(unit.tasks[0].id);
     }
   }, [unit?.id, selectedTaskId]);
+
+  useEffect(() => {
+    if (!unit?.panel?.hotspots?.length) return;
+    if (!selectedHotspotId || !unit.panel.hotspots.some((hotspot) => hotspot.id === selectedHotspotId)) {
+      setSelectedHotspotId(unit.panel.hotspots[0].id);
+    }
+  }, [unit?.id, selectedHotspotId]);
 
   useEffect(() => {
     setLoadedFromProfile(false);
@@ -89,6 +99,13 @@ export default function GpsSimsUnit() {
     unit.tasks.find((task) => task.id === selectedTaskId) ?? unit.tasks[0];
   const progress =
     stepProgress[selectedTask.id] ?? createStepState(selectedTask);
+  const selectedHotspot =
+    unit.panel.hotspots.find((hotspot) => hotspot.id === selectedHotspotId) ??
+    unit.panel.hotspots[0];
+  const panelBaseUrl = import.meta.env.VITE_GPS_PANEL_BASE_URL as string | undefined;
+  const panelImage = panelBaseUrl
+    ? `${panelBaseUrl.replace(/\/$/, "")}/${unit.panel.imageKey}.jpg`
+    : unit.panel.image;
 
   const completedCount = progress.filter(Boolean).length;
 
@@ -186,6 +203,77 @@ export default function GpsSimsUnit() {
               Checkride Mode
             </Button>
             <Badge variant="outline">Progress saves with RSF Pro</Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Panel Walkthrough</CardTitle>
+            <CardDescription>
+              Tap hot zones to rehearse knob pushes, softkeys, and touchscreen flows.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="relative overflow-hidden rounded-2xl border bg-slate-950/10">
+              <img
+                src={panelImage}
+                alt={unit.panel.alt}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+              {unit.panel.hotspots.map((hotspot) => (
+                <button
+                  key={hotspot.id}
+                  type="button"
+                  className={`absolute rounded-lg border text-xs font-semibold uppercase tracking-wide transition ${
+                    hotspot.id === selectedHotspot?.id
+                      ? "border-primary bg-primary/20 text-primary"
+                      : "border-white/40 bg-white/10 text-white"
+                  }`}
+                  style={{
+                    left: `${hotspot.x}%`,
+                    top: `${hotspot.y}%`,
+                    width: `${hotspot.width}%`,
+                    height: `${hotspot.height}%`,
+                  }}
+                  onClick={() => setSelectedHotspotId(hotspot.id)}
+                  aria-label={hotspot.label}
+                >
+                  <span className="sr-only">{hotspot.label}</span>
+                </button>
+              ))}
+            </div>
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold">{selectedHotspot?.label}</h3>
+                <p className="text-sm text-muted-foreground">{selectedHotspot?.description}</p>
+              </div>
+              <Separator />
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>Suggested flow:</p>
+                <ul className="list-disc space-y-1 pl-5">
+                  <li>Touch the hotspot, then run the related task checklist.</li>
+                  <li>Confirm CDI/annunciations after every automation step.</li>
+                  <li>Brief the approach before activating procedures.</li>
+                </ul>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {unit.panel.hotspots.map((hotspot) => (
+                  <Button
+                    key={hotspot.id}
+                    type="button"
+                    variant={hotspot.id === selectedHotspot?.id ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setSelectedHotspotId(hotspot.id)}
+                  >
+                    {hotspot.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Want more realism? Drop in actual panel artwork and we can remap hotspots.
+              </p>
+            </div>
           </CardContent>
         </Card>
 

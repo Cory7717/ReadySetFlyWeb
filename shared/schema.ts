@@ -538,6 +538,23 @@ export const transactions = pgTable("transactions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// NOTAMs (FAA SWIM ingestion)
+export const notams = pgTable("notams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  icao: text("icao").notNull(),
+  notamId: text("notam_id").notNull(),
+  text: text("text").notNull(),
+  effectiveAt: timestamp("effective_at"),
+  expiresAt: timestamp("expires_at"),
+  source: text("source").default("swim"),
+  raw: jsonb("raw"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_notams_unique").on(table.notamId),
+  index("idx_notams_icao").on(table.icao),
+]);
+
 // PayPal Order Consumption (replay protection)
 export const paypalOrderConsumptions = pgTable("paypal_order_consumptions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1616,6 +1633,8 @@ export type Favorite = typeof favorites.$inferSelect;
 export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
 
 export type Transaction = typeof transactions.$inferSelect;
+
+export type Notam = typeof notams.$inferSelect;
 
 export type PaypalOrderConsumption = typeof paypalOrderConsumptions.$inferSelect;
 export type InsertPaypalOrderConsumption = z.infer<typeof insertPaypalOrderConsumptionSchema>;

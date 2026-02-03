@@ -14,12 +14,30 @@ export type GpsTrainerScenario = {
   notes?: string[];
 };
 
+export type GpsTrainerHotspot = {
+  id: string;
+  label: string;
+  description: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type GpsTrainerPanel = {
+  image: string;
+  imageKey: string;
+  alt: string;
+  hotspots: GpsTrainerHotspot[];
+};
+
 export type GpsTrainerUnit = {
   id: string;
   title: string;
   subtitle: string;
   summary: string;
   highlights: string[];
+  panel: GpsTrainerPanel;
   tasks: GpsTrainerTask[];
   scenarios: GpsTrainerScenario[];
 };
@@ -29,6 +47,27 @@ export const gpsTrainerDisclaimer = [
   "Always verify procedures with your instructor and current charts.",
   "US-only training data is used while RSF completes data licensing.",
 ];
+
+const buildPanelImage = (label: string, accent: string) => {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650">
+      <defs>
+        <linearGradient id="panelGradient" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stop-color="#0f172a" />
+          <stop offset="100%" stop-color="#111827" />
+        </linearGradient>
+      </defs>
+      <rect width="1200" height="650" rx="40" fill="url(#panelGradient)" />
+      <rect x="40" y="40" width="1120" height="570" rx="28" fill="#0b1220" stroke="#1f2937" stroke-width="4" />
+      <rect x="90" y="95" width="700" height="430" rx="16" fill="#0a1d3a" stroke="${accent}" stroke-width="6" />
+      <rect x="830" y="95" width="280" height="430" rx="16" fill="#0b1323" stroke="#1f2937" stroke-width="4" />
+      <rect x="90" y="545" width="1020" height="45" rx="12" fill="#0f172a" stroke="#1f2937" stroke-width="2" />
+      <text x="90" y="70" fill="#e2e8f0" font-family="Arial, sans-serif" font-size="26" font-weight="600">${label}</text>
+      <text x="930" y="560" fill="#94a3b8" font-family="Arial, sans-serif" font-size="16">RSF Training Panel</text>
+    </svg>
+  `;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
 
 export const gpsTrainerUnits: GpsTrainerUnit[] = [
   {
@@ -42,6 +81,58 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
       "IFR procedures and holds",
       "Approach sequencing and CDI control",
     ],
+    panel: {
+      imageKey: "rsf-glass-nxi",
+      image: buildPanelImage("RSF Glass NXi", "#38bdf8"),
+      alt: "RSF Glass NXi trainer panel",
+      hotspots: [
+        {
+          id: "direct-to",
+          label: "Direct-To",
+          description: "Activate direct-to navigation and verify the active leg.",
+          x: 72,
+          y: 20,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "flight-plan",
+          label: "FPL",
+          description: "Open and edit the flight plan list.",
+          x: 72,
+          y: 34,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "procedures",
+          label: "PROC",
+          description: "Load and activate procedures, holds, and vectors-to-final.",
+          x: 72,
+          y: 48,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "cdi-softkey",
+          label: "CDI",
+          description: "Toggle GPS/VLOC and confirm annunciations.",
+          x: 22,
+          y: 84,
+          width: 10,
+          height: 6,
+        },
+        {
+          id: "altitude-select",
+          label: "ALT SEL",
+          description: "Adjust altitude preselect and confirm capture.",
+          x: 76,
+          y: 70,
+          width: 12,
+          height: 12,
+        },
+      ],
+    },
     tasks: [
       {
         id: "direct-to",
@@ -144,6 +235,58 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
       "Procedures page discipline",
       "Approach brief and activation",
     ],
+    panel: {
+      imageKey: "rsf-glass-classic",
+      image: buildPanelImage("RSF Glass Classic", "#22c55e"),
+      alt: "RSF Glass Classic trainer panel",
+      hotspots: [
+        {
+          id: "direct-to",
+          label: "Direct-To",
+          description: "Activate a direct-to leg using the legacy workflow.",
+          x: 72,
+          y: 20,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "fpl",
+          label: "FPL",
+          description: "Open the flight plan page and insert fixes.",
+          x: 72,
+          y: 34,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "proc",
+          label: "PROC",
+          description: "Load approaches and vectors-to-final.",
+          x: 72,
+          y: 48,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "cdi",
+          label: "CDI",
+          description: "Switch nav source between GPS and VLOC.",
+          x: 22,
+          y: 84,
+          width: 10,
+          height: 6,
+        },
+        {
+          id: "obs",
+          label: "CRS/OBS",
+          description: "Set course/OBS for VOR or localizer tracking.",
+          x: 76,
+          y: 70,
+          width: 12,
+          height: 12,
+        },
+      ],
+    },
     tasks: [
       {
         id: "direct-to",
@@ -229,6 +372,58 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
       "PROC page discipline",
       "Hold and OBS management",
     ],
+    panel: {
+      imageKey: "rsf-navstack-530",
+      image: buildPanelImage("RSF NavStack 530", "#f97316"),
+      alt: "RSF NavStack 530 trainer panel",
+      hotspots: [
+        {
+          id: "direct-to",
+          label: "Direct-To",
+          description: "Enter and activate a direct-to waypoint.",
+          x: 72,
+          y: 20,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "fpl",
+          label: "FPL",
+          description: "Build and edit the flight plan list.",
+          x: 72,
+          y: 34,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "proc",
+          label: "PROC",
+          description: "Access approaches, holds, and activates.",
+          x: 72,
+          y: 48,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "obs",
+          label: "OBS",
+          description: "Set and confirm OBS/course for VOR tracking.",
+          x: 22,
+          y: 84,
+          width: 10,
+          height: 6,
+        },
+        {
+          id: "knob",
+          label: "Inner/Outer Knob",
+          description: "Twist to select characters and scroll lists.",
+          x: 76,
+          y: 70,
+          width: 12,
+          height: 12,
+        },
+      ],
+    },
     tasks: [
       {
         id: "direct-to",
@@ -313,6 +508,58 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
       "Flight plan editing",
       "IFR workflow discipline",
     ],
+    panel: {
+      imageKey: "rsf-touch-750",
+      image: buildPanelImage("RSF Touch 750", "#a855f7"),
+      alt: "RSF Touch 750 trainer panel",
+      hotspots: [
+        {
+          id: "direct-to",
+          label: "Direct-To",
+          description: "Tap to enter and activate a direct-to waypoint.",
+          x: 72,
+          y: 20,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "fpl",
+          label: "Flight Plan",
+          description: "Open the flight plan page for route edits.",
+          x: 72,
+          y: 34,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "proc",
+          label: "Procedures",
+          description: "Load and activate approaches or holds.",
+          x: 72,
+          y: 48,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "cdi",
+          label: "CDI",
+          description: "Toggle GPS/VLOC and verify annunciations.",
+          x: 22,
+          y: 84,
+          width: 10,
+          height: 6,
+        },
+        {
+          id: "alt-sel",
+          label: "ALT SEL",
+          description: "Adjust altitude preselect and capture.",
+          x: 76,
+          y: 70,
+          width: 12,
+          height: 12,
+        },
+      ],
+    },
     tasks: [
       {
         id: "direct-to",
@@ -397,6 +644,58 @@ export const gpsTrainerUnits: GpsTrainerUnit[] = [
       "IFR procedure setup",
       "Hold and OBS drills",
     ],
+    panel: {
+      imageKey: "rsf-ifd-style",
+      image: buildPanelImage("RSF IFD-Style", "#0ea5e9"),
+      alt: "RSF IFD-Style trainer panel",
+      hotspots: [
+        {
+          id: "direct-to",
+          label: "Direct-To",
+          description: "Enter and activate a direct-to waypoint.",
+          x: 72,
+          y: 20,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "fpl",
+          label: "FPL",
+          description: "Open the flight plan list for edits.",
+          x: 72,
+          y: 34,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "proc",
+          label: "Procedures",
+          description: "Select and activate approaches or holds.",
+          x: 72,
+          y: 48,
+          width: 10,
+          height: 10,
+        },
+        {
+          id: "cdi",
+          label: "CDI",
+          description: "Toggle GPS/VLOC and confirm source.",
+          x: 22,
+          y: 84,
+          width: 10,
+          height: 6,
+        },
+        {
+          id: "fms-knob",
+          label: "FMS Knob",
+          description: "Rotate to enter data and scroll menus.",
+          x: 76,
+          y: 70,
+          width: 12,
+          height: 12,
+        },
+      ],
+    },
     tasks: [
       {
         id: "direct-to",

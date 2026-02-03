@@ -163,6 +163,47 @@ export default function PilotTools() {
     enabled: !!searchIcao,
   });
 
+  const { data: runwayBriefing, isLoading: runwayLoading } = useQuery<{
+    icao: string;
+    runwayInUse: string | null;
+    wind: { direction: number | null; speed: number | null; gust: number | null };
+    advisory: { runway: string; heading: number; headwind: number; crosswind: number } | null;
+    runways: Array<{
+      leIdent: string | null;
+      heIdent: string | null;
+      leHeading: number | null;
+      heHeading: number | null;
+      lengthFt: number | null;
+      surface: string | null;
+    }>;
+  }>({
+    queryKey: [`/api/airports/${searchIcao}/runway-briefing`],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/airports/${searchIcao}/runway-briefing`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch runway briefing");
+      return res.json();
+    },
+    enabled: !!searchIcao,
+  });
+
+  const { data: notams, isLoading: notamsLoading } = useQuery<{
+    icao: string;
+    notams: Array<{ id: string; text: string; effective?: string; expires?: string }>;
+    raw?: any;
+  }>({
+    queryKey: [`/api/notams/${searchIcao}`],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/notams/${searchIcao}`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch NOTAMs");
+      return res.json();
+    },
+    enabled: !!searchIcao,
+  });
+
   const handleSearch = () => {
     if (icao.trim().length >= 3) {
       setSearchIcao(icao.toUpperCase().trim());
@@ -172,6 +213,7 @@ export default function PilotTools() {
   const flightCategory = parseFlightCategory(weather?.metar);
   const atisInfo = extractAtisIdentifier(weather?.metar);
   const runwayInUse = extractRunwayInUse(weather?.metar);
+  const runwayInUseDisplay = runwayBriefing?.runwayInUse || runwayInUse;
 
   useEffect(() => {
     trackEvent("pilot_tools_view", { page: "/pilot-tools" });
@@ -491,9 +533,9 @@ export default function PilotTools() {
                   {weather.cached && (
                     <Badge variant="secondary" className="text-xs">Cached</Badge>
                   )}
-                  {runwayInUse && (
+                  {runwayInUseDisplay && (
                     <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200">
-                      Runway {runwayInUse} in use
+                      Runway {runwayInUseDisplay} in use
                     </Badge>
                   )}
                 </CardDescription>
@@ -535,6 +577,86 @@ export default function PilotTools() {
                     Always obtain an official weather briefing before flight.
                   </AlertDescription>
                 </Alert>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Airport Briefing</CardTitle>
+                <CardDescription>Runway guidance and live NOTAMs for {weather.icao}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <Label className="text-sm font-semibold">Runway Advisory</Label>
+                    {runwayLoading && <Badge variant="secondary">Loading runways</Badge>}
+                  </div>
+                  {runwayBriefing?.advisory ? (
+                    <div className="rounded-lg border p-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">Recommended: {runwayBriefing.advisory.runway}</Badge>
+                        <span className="text-muted-foreground">
+                          Headwind {runwayBriefing.advisory.headwind} kt · Crosswind {runwayBriefing.advisory.crosswind} kt
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Advisory only. ATC assigns runways; verify with ATIS and tower.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Runway advisory unavailable. Check ATIS or tower for active runway.
+                    </p>
+                  )}
+
+                  {runwayBriefing?.runways?.length ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {runwayBriefing.runways.slice(0, 6).map((runway, index) => (
+                        <div key={`${runway.leIdent}-${runway.heIdent}-${index}`} className="rounded-lg border p-2 text-xs">
+                          <div className="font-semibold">
+                            {runway.leIdent || "--"} / {runway.heIdent || "--"}
+                          </div>
+                          <div className="text-muted-foreground">
+                            {runway.surface || "Surface N/A"} · {runway.lengthFt ? `${runway.lengthFt} ft` : "Length N/A"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Runway details not available.</p>
+                  )}
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <Label className="text-sm font-semibold">NOTAMs</Label>
+                    {notamsLoading && <Badge variant="secondary">Loading NOTAMs</Badge>}
+                  </div>
+                  {notams?.notams?.length ? (
+                    <div className="space-y-2">
+                      {notams.notams.slice(0, 6).map((item) => (
+                        <div key={item.id} className="rounded-lg border p-3 text-xs space-y-1">
+                          <div className="font-semibold">{item.text}</div>
+                          {(item.effective || item.expires) && (
+                            <div className="text-muted-foreground">
+                              {item.effective ? `Effective ${item.effective}` : ""}{" "}
+                              {item.expires ? `· Expires ${item.expires}` : ""}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No NOTAMs available at this time.
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    NOTAMs powered by FAA SWIM.
+                  </p>
+                </div>
               </CardContent>
             </Card>
 

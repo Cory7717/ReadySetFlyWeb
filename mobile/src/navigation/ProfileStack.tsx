@@ -6,6 +6,7 @@ import VerificationScreen from '../screens/VerificationScreen';
 import AuthScreen from '../screens/AuthScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
 import PilotToolsScreen from '../screens/PilotToolsScreen';
+import AirportBriefingScreen from '../screens/AirportBriefingScreen';
 import ApproachPlatesScreen from '../screens/ApproachPlatesScreen';
 import FlightPlannerScreen from '../screens/FlightPlannerScreen';
 import RadioCommsTrainerScreen from '../screens/RadioCommsTrainerScreen';
@@ -47,6 +48,7 @@ export type ProfileStackParamList = {
   Auth: undefined;
   Favorites: undefined;
   PilotTools: undefined;
+  AirportBriefing: undefined;
   ApproachPlates: undefined;
   FlightPlanner: undefined;
   RadioCommsTrainer: undefined;
@@ -120,6 +122,11 @@ export default function ProfileStack() {
         name="PilotTools" 
         component={PilotToolsScreen}
         options={{ title: 'Pilot Tools' }}
+      />
+      <Stack.Screen
+        name="AirportBriefing"
+        component={AirportBriefingScreen}
+        options={{ title: 'Airport Briefing' }}
       />
       <Stack.Screen 
         name="ApproachPlates" 

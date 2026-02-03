@@ -33,6 +33,11 @@ const tools = [
     href: "/pilot-tools",
   },
   {
+    title: "NOTAMs & Active Runway",
+    description: "Live NOTAMs plus runway advisory for a searched airport.",
+    href: "/pilot-tools",
+  },
+  {
     title: "Radio Comms Trainer",
     description: "Scenario practice with scoring.",
     href: "/radio-comms-trainer",

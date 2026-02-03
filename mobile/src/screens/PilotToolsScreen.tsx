@@ -16,6 +16,17 @@ export default function PilotToolsScreen({ navigation }: any) {
         <Text style={styles.sectionTitle}>Core Tools</Text>
         <TouchableOpacity
           style={styles.card}
+          onPress={() => navigation.navigate('AirportBriefing')}
+        >
+          <Ionicons name="alert-circle-outline" size={28} color="#1e40af" />
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>Airport Briefing</Text>
+            <Text style={styles.cardSubtitle}>Runways, wind advisory, and live NOTAMs.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
           onPress={() => navigation.navigate('FlightPlanner')}
         >
           <Ionicons name="map-outline" size={28} color="#1e40af" />

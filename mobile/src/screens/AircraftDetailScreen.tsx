@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,11 +8,43 @@ import { apiEndpoints } from '../services/api';
 import { StarRating } from '../components/StarRating';
 import { FavoriteButton } from '../components/FavoriteButton';
 import { format, isValid } from 'date-fns';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Props = NativeStackScreenProps<RentalsStackParamList, 'AircraftDetail'>;
 
 export default function AircraftDetailScreen({ route, navigation }: Props) {
   const { aircraftId } = route.params;
+  const verificationNoticeKey = 'rsf-verification-renter-v1';
+
+  useEffect(() => {
+    const showNotice = async () => {
+      const stored = await AsyncStorage.getItem(verificationNoticeKey);
+      const lastSeen = stored ? Number(stored) : 0;
+      const thirtyDays = 1000 * 60 * 60 * 24 * 30;
+      if (lastSeen && Date.now() - lastSeen < thirtyDays) return;
+
+      const markSeen = async () => {
+        await AsyncStorage.setItem(verificationNoticeKey, String(Date.now()));
+      };
+
+      Alert.alert(
+        'Verification required',
+        'Renters and owners must verify ID, pilot credentials, and insurance when applicable. This protects both parties and reduces fraud.',
+        [
+          { text: 'Got it', onPress: markSeen },
+          {
+            text: 'Start Verification',
+            onPress: async () => {
+              await markSeen();
+              navigation.navigate('Verification');
+            },
+          },
+        ]
+      );
+    };
+
+    showNotice();
+  }, [navigation]);
 
   const { data: aircraft, isLoading, error } = useQuery({
     queryKey: ['/api/aircraft', aircraftId],

@@ -34,6 +34,12 @@ const tools = [
     route: 'PilotTools',
   },
   {
+    title: 'NOTAMs & Active Runway',
+    subtitle: 'Runway advisory plus live NOTAMs for any airport.',
+    icon: 'alert-circle-outline',
+    route: 'AirportBriefing',
+  },
+  {
     title: 'Radio Comms Trainer',
     subtitle: 'Scenario practice with scoring.',
     icon: 'mic-outline',

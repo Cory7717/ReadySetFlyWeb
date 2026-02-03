@@ -22,6 +22,16 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Form,
   FormControl,
   FormDescription,
@@ -71,6 +81,8 @@ export default function ListAircraft() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
+  const [showVerificationNotice, setShowVerificationNotice] = useState(false);
+  const verificationNoticeKey = "rsf-verification-owner-v1";
 
   // Check if we're in edit mode
   const [isEditMode, params] = useRoute("/edit-aircraft/:id");
@@ -79,6 +91,22 @@ export default function ListAircraft() {
   useEffect(() => {
     trackEvent("rental_listing_start", { mode: isEditMode ? "edit" : "create" });
   }, [isEditMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const lastSeen = Number(window.localStorage.getItem(verificationNoticeKey) || 0);
+    const thirtyDays = 1000 * 60 * 60 * 24 * 30;
+    if (!lastSeen || Date.now() - lastSeen > thirtyDays) {
+      setShowVerificationNotice(true);
+    }
+  }, []);
+
+  const handleVerificationNoticeClose = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(verificationNoticeKey, String(Date.now()));
+    }
+    setShowVerificationNotice(false);
+  };
 
   // Fetch existing aircraft if in edit mode
   const { data: existingAircraft, isLoading: loadingAircraft } = useQuery<AircraftListing>({
@@ -455,6 +483,37 @@ export default function ListAircraft() {
 
   return (
     <div className="min-h-screen bg-background">
+      <AlertDialog
+        open={showVerificationNotice}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleVerificationNoticeClose();
+          } else {
+            setShowVerificationNotice(true);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Verification keeps rentals safe</AlertDialogTitle>
+            <AlertDialogDescription>
+              Owners must verify identity, pilot credentials, and aircraft documentation to protect renters,
+              reduce fraud, and speed approvals. Upload insurance and annual inspection records to finish.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleVerificationNoticeClose}>Got it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                handleVerificationNoticeClose();
+                navigate("/verify-identity");
+              }}
+            >
+              Start Verification
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Verification Info */}
         {!isVerified && (

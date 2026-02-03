@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { gpsTrainerDisclaimer, gpsTrainerUnits } from '@shared/gps-sims';
@@ -23,6 +23,9 @@ export default function GpsSimsUnitScreen({ route }: any) {
 
   const [mode, setMode] = useState<Mode>('learn');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(unit?.tasks[0]?.id ?? null);
+  const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(
+    unit?.panel?.hotspots?.[0]?.id ?? null
+  );
   const [stepProgress, setStepProgress] = useState<Record<string, boolean[]>>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [loaded, setLoaded] = useState(false);
@@ -33,6 +36,13 @@ export default function GpsSimsUnitScreen({ route }: any) {
       setSelectedTaskId(unit.tasks[0].id);
     }
   }, [unit?.id, selectedTaskId]);
+
+  useEffect(() => {
+    if (!unit?.panel?.hotspots?.length) return;
+    if (!selectedHotspotId || !unit.panel.hotspots.some((hotspot) => hotspot.id === selectedHotspotId)) {
+      setSelectedHotspotId(unit.panel.hotspots[0].id);
+    }
+  }, [unit?.id, selectedHotspotId]);
 
   useEffect(() => {
     setLoaded(false);
@@ -68,6 +78,12 @@ export default function GpsSimsUnitScreen({ route }: any) {
   const progress = stepProgress[selectedTask.id] ?? createStepState(selectedTask.steps.length);
   const completedCount = progress.filter(Boolean).length;
   const showSteps = mode === 'learn' || revealed[selectedTask.id];
+  const selectedHotspot =
+    unit.panel.hotspots.find((hotspot) => hotspot.id === selectedHotspotId) || unit.panel.hotspots[0];
+  const panelBaseUrl = process.env.EXPO_PUBLIC_GPS_PANEL_BASE_URL;
+  const panelImage = panelBaseUrl
+    ? `${panelBaseUrl.replace(/\/$/, '')}/${unit.panel.imageKey}.jpg`
+    : unit.panel.image;
 
   const handleToggleStep = (index: number) => {
     setStepProgress((prev) => {
@@ -142,6 +158,62 @@ export default function GpsSimsUnitScreen({ route }: any) {
           >
             <Text style={styles.modeButtonText}>Checkride</Text>
           </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Panel Walkthrough</Text>
+        <Text style={styles.helperText}>
+          Tap a hotspot to rehearse the related action before running the checklist.
+        </Text>
+        <View style={styles.panelContainer}>
+          <Image source={{ uri: panelImage }} style={styles.panelImage} />
+          {unit.panel.hotspots.map((hotspot) => {
+            const isActive = hotspot.id === selectedHotspot?.id;
+            return (
+              <TouchableOpacity
+                key={hotspot.id}
+                style={[
+                  styles.hotspot,
+                  isActive && styles.hotspotActive,
+                  {
+                    left: `${hotspot.x}%`,
+                    top: `${hotspot.y}%`,
+                    width: `${hotspot.width}%`,
+                    height: `${hotspot.height}%`,
+                  },
+                ]}
+                onPress={() => setSelectedHotspotId(hotspot.id)}
+              >
+                <Text style={styles.hotspotLabel}>{hotspot.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <View style={styles.hotspotDetail}>
+          <Text style={styles.hotspotTitle}>{selectedHotspot?.label}</Text>
+          <Text style={styles.hotspotDescription}>{selectedHotspot?.description}</Text>
+        </View>
+        <View style={styles.hotspotPillRow}>
+          {unit.panel.hotspots.map((hotspot) => (
+            <TouchableOpacity
+              key={hotspot.id}
+              style={[
+                styles.hotspotPill,
+                hotspot.id === selectedHotspot?.id && styles.hotspotPillActive,
+              ]}
+              onPress={() => setSelectedHotspotId(hotspot.id)}
+            >
+              <Text
+                style={[
+                  styles.hotspotPillText,
+                  hotspot.id === selectedHotspot?.id && styles.hotspotPillTextActive,
+                ]}
+              >
+                {hotspot.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
@@ -296,6 +368,63 @@ const styles = StyleSheet.create({
   },
   modeButtonActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
   modeButtonText: { fontSize: 12, fontWeight: '600', color: colors.text },
+  panelContainer: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 1200 / 650,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+    marginTop: spacing.sm,
+  },
+  panelImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  hotspot: {
+    position: 'absolute',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  hotspotActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(37, 99, 235, 0.25)',
+  },
+  hotspotLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#e2e8f0',
+  },
+  hotspotDetail: {
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  hotspotTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
+  hotspotDescription: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  hotspotPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  hotspotPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  hotspotPillActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  hotspotPillText: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
+  hotspotPillTextActive: { color: colors.primary },
   taskButton: {
     padding: spacing.sm,
     borderRadius: radius.md,

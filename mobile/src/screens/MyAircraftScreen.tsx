@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { api } from '../services/api';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type AircraftType = {
   id: string;
@@ -26,7 +27,7 @@ type AircraftProfile = {
   type?: AircraftType | null;
 };
 
-export default function MyAircraftScreen() {
+export default function MyAircraftScreen({ navigation }: any) {
   const [profiles, setProfiles] = useState<AircraftProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
@@ -40,6 +41,7 @@ export default function MyAircraftScreen() {
     usableFuel: '',
     maxGross: '',
   });
+  const verificationNoticeKey = 'rsf-verification-owner-v1';
 
   const loadProfiles = async () => {
     setLoading(true);
@@ -55,6 +57,36 @@ export default function MyAircraftScreen() {
 
   useEffect(() => {
     loadProfiles();
+  }, []);
+
+  useEffect(() => {
+    const showNotice = async () => {
+      const stored = await AsyncStorage.getItem(verificationNoticeKey);
+      const lastSeen = stored ? Number(stored) : 0;
+      const thirtyDays = 1000 * 60 * 60 * 24 * 30;
+      if (lastSeen && Date.now() - lastSeen < thirtyDays) return;
+
+      const markSeen = async () => {
+        await AsyncStorage.setItem(verificationNoticeKey, String(Date.now()));
+      };
+
+      Alert.alert(
+        'Verification keeps rentals safe',
+        'Owners must verify identity, pilot credentials, and aircraft documentation to protect renters and speed approvals.',
+        [
+          { text: 'Got it', onPress: markSeen },
+          {
+            text: 'Start Verification',
+            onPress: async () => {
+              await markSeen();
+              navigation.navigate('Verification');
+            },
+          },
+        ]
+      );
+    };
+
+    showNotice();
   }, []);
 
   const searchTypes = async () => {

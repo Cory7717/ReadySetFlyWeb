@@ -5,9 +5,15 @@ import { db } from "./db";
 import { notams as notamsTable } from "@shared/schema";
 
 const require = createRequire(import.meta.url);
-const solclientModule = require("solclientjs");
-const solclientjs =
-  solclientModule?.SessionEventCode ? solclientModule : solclientModule?.debug || solclientModule;
+let solclientjs: any = null;
+try {
+  const solclientModule = require("solclientjs");
+  solclientjs =
+    solclientModule?.SessionEventCode ? solclientModule : solclientModule?.debug || solclientModule;
+} catch (error) {
+  console.error("Solace client load failed:", error);
+  solclientjs = null;
+}
 let solaceInitialized = false;
 
 type NormalizedNotam = {
@@ -212,7 +218,12 @@ export function startSwimNotamWorker() {
     return false;
   }
 
-  initSolace();
+  try {
+    initSolace();
+  } catch (error) {
+    console.error("Solace init failed. NOTAM worker disabled:", error);
+    return false;
+  }
 
   const sessionProps = {
     url: connectionUrl,

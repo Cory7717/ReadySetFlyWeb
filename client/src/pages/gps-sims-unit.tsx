@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { trackEvent } from "@/lib/analytics";
+import { apiUrl } from "@/lib/api";
 import { gpsTrainerDisclaimer, gpsTrainerUnits, type GpsTrainerTask } from "@shared/gps-sims";
 import { useAuth } from "@/hooks/useAuth";
 import { useStudentProfile } from "@/hooks/useStudentProfile";
@@ -106,6 +107,12 @@ export default function GpsSimsUnit() {
   const panelImage = panelBaseUrl
     ? `${panelBaseUrl.replace(/\/$/, "")}/${unit.panel.imageKey}.png`
     : unit.panel.image;
+  const panelFallback = apiUrl(`/api/gps-sims/panels/${unit.panel.imageKey}`);
+  const [panelSrc, setPanelSrc] = useState(panelImage);
+
+  useEffect(() => {
+    setPanelSrc(panelImage);
+  }, [panelImage]);
 
   const completedCount = progress.filter(Boolean).length;
 
@@ -219,10 +226,13 @@ export default function GpsSimsUnit() {
               style={{ aspectRatio: "2 / 1" }}
             >
               <img
-                src={panelImage}
+                src={panelSrc}
                 alt={unit.panel.alt}
                 className="h-full w-full object-cover"
                 loading="lazy"
+                onError={() =>
+                  setPanelSrc((current) => (current === panelFallback ? current : panelFallback))
+                }
               />
               {unit.panel.hotspots.map((hotspot) => (
                 <button

@@ -19,6 +19,7 @@ import { and, desc, eq, gte, isNull, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, notams as notamsTable } from "@shared/schema";
+import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
 import { sendContactFormEmail } from "./email-templates";
@@ -407,6 +408,30 @@ function getSampleMarketplaceListings(filters?: any) {
   return SAMPLE_MARKETPLACE_LISTINGS.filter((listing) =>
     matchesMarketplaceSampleFilters(listing, filters)
   );
+}
+
+const GPS_PANEL_KEYS = new Set(gpsTrainerUnits.map((unit) => unit.panel.imageKey));
+
+function buildGpsPanelObjectKeys(imageKey: string): string[] {
+  const normalizedKey = imageKey.replace(/\.png$/i, "");
+  const unit = gpsTrainerUnits.find((item) => item.panel.imageKey === normalizedKey || item.id === normalizedKey);
+  const candidates = new Set<string>([`uploads/${normalizedKey}.png`]);
+
+  if (unit) {
+    const title = unit.title.trim();
+    if (title) {
+      const spaced = title.replace(/\s+/g, " ").trim();
+      const dashed = spaced.replace(/\s+/g, "-");
+      const underscored = spaced.replace(/\s+/g, "_");
+      const slug = spaced.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      candidates.add(`uploads/${spaced}.png`);
+      candidates.add(`uploads/${dashed}.png`);
+      candidates.add(`uploads/${underscored}.png`);
+      if (slug) candidates.add(`uploads/${slug}.png`);
+    }
+  }
+
+  return Array.from(candidates);
 }
 
 
@@ -1417,6 +1442,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Serve uploaded files
   app.use('/uploads', express.static('uploads'));
+
+  // Serve GPS trainer panel images from S3 (private buckets supported)
+  app.get('/api/gps-sims/panels/:imageKey', async (req, res) => {
+    const rawKey = String(req.params.imageKey || "");
+    const normalizedKey = rawKey.replace(/\.png$/i, "").trim();
+
+    if (!normalizedKey || normalizedKey.includes("/") || normalizedKey.includes("..")) {
+      return res.status(400).json({ error: "Invalid image key" });
+    }
+
+    if (!GPS_PANEL_KEYS.has(normalizedKey)) {
+      return res.status(404).json({ error: "Panel image not found" });
+    }
+
+    if (!process.env.AWS_S3_BUCKET) {
+      return res.status(404).json({ error: "Panel image not available" });
+    }
+
+    try {
+      const { S3StorageService } = await import("./s3Storage.js");
+      const s3Service = new S3StorageService();
+      const candidates = buildGpsPanelObjectKeys(normalizedKey);
+
+      for (const key of candidates) {
+        try {
+          const { stream, contentType, contentLength } = await s3Service.getObjectStream({ key });
+          res.setHeader("Content-Type", contentType || "image/png");
+          if (contentLength) res.setHeader("Content-Length", String(contentLength));
+          res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+          await pipeline(stream, res);
+          return;
+        } catch (error: any) {
+          const statusCode = error?.$metadata?.httpStatusCode;
+          if (error?.name === "NoSuchKey" || statusCode === 404) {
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      return res.status(404).json({ error: "Panel image not found" });
+    } catch (error) {
+      console.error("Error streaming GPS panel image:", error);
+      return res.status(500).json({ error: "Failed to load panel image" });
+    }
+  });
 
   // Object Storage Routes (for marketplace listing images)
   // Get upload URL for listing images

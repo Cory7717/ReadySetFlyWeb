@@ -5,6 +5,7 @@ import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { gpsTrainerDisclaimer, gpsTrainerUnits } from '@shared/gps-sims';
 import { useAuth } from '../utils/auth';
 import { useStudentProfile } from '../utils/studentProfile';
+import { apiEndpoints } from '../services/api';
 
 type Mode = 'learn' | 'checkride';
 
@@ -84,6 +85,12 @@ export default function GpsSimsUnitScreen({ route }: any) {
   const panelImage = panelBaseUrl
     ? `${panelBaseUrl.replace(/\/$/, '')}/${unit.panel.imageKey}.png`
     : unit.panel.image;
+  const panelFallback = `${apiEndpoints.baseURL}/api/gps-sims/panels/${unit.panel.imageKey}`;
+  const [panelSrc, setPanelSrc] = useState(panelImage);
+
+  useEffect(() => {
+    setPanelSrc(panelImage);
+  }, [panelImage]);
 
   const handleToggleStep = (index: number) => {
     setStepProgress((prev) => {
@@ -167,7 +174,13 @@ export default function GpsSimsUnitScreen({ route }: any) {
           Tap a hotspot to rehearse the related action before running the checklist.
         </Text>
         <View style={styles.panelContainer}>
-          <Image source={{ uri: panelImage }} style={styles.panelImage} />
+          <Image
+            source={{ uri: panelSrc }}
+            style={styles.panelImage}
+            onError={() =>
+              setPanelSrc((current) => (current === panelFallback ? current : panelFallback))
+            }
+          />
           {unit.panel.hotspots.map((hotspot) => {
             const isActive = hotspot.id === selectedHotspot?.id;
             return (

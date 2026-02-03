@@ -192,31 +192,52 @@ export default function Home() {
       />
 
       <section className="container mx-auto px-4">
-        <Card className="border-primary/20 bg-primary/5">
-          <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="text-sm font-semibold">Need training or services?</div>
-              <p className="text-sm text-muted-foreground">
-                Explore CFIs, flight schools, mechanics, and aviation services in the marketplace.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Button
-                variant="outline"
-                onClick={() => trackEvent("cta_click", { label: "rentals_to_marketplace", target: "/marketplace" })}
-                asChild
-              >
-                <Link href="/marketplace">Explore Marketplace</Link>
-              </Button>
-              <Button
-                onClick={() => trackEvent("cta_click", { label: "rentals_post_listing", target: "/create-marketplace-listing" })}
-                asChild
-              >
-                <Link href="/create-marketplace-listing">Post a Listing</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card className="border-primary/20 bg-primary/5">
+            <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold">Need training or services?</div>
+                <p className="text-sm text-muted-foreground">
+                  Explore CFIs, flight schools, mechanics, and aviation services in the marketplace.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => trackEvent("cta_click", { label: "rentals_to_marketplace", target: "/marketplace" })}
+                  asChild
+                >
+                  <Link href="/marketplace">Explore Marketplace</Link>
+                </Button>
+                <Button
+                  onClick={() => trackEvent("cta_click", { label: "rentals_post_listing", target: "/create-marketplace-listing" })}
+                  asChild
+                >
+                  <Link href="/create-marketplace-listing">Post a Listing</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-sky-500/20 bg-sky-500/5">
+            <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold">New: RSF GPS Simulators</div>
+                <p className="text-sm text-muted-foreground">
+                  Practice IFR GPS workflows on RSF-branded glass panels and stacks.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={() => trackEvent("cta_click", { label: "rentals_to_gps_sims", target: "/gps-sims" })}
+                  asChild
+                >
+                  <Link href="/gps-sims">Open GPS Sims</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </section>
 
       {/* Filters & Results */}

@@ -6,7 +6,8 @@ import { notams as notamsTable } from "@shared/schema";
 
 const require = createRequire(import.meta.url);
 const solclientModule = require("solclientjs");
-const solclientjs = solclientModule?.debug || solclientModule;
+const solclientjs =
+  solclientModule?.SessionEventCode ? solclientModule : solclientModule?.debug || solclientModule;
 let solaceInitialized = false;
 
 type NormalizedNotam = {
@@ -150,6 +151,9 @@ function resolveSolaceLogLevel() {
 
 function initSolace() {
   if (solaceInitialized) return;
+  if (!solclientjs?.SolclientFactory?.init) {
+    throw new Error("Solace client missing SolclientFactory.init");
+  }
   solclientjs.SolclientFactory.init({
     profile: solclientjs.SolclientFactoryProfiles.version10,
     logLevel: resolveSolaceLogLevel(),
@@ -201,6 +205,10 @@ export function startSwimNotamWorker() {
 
   if (!queueName || !username || !password || !connectionUrl || !vpn) {
     console.warn("SWIM JMS env vars missing. NOTAM worker will not start.");
+    return false;
+  }
+  if (!solclientjs?.SessionEventCode || !solclientjs?.MessageConsumerEventName) {
+    console.error("Solace client missing event codes. Check solclientjs import.");
     return false;
   }
 

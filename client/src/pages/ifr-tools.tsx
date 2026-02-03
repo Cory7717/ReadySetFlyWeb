@@ -33,6 +33,11 @@ const tools = [
     href: "/pilot-tools",
   },
   {
+    title: "TFR Map",
+    description: "RSF-owned TFR map powered by FAA SWIM.",
+    href: "/tfr-map",
+  },
+  {
     title: "NOTAMs & Active Runway",
     description: "Live NOTAMs plus runway advisory for a searched airport.",
     href: "/pilot-tools",

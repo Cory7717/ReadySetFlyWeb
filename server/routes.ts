@@ -528,10 +528,187 @@ const RUNWAY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let runwayCache: { data: Map<string, RunwayMeta[]>; expiresAt: number } | null = null;
 const NOTAM_CACHE_TTL_MS = 2 * 60 * 1000;
 const notamCache = new Map<string, { data: any; expiresAt: number }>();
+const TFR_CACHE_TTL_MS = 2 * 60 * 1000;
+const tfrCache = new Map<string, { data: any; expiresAt: number }>();
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
 
 function normalizeIcao(value: string) {
   return value.trim().toUpperCase();
+}
+
+function dmsToDecimal(deg: number, min: number, sec: number, hemi: string) {
+  const sign = hemi === "S" || hemi === "W" ? -1 : 1;
+  return sign * (deg + min / 60 + sec / 3600);
+}
+
+function parseCoordPair(text: string) {
+  const match = text.match(
+    /(\d{2})[°º]\s*(\d{2})['’]\s*(\d{2})"?\s*([NS])\s+(\d{2,3})[°º]\s*(\d{2})['’]\s*(\d{2})"?\s*([EW])/
+  );
+  if (!match) return null;
+  const lat = dmsToDecimal(Number(match[1]), Number(match[2]), Number(match[3]), match[4]);
+  const lon = dmsToDecimal(Number(match[5]), Number(match[6]), Number(match[7]), match[8]);
+  return { lat, lon };
+}
+
+function bearingBetween(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const toDeg = (rad: number) => (rad * 180) / Math.PI;
+  const dLon = toRad(lon2 - lon1);
+  const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x =
+    Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  const bearing = toDeg(Math.atan2(y, x));
+  return (bearing + 360) % 360;
+}
+
+function destinationPoint(lat: number, lon: number, bearingDeg: number, distanceNm: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const toDeg = (rad: number) => (rad * 180) / Math.PI;
+  const radiusNm = 3440.065;
+  const angular = distanceNm / radiusNm;
+  const bearing = toRad(bearingDeg);
+  const lat1 = toRad(lat);
+  const lon1 = toRad(lon);
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angular) + Math.cos(lat1) * Math.sin(angular) * Math.cos(bearing)
+  );
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(angular) * Math.cos(lat1),
+      Math.cos(angular) - Math.sin(lat1) * Math.sin(lat2)
+    );
+
+  return { lat: toDeg(lat2), lon: toDeg(lon2) };
+}
+
+function buildArcPoints(
+  center: { lat: number; lon: number },
+  start: { lat: number; lon: number },
+  end: { lat: number; lon: number },
+  radiusNm: number,
+  clockwise: boolean
+) {
+  let startBearing = bearingBetween(center.lat, center.lon, start.lat, start.lon);
+  let endBearing = bearingBetween(center.lat, center.lon, end.lat, end.lon);
+
+  if (clockwise && endBearing <= startBearing) {
+    endBearing += 360;
+  }
+  if (!clockwise && startBearing <= endBearing) {
+    startBearing += 360;
+  }
+
+  const total = Math.abs(endBearing - startBearing);
+  const steps = Math.max(12, Math.ceil(total / 5));
+  const increment = (endBearing - startBearing) / steps;
+
+  const points: { lat: number; lon: number }[] = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const bearing = startBearing + increment * i;
+    points.push(destinationPoint(center.lat, center.lon, bearing, radiusNm));
+  }
+  return points;
+}
+
+function parseTfrPolygon(text: string) {
+  const arcRegex =
+    /(Clockwise|Counterclockwise)\s+on\s+a\s+(\d+(?:\.\d+)?)\s*NM ARC Centered on:\s*([0-9º'\"NS\s]+)\s+([0-9º'\"EW\s]+)/gi;
+  const coordRegex =
+    /(\d{2})[°º]\s*(\d{2})['’]\s*(\d{2})"?\s*([NS])\s+(\d{2,3})[°º]\s*(\d{2})['’]\s*(\d{2})"?\s*([EW])/gi;
+
+  const arcMatches: Array<{ index: number; end: number; clockwise: boolean; radius: number; center: { lat: number; lon: number } | null }> = [];
+  let match: RegExpExecArray | null;
+  while ((match = arcRegex.exec(text)) !== null) {
+    const clockwise = match[1].toLowerCase().startsWith("clockwise");
+    const radius = Number(match[2]);
+    const center = parseCoordPair(`${match[3]} ${match[4]}`);
+    arcMatches.push({
+      index: match.index,
+      end: match.index + match[0].length,
+      clockwise,
+      radius,
+      center,
+    });
+  }
+
+  const tokens: Array<
+    | { type: "point"; index: number; lat: number; lon: number }
+    | { type: "arc"; index: number; clockwise: boolean; radius: number; center: { lat: number; lon: number } }
+  > = [];
+
+  while ((match = coordRegex.exec(text)) !== null) {
+    const index = match.index;
+    const isArcCenter = arcMatches.some((arc) => index >= arc.index && index <= arc.end);
+    if (isArcCenter) continue;
+    const lat = dmsToDecimal(Number(match[1]), Number(match[2]), Number(match[3]), match[4]);
+    const lon = dmsToDecimal(Number(match[5]), Number(match[6]), Number(match[7]), match[8]);
+    tokens.push({ type: "point", index, lat, lon });
+  }
+
+  arcMatches.forEach((arc) => {
+    if (!arc.center) return;
+    tokens.push({
+      type: "arc",
+      index: arc.index,
+      clockwise: arc.clockwise,
+      radius: arc.radius,
+      center: arc.center,
+    });
+  });
+
+  tokens.sort((a, b) => a.index - b.index);
+
+  const points: { lat: number; lon: number }[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    if (token.type === "point") {
+      points.push({ lat: token.lat, lon: token.lon });
+      continue;
+    }
+
+    const start = points[points.length - 1];
+    const nextPointToken = tokens.slice(i + 1).find((item) => item.type === "point") as
+      | { type: "point"; index: number; lat: number; lon: number }
+      | undefined;
+    if (!start || !nextPointToken) continue;
+    const arcPoints = buildArcPoints(
+      token.center,
+      start,
+      { lat: nextPointToken.lat, lon: nextPointToken.lon },
+      token.radius,
+      token.clockwise
+    );
+    arcPoints.slice(1).forEach((p) => points.push(p));
+  }
+
+  if (points.length >= 3) {
+    const first = points[0];
+    const last = points[points.length - 1];
+    if (first.lat !== last.lat || first.lon !== last.lon) {
+      points.push({ ...first });
+    }
+  }
+
+  return points;
+}
+
+function extractLineValue(text: string, label: string) {
+  const match = text.match(new RegExp(`${label}\\s*:\\s*([^\\n\\r]+)`, "i"));
+  return match ? match[1].trim() : null;
+}
+
+function isTfrNotam(text: string, notamId: string) {
+  const upperText = text.toUpperCase();
+  if (notamId?.toUpperCase().startsWith("FDC")) return true;
+  return (
+    upperText.includes("TEMPORARY FLIGHT RESTRICTION") ||
+    upperText.includes("AIRSPACE DEFINITION") ||
+    upperText.includes("TFR")
+  );
 }
 
 function extractRunwayInUseFromMetar(metar: any): string | null {
@@ -7666,6 +7843,69 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error: any) {
       console.error("NOTAM fetch failed:", error);
       res.status(500).json({ error: error.message || "Failed to fetch NOTAMs" });
+    }
+  });
+
+  app.get("/api/tfrs", async (req, res) => {
+    try {
+      const cacheKey = String(req.query?.icao || "all").toUpperCase();
+      const cached = tfrCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return res.json(cached.data);
+      }
+
+      const now = new Date();
+      const rows = await db
+        .select()
+        .from(notamsTable)
+        .where(or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, now)))
+        .orderBy(desc(notamsTable.effectiveAt), desc(notamsTable.createdAt))
+        .limit(500);
+
+      const features = rows
+        .filter((row) => row.text && isTfrNotam(row.text, row.notamId))
+        .map((row) => {
+          if (cacheKey !== "ALL" && row.icao !== cacheKey) return null;
+          const points = parseTfrPolygon(row.text || "");
+          if (!points || points.length < 3) return null;
+
+          const reason = extractLineValue(row.text, "Reason for NOTAM");
+          const location = extractLineValue(row.text, "Location");
+          const tfrType = extractLineValue(row.text, "Type");
+          const altitude = extractLineValue(row.text, "Altitude");
+
+          return {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [points.map((p) => [p.lon, p.lat])],
+            },
+            properties: {
+              notamId: row.notamId,
+              icao: row.icao,
+              location,
+              reason,
+              tfrType,
+              altitude,
+              effectiveAt: row.effectiveAt ? row.effectiveAt.toISOString() : null,
+              expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+              text: row.text,
+            },
+          };
+        })
+        .filter(Boolean);
+
+      const payload = {
+        type: "FeatureCollection",
+        features,
+        updatedAt: new Date().toISOString(),
+      };
+
+      tfrCache.set(cacheKey, { data: payload, expiresAt: Date.now() + TFR_CACHE_TTL_MS });
+      res.json(payload);
+    } catch (error: any) {
+      console.error("TFR fetch failed:", error);
+      res.status(500).json({ error: "Failed to fetch TFRs" });
     }
   });
 

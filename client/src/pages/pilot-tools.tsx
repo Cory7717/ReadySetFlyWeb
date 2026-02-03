@@ -321,6 +321,22 @@ export default function PilotTools() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
+              TFR Map (RSF)
+            </CardTitle>
+            <CardDescription>RSF-owned TFR map powered by FAA SWIM.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button asChild>
+              <Link href="/tfr-map">Open TFR Map</Link>
+            </Button>
+            <Badge variant="outline">Live airspace</Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
               Airport Briefing (NOTAMs + Runway)
             </CardTitle>
             <CardDescription>Live NOTAMs and runway advisory for any airport.</CardDescription>
@@ -473,7 +489,7 @@ export default function PilotTools() {
         </Card>
 
         {/* Search */}
-        <Card>
+        <Card id="airport-weather">
           <CardHeader>
             <CardTitle>Airport Weather</CardTitle>
             <CardDescription>Enter an ICAO code (e.g., KAUS, KJFK, KDFW)</CardDescription>
@@ -683,7 +699,41 @@ export default function PilotTools() {
                 <CardDescription>Official sources for flight planning</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    RSF Tools
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Button variant="outline" className="justify-start" asChild>
+                      <a href="#airport-weather">
+                        <Cloud className="h-4 w-4 mr-2" />
+                        RSF METAR/TAF
+                      </a>
+                    </Button>
+
+                    <Button variant="outline" className="justify-start" asChild>
+                      <a href="#airport-briefing">
+                        <AlertTriangle className="h-4 w-4 mr-2" />
+                        RSF NOTAMs + Runway
+                      </a>
+                    </Button>
+
+                    <Button variant="outline" className="justify-start" asChild>
+                      <Link href="/tfr-map">
+                        <AlertTriangle className="h-4 w-4 mr-2" />
+                        RSF TFR Map
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
+
+                <Separator className="my-2" />
+
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Official Sources
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Button variant="outline" className="justify-start" asChild>
                     <a
                       href={`https://www.aviationweather.gov/metar/data?ids=${weather.icao}&format=decoded`}
@@ -694,16 +744,6 @@ export default function PilotTools() {
                       View METAR/TAF
                       <ExternalLink className="h-3 w-3 ml-auto" />
                     </a>
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    className="justify-start"
-                    onClick={() => window.open(`https://notams.aim.faa.gov/notamSearch/nsapp.html#/`, '_blank')}
-                  >
-                    <AlertTriangle className="h-4 w-4 mr-2" />
-                    NOTAMs
-                    <ExternalLink className="h-3 w-3 ml-auto" />
                   </Button>
 
                   <Button
@@ -745,6 +785,7 @@ export default function PilotTools() {
                     SkyVector
                     <ExternalLink className="h-3 w-3 ml-auto" />
                   </Button>
+                  </div>
                 </div>
 
                 <Separator className="my-4" />

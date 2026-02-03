@@ -320,6 +320,22 @@ export default function PilotTools() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Airport Briefing (NOTAMs + Runway)
+            </CardTitle>
+            <CardDescription>Live NOTAMs and runway advisory for any airport.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button asChild>
+              <a href="#airport-briefing">Open Airport Briefing</a>
+            </Button>
+            <Badge variant="outline">FAA SWIM</Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <Wind className="h-5 w-5" />
               Crosswind Calculator
             </CardTitle>
@@ -580,7 +596,7 @@ export default function PilotTools() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card id="airport-briefing">
               <CardHeader>
                 <CardTitle>Airport Briefing</CardTitle>
                 <CardDescription>Runway guidance and live NOTAMs for {weather.icao}</CardDescription>

@@ -23,6 +23,9 @@ import StudentSyllabiScreen from '../screens/StudentSyllabiScreen';
 import StudentVorTrainerScreen from '../screens/StudentVorTrainerScreen';
 import StudentChecklistsScreen from '../screens/StudentChecklistsScreen';
 import StudentWeatherScreen from '../screens/StudentWeatherScreen';
+import GpsSimsHubScreen from '../screens/GpsSimsHubScreen';
+import GpsSimsUnitScreen from '../screens/GpsSimsUnitScreen';
+import IfrToolsScreen from '../screens/IfrToolsScreen';
 import OwnershipCostCalculatorScreen from '../screens/OwnershipCostCalculatorScreen';
 import CrosswindCalculatorScreen from '../screens/CrosswindCalculatorScreen';
 import DensityAltitudeScreen from '../screens/DensityAltitudeScreen';
@@ -61,6 +64,9 @@ export type ProfileStackParamList = {
   StudentVorTrainer: undefined;
   StudentChecklists: undefined;
   StudentWeather: undefined;
+  GpsSimsHub: undefined;
+  GpsSimsUnit: { unitId: string };
+  IfrTools: undefined;
   OwnershipCost: undefined;
   CrosswindCalc: undefined;
   DensityAltitude: undefined;
@@ -199,6 +205,21 @@ export default function ProfileStack() {
         name="StudentWeather" 
         component={StudentWeatherScreen}
         options={{ title: 'Student Weather' }}
+      />
+      <Stack.Screen
+        name="GpsSimsHub"
+        component={GpsSimsHubScreen}
+        options={{ title: 'RSF GPS Sims' }}
+      />
+      <Stack.Screen
+        name="GpsSimsUnit"
+        component={GpsSimsUnitScreen}
+        options={{ title: 'GPS Simulator' }}
+      />
+      <Stack.Screen
+        name="IfrTools"
+        component={IfrToolsScreen}
+        options={{ title: 'IFR Tools' }}
       />
       <Stack.Screen 
         name="OwnershipCost" 

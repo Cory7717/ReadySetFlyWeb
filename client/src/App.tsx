@@ -61,6 +61,9 @@ const StudentSyllabi = lazy(() => import("@/pages/student/syllabi"));
 const StudentVorTrainer = lazy(() => import("@/pages/student/vor-trainer"));
 const StudentChecklists = lazy(() => import("@/pages/student/checklists"));
 const StudentWeather = lazy(() => import("@/pages/student/weather"));
+const GpsSimsHub = lazy(() => import("@/pages/gps-sims"));
+const GpsSimsUnit = lazy(() => import("@/pages/gps-sims-unit"));
+const IfrTools = lazy(() => import("@/pages/ifr-tools"));
 
 function StudentPageLoader({ component: Component }: { component: ComponentType }) {
   return (
@@ -125,6 +128,9 @@ function Router() {
       <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />
       <Route path="/student/checklists" component={() => <StudentPageLoader component={StudentChecklists} />} />
       <Route path="/student/weather" component={() => <StudentPageLoader component={StudentWeather} />} />
+      <Route path="/gps-sims" component={() => <StudentPageLoader component={GpsSimsHub} />} />
+      <Route path="/gps-sims/:unitId" component={() => <StudentPageLoader component={GpsSimsUnit} />} />
+      <Route path="/ifr-tools" component={() => <StudentPageLoader component={IfrTools} />} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
       <Route path="/delete-account" component={DeleteAccount} />

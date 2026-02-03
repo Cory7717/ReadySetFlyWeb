@@ -68,6 +68,22 @@ export default function StudentHubScreen({ navigation }: any) {
           </View>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('GpsSimsHub')}>
+          <Ionicons name="compass-outline" size={24} color="#1e40af" />
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>RSF GPS Simulators</Text>
+            <Text style={styles.cardSubtitle}>IFR GPS workflows for top avionics stacks.</Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('IfrTools')}>
+          <Ionicons name="clipboard-outline" size={24} color="#1e40af" />
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>IFR Tools Hub</Text>
+            <Text style={styles.cardSubtitle}>Plates, simulators, and IFR planning tools.</Text>
+          </View>
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentSyllabi')}>
           <Ionicons name="school-outline" size={24} color="#1e40af" />
           <View style={styles.cardText}>

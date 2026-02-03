@@ -14,7 +14,6 @@ import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { startSwimNotamWorker } from "./notam-worker";
 
 const app = express();
 // Behind Render's proxy; required for secure cookies/session in OAuth flows
@@ -92,15 +91,21 @@ app.use((req, res, next) => {
     port,
     host: "0.0.0.0",
     reusePort: true,
-  }, () => {
+  }, async () => {
     log(`serving on port ${port}`);
     const shouldStartSwim =
       String(process.env.SWIM_RUN_IN_API ?? "").toLowerCase() !== "false" &&
       process.env.SWIM_RUN_MODE !== "worker";
     if (shouldStartSwim) {
-      const started = startSwimNotamWorker();
-      if (started) {
-        log("SWIM NOTAM worker running inside API process");
+      try {
+        const { startSwimNotamWorker } = await import("./notam-worker");
+        const started = startSwimNotamWorker();
+        if (started) {
+          log("SWIM NOTAM worker running inside API process");
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`SWIM NOTAM worker failed to start: ${message}`);
       }
     }
   });

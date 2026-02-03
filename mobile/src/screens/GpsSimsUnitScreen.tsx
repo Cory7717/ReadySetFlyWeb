@@ -82,7 +82,7 @@ export default function GpsSimsUnitScreen({ route }: any) {
     unit.panel.hotspots.find((hotspot) => hotspot.id === selectedHotspotId) || unit.panel.hotspots[0];
   const panelBaseUrl = process.env.EXPO_PUBLIC_GPS_PANEL_BASE_URL;
   const panelImage = panelBaseUrl
-    ? `${panelBaseUrl.replace(/\/$/, '')}/${unit.panel.imageKey}.jpg`
+    ? `${panelBaseUrl.replace(/\/$/, '')}/${unit.panel.imageKey}.png`
     : unit.panel.image;
 
   const handleToggleStep = (index: number) => {
@@ -185,7 +185,7 @@ export default function GpsSimsUnitScreen({ route }: any) {
                 ]}
                 onPress={() => setSelectedHotspotId(hotspot.id)}
               >
-                <Text style={styles.hotspotLabel}>{hotspot.label}</Text>
+                {isActive && <Text style={styles.hotspotLabel}>{hotspot.label}</Text>}
               </TouchableOpacity>
             );
           })}
@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
   panelContainer: {
     position: 'relative',
     width: '100%',
-    aspectRatio: 1200 / 650,
+    aspectRatio: 1536 / 768,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -393,10 +393,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
+    opacity: 0.35,
   },
   hotspotActive: {
     borderColor: colors.primary,
     backgroundColor: 'rgba(37, 99, 235, 0.25)',
+    opacity: 1,
   },
   hotspotLabel: {
     fontSize: 9,

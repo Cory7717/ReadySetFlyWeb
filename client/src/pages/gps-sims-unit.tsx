@@ -104,7 +104,7 @@ export default function GpsSimsUnit() {
     unit.panel.hotspots[0];
   const panelBaseUrl = import.meta.env.VITE_GPS_PANEL_BASE_URL as string | undefined;
   const panelImage = panelBaseUrl
-    ? `${panelBaseUrl.replace(/\/$/, "")}/${unit.panel.imageKey}.jpg`
+    ? `${panelBaseUrl.replace(/\/$/, "")}/${unit.panel.imageKey}.png`
     : unit.panel.image;
 
   const completedCount = progress.filter(Boolean).length;
@@ -214,7 +214,10 @@ export default function GpsSimsUnit() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="relative overflow-hidden rounded-2xl border bg-slate-950/10">
+            <div
+              className="relative overflow-hidden rounded-2xl border bg-slate-950/10"
+              style={{ aspectRatio: "2 / 1" }}
+            >
               <img
                 src={panelImage}
                 alt={unit.panel.alt}

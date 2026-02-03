@@ -138,38 +138,38 @@ function parsePayload(body: string) {
   }
 }
 
-const queueName = process.env.SWIM_JMS_QUEUE;
-const username = process.env.SWIM_JMS_USERNAME;
-const password = process.env.SWIM_JMS_PASSWORD;
-const connectionUrl = process.env.SWIM_JMS_URL;
-const connectionFactory = process.env.SWIM_JMS_CONNECTION_FACTORY;
-const vpn = process.env.SWIM_JMS_VPN;
+export function startSwimNotamWorker() {
+  const queueName = process.env.SWIM_JMS_QUEUE;
+  const username = process.env.SWIM_JMS_USERNAME;
+  const password = process.env.SWIM_JMS_PASSWORD;
+  const connectionUrl = process.env.SWIM_JMS_URL;
+  const connectionFactory = process.env.SWIM_JMS_CONNECTION_FACTORY;
+  const vpn = process.env.SWIM_JMS_VPN;
 
-if (!queueName || !username || !password || !connectionUrl || !vpn) {
-  console.error("SWIM JMS env vars missing. Worker will not start.");
-  process.exit(1);
-}
+  if (!queueName || !username || !password || !connectionUrl || !vpn) {
+    console.warn("SWIM JMS env vars missing. NOTAM worker will not start.");
+    return false;
+  }
 
-const destination =
-  process.env.SWIM_STOMP_DESTINATION ||
-  (process.env.SWIM_QUEUE_PREFIX ? `${process.env.SWIM_QUEUE_PREFIX}${queueName}` : queueName);
+  const destination =
+    process.env.SWIM_STOMP_DESTINATION ||
+    (process.env.SWIM_QUEUE_PREFIX ? `${process.env.SWIM_QUEUE_PREFIX}${queueName}` : queueName);
 
-const url = new URL(connectionUrl);
-const connectOptions: stompit.ConnectOptions = {
-  host: url.hostname,
-  port: Number(url.port) || 55443,
-  ssl: url.protocol === "tcps:" || url.protocol === "ssl:" || url.protocol === "tls:",
-  connectHeaders: {
-    login: username,
-    passcode: password,
-    host: vpn,
-    "client-id": connectionFactory || "",
-    "heart-beat": "10000,10000",
-  },
-};
+  const url = new URL(connectionUrl);
+  const connectOptions: stompit.ConnectOptions = {
+    host: url.hostname,
+    port: Number(url.port) || 55443,
+    ssl: url.protocol === "tcps:" || url.protocol === "ssl:" || url.protocol === "tls:",
+    connectHeaders: {
+      login: username,
+      passcode: password,
+      host: vpn,
+      "client-id": connectionFactory || "",
+      "heart-beat": "10000,10000",
+    },
+  };
 
-function start() {
-  stompit.connect(connectOptions, (error, client) => {
+  const start = () => stompit.connect(connectOptions, (error, client) => {
     if (error) {
       console.error("SWIM STOMP connect failed:", error.message);
       setTimeout(start, 5000);
@@ -224,6 +224,14 @@ function start() {
       setTimeout(start, 5000);
     });
   });
+  start();
+  return true;
 }
 
-start();
+const shouldAutoStart =
+  process.env.SWIM_RUN_MODE === "worker" ||
+  process.argv.some((arg) => arg.includes("notam-worker"));
+
+if (shouldAutoStart) {
+  startSwimNotamWorker();
+}

@@ -61,6 +61,24 @@ export async function maybeSyncLogbookProSubscription(storage: IStorage, user: U
     const updated = await storage.updateUser(user.id, updates);
     return updated || user;
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/does not exist/i.test(message)) {
+      const updates: Partial<User> = {
+        membershipTier: "free",
+        membershipStatus: "inactive",
+        membershipProvider: null,
+        membershipEndsAt: null,
+        paypalSubscriptionId: null,
+        paypalPlanId: null,
+        logbookProStatus: "inactive",
+        logbookProSubscriptionId: null,
+        logbookProEndsAt: null,
+        logbookProCanceledAt: new Date(),
+        logbookProCancelAtPeriodEnd: false,
+      };
+      const updated = await storage.updateUser(user.id, updates);
+      return updated || { ...user, ...updates };
+    }
     console.error("PayPal subscription sync error:", error);
     return user;
   }

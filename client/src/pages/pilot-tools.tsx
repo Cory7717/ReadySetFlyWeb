@@ -549,6 +549,11 @@ export default function PilotTools() {
                     >
                       {flightCategory.category}
                     </Badge>
+                    {runwayInUseDisplay && (
+                      <Badge variant="outline" className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200">
+                        Active RWY: {runwayInUseDisplay}
+                      </Badge>
+                    )}
                     {atisInfo && (
                       <Badge variant="outline" className="bg-sky-100 dark:bg-sky-900/30 text-sky-800 dark:text-sky-200">
                         {atisInfo}

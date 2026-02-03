@@ -145,6 +145,9 @@ export function startSwimNotamWorker() {
   const connectionUrl = process.env.SWIM_JMS_URL;
   const connectionFactory = process.env.SWIM_JMS_CONNECTION_FACTORY;
   const vpn = process.env.SWIM_JMS_VPN;
+  const hostHeader = process.env.SWIM_STOMP_HOST || vpn;
+  const clientId = process.env.SWIM_STOMP_CLIENT_ID || connectionFactory || username;
+  const allowInsecure = String(process.env.SWIM_TLS_INSECURE ?? "").toLowerCase() === "true";
 
   if (!queueName || !username || !password || !connectionUrl || !vpn) {
     console.warn("SWIM JMS env vars missing. NOTAM worker will not start.");
@@ -160,11 +163,16 @@ export function startSwimNotamWorker() {
     host: url.hostname,
     port: Number(url.port) || 55443,
     ssl: url.protocol === "tcps:" || url.protocol === "ssl:" || url.protocol === "tls:",
+    sslOptions: {
+      servername: url.hostname,
+      rejectUnauthorized: !allowInsecure,
+    },
     connectHeaders: {
       login: username,
       passcode: password,
-      host: vpn,
-      "client-id": connectionFactory || "",
+      host: hostHeader,
+      "accept-version": "1.2",
+      "client-id": clientId || "",
       "heart-beat": "10000,10000",
     },
   };

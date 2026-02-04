@@ -288,6 +288,14 @@
     animation-play-state: paused;
   }
 
+  .events-scroll {
+    scrollbar-width: none;
+  }
+
+  .events-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Hide ugly search cancel button in Chrome until we can style it properly */
   input[type="search"]::-webkit-search-cancel-button {
     @apply hidden;

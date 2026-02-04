@@ -39,11 +39,17 @@ export default function Landing() {
   };
   const eventsScrollRef = useRef<HTMLDivElement | null>(null);
   const [eventsHovering, setEventsHovering] = useState(false);
+  const [autoPauseUntil, setAutoPauseUntil] = useState(0);
+
+  const pauseAutoScroll = (ms = 8000) => {
+    setAutoPauseUntil(Date.now() + ms);
+  };
 
   const scrollEvents = (direction: "left" | "right") => {
     const container = eventsScrollRef.current;
     if (!container) return;
     const delta = container.clientWidth * 0.75;
+    pauseAutoScroll();
     container.scrollBy({ left: direction === "left" ? -delta : delta, behavior: "smooth" });
   };
 
@@ -51,7 +57,7 @@ export default function Landing() {
     const container = eventsScrollRef.current;
     if (!container || feedEvents.length <= 1) return;
     const interval = window.setInterval(() => {
-      if (!container || eventsHovering) return;
+      if (!container || eventsHovering || Date.now() < autoPauseUntil) return;
       const maxScroll = container.scrollWidth - container.clientWidth;
       if (maxScroll <= 0) return;
       const next = container.scrollLeft + container.clientWidth * 0.75;
@@ -62,7 +68,7 @@ export default function Landing() {
       }
     }, Math.max(4000, feedEvents.length * 300));
     return () => window.clearInterval(interval);
-  }, [feedEvents.length, eventsHovering]);
+  }, [feedEvents.length, eventsHovering, autoPauseUntil]);
   
   return (
     <div className="min-h-screen">
@@ -154,7 +160,7 @@ export default function Landing() {
 
           {feedEvents.length ? (
             <div className="relative mt-6 rounded-2xl border bg-background/70">
-              <div className="absolute right-3 top-3 z-10 hidden items-center gap-2 sm:flex">
+              <div className="absolute left-2 top-1/2 z-10 hidden -translate-y-1/2 sm:flex">
                 <Button
                   variant="outline"
                   size="icon"
@@ -163,6 +169,8 @@ export default function Landing() {
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
+              </div>
+              <div className="absolute right-2 top-1/2 z-10 hidden -translate-y-1/2 sm:flex">
                 <Button
                   variant="outline"
                   size="icon"
@@ -176,7 +184,9 @@ export default function Landing() {
                 ref={eventsScrollRef}
                 onMouseEnter={() => setEventsHovering(true)}
                 onMouseLeave={() => setEventsHovering(false)}
-                className="flex gap-4 overflow-x-auto px-4 py-4 scroll-smooth"
+                onPointerDown={() => pauseAutoScroll()}
+                onTouchStart={() => pauseAutoScroll()}
+                className="events-scroll flex gap-4 overflow-x-auto px-4 py-4 scroll-smooth snap-x snap-mandatory"
               >
                 {feedEvents.map((event) => (
                   <Link
@@ -184,7 +194,7 @@ export default function Landing() {
                     href="/events"
                     onClick={() => trackEvent("cta_click", { label: "events_feed", target: "/events" })}
                   >
-                    <div className="min-w-[260px] overflow-hidden rounded-xl border bg-background shadow-sm hover:shadow-md transition-shadow">
+                    <div className="min-w-[260px] snap-start overflow-hidden rounded-xl border bg-background shadow-sm hover:shadow-md transition-shadow">
                       {event.imageUrl && (
                         <img
                           src={event.imageUrl}

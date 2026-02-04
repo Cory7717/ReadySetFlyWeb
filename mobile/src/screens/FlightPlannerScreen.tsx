@@ -994,7 +994,7 @@ export default function FlightPlannerScreen() {
                 maximumZ={12}
                 minimumZ={6}
                 tileSize={256}
-                opacity={0.9}
+                opacity={0.85}
                 zIndex={600}
               />
             )}
@@ -1010,21 +1010,21 @@ export default function FlightPlannerScreen() {
             )}
             {mapStyle === 'radar' && (
               <UrlTile
-                urlTemplate="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/observations/weather_radar/MapServer/tile/{z}/{y}/{x}"
-                maximumZ={10}
-                minimumZ={3}
+                urlTemplate="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer/tile/{z}/{y}/{x}"
+                maximumZ={11}
+                minimumZ={4}
                 tileSize={256}
-                opacity={0.7}
+                opacity={0.75}
                 zIndex={600}
               />
             )}
             {mapStyle === 'winds' && (
               <UrlTile
-                urlTemplate="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/analysis/winds/MapServer/tile/{z}/{y}/{x}"
-                maximumZ={9}
-                minimumZ={3}
+                urlTemplate="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/analysis/wind_speed/MapServer/tile/{z}/{y}/{x}"
+                maximumZ={11}
+                minimumZ={4}
                 tileSize={256}
-                opacity={0.8}
+                opacity={0.7}
                 zIndex={600}
               />
             )}

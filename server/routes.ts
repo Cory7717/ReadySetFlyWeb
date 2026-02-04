@@ -15,7 +15,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
-import { and, desc, eq, gte, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, aviationEvents, notams as notamsTable } from "@shared/schema";
@@ -469,6 +469,7 @@ const SAMPLE_AVIATION_EVENTS = [
     location: "KGTU - Georgetown, TX",
     category: "Fly-In",
     eventUrl: "https://readysetfly.us/events/sample-hill-country",
+    imageUrl: "https://images.unsplash.com/photo-1489515217757-5fd1be406fef?w=1200",
     startDate: new Date("2026-03-07T14:00:00Z"),
     endDate: new Date("2026-03-07T18:00:00Z"),
     isSample: true,
@@ -481,6 +482,7 @@ const SAMPLE_AVIATION_EVENTS = [
     location: "AUS Flight School - Austin, TX",
     category: "Safety Seminar",
     eventUrl: "https://readysetfly.us/events/sample-weather",
+    imageUrl: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1200",
     startDate: new Date("2026-03-19T00:30:00Z"),
     endDate: new Date("2026-03-19T02:30:00Z"),
     isSample: true,
@@ -493,6 +495,7 @@ const SAMPLE_AVIATION_EVENTS = [
     location: "KADS - Addison, TX",
     category: "Career",
     eventUrl: "https://readysetfly.us/events/sample-career-night",
+    imageUrl: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200",
     startDate: new Date("2026-04-02T23:00:00Z"),
     endDate: new Date("2026-04-03T01:00:00Z"),
     isSample: true,
@@ -505,8 +508,35 @@ const SAMPLE_AVIATION_EVENTS = [
     location: "KSDL - Scottsdale, AZ",
     category: "Training",
     eventUrl: "https://readysetfly.us/events/sample-ifr-clinic",
+    imageUrl: "https://images.unsplash.com/photo-1529078155058-5d716f45d604?w=1200",
     startDate: new Date("2026-04-11T16:00:00Z"),
     endDate: new Date("2026-04-11T21:00:00Z"),
+    isSample: true,
+  },
+  {
+    id: "sample-gulf-coast-airshow",
+    title: "Gulf Coast Airshow Weekend",
+    description:
+      "Sample event: Weekend airshow with formation teams, static ramp access, and youth STEM briefings.",
+    location: "KPNS - Pensacola, FL",
+    category: "Airshow",
+    eventUrl: "https://readysetfly.us/events/sample-gulf-coast-airshow",
+    imageUrl: "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=1200",
+    startDate: new Date("2026-05-16T15:00:00Z"),
+    endDate: new Date("2026-05-17T22:00:00Z"),
+    isSample: true,
+  },
+  {
+    id: "sample-charity-fly-in",
+    title: "Wings for Warriors Charity Fly-In",
+    description:
+      "Sample event: Charity fly-in supporting veterans with ramp tours, sunrise departures, and raffles.",
+    location: "KAPA - Centennial, CO",
+    category: "Charity",
+    eventUrl: "https://readysetfly.us/events/sample-charity-fly-in",
+    imageUrl: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=1200",
+    startDate: new Date("2026-06-13T13:00:00Z"),
+    endDate: new Date("2026-06-13T20:00:00Z"),
     isSample: true,
   },
 ] as const;
@@ -518,6 +548,7 @@ const serializeAviationEvent = (event: any) => ({
   location: event.location,
   category: event.category,
   eventUrl: event.eventUrl ?? undefined,
+  imageUrl: event.imageUrl ?? undefined,
   startDate: event.startDate instanceof Date ? event.startDate.toISOString() : event.startDate,
   endDate: event.endDate instanceof Date ? event.endDate.toISOString() : event.endDate,
   isSample: Boolean(event.isSample),
@@ -597,6 +628,10 @@ type AirportSearchResult = {
   lon: number;
 };
 
+type AirportReference = AirportSearchResult & {
+  timezone?: string | null;
+};
+
 type RunwayMeta = {
   leIdent: string | null;
   heIdent: string | null;
@@ -641,6 +676,7 @@ let stationCache: { data: AirportSearchResult[]; expiresAt: number } | null = nu
 const AIRPORTS_CACHE_URL = "https://ourairports.com/data/airports.csv";
 const AIRPORTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let airportTimezoneCache: { data: Map<string, string>; expiresAt: number } | null = null;
+let airportReferenceCache: { data: Map<string, AirportReference>; expiresAt: number } | null = null;
 const RUNWAY_CACHE_URL = "https://ourairports.com/data/runways.csv";
 const RUNWAY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let runwayCache: { data: Map<string, RunwayMeta[]>; expiresAt: number } | null = null;
@@ -1057,6 +1093,88 @@ async function loadAirportTimezoneCache(): Promise<Map<string, string>> {
   }
 
   airportTimezoneCache = { data: map, expiresAt: now + AIRPORTS_CACHE_TTL_MS };
+  return map;
+}
+
+async function loadAirportReferenceCache(): Promise<Map<string, AirportReference>> {
+  const now = Date.now();
+  if (airportReferenceCache && airportReferenceCache.expiresAt > now) {
+    return airportReferenceCache.data;
+  }
+
+  const response = await fetch(AIRPORTS_CACHE_URL, {
+    headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load airports data: ${response.status}`);
+  }
+
+  const text = await response.text();
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  const map = new Map<string, AirportReference>();
+  if (lines.length === 0) {
+    airportReferenceCache = { data: map, expiresAt: now + AIRPORTS_CACHE_TTL_MS };
+    return map;
+  }
+
+  const header = parseCsvLine(lines[0]).map((value) => value.trim().toLowerCase());
+  const idx = (name: string) => header.indexOf(name);
+
+  const idxIdent = idx("ident");
+  const idxGps = idx("gps_code");
+  const idxLocal = idx("local_code");
+  const idxIata = idx("iata_code");
+  const idxName = idx("name");
+  const idxCity = idx("municipality");
+  const idxRegion = idx("iso_region");
+  const idxLat = idx("latitude_deg");
+  const idxLon = idx("longitude_deg");
+  const idxTimezone = idx("timezone");
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const row = parseCsvLine(lines[i]);
+    const lat = idxLat >= 0 ? Number(row[idxLat]) : NaN;
+    const lon = idxLon >= 0 ? Number(row[idxLon]) : NaN;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+    const ident = idxIdent >= 0 ? row[idxIdent]?.trim().toUpperCase() : "";
+    const gpsCode = idxGps >= 0 ? row[idxGps]?.trim().toUpperCase() : "";
+    const localCode = idxLocal >= 0 ? row[idxLocal]?.trim().toUpperCase() : "";
+    const iataCode = idxIata >= 0 ? row[idxIata]?.trim().toUpperCase() : "";
+    const name = idxName >= 0 ? row[idxName]?.trim() : "";
+    const city = idxCity >= 0 ? row[idxCity]?.trim() : "";
+    const region = idxRegion >= 0 ? row[idxRegion]?.trim() : "";
+    const timezone = idxTimezone >= 0 ? row[idxTimezone]?.trim() : "";
+
+    if (!ident && !gpsCode && !localCode && !iataCode) continue;
+
+    let state: string | null = null;
+    if (region.startsWith("US-")) {
+      state = region.slice(3);
+    } else if (region.includes("-")) {
+      state = region.split("-")[1] || null;
+    }
+
+    const canonical = ident || gpsCode || localCode || iataCode;
+    const reference: AirportReference = {
+      icao: canonical,
+      name: name || null,
+      city: city || null,
+      state: state || null,
+      lat,
+      lon,
+      timezone: timezone || null,
+    };
+
+    const candidates = [gpsCode, ident, localCode, iataCode].filter(Boolean);
+    candidates.forEach((code) => {
+      if (!map.has(code)) {
+        map.set(code, reference);
+      }
+    });
+  }
+
+  airportReferenceCache = { data: map, expiresAt: now + AIRPORTS_CACHE_TTL_MS };
   return map;
 }
 
@@ -7367,6 +7485,91 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  // Aviation Events (community calendar)
+  app.get("/api/events", async (_req, res) => {
+    try {
+      const now = new Date();
+      await db
+        .delete(aviationEvents)
+        .where(
+          and(
+            lt(aviationEvents.endDate, now),
+            or(isNull(aviationEvents.isSample), eq(aviationEvents.isSample, false))
+          )
+        );
+
+      const rows = await db
+        .select()
+        .from(aviationEvents)
+        .where(gte(aviationEvents.endDate, now))
+        .orderBy(asc(aviationEvents.startDate), asc(aviationEvents.createdAt));
+
+      const merged = [
+        ...rows.map(serializeAviationEvent),
+        ...SAMPLE_AVIATION_EVENTS.map(serializeAviationEvent),
+      ];
+
+      merged.sort(
+        (a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+      );
+
+      res.json({ events: merged });
+    } catch (error) {
+      console.error("Failed to load aviation events:", error);
+      res.status(500).json({ error: "Failed to load aviation events" });
+    }
+  });
+
+  app.post("/api/events", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const payload = insertAviationEventSchema.parse(req.body);
+      const blocklistHaystack = `${payload.title} ${payload.description} ${payload.location}`.toLowerCase();
+      if (AVIATION_EVENT_BLOCKLIST.some((term) => blocklistHaystack.includes(term))) {
+        return res.status(400).json({
+          error: "Events must be aviation-only. Use Marketplace listings for ads or sales posts.",
+        });
+      }
+
+      if (payload.endDate.getTime() < payload.startDate.getTime()) {
+        return res.status(400).json({ error: "End date must be after the start date" });
+      }
+
+      const now = new Date();
+      if (payload.endDate.getTime() < now.getTime()) {
+        return res.status(400).json({ error: "Event end date must be in the future" });
+      }
+
+      const eventUrl = payload.eventUrl?.trim() ? payload.eventUrl.trim() : null;
+      const imageUrl = payload.imageUrl?.trim() ? payload.imageUrl.trim() : null;
+
+      const [created] = await db
+        .insert(aviationEvents)
+        .values({
+          title: payload.title,
+          description: payload.description,
+          location: payload.location,
+          category: payload.category,
+          eventUrl,
+          imageUrl,
+          createdBy: userId,
+          startDate: payload.startDate,
+          endDate: payload.endDate,
+          isSample: false,
+        })
+        .returning();
+
+      res.json(serializeAviationEvent(created));
+    } catch (error: any) {
+      console.error("Failed to create aviation event:", error);
+      res.status(400).json({ error: error.message || "Failed to publish event" });
+    }
+  });
+
   // Job Applications
   app.post("/api/job-applications", upload.single('resume'), async (req: any, res) => {
     try {
@@ -7747,9 +7950,26 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const fuelGallons = Math.max(0, fuelOnBoard ?? usableFuelGal);
 
       const stations = await loadStationCache();
+      const referenceMap = await loadAirportReferenceCache().catch(() => null);
       const findStation = (value: string) => {
         const candidates = buildIcaoCandidates(value);
-        return stations.find((station) => candidates.includes(station.icao)) || null;
+        const station = stations.find((entry) => candidates.includes(entry.icao));
+        if (station) return station;
+        if (!referenceMap) return null;
+        for (const candidate of candidates) {
+          const fallback = referenceMap.get(candidate);
+          if (fallback && Number.isFinite(fallback.lat) && Number.isFinite(fallback.lon)) {
+            return {
+              icao: candidate,
+              name: fallback.name ?? null,
+              city: fallback.city ?? null,
+              state: fallback.state ?? null,
+              lat: fallback.lat,
+              lon: fallback.lon,
+            } as AirportSearchResult;
+          }
+        }
+        return null;
       };
 
       const departureStation = findStation(departure);
@@ -7859,6 +8079,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
 
+      let referenceMap: Map<string, AirportReference> | null = null;
+      const getReferenceMap = async () => {
+        if (referenceMap) return referenceMap;
+        try {
+          referenceMap = await loadAirportReferenceCache();
+        } catch (error) {
+          console.warn("Airport reference cache failed:", error);
+          referenceMap = null;
+        }
+        return referenceMap;
+      };
+
       const candidates = buildIcaoCandidates(requestedIcao);
 
       for (const candidate of candidates) {
@@ -7903,6 +8135,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           : stationData?.[0] ?? stationData?.data?.[0] ?? stationData;
 
         if (!stationCandidate) {
+          const refMap = await getReferenceMap();
+          const fallback = refMap?.get(candidate);
+          if (fallback) {
+            const payload: AirportMeta = {
+              icao: candidate,
+              name: fallback.name ?? null,
+              lat: Number(fallback.lat),
+              lon: Number(fallback.lon),
+              elevationFt: null,
+              timezone: fallback.timezone ?? null,
+            };
+
+            setCachedAirport(candidate, payload);
+            if (candidate !== requestedIcao) {
+              setCachedAirport(requestedIcao, payload);
+            }
+            return res.json({ ...payload, cached: false, source: "ourairports" });
+          }
           continue;
         }
 
@@ -7922,6 +8172,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         );
 
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+          const refMap = await getReferenceMap();
+          const fallback = refMap?.get(candidate);
+          if (fallback) {
+            const payload: AirportMeta = {
+              icao: candidate,
+              name: fallback.name ?? null,
+              lat: Number(fallback.lat),
+              lon: Number(fallback.lon),
+              elevationFt: null,
+              timezone: fallback.timezone ?? null,
+            };
+
+            setCachedAirport(candidate, payload);
+            if (candidate !== requestedIcao) {
+              setCachedAirport(requestedIcao, payload);
+            }
+            return res.json({ ...payload, cached: false, source: "ourairports" });
+          }
           continue;
         }
 
@@ -7936,6 +8204,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             null;
         } catch (error) {
           console.warn("Airport timezone lookup failed:", error);
+        }
+        if (!timezone) {
+          const refMap = await getReferenceMap();
+          const fallback = refMap?.get(candidate);
+          timezone = fallback?.timezone ?? null;
         }
 
         const payload: AirportMeta = {

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Link } from "wouter";
-import { CalendarDays, MapPin, ExternalLink } from "lucide-react";
+import { CalendarDays, MapPin, ExternalLink, ImagePlus, X } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ObjectUploader } from "@/components/ObjectUploader";
+import type { UploadResult } from "@uppy/core";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +36,7 @@ type AviationEvent = {
   location: string;
   category: string;
   eventUrl?: string | null;
+  imageUrl?: string | null;
   startDate: string;
   endDate: string;
   isSample?: boolean;
@@ -60,6 +63,7 @@ const eventSchema = z
     startDate: z.string().min(1, "Start date is required"),
     endDate: z.string().min(1, "End date is required"),
     eventUrl: z.string().url("Enter a valid URL").optional().or(z.literal("")),
+    imageUrl: z.string().url("Enter a valid image URL").optional().or(z.literal("")),
     aviationOnly: z.literal(true, {
       errorMap: () => ({ message: "Confirm this is an aviation-only event" }),
     }),
@@ -98,6 +102,7 @@ export default function EventsPage() {
     startDate: "",
     endDate: "",
     eventUrl: "",
+    imageUrl: "",
     aviationOnly: false,
   });
 
@@ -114,6 +119,83 @@ export default function EventsPage() {
 
   const events: AviationEvent[] = data?.events ?? [];
 
+  const handleGetUploadParameters = async () => {
+    const response = await fetch(apiUrl("/api/objects/upload"), {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `Upload init failed (${response.status})`);
+    }
+    const data = await response.json();
+    if (!data?.uploadURL) {
+      throw new Error("Upload init failed: missing upload URL");
+    }
+    return {
+      method: "PUT" as const,
+      url: data.uploadURL,
+    };
+  };
+
+  const handleUploadComplete = async (
+    result: UploadResult<Record<string, unknown>, Record<string, unknown>>
+  ) => {
+    const successfulFiles = ((result as any)?.successful ?? []) as any[];
+    if (!successfulFiles.length) {
+      toast({
+        title: "Upload failed",
+        description: "No image was uploaded. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const extractUrl = (file: any): string | undefined => {
+      const candidates = [
+        file?.uploadURL,
+        file?.response?.uploadURL,
+        file?.response?.url,
+        file?.response?.location,
+        file?.response?.body?.uploadURL,
+        file?.response?.body?.url,
+        file?.response?.body?.location,
+        file?.response?.data?.uploadURL,
+        file?.response?.data?.url,
+        file?.response?.data?.location,
+      ].filter(Boolean) as string[];
+      const raw = candidates[0];
+      return raw ? raw.split("?")[0] : undefined;
+    };
+
+    const imageUrl = extractUrl(successfulFiles[0]);
+    if (!imageUrl) {
+      toast({
+        title: "Upload failed",
+        description: "Unable to read the image URL. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await fetch(apiUrl("/api/listing-images"), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageURL: imageUrl }),
+        credentials: "include",
+      });
+    } catch (error) {
+      console.warn("Event image ACL update failed, continuing:", error);
+    }
+
+    setFormState((prev) => ({ ...prev, imageUrl }));
+    toast({
+      title: "Event image added",
+      description: "Your event image is ready to publish.",
+    });
+  };
+
   const mutation = useMutation({
     mutationFn: async (payload: typeof formState) => {
       const response = await fetch(apiUrl("/api/events"), {
@@ -124,6 +206,7 @@ export default function EventsPage() {
           startDate: new Date(payload.startDate).toISOString(),
           endDate: new Date(payload.endDate).toISOString(),
           eventUrl: payload.eventUrl || undefined,
+          imageUrl: payload.imageUrl || undefined,
         }),
       });
       if (!response.ok) {
@@ -145,6 +228,7 @@ export default function EventsPage() {
         startDate: "",
         endDate: "",
         eventUrl: "",
+        imageUrl: "",
         aviationOnly: false,
       });
       setFormErrors({});
@@ -225,15 +309,25 @@ export default function EventsPage() {
             </Card>
           ) : hasEvents ? (
             <div className="grid gap-4 md:grid-cols-2">
-              {eventSummary.map((event) => (
-                <Card
-                  key={event.id}
-                  className="relative overflow-hidden border-primary/10 hover:shadow-md transition-shadow"
-                >
-                  {event.isSample && (
-                    <>
-                      <Badge className="absolute right-4 top-4" variant="secondary">
-                        SAMPLE
+                  {eventSummary.map((event) => (
+                    <Card
+                      key={event.id}
+                      className="relative overflow-hidden border-primary/10 hover:shadow-md transition-shadow"
+                    >
+                      {event.imageUrl && (
+                        <div className="h-40 w-full overflow-hidden border-b">
+                          <img
+                            src={event.imageUrl}
+                            alt={event.title}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                      )}
+                      {event.isSample && (
+                        <>
+                          <Badge className="absolute right-4 top-4" variant="secondary">
+                            SAMPLE
                       </Badge>
                       <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-4xl font-bold text-primary/10">
                         SAMPLE
@@ -363,6 +457,42 @@ export default function EventsPage() {
                     {formErrors.description && <p className="text-xs text-red-500">{formErrors.description}</p>}
                   </div>
                   <div className="space-y-2">
+                    <label className="text-sm font-semibold">Event image (optional)</label>
+                    {formState.imageUrl ? (
+                      <div className="relative overflow-hidden rounded-lg border">
+                        <img
+                          src={formState.imageUrl}
+                          alt="Event preview"
+                          className="h-40 w-full object-cover"
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="icon"
+                          className="absolute right-2 top-2"
+                          onClick={() => setFormState((prev) => ({ ...prev, imageUrl: "" }))}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-4 text-xs text-muted-foreground">
+                        <ImagePlus className="h-5 w-5" />
+                        Add a flyer or event photo.
+                      </div>
+                    )}
+                    <ObjectUploader
+                      maxNumberOfFiles={1}
+                      onGetUploadParameters={handleGetUploadParameters}
+                      onComplete={handleUploadComplete}
+                      buttonVariant="outline"
+                      buttonSize="sm"
+                    >
+                      Upload image
+                    </ObjectUploader>
+                    {formErrors.imageUrl && <p className="text-xs text-red-500">{formErrors.imageUrl}</p>}
+                  </div>
+                  <div className="space-y-2">
                     <label className="text-sm font-semibold">Event link (optional)</label>
                     <Input
                       value={formState.eventUrl}
@@ -409,6 +539,13 @@ export default function EventsPage() {
                 <Badge variant="outline">{selectedEvent.category}</Badge>
                 {selectedEvent.isSample && <Badge variant="secondary">Sample event</Badge>}
               </div>
+              {selectedEvent.imageUrl && (
+                <img
+                  src={selectedEvent.imageUrl}
+                  alt={selectedEvent.title}
+                  className="h-48 w-full rounded-lg object-cover"
+                />
+              )}
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
                 {selectedEvent.location}

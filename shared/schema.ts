@@ -437,6 +437,7 @@ export const aviationEvents = pgTable("aviation_events", {
   location: text("location").notNull(),
   category: text("category").notNull(),
   eventUrl: text("event_url"),
+  imageUrl: text("image_url"),
   createdBy: varchar("created_by").references(() => users.id),
   startDate: timestamp("start_date").notNull(),
   endDate: timestamp("end_date").notNull(),
@@ -1604,6 +1605,7 @@ export const insertAviationEventSchema = createInsertSchema(aviationEvents).omit
   location: z.string().min(3, "Location is required"),
   category: z.string().min(2, "Category is required"),
   eventUrl: z.string().url("Event URL must be valid").optional().or(z.literal("")),
+  imageUrl: z.string().url("Image URL must be valid").optional().or(z.literal("")),
   startDate: z.coerce.date(),
   endDate: z.coerce.date(),
 });

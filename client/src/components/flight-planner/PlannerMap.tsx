@@ -36,6 +36,7 @@ function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "st
         if (mapStyle === "sectional") {
           const zoom = map.getZoom();
           if (zoom > 12) map.setZoom(12);
+          if (zoom < 6) map.setZoom(6);
         }
       } catch {
         // Map may be unmounted during transitions; ignore.
@@ -55,8 +56,11 @@ function MapStyleController({ mapStyle }: { mapStyle: "standard" | "sectional" |
     const raf = requestAnimationFrame(() => {
       try {
         if (mapStyle === "sectional") {
-          map.setMinZoom(2);
+          map.setMinZoom(6);
           map.setMaxZoom(12);
+          if (map.getZoom() < 6) {
+            map.setZoom(6);
+          }
           return;
         }
         map.setMinZoom(2);
@@ -77,10 +81,11 @@ export default function PlannerMap({ points, height = "380px", mapStyle = "stand
     : [39.5, -98.35];
   const showRadar = mapStyle === "radar";
   const showWinds = mapStyle === "winds";
+  const initialZoom = mapStyle === "sectional" ? 6 : (points.length ? 6 : 4);
 
   return (
     <div style={{ height }}>
-      <MapContainer center={center} zoom={points.length ? 6 : 4} scrollWheelZoom className="h-full w-full rounded-xl">
+      <MapContainer center={center} zoom={initialZoom} scrollWheelZoom className="h-full w-full rounded-xl">
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -91,26 +96,27 @@ export default function PlannerMap({ points, height = "380px", mapStyle = "stand
             url="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
             minZoom={6}
             maxZoom={12}
-            opacity={0.9}
+            maxNativeZoom={12}
+            opacity={0.85}
           />
         )}
         {showRadar && (
           <TileLayer
             attribution="NOAA nowCOAST (radar)"
-            url="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/observations/weather_radar/MapServer/tile/{z}/{y}/{x}"
-            opacity={0.7}
-            maxZoom={10}
-            minZoom={3}
+            url="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer/tile/{z}/{y}/{x}"
+            opacity={0.75}
+            maxZoom={11}
+            minZoom={4}
             zIndex={600}
           />
         )}
         {showWinds && (
           <TileLayer
             attribution="NOAA nowCOAST (winds)"
-            url="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/analysis/winds/MapServer/tile/{z}/{y}/{x}"
-            opacity={0.8}
-            maxZoom={9}
-            minZoom={3}
+            url="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/analysis/wind_speed/MapServer/tile/{z}/{y}/{x}"
+            opacity={0.7}
+            maxZoom={11}
+            minZoom={4}
             zIndex={600}
           />
         )}

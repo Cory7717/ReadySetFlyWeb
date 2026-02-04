@@ -138,7 +138,16 @@ export default function Landing() {
                     href="/events"
                     onClick={() => trackEvent("cta_click", { label: "events_feed", target: "/events" })}
                   >
-                    <div className="min-w-[240px] rounded-xl border bg-background p-4 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="min-w-[260px] overflow-hidden rounded-xl border bg-background shadow-sm hover:shadow-md transition-shadow">
+                      {event.imageUrl && (
+                        <img
+                          src={event.imageUrl}
+                          alt={event.title}
+                          className="h-28 w-full object-cover"
+                          loading="lazy"
+                        />
+                      )}
+                      <div className="p-4">
                       <div className="flex items-center justify-between gap-2">
                         <Badge variant="outline">{event.category}</Badge>
                         {event.isSample && (
@@ -150,6 +159,7 @@ export default function Landing() {
                       <div className="mt-3 font-semibold">{event.title}</div>
                       <div className="text-xs text-muted-foreground">{formatEventRange(event.startDate, event.endDate)}</div>
                       <div className="text-xs text-muted-foreground mt-1">{event.location}</div>
+                      </div>
                     </div>
                   </Link>
                 ))}

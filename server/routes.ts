@@ -7858,16 +7858,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           .orderBy(desc(notamsTable.effectiveAt), desc(notamsTable.createdAt))
           .limit(50);
 
-        return res.json({
-          icao: requestedIcao,
-          source: "swim",
-          notams: rows.map((row) => ({
-            id: row.notamId,
-            text: row.text,
-            effective: row.effectiveAt ? row.effectiveAt.toISOString() : undefined,
-            expires: row.expiresAt ? row.expiresAt.toISOString() : undefined,
-          })),
-        });
+        if (rows.length > 0) {
+          return res.json({
+            icao: requestedIcao,
+            source: "swim",
+            notams: rows.map((row) => ({
+              id: row.notamId,
+              text: row.text,
+              effective: row.effectiveAt ? row.effectiveAt.toISOString() : undefined,
+              expires: row.expiresAt ? row.expiresAt.toISOString() : undefined,
+            })),
+          });
+        }
       }
 
       const cached = notamCache.get(requestedIcao);

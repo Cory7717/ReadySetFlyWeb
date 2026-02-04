@@ -38,6 +38,7 @@ export default function AdminDashboard() {
 
   const [userSearch, setUserSearch] = useState("");
   const [activeTab, setActiveTab] = useState("analytics");
+  const [featureUsageRange, setFeatureUsageRange] = useState("7");
   const [selectedSubmission, setSelectedSubmission] = useState<VerificationSubmission | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [rejectionNotes, setRejectionNotes] = useState("");
@@ -296,6 +297,24 @@ export default function AdminDashboard() {
     enabled: activeTab === "analytics",
   });
 
+  const { data: featureUsage, isLoading: featureUsageLoading } = useQuery<{
+    rangeDays: number;
+    totalEvents: number;
+    uniqueVisitors: number;
+    returningVisitors: number;
+    guestEvents: number;
+    guestVisitors: number;
+    pages: Array<{
+      key: string;
+      totalEvents: number;
+      uniqueVisitors: number;
+      returningVisitors: number;
+    }>;
+  }>({
+    queryKey: [`/api/admin/feature-usage?days=${featureUsageRange}`],
+    enabled: activeTab === "analytics",
+  });
+
   // CRM Leads query
   const { data: leads = [], isLoading: leadsLoading } = useQuery<CrmLead[]>({
     queryKey: ["/api/crm/leads"],
@@ -416,6 +435,38 @@ export default function AdminDashboard() {
 
   // Helper to check if an order has been activated
   const isOrderActivated = (orderId: string) => bannerAdsByOrderId.has(orderId);
+
+  const formatUsageLabel = (raw: string) => {
+    if (!raw) return "Unknown";
+    let key = raw;
+    if (key.startsWith("http")) {
+      try {
+        key = new URL(key).pathname || "/";
+      } catch {}
+    }
+    if (key === "/") return "Home";
+    if (key.startsWith("/")) {
+      const parts = key.split("/").filter(Boolean);
+      if (!parts.length) return "Home";
+      const labelParts = parts.map((part) =>
+        part
+          .replace(/[_-]+/g, " ")
+          .replace(/\b\w/g, (char) => char.toUpperCase())
+      );
+      if (parts[0] === "student") {
+        return `Student • ${labelParts.slice(1).join(" • ") || "Hub"}`;
+      }
+      if (parts[0] === "gps-sims") {
+        return `GPS Sims • ${labelParts.slice(1).join(" • ") || "Hub"}`;
+      }
+      return labelParts.join(" • ");
+    }
+    return key
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  const featureUsagePages = useMemo(() => featureUsage?.pages ?? [], [featureUsage]);
 
   // Approve submission mutation
   const approveMutation = useMutation({
@@ -1694,6 +1745,71 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Feature Engagement */}
+          <Card>
+            <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <CardTitle>Feature Engagement</CardTitle>
+                <CardDescription>Usage across tools, training, and marketplace</CardDescription>
+              </div>
+              <Select value={featureUsageRange} onValueChange={setFeatureUsageRange}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Select range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">Last 7 days</SelectItem>
+                  <SelectItem value="30">Last 30 days</SelectItem>
+                  <SelectItem value="90">Last 90 days</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-4">
+                <div className="rounded-lg border p-4">
+                  <div className="text-xs text-muted-foreground">Total events</div>
+                  <div className="text-2xl font-bold">{featureUsage?.totalEvents || 0}</div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <div className="text-xs text-muted-foreground">Unique visitors</div>
+                  <div className="text-2xl font-bold">{featureUsage?.uniqueVisitors || 0}</div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <div className="text-xs text-muted-foreground">Returning visitors</div>
+                  <div className="text-2xl font-bold">{featureUsage?.returningVisitors || 0}</div>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <div className="text-xs text-muted-foreground">Guest visitors</div>
+                  <div className="text-2xl font-bold">{featureUsage?.guestVisitors || 0}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {featureUsage?.guestEvents || 0} events
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="text-sm font-semibold">Top pages & tools</div>
+                {featureUsageLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading usage...</div>
+                ) : featureUsagePages.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No usage data yet.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {featureUsagePages.map((item) => (
+                      <div key={item.key} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="font-medium">{formatUsageLabel(item.key)}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline">{item.totalEvents} events</Badge>
+                          <Badge variant="secondary">{item.uniqueVisitors} unique</Badge>
+                          <Badge variant="secondary">{item.returningVisitors} returning</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Marketplace Listings Stats */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

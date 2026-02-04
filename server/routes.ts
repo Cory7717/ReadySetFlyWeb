@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, aviationEvents, notams as notamsTable } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, aviationEvents, notams as notamsTable } from "@shared/schema";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
@@ -96,6 +96,42 @@ function toCents(value: string | number | null | undefined): number | null {
   const parsed = typeof value === "string" ? Number(value) : value;
   if (!Number.isFinite(parsed)) return null;
   return Math.round(parsed * 100);
+}
+
+function normalizeAnalyticsPage(raw?: string | null): string | undefined {
+  if (!raw || typeof raw !== "string") return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith("http")) {
+    try {
+      const url = new URL(trimmed);
+      return url.pathname || "/";
+    } catch {}
+  }
+  if (trimmed.startsWith("/")) return trimmed;
+  return `/${trimmed}`;
+}
+
+function deriveAnalyticsPage(event: string, page: unknown, params: Record<string, any> | undefined): string | undefined {
+  if (event === "student_page_view" && typeof params?.page === "string") {
+    return normalizeAnalyticsPage(`/student/${params.page.replace(/^\\//, "")}`);
+  }
+  if (event === "planner_page_view") return "/flight-planner";
+  if (event === "gps_sims_hub_view") return "/gps-sims";
+  if (event === "gps_sims_unit_view" && typeof params?.unit === "string") {
+    return normalizeAnalyticsPage(`/gps-sims/${params.unit}`);
+  }
+  if (event === "radio_comms_view") return "/radio-comms-trainer";
+  if (event === "marketplace_view") return "/marketplace";
+  if (event === "rentals_view") return "/rentals";
+  if (event === "ifr_tools_view") return "/ifr-tools";
+  if (event === "pilot_tools_view") return "/pilot-tools";
+  const fallback =
+    (typeof page === "string" && page) ||
+    (typeof params?.page === "string" && params.page) ||
+    (typeof params?.target === "string" && params.target) ||
+    "";
+  return normalizeAnalyticsPage(fallback);
 }
 
 function extractPayPalOrderAmount(orderData: any): { value: string; currency: string } | null {
@@ -6278,6 +6314,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Analytics events (guest-safe)
+  app.post("/api/analytics/event", async (req: any, res) => {
+    try {
+      const event = typeof req.body?.event === "string" ? req.body.event.trim() : "";
+      if (!event) {
+        return res.status(400).json({ error: "Event is required" });
+      }
+
+      const params = req.body?.params && typeof req.body.params === "object" ? req.body.params : undefined;
+      const page = deriveAnalyticsPage(event, req.body?.page, params);
+      let visitorId = typeof req.body?.visitorId === "string" ? req.body.visitorId.trim() : "";
+      if (!visitorId) visitorId = crypto.randomUUID();
+
+      const parsed = insertAnalyticsEventSchema.safeParse({
+        event,
+        page,
+        visitorId,
+        userId: req.user?.claims?.sub,
+        meta: params,
+      });
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid analytics payload" });
+      }
+
+      const created = await storage.createAnalyticsEvent(parsed.data);
+      res.json({ success: true, visitorId: created.visitorId });
+    } catch (error) {
+      console.error("Failed to record analytics event:", error);
+      res.status(500).json({ error: "Failed to record analytics event" });
+    }
+  });
+
   // Admin Analytics
   app.get("/api/admin/analytics", isAuthenticated, requireAnalyticsAdmin, async (req, res) => {
     try {
@@ -6285,6 +6354,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(analytics);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
+  // Admin Feature Usage (engagement)
+  app.get("/api/admin/feature-usage", isAuthenticated, requireAnalyticsAdmin, async (req, res) => {
+    try {
+      const daysParam = Array.isArray(req.query.days) ? req.query.days[0] : req.query.days;
+      const days = Number(daysParam ?? 7);
+      const usage = await storage.getFeatureUsage(days);
+      res.json(usage);
+    } catch (error) {
+      console.error("Failed to fetch feature usage:", error);
+      res.status(500).json({ error: "Failed to fetch feature usage" });
     }
   });
 

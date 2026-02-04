@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Link } from "wouter";
 import { CalendarDays, MapPin, ExternalLink, ImagePlus, X } from "lucide-react";
 import { apiUrl } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,10 @@ export default function EventsPage() {
     imageUrl: "",
     aviationOnly: false,
   });
+
+  useEffect(() => {
+    trackEvent("events_view", { page: "/events" });
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ["aviation-events"],

@@ -15,6 +15,8 @@ import {
   type Favorite,
   type InsertFavorite,
   type Transaction,
+  type AnalyticsEvent,
+  type InsertAnalyticsEvent,
   type PaypalOrderConsumption,
   type InsertPaypalOrderConsumption,
   type VerificationSubmission,
@@ -86,6 +88,7 @@ import {
   reviews,
   favorites,
   transactions,
+  analyticsEvents,
   paypalOrderConsumptions,
   withdrawalRequests,
   verificationSubmissions,
@@ -286,6 +289,21 @@ export interface IStorage {
     profitMarginYear: string;
     totalRentals: number;
     activeRentals: number;
+  }>;
+  createAnalyticsEvent(event: InsertAnalyticsEvent): Promise<AnalyticsEvent>;
+  getFeatureUsage(days: number): Promise<{
+    rangeDays: number;
+    totalEvents: number;
+    uniqueVisitors: number;
+    returningVisitors: number;
+    guestEvents: number;
+    guestVisitors: number;
+    pages: Array<{
+      key: string;
+      totalEvents: number;
+      uniqueVisitors: number;
+      returningVisitors: number;
+    }>;
   }>;
 
   // CRM - Leads
@@ -2019,6 +2037,82 @@ export class DatabaseStorage implements IStorage {
       totalActiveMarketplaceListings: activeMarketplaceListings.length,
       totalExpiredMarketplaceListings: expiredMarketplaceListings.length,
       marketplaceByCategory,
+    };
+  }
+
+  async createAnalyticsEvent(event: InsertAnalyticsEvent): Promise<AnalyticsEvent> {
+    const [created] = await db.insert(analyticsEvents).values(event).returning();
+    return created;
+  }
+
+  async getFeatureUsage(days: number): Promise<{
+    rangeDays: number;
+    totalEvents: number;
+    uniqueVisitors: number;
+    returningVisitors: number;
+    guestEvents: number;
+    guestVisitors: number;
+    pages: Array<{
+      key: string;
+      totalEvents: number;
+      uniqueVisitors: number;
+      returningVisitors: number;
+    }>;
+  }> {
+    const rangeDays = Number.isFinite(days) && days > 0 ? Math.min(Math.max(days, 1), 90) : 7;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - rangeDays);
+
+    const totalsResult = await db.execute(sql`
+      WITH returning AS (
+        SELECT "visitor_id"
+        FROM "analytics_events"
+        GROUP BY "visitor_id"
+        HAVING min("created_at") < ${startDate}
+      )
+      SELECT
+        count(*)::int AS "totalEvents",
+        count(distinct "visitor_id")::int AS "uniqueVisitors",
+        count(distinct CASE WHEN "visitor_id" IN (SELECT "visitor_id" FROM returning) THEN "visitor_id" END)::int AS "returningVisitors",
+        count(*) FILTER (WHERE "user_id" IS NULL)::int AS "guestEvents",
+        count(distinct CASE WHEN "user_id" IS NULL THEN "visitor_id" END)::int AS "guestVisitors"
+      FROM "analytics_events"
+      WHERE "created_at" >= ${startDate};
+    `);
+    const totalsRow = (totalsResult.rows?.[0] as any) || {};
+
+    const pagesResult = await db.execute(sql`
+      WITH returning AS (
+        SELECT "visitor_id"
+        FROM "analytics_events"
+        GROUP BY "visitor_id"
+        HAVING min("created_at") < ${startDate}
+      )
+      SELECT
+        COALESCE(NULLIF("page", ''), "event") AS "key",
+        count(*)::int AS "totalEvents",
+        count(distinct "visitor_id")::int AS "uniqueVisitors",
+        count(distinct CASE WHEN "visitor_id" IN (SELECT "visitor_id" FROM returning) THEN "visitor_id" END)::int AS "returningVisitors"
+      FROM "analytics_events"
+      WHERE "created_at" >= ${startDate}
+      GROUP BY 1
+      ORDER BY "totalEvents" DESC
+      LIMIT 30;
+    `);
+
+    return {
+      rangeDays,
+      totalEvents: Number(totalsRow.totalEvents || 0),
+      uniqueVisitors: Number(totalsRow.uniqueVisitors || 0),
+      returningVisitors: Number(totalsRow.returningVisitors || 0),
+      guestEvents: Number(totalsRow.guestEvents || 0),
+      guestVisitors: Number(totalsRow.guestVisitors || 0),
+      pages: (pagesResult.rows || []) as Array<{
+        key: string;
+        totalEvents: number;
+        uniqueVisitors: number;
+        returningVisitors: number;
+      }>,
     };
   }
 

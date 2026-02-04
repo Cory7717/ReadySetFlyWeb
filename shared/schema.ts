@@ -555,6 +555,22 @@ export const transactions = pgTable("transactions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Analytics Events (feature engagement tracking)
+export const analyticsEvents = pgTable("analytics_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  event: text("event").notNull(),
+  page: text("page"),
+  visitorId: text("visitor_id").notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  meta: jsonb("meta"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_analytics_events_created").on(table.createdAt),
+  index("idx_analytics_events_event").on(table.event),
+  index("idx_analytics_events_page").on(table.page),
+  index("idx_analytics_events_visitor").on(table.visitorId),
+]);
+
 // NOTAMs (FAA SWIM ingestion)
 export const notams = pgTable("notams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1610,6 +1626,11 @@ export const insertAviationEventSchema = createInsertSchema(aviationEvents).omit
   endDate: z.coerce.date(),
 });
 
+export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalRequests).omit({
   id: true,
   createdAt: true,
@@ -1666,6 +1687,9 @@ export type Favorite = typeof favorites.$inferSelect;
 export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
 
 export type Transaction = typeof transactions.$inferSelect;
+
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 
 export type Notam = typeof notams.$inferSelect;
 

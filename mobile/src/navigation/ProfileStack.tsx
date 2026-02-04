@@ -27,6 +27,7 @@ import StudentWeatherScreen from '../screens/StudentWeatherScreen';
 import GpsSimsHubScreen from '../screens/GpsSimsHubScreen';
 import GpsSimsUnitScreen from '../screens/GpsSimsUnitScreen';
 import IfrToolsScreen from '../screens/IfrToolsScreen';
+import TfrsScreen from '../screens/TfrsScreen';
 import OwnershipCostCalculatorScreen from '../screens/OwnershipCostCalculatorScreen';
 import CrosswindCalculatorScreen from '../screens/CrosswindCalculatorScreen';
 import DensityAltitudeScreen from '../screens/DensityAltitudeScreen';
@@ -69,6 +70,7 @@ export type ProfileStackParamList = {
   GpsSimsHub: undefined;
   GpsSimsUnit: { unitId: string };
   IfrTools: undefined;
+  Tfrs: undefined;
   OwnershipCost: undefined;
   CrosswindCalc: undefined;
   DensityAltitude: undefined;
@@ -227,6 +229,11 @@ export default function ProfileStack() {
         name="IfrTools"
         component={IfrToolsScreen}
         options={{ title: 'IFR Tools' }}
+      />
+      <Stack.Screen
+        name="Tfrs"
+        component={TfrsScreen}
+        options={{ title: 'TFRs' }}
       />
       <Stack.Screen 
         name="OwnershipCost" 

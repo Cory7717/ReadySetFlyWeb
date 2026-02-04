@@ -48,6 +48,17 @@ export default function PilotToolsScreen({ navigation }: any) {
           </View>
           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('Tfrs')}
+        >
+          <Ionicons name="alert-outline" size={28} color="#1e40af" />
+          <View style={styles.cardText}>
+            <Text style={styles.cardTitle}>TFRs</Text>
+            <Text style={styles.cardSubtitle}>Live Temporary Flight Restrictions by ICAO.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>

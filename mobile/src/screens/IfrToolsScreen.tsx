@@ -40,6 +40,12 @@ const tools = [
     route: 'AirportBriefing',
   },
   {
+    title: 'TFRs',
+    subtitle: 'Temporary Flight Restrictions by ICAO.',
+    icon: 'warning-outline',
+    route: 'Tfrs',
+  },
+  {
     title: 'Radio Comms Trainer',
     subtitle: 'Scenario practice with scoring.',
     icon: 'mic-outline',

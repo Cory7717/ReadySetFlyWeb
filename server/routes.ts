@@ -7891,7 +7891,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const endpointTemplate = process.env.SWIM_NOTAM_ENDPOINT;
       if (!endpointTemplate) {
-        return res.status(503).json({ error: "NOTAM feed not configured" });
+        return res.json({
+          icao: requestedIcao,
+          source: "swim",
+          notams: [],
+          notice: "NOTAM feed not configured. Awaiting SWIM stream.",
+        });
       }
 
       const accessToken = await getSwimAccessToken();

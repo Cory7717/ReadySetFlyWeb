@@ -38,6 +38,7 @@ export default function Landing() {
     return `${formatter.format(startDate)} - ${formatter.format(endDate)}`;
   };
   const eventsScrollRef = useRef<HTMLDivElement | null>(null);
+  const autoScrollActiveRef = useRef(false);
   const [eventsHovering, setEventsHovering] = useState(false);
   const [autoPauseUntil, setAutoPauseUntil] = useState(0);
 
@@ -59,13 +60,23 @@ export default function Landing() {
     let rafId = 0;
     let lastTime = 0;
     const speedPxPerSec = 26;
+    const setAutoScrollState = (active: boolean) => {
+      if (autoScrollActiveRef.current === active) return;
+      autoScrollActiveRef.current = active;
+      container.style.scrollSnapType = active ? "none" : "x mandatory";
+      container.style.scrollBehavior = active ? "auto" : "smooth";
+    };
 
     const tick = (time: number) => {
       if (!container) return;
-      if (eventsHovering || Date.now() < autoPauseUntil) {
+      const shouldScroll = !eventsHovering && Date.now() >= autoPauseUntil;
+      if (!shouldScroll) {
+        setAutoScrollState(false);
+        lastTime = time;
         rafId = window.requestAnimationFrame(tick);
         return;
       }
+      setAutoScrollState(true);
       if (!lastTime) lastTime = time;
       const deltaSec = (time - lastTime) / 1000;
       lastTime = time;
@@ -81,7 +92,11 @@ export default function Landing() {
     };
 
     rafId = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(rafId);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      container.style.scrollSnapType = "";
+      container.style.scrollBehavior = "";
+    };
   }, [feedEvents.length, eventsHovering, autoPauseUntil]);
   
   return (

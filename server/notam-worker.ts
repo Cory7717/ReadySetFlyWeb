@@ -329,7 +329,24 @@ export function startSwimNotamWorker() {
   const session = solclientjs.SolclientFactory.createSession(sessionProps);
   let consumer: any = null;
 
-  session.on(solclientjs.SessionEventCode.UP_NOTICE, () => {
+  const safeOn = (
+    emitter: any,
+    eventName: any,
+    handler: (...args: any[]) => void,
+    label: string
+  ) => {
+    if (!eventName) {
+      console.warn(`SWIM Solace event missing: ${label}`);
+      return;
+    }
+    try {
+      emitter.on(eventName, handler);
+    } catch (error: any) {
+      console.error(`SWIM Solace listener attach failed (${label}):`, error?.message || error);
+    }
+  };
+
+  safeOn(session, solclientjs.SessionEventCode.UP_NOTICE, () => {
     console.log("SWIM Solace session up. Subscribing to queue:", queueName);
     if (consumer) return;
     try {
@@ -342,7 +359,7 @@ export function startSwimNotamWorker() {
       return;
     }
 
-    consumer.on(solclientjs.MessageConsumerEventName.MESSAGE, async (message: any) => {
+    safeOn(consumer, solclientjs.MessageConsumerEventName.MESSAGE, async (message: any) => {
       try {
         const body = messageToString(message);
         const payload = parsePayload(body);
@@ -363,30 +380,30 @@ export function startSwimNotamWorker() {
           // ignore
         }
       }
-    });
+    }, "MESSAGE");
 
-    consumer.on(solclientjs.MessageConsumerEventName.CONNECT_FAILED_ERROR, (err: any) => {
+    safeOn(consumer, solclientjs.MessageConsumerEventName.CONNECT_FAILED_ERROR, (err: any) => {
       console.error("SWIM consumer connect failed:", err?.message || err);
-    });
+    }, "CONSUMER_CONNECT_FAILED");
 
-    consumer.on(solclientjs.MessageConsumerEventName.DOWN_ERROR, (err: any) => {
+    safeOn(consumer, solclientjs.MessageConsumerEventName.DOWN_ERROR, (err: any) => {
       console.error("SWIM consumer down:", err?.message || err);
-    });
+    }, "CONSUMER_DOWN_ERROR");
 
     consumer.connect();
-  });
+  }, "UP_NOTICE");
 
-  session.on(solclientjs.SessionEventCode.CONNECT_FAILED_ERROR, (err: any) => {
+  safeOn(session, solclientjs.SessionEventCode.CONNECT_FAILED_ERROR, (err: any) => {
     console.error("SWIM session connect failed:", err?.message || err);
-  });
+  }, "CONNECT_FAILED_ERROR");
 
-  session.on(solclientjs.SessionEventCode.DISCONNECTED, () => {
+  safeOn(session, solclientjs.SessionEventCode.DISCONNECTED, () => {
     console.warn("SWIM session disconnected.");
-  });
+  }, "DISCONNECTED");
 
-  session.on(solclientjs.SessionEventCode.RECONNECTING, () => {
+  safeOn(session, solclientjs.SessionEventCode.RECONNECTING, () => {
     console.warn("SWIM session reconnecting...");
-  });
+  }, "RECONNECTING");
 
   session.connect();
   return true;

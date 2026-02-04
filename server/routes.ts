@@ -1572,6 +1572,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes (from blueprint:javascript_log_in_with_replit)
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
+      if (String(process.env.AUTH_LOG_REQUEST_META || '').toLowerCase() === 'true') {
+        const forwardedFor = String(req.headers['x-forwarded-for'] || '')
+          .split(',')[0]
+          .trim();
+        const ip =
+          forwardedFor ||
+          String(req.headers['x-real-ip'] || '') ||
+          req.socket?.remoteAddress ||
+          'unknown';
+        const userAgent = String(req.headers['user-agent'] || 'unknown');
+        console.log(`[AUTH META] ip=${ip} ua="${userAgent}"`);
+      }
       const sessionUserId = req.user.claims.sub;
       console.log("[AUTH /api/auth/user] Looking up user with session ID:", sessionUserId);
       let user = await storage.getUser(sessionUserId);

@@ -114,7 +114,7 @@ function normalizeAnalyticsPage(raw?: string | null): string | undefined {
 
 function deriveAnalyticsPage(event: string, page: unknown, params: Record<string, any> | undefined): string | undefined {
   if (event === "student_page_view" && typeof params?.page === "string") {
-    return normalizeAnalyticsPage(`/student/${params.page.replace(/^\\//, "")}`);
+    return normalizeAnalyticsPage(`/student/${params.page.replace(/^\/+/, "")}`);
   }
   if (event === "planner_page_view") return "/flight-planner";
   if (event === "gps_sims_hub_view") return "/gps-sims";

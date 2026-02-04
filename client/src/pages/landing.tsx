@@ -56,18 +56,32 @@ export default function Landing() {
   useEffect(() => {
     const container = eventsScrollRef.current;
     if (!container || feedEvents.length <= 1) return;
-    const interval = window.setInterval(() => {
-      if (!container || eventsHovering || Date.now() < autoPauseUntil) return;
-      const maxScroll = container.scrollWidth - container.clientWidth;
-      if (maxScroll <= 0) return;
-      const next = container.scrollLeft + container.clientWidth * 0.75;
-      if (next >= maxScroll - 8) {
-        container.scrollTo({ left: 0, behavior: "smooth" });
-      } else {
-        container.scrollTo({ left: next, behavior: "smooth" });
+    let rafId = 0;
+    let lastTime = 0;
+    const speedPxPerSec = 26;
+
+    const tick = (time: number) => {
+      if (!container) return;
+      if (eventsHovering || Date.now() < autoPauseUntil) {
+        rafId = window.requestAnimationFrame(tick);
+        return;
       }
-    }, Math.max(4000, feedEvents.length * 300));
-    return () => window.clearInterval(interval);
+      if (!lastTime) lastTime = time;
+      const deltaSec = (time - lastTime) / 1000;
+      lastTime = time;
+      const maxScroll = container.scrollWidth - container.clientWidth;
+      if (maxScroll > 0) {
+        let next = container.scrollLeft + speedPxPerSec * deltaSec;
+        if (next >= maxScroll - 4) {
+          next = 0;
+        }
+        container.scrollLeft = next;
+      }
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(rafId);
   }, [feedEvents.length, eventsHovering, autoPauseUntil]);
   
   return (
@@ -160,22 +174,24 @@ export default function Landing() {
 
           {feedEvents.length ? (
             <div className="relative mt-6 rounded-2xl border bg-background/70">
-              <div className="absolute left-2 top-1/2 z-10 hidden -translate-y-1/2 sm:flex">
+              <div className="absolute -left-4 top-1/2 z-10 hidden -translate-y-1/2 sm:flex">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="icon"
                   aria-label="Scroll events left"
                   onClick={() => scrollEvents("left")}
+                  className="h-10 w-10 rounded-full shadow-lg"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="absolute right-2 top-1/2 z-10 hidden -translate-y-1/2 sm:flex">
+              <div className="absolute -right-4 top-1/2 z-10 hidden -translate-y-1/2 sm:flex">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="icon"
                   aria-label="Scroll events right"
                   onClick={() => scrollEvents("right")}
+                  className="h-10 w-10 rounded-full shadow-lg"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>

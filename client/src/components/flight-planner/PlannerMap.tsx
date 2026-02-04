@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { MapContainer, Marker, Polyline, TileLayer, useMap } from "react-leaflet";
+import { MapContainer, Marker, Polyline, TileLayer, WMSTileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -12,7 +12,7 @@ export type PlannerPoint = {
 type PlannerMapProps = {
   points: PlannerPoint[];
   height?: string;
-  mapStyle?: "standard" | "sectional";
+  mapStyle?: "standard" | "sectional" | "radar" | "winds";
 };
 
 const defaultIcon = L.icon({
@@ -23,7 +23,7 @@ const defaultIcon = L.icon({
   iconAnchor: [12, 41],
 });
 
-function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "standard" | "sectional" }) {
+function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "standard" | "sectional" | "radar" | "winds" }) {
   const map = useMap();
 
   useEffect(() => {
@@ -35,7 +35,7 @@ function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "st
         map.fitBounds(bounds.pad(0.2));
         if (mapStyle === "sectional") {
           const zoom = map.getZoom();
-          if (zoom < 8) map.setZoom(8);
+          if (zoom < 4) map.setZoom(4);
           if (zoom > 12) map.setZoom(12);
         }
       } catch {
@@ -48,7 +48,7 @@ function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "st
   return null;
 }
 
-function MapStyleController({ mapStyle }: { mapStyle: "standard" | "sectional" }) {
+function MapStyleController({ mapStyle }: { mapStyle: "standard" | "sectional" | "radar" | "winds" }) {
   const map = useMap();
 
   useEffect(() => {
@@ -56,9 +56,9 @@ function MapStyleController({ mapStyle }: { mapStyle: "standard" | "sectional" }
     const raf = requestAnimationFrame(() => {
       try {
         if (mapStyle === "sectional") {
-          map.setMinZoom(8);
+          map.setMinZoom(4);
           map.setMaxZoom(12);
-          if (map.getZoom() < 8) map.setZoom(8);
+          if (map.getZoom() < 4) map.setZoom(4);
           if (map.getZoom() > 12) map.setZoom(12);
           return;
         }
@@ -78,6 +78,8 @@ export default function PlannerMap({ points, height = "380px", mapStyle = "stand
   const center: [number, number] = points.length
     ? [points[0].lat, points[0].lon]
     : [39.5, -98.35];
+  const showRadar = mapStyle === "radar";
+  const showWinds = mapStyle === "winds";
 
   return (
     <div style={{ height }}>
@@ -86,13 +88,31 @@ export default function PlannerMap({ points, height = "380px", mapStyle = "stand
           <TileLayer
             attribution='Federal Aviation Administration, Aeronautical Information Services'
             url="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
-            minZoom={8}
+            minZoom={4}
             maxZoom={12}
           />
         ) : (
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+        )}
+        {showRadar && (
+          <WMSTileLayer
+            url="https://nowcoast.noaa.gov/geoserver/observations/weather_radar/wms"
+            layers="conus_base_reflectivity_mosaic"
+            format="image/png"
+            transparent
+            opacity={0.55}
+          />
+        )}
+        {showWinds && (
+          <WMSTileLayer
+            url="https://nowcoast.noaa.gov/geoserver/analysis/winds/wms"
+            layers="analysis_wind_speed"
+            format="image/png"
+            transparent
+            opacity={0.6}
           />
         )}
         <MapStyleController mapStyle={mapStyle} />

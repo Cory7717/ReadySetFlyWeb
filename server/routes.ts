@@ -496,6 +496,7 @@ type AirportMeta = {
   lat: number;
   lon: number;
   elevationFt?: number | null;
+  timezone?: string | null;
 };
 
 type AirportSearchResult = {
@@ -548,6 +549,9 @@ const airportMetaCache = new Map<string, { data: AirportMeta; expiresAt: number 
 const STATION_CACHE_URL = "https://aviationweather.gov/data/cache/stations.cache.json.gz";
 const STATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let stationCache: { data: AirportSearchResult[]; expiresAt: number } | null = null;
+const AIRPORTS_CACHE_URL = "https://ourairports.com/data/airports.csv";
+const AIRPORTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+let airportTimezoneCache: { data: Map<string, string>; expiresAt: number } | null = null;
 const RUNWAY_CACHE_URL = "https://ourairports.com/data/runways.csv";
 const RUNWAY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let runwayCache: { data: Map<string, RunwayMeta[]>; expiresAt: number } | null = null;
@@ -608,6 +612,38 @@ function destinationPoint(lat: number, lon: number, bearingDeg: number, distance
     );
 
   return { lat: toDeg(lat2), lon: toDeg(lon2) };
+}
+
+function distanceNmBetween(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const radiusNm = 3440.065;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return radiusNm * c;
+}
+
+function findNearestStation(
+  stations: AirportSearchResult[],
+  target: { lat: number; lon: number },
+  exclude: Set<string>,
+  maxRadiusNm: number
+) {
+  let best: { station: AirportSearchResult; distanceNm: number } | null = null;
+  for (const station of stations) {
+    if (!station?.icao) continue;
+    if (exclude.has(station.icao)) continue;
+    if (!Number.isFinite(station.lat) || !Number.isFinite(station.lon)) continue;
+    const distance = distanceNmBetween(target.lat, target.lon, station.lat, station.lon);
+    if (distance > maxRadiusNm) continue;
+    if (!best || distance < best.distanceNm) {
+      best = { station, distanceNm: distance };
+    }
+  }
+  return best?.station ?? null;
 }
 
 function buildArcPoints(
@@ -884,6 +920,55 @@ function parseCsvLine(line: string): string[] {
   }
   result.push(current);
   return result;
+}
+
+async function loadAirportTimezoneCache(): Promise<Map<string, string>> {
+  const now = Date.now();
+  if (airportTimezoneCache && airportTimezoneCache.expiresAt > now) {
+    return airportTimezoneCache.data;
+  }
+
+  const response = await fetch(AIRPORTS_CACHE_URL, {
+    headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load airports data: ${response.status}`);
+  }
+
+  const text = await response.text();
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  const map = new Map<string, string>();
+  if (lines.length === 0) {
+    airportTimezoneCache = { data: map, expiresAt: now + AIRPORTS_CACHE_TTL_MS };
+    return map;
+  }
+
+  const header = parseCsvLine(lines[0]).map((value) => value.trim().toLowerCase());
+  const idxIdent = header.indexOf("ident");
+  const idxGps = header.indexOf("gps_code");
+  const idxLocal = header.indexOf("local_code");
+  const idxIata = header.indexOf("iata_code");
+  const idxTimezone = header.indexOf("timezone");
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const row = parseCsvLine(lines[i]);
+    if (row.length < 5) continue;
+    const timezone = idxTimezone >= 0 ? row[idxTimezone]?.trim() : "";
+    if (!timezone) continue;
+    const ident = idxIdent >= 0 ? row[idxIdent]?.trim().toUpperCase() : "";
+    const gpsCode = idxGps >= 0 ? row[idxGps]?.trim().toUpperCase() : "";
+    const localCode = idxLocal >= 0 ? row[idxLocal]?.trim().toUpperCase() : "";
+    const iataCode = idxIata >= 0 ? row[idxIata]?.trim().toUpperCase() : "";
+    const candidates = [gpsCode, ident, localCode, iataCode].filter(Boolean);
+    candidates.forEach((code) => {
+      if (!map.has(code)) {
+        map.set(code, timezone);
+      }
+    });
+  }
+
+  airportTimezoneCache = { data: map, expiresAt: now + AIRPORTS_CACHE_TTL_MS };
+  return map;
 }
 
 async function loadRunwayCache(): Promise<Map<string, RunwayMeta[]>> {
@@ -7556,6 +7641,125 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.get("/api/airports/route-suggestions", airportLookupRateLimiter, async (req, res) => {
+    try {
+      const departure = normalizeIcao(String(req.query.departure || ""));
+      const destination = normalizeIcao(String(req.query.destination || ""));
+      if (!/^[A-Z0-9]{3,4}$/.test(departure) || !/^[A-Z0-9]{3,4}$/.test(destination)) {
+        return res.status(400).json({ error: "Departure and destination must be valid ICAO codes." });
+      }
+
+      const cruiseKtas = Math.max(40, toNumber(req.query.cruiseKtas) ?? 110);
+      const fuelBurnGph = Math.max(0.1, toNumber(req.query.fuelBurnGph) ?? 8);
+      const usableFuelGal = Math.max(0, toNumber(req.query.usableFuelGal) ?? 40);
+      const fuelOnBoard = toNumber(req.query.fuelOnBoard);
+      const reserveMinutesRaw = toNumber(req.query.reserveMinutes);
+      const reserveMinutes = Math.max(0, Math.min(180, reserveMinutesRaw ?? 45));
+      const fuelGallons = Math.max(0, fuelOnBoard ?? usableFuelGal);
+
+      const stations = await loadStationCache();
+      const findStation = (value: string) => {
+        const candidates = buildIcaoCandidates(value);
+        return stations.find((station) => candidates.includes(station.icao)) || null;
+      };
+
+      const departureStation = findStation(departure);
+      const destinationStation = findStation(destination);
+      if (!departureStation || !destinationStation) {
+        return res.status(404).json({ error: "Unable to resolve departure or destination." });
+      }
+
+      const routeDistanceNm = distanceNmBetween(
+        departureStation.lat,
+        departureStation.lon,
+        destinationStation.lat,
+        destinationStation.lon
+      );
+      const reserveHours = reserveMinutes / 60;
+      const enduranceHours = fuelBurnGph > 0 ? fuelGallons / fuelBurnGph : 0;
+      const availableHours = Math.max(0, enduranceHours - reserveHours);
+      const maxLegNm = availableHours * cruiseKtas;
+      const planningLegNm = maxLegNm * 0.9;
+
+      let stopCount = 0;
+      if (planningLegNm > 0 && routeDistanceNm > planningLegNm * 1.1) {
+        stopCount = Math.min(3, Math.max(0, Math.ceil(routeDistanceNm / planningLegNm) - 1));
+      }
+
+      let waypointCount = 0;
+      if (routeDistanceNm > 140) waypointCount = 1;
+      if (routeDistanceNm > 320) waypointCount = 2;
+      if (routeDistanceNm > 600) waypointCount = 3;
+
+      const bearing = bearingBetween(
+        departureStation.lat,
+        departureStation.lon,
+        destinationStation.lat,
+        destinationStation.lon
+      );
+      const used = new Set<string>([departureStation.icao, destinationStation.icao]);
+      const plannedStops: string[] = [];
+      const waypoints: string[] = [];
+      const candidateRadii = [60, 90, 120, 160];
+
+      const pickAtFraction = (fraction: number) => {
+        const target = destinationPoint(
+          departureStation.lat,
+          departureStation.lon,
+          bearing,
+          routeDistanceNm * fraction
+        );
+        for (const radius of candidateRadii) {
+          const candidate = findNearestStation(stations, target, used, radius);
+          if (candidate) {
+            used.add(candidate.icao);
+            return candidate.icao;
+          }
+        }
+        return null;
+      };
+
+      if (stopCount > 0) {
+        const step = 1 / (stopCount + 1);
+        for (let i = 1; i <= stopCount; i += 1) {
+          const suggestion = pickAtFraction(step * i);
+          if (suggestion) plannedStops.push(suggestion);
+        }
+      }
+
+      if (waypointCount > 0) {
+        const fractions =
+          waypointCount === 1
+            ? [0.5]
+            : waypointCount === 2
+              ? [0.35, 0.65]
+              : [0.25, 0.5, 0.75];
+        for (const fraction of fractions) {
+          const suggestion = pickAtFraction(fraction);
+          if (suggestion) waypoints.push(suggestion);
+        }
+      }
+
+      return res.json({
+        departure: departureStation.icao,
+        destination: destinationStation.icao,
+        waypoints,
+        plannedStops,
+        meta: {
+          routeDistanceNm: Number(routeDistanceNm.toFixed(1)),
+          maxLegNm: Number(maxLegNm.toFixed(1)),
+          cruiseKtas,
+          fuelBurnGph,
+          fuelGallons,
+          reserveMinutes,
+        },
+      });
+    } catch (error) {
+      console.error("Route suggestion failed:", error);
+      res.status(500).json({ error: "Failed to generate route suggestions" });
+    }
+  });
+
   app.get("/api/airports/:icao", airportLookupRateLimiter, async (req, res) => {
     try {
       const requestedIcao = normalizeIcao(req.params.icao || "");
@@ -7632,6 +7836,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           continue;
         }
 
+        let timezone: string | null = null;
+        try {
+          const tzMap = await loadAirportTimezoneCache();
+          timezone =
+            tzMap.get(candidate) ??
+            (candidate.length === 4 && candidate.startsWith("K")
+              ? tzMap.get(candidate.slice(1))
+              : null) ??
+            null;
+        } catch (error) {
+          console.warn("Airport timezone lookup failed:", error);
+        }
+
         const payload: AirportMeta = {
           icao: candidate,
           name:
@@ -7643,6 +7860,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           lat,
           lon,
           elevationFt: stationCandidate.elevation ? Number(stationCandidate.elevation) : null,
+          timezone,
         };
 
         setCachedAirport(candidate, payload);

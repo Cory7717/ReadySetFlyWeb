@@ -76,6 +76,23 @@ type WeatherResponse = {
   taf: any;
 };
 
+type RouteSuggestionMeta = {
+  routeDistanceNm: number;
+  maxLegNm: number;
+  cruiseKtas: number;
+  fuelBurnGph: number;
+  fuelGallons: number;
+  reserveMinutes: number;
+};
+
+type RouteSuggestionResponse = {
+  departure: string;
+  destination: string;
+  waypoints: string[];
+  plannedStops: string[];
+  meta: RouteSuggestionMeta;
+};
+
 function parseFlightCategory(metar: any): "VFR" | "MVFR" | "IFR" | "LIFR" | "UNKNOWN" {
   if (!metar?.rawOb) return "UNKNOWN";
   const raw = metar.rawOb || "";
@@ -95,13 +112,95 @@ function hasThunder(taf: any) {
   return raw.includes("TS");
 }
 
-  function parseWaypoints(input: string) {
-    return input
-      .split(/[,\s]+/)
-      .map((item) => item.trim().toUpperCase())
-      .filter(Boolean)
-      .filter((item) => ICAO_REGEX.test(item));
+function parseWaypoints(input: string) {
+  return input
+    .split(/[,\s]+/)
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean)
+    .filter((item) => ICAO_REGEX.test(item));
+}
+
+function parseDateTimeLocal(value: string) {
+  if (!value) return null;
+  const [datePart, timePart] = value.split("T");
+  if (!datePart || !timePart) return null;
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = timePart.split(":").map(Number);
+  if (!year || !month || !day || Number.isNaN(hour) || Number.isNaN(minute)) return null;
+  return { year, month, day, hour, minute };
+}
+
+function getTimeZoneOffsetMinutes(date: Date, timeZone: string) {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = dtf.formatToParts(date);
+  const map: Record<string, string> = {};
+  parts.forEach((part) => {
+    if (part.type !== "literal") {
+      map[part.type] = part.value;
+    }
+  });
+  const asUtc = Date.UTC(
+    Number(map.year),
+    Number(map.month) - 1,
+    Number(map.day),
+    Number(map.hour),
+    Number(map.minute),
+    Number(map.second)
+  );
+  return (asUtc - date.getTime()) / 60000;
+}
+
+function normalizeTimeZone(value?: string | null) {
+  const fallback = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (!value) return fallback;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date());
+    return value;
+  } catch {
+    return fallback;
   }
+}
+
+function zonedDateTimeToUtc(value: string, timeZone: string) {
+  const parts = parseDateTimeLocal(value);
+  if (!parts) return null;
+  const guess = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0));
+  const offset = getTimeZoneOffsetMinutes(guess, timeZone);
+  return new Date(guess.getTime() - offset * 60000);
+}
+
+function formatDateTimeLocal(date: Date, timeZone: string) {
+  try {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = dtf.formatToParts(date);
+    const map: Record<string, string> = {};
+    parts.forEach((part) => {
+      if (part.type !== "literal") {
+        map[part.type] = part.value;
+      }
+    });
+    return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+  } catch {
+    return date.toISOString().slice(0, 16);
+  }
+}
 
 const checklistDefaults = {
   weather: false,
@@ -140,8 +239,10 @@ export default function FlightPlanner() {
   const [selectedTypeId, setSelectedTypeId] = useState<string>(FALLBACK_TYPE.id);
   const [reserveMinutes, setReserveMinutes] = useState("45");
   const [headwind, setHeadwind] = useState("0");
+  const [plannedAltitude, setPlannedAltitude] = useState("");
+  const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
-  const [mapStyle, setMapStyle] = useState<"standard" | "sectional">("standard");
+  const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds">("standard");
   const [wakeLockError, setWakeLockError] = useState<string | null>(null);
   const [customProfile, setCustomProfile] = useState({
     name: "",
@@ -338,17 +439,60 @@ export default function FlightPlanner() {
     FALLBACK_TYPE.max_gross_weight_lb_effective ??
     2400;
 
+  const routeSuggestionQuery = useQuery<RouteSuggestionResponse>({
+    queryKey: [
+      "/api/airports/route-suggestions",
+      departureResolved,
+      destinationResolved,
+      planningCruise,
+      planningBurn,
+      planningFuel,
+      reserveMinutes,
+      form.fuelOnBoard,
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        departure: departureResolved,
+        destination: destinationResolved,
+        cruiseKtas: String(planningCruise),
+        fuelBurnGph: String(planningBurn),
+        usableFuelGal: String(planningFuel),
+        reserveMinutes: String(reserveMinutes),
+      });
+      const fuelOnBoard = Number(form.fuelOnBoard);
+      if (Number.isFinite(fuelOnBoard) && fuelOnBoard > 0) {
+        params.set("fuelOnBoard", String(fuelOnBoard));
+      }
+      const res = await fetch(apiUrl(`/api/airports/route-suggestions?${params.toString()}`));
+      if (!res.ok) {
+        throw new Error("Failed to load route suggestions");
+      }
+      return res.json();
+    },
+    enabled: Boolean(departureResolved && destinationResolved),
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const suggestedWaypoints = routeSuggestionQuery.data?.waypoints ?? [];
+  const suggestedStops = routeSuggestionQuery.data?.plannedStops ?? [];
+  const suggestionMeta = routeSuggestionQuery.data?.meta;
+
   const waypoints = useMemo(() => parseWaypoints(waypointsInput), [waypointsInput]);
   const plannedStops = useMemo(() => parseWaypoints(plannedStopsInput), [plannedStopsInput]);
-  const routeIcaos = useMemo(() => {
-    const list = [
+  const routeSequence = useMemo(() => {
+    return [
       departureResolved.trim().toUpperCase(),
       ...plannedStops,
       ...waypoints,
       destinationResolved.trim().toUpperCase(),
-    ].filter(Boolean);
-    return Array.from(new Set(list)).filter((icao) => ICAO_REGEX.test(icao));
+    ]
+      .filter(Boolean)
+      .filter((icao) => ICAO_REGEX.test(icao));
   }, [departureResolved, destinationResolved, waypoints, plannedStops]);
+
+  const routeIcaos = useMemo(() => {
+    return Array.from(new Set(routeSequence));
+  }, [routeSequence]);
 
   const airportQueries = useQueries({
     queries: routeIcaos.map((icao) => ({
@@ -374,6 +518,21 @@ export default function FlightPlanner() {
     return map;
   }, [airportQueries, routeIcaos]);
 
+  const browserTimeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    []
+  );
+
+  const departureTimeZone = useMemo(() => {
+    const tz = airportMap.get(departureResolved)?.timezone;
+    return normalizeTimeZone(tz || browserTimeZone);
+  }, [airportMap, departureResolved, browserTimeZone]);
+
+  const destinationTimeZone = useMemo(() => {
+    const tz = airportMap.get(destinationResolved)?.timezone;
+    return normalizeTimeZone(tz || browserTimeZone);
+  }, [airportMap, destinationResolved, browserTimeZone]);
+
   const airportErrors = useMemo(() => {
     return airportQueries
       .map((query, index) => ({ icao: routeIcaos[index], error: query.error }))
@@ -385,14 +544,14 @@ export default function FlightPlanner() {
   }, [routeIcaos, airportMap]);
 
   const airportPoints: AirportPoint[] = useMemo(() => {
-    return routeIcaos
+    return routeSequence
       .map((icao) => {
         const data = airportMap.get(icao);
         if (!data || !Number.isFinite(data.lat) || !Number.isFinite(data.lon)) return null;
         return { icao, lat: Number(data.lat), lon: Number(data.lon) };
       })
       .filter(Boolean) as AirportPoint[];
-  }, [airportMap, routeIcaos]);
+  }, [airportMap, routeSequence]);
 
   const suggestedWaypoint = useMemo(() => {
     if (routeSuggestion !== "midpoint") return null;
@@ -436,15 +595,55 @@ export default function FlightPlanner() {
   const reserveFuel = (Number(reserveMinutes) / 60) * planningBurn;
   const tripFuel = eteHours * planningBurn;
   const totalFuel = tripFuel + reserveFuel;
+  const eteMinutes = eteHours ? Math.round(eteHours * 60) : 0;
+  const plannedAltitudeFt = Number(plannedAltitude);
+  const canAutoArrival = Boolean(form.plannedDepartureAt && eteMinutes);
+
+  const altitudeRisks = useMemo(() => {
+    if (!Number.isFinite(plannedAltitudeFt) || plannedAltitudeFt <= 0) return [];
+    const risks: string[] = [];
+    if (plannedAltitudeFt >= 18000) {
+      risks.push("Flight levels require IFR clearance and performance planning.");
+    }
+    if (plannedAltitudeFt >= 12500) {
+      risks.push("Oxygen required above 12,500 ft MSL for more than 30 minutes.");
+    }
+    if (plannedAltitudeFt >= 14000) {
+      risks.push("Oxygen required for crew above 14,000 ft MSL.");
+    }
+    if (plannedAltitudeFt >= 15000) {
+      risks.push("Passengers require oxygen above 15,000 ft MSL.");
+    }
+    if (windValue >= 25) {
+      risks.push(`Headwind ${windValue} kt may increase fuel burn at altitude.`);
+    }
+    risks.push("Review AIRMET/SIGMETs and turbulence or icing layers before departure.");
+    if (mapStyle !== "winds") {
+      risks.push("Review the Winds (Aloft) overlay for upper-level flow and turbulence hints.");
+    }
+    return risks;
+  }, [plannedAltitudeFt, windValue, mapStyle]);
+
+  useEffect(() => {
+    if (!arrivalAuto || !form.plannedDepartureAt || !eteMinutes) return;
+    const departureUtc = zonedDateTimeToUtc(form.plannedDepartureAt, departureTimeZone);
+    if (!departureUtc) return;
+    const arrivalUtc = new Date(departureUtc.getTime() + eteMinutes * 60000);
+    const arrivalLocal = formatDateTimeLocal(arrivalUtc, destinationTimeZone);
+    setForm((prev) => ({ ...prev, plannedArrivalAt: arrivalLocal }));
+  }, [arrivalAuto, form.plannedDepartureAt, eteMinutes, departureTimeZone, destinationTimeZone]);
 
   const weatherIcaos = useMemo(() => {
     const list = [
       departureResolved.trim().toUpperCase(),
-      ...waypoints.slice(0, 2),
+      ...plannedStops,
+      ...waypoints,
       destinationResolved.trim().toUpperCase(),
     ].filter(Boolean);
-    return Array.from(new Set(list)).filter((icao) => ICAO_REGEX.test(icao));
-  }, [departureResolved, destinationResolved, waypoints]);
+    return Array.from(new Set(list))
+      .filter((icao) => ICAO_REGEX.test(icao))
+      .slice(0, 8);
+  }, [departureResolved, destinationResolved, plannedStops, waypoints]);
 
   const weatherQueries = useQueries({
     queries: weatherIcaos.map((icao) => ({
@@ -463,19 +662,57 @@ export default function FlightPlanner() {
     .map((query, index) => ({ icao: weatherIcaos[index], data: query.data as WeatherResponse | undefined }))
     .filter((item) => item.icao);
 
+  const weatherFindings = useMemo(() => {
+    return weatherData.map(({ icao, data }) => ({
+      icao,
+      category: parseFlightCategory(data?.metar),
+      thunder: hasThunder(data?.taf),
+    }));
+  }, [weatherData]);
+
+  const enrouteFindings = useMemo(() => {
+    return weatherFindings.filter(
+      (item) =>
+        item.icao !== departureResolved.trim().toUpperCase() &&
+        item.icao !== destinationResolved.trim().toUpperCase()
+    );
+  }, [weatherFindings, departureResolved, destinationResolved]);
+
+  const enrouteIfr = useMemo(
+    () =>
+      enrouteFindings
+        .filter((item) => item.category === "IFR" || item.category === "LIFR")
+        .map((item) => item.icao),
+    [enrouteFindings]
+  );
+  const enrouteTs = useMemo(
+    () => enrouteFindings.filter((item) => item.thunder).map((item) => item.icao),
+    [enrouteFindings]
+  );
+
+  const routeVariationNotes = useMemo(() => {
+    const notes: string[] = [];
+    if (enrouteIfr.length > 0) {
+      notes.push(`IFR/LIFR reported enroute: ${enrouteIfr.join(", ")}.`);
+    }
+    if (enrouteTs.length > 0) {
+      notes.push(`Thunderstorms flagged in TAFs: ${enrouteTs.join(", ")}.`);
+    }
+    return notes;
+  }, [enrouteIfr, enrouteTs]);
+
   const routeRisk = useMemo(() => {
     let risk = "Normal";
     let hasIfr = false;
     let hasTs = false;
-    weatherData.forEach(({ data }) => {
-      const category = parseFlightCategory(data?.metar);
-      if (category === "IFR" || category === "LIFR") hasIfr = true;
-      if (hasThunder(data?.taf)) hasTs = true;
+    weatherFindings.forEach((item) => {
+      if (item.category === "IFR" || item.category === "LIFR") hasIfr = true;
+      if (item.thunder) hasTs = true;
     });
     if (hasIfr) risk = "IFR Conditions";
     if (hasTs) risk = hasIfr ? "IFR + Thunderstorms" : "Thunderstorms";
     return risk;
-  }, [weatherData]);
+  }, [weatherFindings]);
   const resetForm = () => {
     setEditingPlan(null);
       setForm({
@@ -493,7 +730,15 @@ export default function FlightPlanner() {
       });
       setWaypointsInput("");
       setPlannedStopsInput("");
+      setPlannedAltitude("");
+      setArrivalAuto(true);
     };
+
+  const toUtcIso = (value: string, timeZone: string) => {
+    const utcDate = zonedDateTimeToUtc(value, timeZone);
+    if (utcDate) return utcDate.toISOString();
+    return new Date(value).toISOString();
+  };
 
   const createPlanMutation = useMutation({
     mutationFn: async () => {
@@ -506,8 +751,12 @@ export default function FlightPlanner() {
           route: routeString,
           aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
           fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
-          plannedDepartureAt: form.plannedDepartureAt ? new Date(form.plannedDepartureAt).toISOString() : null,
-          plannedArrivalAt: form.plannedArrivalAt ? new Date(form.plannedArrivalAt).toISOString() : null,
+          plannedDepartureAt: form.plannedDepartureAt
+            ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
+            : null,
+          plannedArrivalAt: form.plannedArrivalAt
+            ? toUtcIso(form.plannedArrivalAt, destinationTimeZone)
+            : null,
         };
       const res = await apiRequest("POST", "/api/flight-plans", payload);
       return res.json();
@@ -529,14 +778,18 @@ export default function FlightPlanner() {
           .map((value) => value.trim())
           .filter(Boolean)
           .join(" ");
-        const payload = {
-          ...form,
-          route: routeString,
-          aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
-          fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
-          plannedDepartureAt: form.plannedDepartureAt ? new Date(form.plannedDepartureAt).toISOString() : null,
-          plannedArrivalAt: form.plannedArrivalAt ? new Date(form.plannedArrivalAt).toISOString() : null,
-        };
+      const payload = {
+        ...form,
+        route: routeString,
+        aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
+        fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
+        plannedDepartureAt: form.plannedDepartureAt
+          ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
+          : null,
+        plannedArrivalAt: form.plannedArrivalAt
+          ? toUtcIso(form.plannedArrivalAt, destinationTimeZone)
+          : null,
+      };
       const res = await apiRequest("PATCH", `/api/flight-plans/${editingPlan.id}`, payload);
       return res.json();
     },
@@ -599,7 +852,10 @@ export default function FlightPlanner() {
       const payload = {
         flightDate: new Date().toISOString().slice(0, 10),
         aircraftType: selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
-        route: `${form.departure} ${waypointsInput} ${form.destination}`.trim(),
+        route: [form.departure, plannedStopsInput, waypointsInput, form.destination]
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .join(" "),
         remarks: "Planned from Flight Planner",
       };
       const res = await apiRequest("POST", "/api/logbook", payload);
@@ -629,6 +885,9 @@ export default function FlightPlanner() {
       notes: editingPlan.notes || "",
     });
     setWaypointsInput(editingPlan.route || "");
+    setPlannedStopsInput("");
+    setPlannedAltitude("");
+    setArrivalAuto(false);
   }, [editingPlan]);
 
   useEffect(() => {
@@ -754,6 +1013,27 @@ export default function FlightPlanner() {
                 placeholder="KISP KPVD (comma or space separated)"
               />
               <p className="text-xs text-muted-foreground">Optional. Add ICAO codes separated by space or comma.</p>
+              {routeSuggestionQuery.isFetching && departureResolved && destinationResolved && (
+                <div className="text-xs text-muted-foreground">Calculating suggested waypoints...</div>
+              )}
+              {suggestedWaypoints.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Suggested:</span>
+                  {suggestedWaypoints.map((icao) => (
+                    <Badge key={`waypoint-${icao}`} variant="secondary">
+                      {icao}
+                    </Badge>
+                  ))}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setWaypointsInput(suggestedWaypoints.join(" "))}
+                  >
+                    {waypoints.length > 0 ? "Replace with suggested" : "Use suggested"}
+                  </Button>
+                </div>
+              )}
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Planned stops (optional)</Label>
@@ -763,6 +1043,33 @@ export default function FlightPlanner() {
                 placeholder="KACT KTYR (fuel/meal stops)"
               />
               <p className="text-xs text-muted-foreground">Use ICAO codes for planned fuel or rest stops.</p>
+              {routeSuggestionQuery.isFetching && departureResolved && destinationResolved && (
+                <div className="text-xs text-muted-foreground">Estimating fuel-based stops...</div>
+              )}
+              {suggestedStops.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Suggested fuel stops:</span>
+                  {suggestedStops.map((icao) => (
+                    <Badge key={`stop-${icao}`} variant="secondary">
+                      {icao}
+                    </Badge>
+                  ))}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPlannedStopsInput(suggestedStops.join(" "))}
+                  >
+                    {plannedStops.length > 0 ? "Replace with suggested" : "Use suggested"}
+                  </Button>
+                </div>
+              )}
+              {suggestionMeta && suggestedStops.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  Max leg ~{suggestionMeta.maxLegNm.toFixed(0)} NM based on {suggestionMeta.fuelGallons.toFixed(0)} gal
+                  at {suggestionMeta.fuelBurnGph.toFixed(1)} gph with {suggestionMeta.reserveMinutes} min reserve.
+                </div>
+              )}
             </div>
           <div className="space-y-2">
             <Label>Alternate (optional)</Label>
@@ -876,7 +1183,26 @@ export default function FlightPlanner() {
               >
                 Sectional (FAA)
               </Button>
+              <Button
+                variant={mapStyle === "radar" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMapStyle("radar")}
+              >
+                Weather (Radar)
+              </Button>
+              <Button
+                variant={mapStyle === "winds" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMapStyle("winds")}
+              >
+                Winds (Aloft Beta)
+              </Button>
             </div>
+            {(mapStyle === "radar" || mapStyle === "winds") && (
+              <div className="text-xs text-muted-foreground mt-2">
+                Weather layers are for situational awareness only. Always verify with an official briefing.
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -952,7 +1278,32 @@ export default function FlightPlanner() {
               />
               {!isPro && <p className="text-xs text-muted-foreground">RSF Pro unlocks wind-adjusted ETE.</p>}
             </div>
+            <div className="space-y-2">
+              <Label>Planned Altitude (ft)</Label>
+              <Input
+                value={plannedAltitude}
+                onChange={(e) => setPlannedAltitude(e.target.value)}
+                placeholder="8500"
+                type="number"
+              />
+              <p className="text-xs text-muted-foreground">
+                Used for enroute awareness and winds aloft checks.
+              </p>
+            </div>
           </div>
+
+          {altitudeRisks.length > 0 && (
+            <Alert>
+              <AlertDescription>
+                <div className="font-semibold mb-1">Altitude notes</div>
+                <ul className="list-disc pl-5 space-y-1 text-sm">
+                  {altitudeRisks.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="grid gap-4 md:grid-cols-4">
             <div className="rounded-lg border p-3">
@@ -1062,7 +1413,7 @@ export default function FlightPlanner() {
       <Card>
         <CardHeader>
           <CardTitle>Weather & ATIS Awareness</CardTitle>
-          <CardDescription>Quick look at departure, destination, and waypoint weather.</CardDescription>
+          <CardDescription>Quick look at departure, enroute, and destination weather.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {weatherData.length === 0 ? (
@@ -1087,6 +1438,24 @@ export default function FlightPlanner() {
                 );
               })}
             </div>
+          )}
+          {routeVariationNotes.length > 0 ? (
+            <Alert>
+              <AlertDescription>
+                <div className="font-semibold">Potential routing adjustments</div>
+                <ul className="list-disc pl-5 text-sm mt-1 space-y-1">
+                  {routeVariationNotes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            enrouteFindings.length > 0 && (
+              <div className="text-xs text-muted-foreground">
+                No enroute weather flags in selected waypoints/stops.
+              </div>
+            )
           )}
           <Alert>
             <AlertDescription>
@@ -1126,7 +1495,12 @@ export default function FlightPlanner() {
           <div className="grid gap-2 md:grid-cols-2">
             <div>
               <div className="text-muted-foreground">Route</div>
-              <div>{form.departure || "-"} {waypointsInput} {form.destination || ""}</div>
+              <div>
+                {[form.departure || "-", plannedStopsInput, waypointsInput, form.destination || ""]
+                  .map((value) => value.trim())
+                  .filter(Boolean)
+                  .join(" ")}
+              </div>
             </div>
             <div>
               <div className="text-muted-foreground">Alternate</div>
@@ -1171,6 +1545,9 @@ export default function FlightPlanner() {
                 value={form.plannedDepartureAt}
                 onChange={(e) => setForm({ ...form, plannedDepartureAt: e.target.value })}
               />
+              <p className="text-xs text-muted-foreground">
+                Local time at departure ({departureTimeZone}).
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Aircraft Type (optional)</Label>
@@ -1181,12 +1558,29 @@ export default function FlightPlanner() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Planned Arrival</Label>
+              <div className="flex items-center justify-between">
+                <Label>Planned Arrival</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={!canAutoArrival}
+                  onClick={() => setArrivalAuto(true)}
+                >
+                  Auto-calc
+                </Button>
+              </div>
               <Input
                 type="datetime-local"
                 value={form.plannedArrivalAt}
-                onChange={(e) => setForm({ ...form, plannedArrivalAt: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, plannedArrivalAt: e.target.value });
+                  setArrivalAuto(false);
+                }}
               />
+              <p className="text-xs text-muted-foreground">
+                Local time at destination ({destinationTimeZone}).
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Fuel On Board (gal)</Label>

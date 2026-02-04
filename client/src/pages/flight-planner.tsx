@@ -334,7 +334,7 @@ export default function FlightPlanner() {
       setDepartureResolved(value);
       return;
     }
-    if (value.length === 4 && ICAO_REGEX.test(value) && /^[KCP]/.test(value)) {
+    if (value.length === 4 && ICAO_REGEX.test(value)) {
       setDepartureResolved(value);
       return;
     }
@@ -375,7 +375,7 @@ export default function FlightPlanner() {
       setDestinationResolved(value);
       return;
     }
-    if (value.length === 4 && ICAO_REGEX.test(value) && /^[KCP]/.test(value)) {
+    if (value.length === 4 && ICAO_REGEX.test(value)) {
       setDestinationResolved(value);
       return;
     }
@@ -1167,7 +1167,7 @@ export default function FlightPlanner() {
           </div>
             {routeIcaos.length === 0 ? (
               <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
-            ) : routePoints.length < 2 ? (
+            ) : routePoints.length === 0 ? (
               <div className="text-sm text-muted-foreground">
                 Waiting for airport coordinates... Waypoints are optional. Check ICAO codes if this takes more than a few seconds.
               </div>
@@ -1179,11 +1179,16 @@ export default function FlightPlanner() {
                 />
               </Suspense>
             )}
-          {airportErrors.length > 0 && (
-            <div className="mt-3 text-xs text-destructive">
-              Airport lookup failed for: {airportErrors.map((item) => item.icao).join(", ")}. Check ICAO codes.
-            </div>
-          )}
+            {airportErrors.length > 0 && (
+              <div className="mt-3 text-xs text-destructive">
+                Airport lookup failed for: {airportErrors.map((item) => item.icao).join(", ")}. Check ICAO codes.
+              </div>
+            )}
+            {routeIcaos.length > 0 && routePoints.length === 1 && (
+              <div className="mt-3 text-xs text-muted-foreground">
+                Route map updates as additional points resolve. Waypoints and planned stops are optional.
+              </div>
+            )}
             {airportErrors.length === 0 && missingIcaos.length > 0 && (
               <div className="mt-3 text-xs text-muted-foreground">
                 Waiting on coordinates for: {missingIcaos.join(", ")}.

@@ -2,12 +2,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun, Calculator, Radio, Gauge, Scale, CalendarDays, Navigation2 } from "lucide-react";
+import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun, Calculator, Radio, Gauge, Scale, CalendarDays, Navigation2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { useEffect, useRef, useState } from "react";
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
@@ -22,8 +23,7 @@ export default function Landing() {
     },
   });
   const events = eventsData?.events ?? [];
-  const feedEvents = events.slice(0, 6);
-  const marqueeEvents = feedEvents.length ? [...feedEvents, ...feedEvents] : [];
+  const feedEvents = events.slice(0, 10);
   const formatEventRange = (start: string, end: string) => {
     const formatter = new Intl.DateTimeFormat("en-US", {
       month: "short",
@@ -37,6 +37,32 @@ export default function Landing() {
     }
     return `${formatter.format(startDate)} - ${formatter.format(endDate)}`;
   };
+  const eventsScrollRef = useRef<HTMLDivElement | null>(null);
+  const [eventsHovering, setEventsHovering] = useState(false);
+
+  const scrollEvents = (direction: "left" | "right") => {
+    const container = eventsScrollRef.current;
+    if (!container) return;
+    const delta = container.clientWidth * 0.75;
+    container.scrollBy({ left: direction === "left" ? -delta : delta, behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    const container = eventsScrollRef.current;
+    if (!container || feedEvents.length <= 1) return;
+    const interval = window.setInterval(() => {
+      if (!container || eventsHovering) return;
+      const maxScroll = container.scrollWidth - container.clientWidth;
+      if (maxScroll <= 0) return;
+      const next = container.scrollLeft + container.clientWidth * 0.75;
+      if (next >= maxScroll - 8) {
+        container.scrollTo({ left: 0, behavior: "smooth" });
+      } else {
+        container.scrollTo({ left: next, behavior: "smooth" });
+      }
+    }, Math.max(4000, feedEvents.length * 300));
+    return () => window.clearInterval(interval);
+  }, [feedEvents.length, eventsHovering]);
   
   return (
     <div className="min-h-screen">
@@ -126,15 +152,35 @@ export default function Landing() {
             </Button>
           </div>
 
-          {marqueeEvents.length ? (
-            <div className="mt-6 overflow-hidden rounded-2xl border bg-background/70">
+          {feedEvents.length ? (
+            <div className="relative mt-6 rounded-2xl border bg-background/70">
+              <div className="absolute right-3 top-3 z-10 hidden items-center gap-2 sm:flex">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Scroll events left"
+                  onClick={() => scrollEvents("left")}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Scroll events right"
+                  onClick={() => scrollEvents("right")}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
               <div
-                className="marquee-track flex w-max gap-4 px-4 py-4"
-                style={{ animationDuration: `${Math.max(18, feedEvents.length * 6)}s` }}
+                ref={eventsScrollRef}
+                onMouseEnter={() => setEventsHovering(true)}
+                onMouseLeave={() => setEventsHovering(false)}
+                className="flex gap-4 overflow-x-auto px-4 py-4 scroll-smooth"
               >
-                {marqueeEvents.map((event, index) => (
+                {feedEvents.map((event) => (
                   <Link
-                    key={`${event.id}-${index}`}
+                    key={event.id}
                     href="/events"
                     onClick={() => trackEvent("cta_click", { label: "events_feed", target: "/events" })}
                   >
@@ -148,17 +194,17 @@ export default function Landing() {
                         />
                       )}
                       <div className="p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <Badge variant="outline">{event.category}</Badge>
-                        {event.isSample && (
-                          <Badge variant="secondary" className="text-[10px]">
-                            SAMPLE
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="mt-3 font-semibold">{event.title}</div>
-                      <div className="text-xs text-muted-foreground">{formatEventRange(event.startDate, event.endDate)}</div>
-                      <div className="text-xs text-muted-foreground mt-1">{event.location}</div>
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge variant="outline">{event.category}</Badge>
+                          {event.isSample && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              SAMPLE
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="mt-3 font-semibold">{event.title}</div>
+                        <div className="text-xs text-muted-foreground">{formatEventRange(event.startDate, event.endDate)}</div>
+                        <div className="text-xs text-muted-foreground mt-1">{event.location}</div>
                       </div>
                     </div>
                   </Link>

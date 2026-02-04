@@ -2,7 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun, Calculator, Radio, Gauge, Scale } from "lucide-react";
+import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun, Calculator, Radio, Gauge, Scale, CalendarDays, Navigation2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -10,6 +11,32 @@ import { trackEvent } from "@/lib/analytics";
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
+  const { data: eventsData } = useQuery({
+    queryKey: ["aviation-events", "feed"],
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/api/events"));
+      if (!response.ok) {
+        return { events: [] };
+      }
+      return response.json();
+    },
+  });
+  const events = eventsData?.events ?? [];
+  const feedEvents = events.slice(0, 6);
+  const marqueeEvents = feedEvents.length ? [...feedEvents, ...feedEvents] : [];
+  const formatEventRange = (start: string, end: string) => {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return "";
+    if (startDate.toDateString() === endDate.toDateString()) {
+      return formatter.format(startDate);
+    }
+    return `${formatter.format(startDate)} - ${formatter.format(endDate)}`;
+  };
   
   return (
     <div className="min-h-screen">
@@ -77,6 +104,64 @@ export default function Landing() {
               </Button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Aviation Events Feed */}
+      <div className="py-10">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CalendarDays className="h-4 w-4" />
+                Community Calendar
+              </div>
+              <h2 className="text-2xl font-semibold">Upcoming Aviation Events</h2>
+              <p className="text-sm text-muted-foreground">
+                Share fly-ins, safety seminars, and airshows with the RSF community.
+              </p>
+            </div>
+            <Button variant="outline" asChild>
+              <Link href="/events">View all events</Link>
+            </Button>
+          </div>
+
+          {marqueeEvents.length ? (
+            <div className="mt-6 overflow-hidden rounded-2xl border bg-background/70">
+              <div
+                className="marquee-track flex w-max gap-4 px-4 py-4"
+                style={{ animationDuration: `${Math.max(18, feedEvents.length * 6)}s` }}
+              >
+                {marqueeEvents.map((event, index) => (
+                  <Link
+                    key={`${event.id}-${index}`}
+                    href="/events"
+                    onClick={() => trackEvent("cta_click", { label: "events_feed", target: "/events" })}
+                  >
+                    <div className="min-w-[240px] rounded-xl border bg-background p-4 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge variant="outline">{event.category}</Badge>
+                        {event.isSample && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            SAMPLE
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="mt-3 font-semibold">{event.title}</div>
+                      <div className="text-xs text-muted-foreground">{formatEventRange(event.startDate, event.endDate)}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{event.location}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <Card className="mt-6">
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                No events posted yet. Add a fly-in or safety seminar to kick things off.
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
@@ -353,6 +438,44 @@ export default function Landing() {
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     Demo available - full access with RSF Pro
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* GPS Sims Card */}
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex flex-col items-center text-center space-y-4">
+                  <div className="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-900/30 flex items-center justify-center">
+                    <Navigation2 className="h-8 w-8 text-slate-600 dark:text-slate-300" />
+                  </div>
+                  <h3 className="text-xl font-semibold">RSF GPS Simulators</h3>
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300">
+                    New Trainer
+                  </Badge>
+                  <p className="text-muted-foreground">
+                    Interactive glass and GPS panel walkthroughs for IFR procedures, holds, and flight plan workflows.
+                  </p>
+                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300 mt-0.5 flex-shrink-0" />
+                      <span>Hotspot drills for knobs, softkeys, and menus</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300 mt-0.5 flex-shrink-0" />
+                      <span>Scenario-based IFR workflows and checklists</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300 mt-0.5 flex-shrink-0" />
+                      <span>Designed for US training data</span>
+                    </li>
+                  </ul>
+                  <Button className="w-full" variant="outline" asChild>
+                    <Link href="/gps-sims">Open GPS Sims</Link>
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Free to explore - save progress with RSF Pro
                   </p>
                 </div>
               </CardContent>

@@ -429,6 +429,22 @@ export const promoAlerts = pgTable("promo_alerts", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Aviation Events (community calendar)
+export const aviationEvents = pgTable("aviation_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  location: text("location").notNull(),
+  category: text("category").notNull(),
+  eventUrl: text("event_url"),
+  createdBy: varchar("created_by").references(() => users.id),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  isSample: boolean("is_sample").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Rentals
 export const rentals = pgTable("rentals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1577,6 +1593,21 @@ export const insertPromoAlertSchema = createInsertSchema(promoAlerts).omit({
   variant: z.enum(["info", "success", "warning", "destructive"]).default("info"),
 });
 
+export const insertAviationEventSchema = createInsertSchema(aviationEvents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  isSample: true,
+}).extend({
+  title: z.string().min(3, "Title is required"),
+  description: z.string().min(20, "Description is required"),
+  location: z.string().min(3, "Location is required"),
+  category: z.string().min(2, "Category is required"),
+  eventUrl: z.string().url("Event URL must be valid").optional().or(z.literal("")),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+});
+
 export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalRequests).omit({
   id: true,
   createdAt: true,
@@ -1677,6 +1708,8 @@ export type InsertJobApplication = z.infer<typeof insertJobApplicationSchema>;
 
 export type PromoAlert = typeof promoAlerts.$inferSelect;
 export type InsertPromoAlert = z.infer<typeof insertPromoAlertSchema>;
+export type AviationEvent = typeof aviationEvents.$inferSelect;
+export type InsertAviationEvent = z.infer<typeof insertAviationEventSchema>;
 
 export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
 export type InsertWithdrawalRequest = z.infer<typeof insertWithdrawalRequestSchema>;

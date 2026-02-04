@@ -337,7 +337,7 @@ export default function LogbookProScreen({ navigation }: any) {
       </View>
 
       <TouchableOpacity style={styles.primaryButton} onPress={handleSubscribe} disabled={loading}>
-        <Text style={styles.primaryButtonText}>{loading ? 'Redirecting...' : 'Upgrade with PayPal'}</Text>
+        <Text style={styles.primaryButtonText}>{loading ? 'Redirecting...' : 'Become a Member with PayPal'}</Text>
       </TouchableOpacity>
 
       {user?.membershipStatus && (

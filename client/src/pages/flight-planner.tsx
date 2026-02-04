@@ -533,6 +533,28 @@ export default function FlightPlanner() {
     return normalizeTimeZone(tz || browserTimeZone);
   }, [airportMap, destinationResolved, browserTimeZone]);
 
+  const plannedDepartureUtc = useMemo(() => {
+    if (!form.plannedDepartureAt) return null;
+    return zonedDateTimeToUtc(form.plannedDepartureAt, departureTimeZone);
+  }, [form.plannedDepartureAt, departureTimeZone]);
+
+  const hoursToDeparture = useMemo(() => {
+    if (!plannedDepartureUtc) return null;
+    return (plannedDepartureUtc.getTime() - Date.now()) / 3600000;
+  }, [plannedDepartureUtc]);
+
+  const forecastNotice = useMemo(() => {
+    if (!hoursToDeparture || hoursToDeparture <= 24) return null;
+    const days = hoursToDeparture / 24;
+    if (days > 10) {
+      return `Planned departure is ${days.toFixed(1)} days out. Long-range forecasts are limited; recheck weather 24 hours and day-of.`;
+    }
+    if (days > 3) {
+      return `Planned departure is about ${Math.round(days)} days out. TAFs cover ~24–30 hours; recheck the night before and day-of.`;
+    }
+    return `Planned departure is about ${Math.round(hoursToDeparture)} hours out. Recheck weather within 24 hours of departure.`;
+  }, [hoursToDeparture]);
+
   const airportErrors = useMemo(() => {
     return airportQueries
       .map((query, index) => ({ icao: routeIcaos[index], error: query.error }))
@@ -1198,9 +1220,15 @@ export default function FlightPlanner() {
                 Winds (Aloft Beta)
               </Button>
             </div>
+            {mapStyle === "sectional" && (
+              <div className="text-xs text-muted-foreground mt-2">
+                Sectional tiles appear at zoom 6+; zoom in for FAA chart detail.
+              </div>
+            )}
             {(mapStyle === "radar" || mapStyle === "winds") && (
               <div className="text-xs text-muted-foreground mt-2">
-                Weather layers are for situational awareness only. Always verify with an official briefing.
+                Weather layers are for situational awareness only. Radar shows current precip; blank means no returns.
+                Winds is a surface analysis layer (beta). Always verify with an official briefing.
               </div>
             )}
           </CardContent>
@@ -1416,6 +1444,11 @@ export default function FlightPlanner() {
           <CardDescription>Quick look at departure, enroute, and destination weather.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {forecastNotice && (
+            <Alert>
+              <AlertDescription>{forecastNotice}</AlertDescription>
+            </Alert>
+          )}
           {weatherData.length === 0 ? (
             <div className="text-sm text-muted-foreground">Enter airports to load weather summaries.</div>
           ) : (
@@ -1603,7 +1636,7 @@ export default function FlightPlanner() {
             <Button
               onClick={() => {
                 if (!isPro) {
-                  toast({ title: "Upgrade to save", description: "RSF Pro is required to save flight plans." });
+                  toast({ title: "Upgrade to RSF Pro to save", description: "RSF Pro membership is required to save flight plans." });
                   trackEvent("planner_upgrade_prompt", { action: "save_plan" });
                   window.location.href = "/logbook/pro";
                   return;
@@ -1624,7 +1657,7 @@ export default function FlightPlanner() {
               variant="outline"
               onClick={() => {
                 if (!isPro) {
-                  toast({ title: "Upgrade to sync", description: "RSF Pro is required to sync to logbook." });
+                  toast({ title: "Upgrade to RSF Pro to sync", description: "RSF Pro membership is required to sync to logbook." });
                   trackEvent("planner_upgrade_prompt", { action: "send_to_logbook" });
                   window.location.href = "/logbook/pro";
                   return;

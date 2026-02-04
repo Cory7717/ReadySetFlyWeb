@@ -561,7 +561,7 @@ export default function RadioCommsTrainer() {
           {!isPro && (
             <Alert>
               <AlertDescription>
-                Upgrade to RSF Pro to unlock full scenario examples, scoring, and practice history. Save, alerts, analytics require RSF Pro.
+                Upgrade to RSF Pro or Pro+ to unlock full scenario examples, scoring, and practice history. Save, alerts, analytics require RSF Pro membership.
               </AlertDescription>
             </Alert>
           )}

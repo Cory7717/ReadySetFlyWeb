@@ -429,7 +429,7 @@ export default function GpsSimsUnitScreen({ route }: any) {
 
         <View style={styles.saveRow}>
           <Text style={styles.saveText}>
-            {isPro ? 'Saved progress is enabled.' : 'Upgrade to RSF Pro to save progress.'}
+            {isPro ? 'Saved progress is enabled.' : 'Upgrade to RSF Pro or Pro+ to save progress.'}
           </Text>
           <TouchableOpacity
             style={[styles.saveButton, !canPersist && styles.saveButtonDisabled]}

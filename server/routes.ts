@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, desc, eq, gte, isNull, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, notams as notamsTable } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, aviationEvents, notams as notamsTable } from "@shared/schema";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
@@ -433,6 +433,95 @@ function buildGpsPanelObjectKeys(imageKey: string): string[] {
 
   return Array.from(candidates);
 }
+
+const AVIATION_EVENT_CATEGORIES = [
+  "Airshow",
+  "Fly-In",
+  "Safety Seminar",
+  "Training",
+  "Meetup",
+  "Charity",
+  "Career",
+  "Museum",
+  "Other",
+] as const;
+
+const AVIATION_EVENT_BLOCKLIST = [
+  "for sale",
+  "for rent",
+  "lease",
+  "real estate",
+  "crypto",
+  "investment",
+  "token",
+  "loan",
+  "mortgage",
+  "affiliate",
+  "marketing",
+];
+
+const SAMPLE_AVIATION_EVENTS = [
+  {
+    id: "sample-hill-country-fly-in",
+    title: "Hill Country Fly-In Breakfast",
+    description:
+      "Sample event: Ramp-open breakfast with pilot briefing, local GA vendors, and short seminars on mountain flying.",
+    location: "KGTU - Georgetown, TX",
+    category: "Fly-In",
+    eventUrl: "https://readysetfly.us/events/sample-hill-country",
+    startDate: new Date("2026-03-07T14:00:00Z"),
+    endDate: new Date("2026-03-07T18:00:00Z"),
+    isSample: true,
+  },
+  {
+    id: "sample-safety-seminar",
+    title: "RSF Safety Seminar: Weather Decisions",
+    description:
+      "Sample event: Interactive safety session focused on weather decision-making and preflight go/no-go planning.",
+    location: "AUS Flight School - Austin, TX",
+    category: "Safety Seminar",
+    eventUrl: "https://readysetfly.us/events/sample-weather",
+    startDate: new Date("2026-03-19T00:30:00Z"),
+    endDate: new Date("2026-03-19T02:30:00Z"),
+    isSample: true,
+  },
+  {
+    id: "sample-career-night",
+    title: "Southwest Aviation Career Night",
+    description:
+      "Sample event: Meet regional operators, hear from CFIs, and learn about time-building opportunities.",
+    location: "KADS - Addison, TX",
+    category: "Career",
+    eventUrl: "https://readysetfly.us/events/sample-career-night",
+    startDate: new Date("2026-04-02T23:00:00Z"),
+    endDate: new Date("2026-04-03T01:00:00Z"),
+    isSample: true,
+  },
+  {
+    id: "sample-ifr-clinic",
+    title: "Desert IFR Clinic",
+    description:
+      "Sample event: IFR training clinic with hold entries, approach briefings, and simulator demos.",
+    location: "KSDL - Scottsdale, AZ",
+    category: "Training",
+    eventUrl: "https://readysetfly.us/events/sample-ifr-clinic",
+    startDate: new Date("2026-04-11T16:00:00Z"),
+    endDate: new Date("2026-04-11T21:00:00Z"),
+    isSample: true,
+  },
+] as const;
+
+const serializeAviationEvent = (event: any) => ({
+  id: event.id,
+  title: event.title,
+  description: event.description,
+  location: event.location,
+  category: event.category,
+  eventUrl: event.eventUrl ?? undefined,
+  startDate: event.startDate instanceof Date ? event.startDate.toISOString() : event.startDate,
+  endDate: event.endDate instanceof Date ? event.endDate.toISOString() : event.endDate,
+  isSample: Boolean(event.isSample),
+});
 
 
 async function walkDir(dir: string): Promise<string[]> {

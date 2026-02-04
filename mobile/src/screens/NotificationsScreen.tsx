@@ -113,7 +113,7 @@ export default function NotificationsScreen() {
       ) : (
         <View style={styles.card}>
           <Text style={styles.rowTitle}>RSF Pro Alerts</Text>
-          <Text style={styles.rowSubtitle}>Upgrade to RSF Pro to receive currency and expiration alerts.</Text>
+          <Text style={styles.rowSubtitle}>Upgrade to RSF Pro or Pro+ to receive currency and expiration alerts.</Text>
         </View>
       )}
 

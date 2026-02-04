@@ -966,7 +966,7 @@ export default function Logbook() {
               Tip: <strong>Your logbook data will always be free and exportable.</strong> Pro adds intelligence and automation.
             </p>
             <Button variant="default" asChild>
-              <Link href="/logbook/pro">{isPro ? "Manage RSF Pro" : "Upgrade to RSF Pro"}</Link>
+              <Link href="/logbook/pro">{isPro ? "Manage Membership" : "Upgrade to RSF Pro"}</Link>
             </Button>
             <p className="text-[11px] text-muted-foreground text-center">
               Cancel anytime. Free logbook access stays available.

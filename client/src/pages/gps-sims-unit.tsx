@@ -513,7 +513,7 @@ export default function GpsSimsUnit() {
                 <span>
                   {isPro
                     ? "Saved progress and training history are enabled."
-                    : "Upgrade to RSF Pro to save progress and training history."}
+                    : "Upgrade to RSF Pro or Pro+ to save progress and training history."}
                 </span>
                 <Button
                   type="button"

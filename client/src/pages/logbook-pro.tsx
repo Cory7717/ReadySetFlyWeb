@@ -21,7 +21,7 @@ export default function LogbookProPage() {
         <Card>
           <CardHeader>
             <CardTitle>RSF Pro Membership</CardTitle>
-            <CardDescription>Please sign in to upgrade.</CardDescription>
+            <CardDescription>Please sign in to manage membership.</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -90,7 +90,7 @@ export default function LogbookProPage() {
         <CardHeader>
           <CardTitle>RSF Pro Membership</CardTitle>
           <CardDescription>
-            Save, alerts, analytics, and pro training tools - all in one membership.
+            Save, alerts, analytics, and pro training tools - all in one membership. Become a member today and upgrade to RSF Pro and Pro+.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -182,7 +182,7 @@ export default function LogbookProPage() {
               </div>
 
               <Button onClick={handleSubscribe} disabled={loading}>
-                {loading ? "Redirecting..." : "Upgrade with PayPal"}
+                {loading ? "Redirecting..." : "Become a Member with PayPal"}
               </Button>
               <p className="text-xs text-muted-foreground">
                 By subscribing you agree to recurring billing at the selected interval.

@@ -65,6 +65,7 @@ const StudentWeather = lazy(() => import("@/pages/student/weather"));
 const GpsSimsHub = lazy(() => import("@/pages/gps-sims"));
 const GpsSimsUnit = lazy(() => import("@/pages/gps-sims-unit"));
 const IfrTools = lazy(() => import("@/pages/ifr-tools"));
+const EventsPage = lazy(() => import("@/pages/events"));
 
 function StudentPageLoader({ component: Component }: { component: ComponentType }) {
   return (
@@ -118,6 +119,7 @@ function Router() {
       <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
       <Route path="/weight-balance" component={WeightBalance} />
       <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
+      <Route path="/events" component={() => <StudentPageLoader component={EventsPage} />} />
       <Route path="/admin/invite" component={RequireAuth} />
       <Route path="/student" component={() => <StudentPageLoader component={StudentHub} />} />
       <Route path="/start-flying" component={() => <StudentPageLoader component={StudentHub} />} />

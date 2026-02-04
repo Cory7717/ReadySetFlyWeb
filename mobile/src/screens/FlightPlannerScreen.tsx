@@ -595,6 +595,25 @@ export default function FlightPlannerScreen() {
   const plannedAltitudeFt = parseFloat(plannedAltitude);
   const resolvedDepartureTimeZone = normalizeTimeZone(departureTimeZone || deviceTimeZone);
   const resolvedDestinationTimeZone = normalizeTimeZone(destinationTimeZone || deviceTimeZone);
+  const plannedDepartureUtc = useMemo(() => {
+    if (!plannedDepartureAt) return null;
+    return zonedDateTimeToUtc(plannedDepartureAt, resolvedDepartureTimeZone);
+  }, [plannedDepartureAt, resolvedDepartureTimeZone]);
+  const hoursToDeparture = useMemo(() => {
+    if (!plannedDepartureUtc) return null;
+    return (plannedDepartureUtc.getTime() - Date.now()) / 3600000;
+  }, [plannedDepartureUtc]);
+  const forecastNotice = useMemo(() => {
+    if (!hoursToDeparture || hoursToDeparture <= 24) return null;
+    const days = hoursToDeparture / 24;
+    if (days > 10) {
+      return `Planned departure is ${days.toFixed(1)} days out. Long-range forecasts are limited; recheck weather 24 hours and day-of.`;
+    }
+    if (days > 3) {
+      return `Planned departure is about ${Math.round(days)} days out. TAFs cover ~24–30 hours; recheck the night before and day-of.`;
+    }
+    return `Planned departure is about ${Math.round(hoursToDeparture)} hours out. Recheck weather within 24 hours of departure.`;
+  }, [hoursToDeparture]);
   const altitudeRisks = useMemo(() => {
     if (!Number.isFinite(plannedAltitudeFt) || plannedAltitudeFt <= 0) return [];
     const risks: string[] = [];
@@ -961,7 +980,7 @@ export default function FlightPlannerScreen() {
           <MapView
             style={styles.map}
             ref={mapRef}
-            mapType={mapStyle === 'sectional' || mapStyle === 'terrain' ? 'none' : 'standard'}
+            mapType="standard"
             initialRegion={{
               latitude: routePoints[0].latitude,
               longitude: routePoints[0].longitude,
@@ -973,8 +992,10 @@ export default function FlightPlannerScreen() {
               <UrlTile
                 urlTemplate="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
                 maximumZ={12}
-                minimumZ={4}
+                minimumZ={6}
                 tileSize={256}
+                opacity={0.9}
+                zIndex={600}
               />
             )}
             {mapStyle === 'terrain' && (
@@ -983,22 +1004,28 @@ export default function FlightPlannerScreen() {
                 maximumZ={15}
                 minimumZ={4}
                 tileSize={256}
+                opacity={0.85}
+                zIndex={600}
               />
             )}
             {mapStyle === 'radar' && (
               <UrlTile
                 urlTemplate="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/observations/weather_radar/MapServer/tile/{z}/{y}/{x}"
                 maximumZ={10}
-                minimumZ={4}
+                minimumZ={3}
                 tileSize={256}
+                opacity={0.7}
+                zIndex={600}
               />
             )}
             {mapStyle === 'winds' && (
               <UrlTile
                 urlTemplate="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/analysis/winds/MapServer/tile/{z}/{y}/{x}"
                 maximumZ={9}
-                minimumZ={4}
+                minimumZ={3}
                 tileSize={256}
+                opacity={0.8}
+                zIndex={600}
               />
             )}
             <Polyline
@@ -1021,16 +1048,30 @@ export default function FlightPlannerScreen() {
                 coordinate={{ latitude: point.latitude, longitude: point.longitude }}
                 title={point.icao}
                 description={point.name || undefined}
-              />
+                anchor={{ x: 0.5, y: 1 }}
+              >
+                <View style={styles.markerLabelContainer}>
+                  <Text style={styles.markerLabelText}>{point.icao}</Text>
+                  <View style={styles.markerDot} />
+                </View>
+              </Marker>
             ))}
           </MapView>
         ) : (
           <Text style={styles.helperText}>Enter airports and build a route to preview the map.</Text>
         )}
+        {mapStyle === 'sectional' && (
+          <Text style={styles.helperText}>
+            Sectional tiles appear at zoom 6+; zoom in for FAA chart detail.
+          </Text>
+        )}
         <Text style={styles.helperText}>Sectional tiles provided by FAA/Aeronautical Information Services.</Text>
         {mapStyle === 'terrain' && <Text style={styles.helperText}>Terrain tiles provided by USGS National Map.</Text>}
         {(mapStyle === 'radar' || mapStyle === 'winds') && (
-          <Text style={styles.helperText}>Weather overlays are for situational awareness only. Always brief officially.</Text>
+          <Text style={styles.helperText}>
+            Weather overlays are for situational awareness only. Radar shows current precip; blank means no returns.
+            Winds is a surface analysis layer (beta). Always brief officially.
+          </Text>
         )}
         <View style={styles.instrumentPanel}>
           <Text style={styles.instrumentTitle}>Live Flight Data</Text>
@@ -1255,6 +1296,7 @@ export default function FlightPlannerScreen() {
       {(departureWeather || destinationWeather || weatherError) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Weather Snapshot</Text>
+          {forecastNotice && <Text style={styles.helperText}>{forecastNotice}</Text>}
           {weatherError && <Text style={styles.helperText}>{weatherError}</Text>}
           <View style={styles.weatherCard}>
             <Text style={styles.weatherTitle}>Departure {departure.toUpperCase()}</Text>
@@ -1420,6 +1462,28 @@ const styles = StyleSheet.create({
   trafficRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   portInput: { flex: 1 },
   errorText: { fontSize: 12, color: colors.danger },
+  markerLabelContainer: { alignItems: 'center' },
+  markerLabelText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.text,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  markerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
   instrumentPanel: { marginTop: spacing.sm, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
   instrumentTitle: { fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
   instrumentRow: { flexDirection: 'row', gap: spacing.sm },

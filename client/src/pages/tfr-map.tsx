@@ -18,13 +18,24 @@ type TfrFeatureCollection = FeatureCollection & {
   updatedAt?: string;
 };
 
+const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+
 export default function TfrMap() {
+  const initialIcao =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("icao") || ""
+      : "";
   const [query, setQuery] = useState("");
+  const [icaoFilter, setIcaoFilter] = useState(initialIcao.toUpperCase());
+
+  const normalizedIcao = icaoFilter.trim().toUpperCase();
+  const activeIcao = ICAO_REGEX.test(normalizedIcao) ? normalizedIcao : "";
 
   const { data, isLoading, error, refetch } = useQuery<TfrFeatureCollection>({
-    queryKey: ["/api/tfrs"],
+    queryKey: ["/api/tfrs", activeIcao],
     queryFn: async () => {
-      const res = await fetch(apiUrl("/api/tfrs"), { credentials: "include" });
+      const url = activeIcao ? `/api/tfrs?icao=${activeIcao}` : "/api/tfrs";
+      const res = await fetch(apiUrl(url), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch TFRs");
       return res.json();
     },
@@ -78,9 +89,18 @@ export default function TfrMap() {
         <Card>
           <CardHeader>
             <CardTitle>Search TFRs</CardTitle>
-            <CardDescription>Filter by NOTAM number, location, or reason.</CardDescription>
+            <CardDescription>Filter by ICAO, NOTAM number, location, or reason.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[200px]">
+              <Label className="sr-only" htmlFor="tfr-icao">ICAO Filter</Label>
+              <Input
+                id="tfr-icao"
+                value={icaoFilter}
+                onChange={(e) => setIcaoFilter(e.target.value.toUpperCase())}
+                placeholder="ICAO (KAUS)"
+              />
+            </div>
             <div className="flex-1 min-w-[240px]">
               <Label className="sr-only" htmlFor="tfr-search">Search TFRs</Label>
               <div className="relative">

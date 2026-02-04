@@ -335,7 +335,7 @@ export function startSwimNotamWorker() {
     handler: (...args: any[]) => void,
     label: string
   ) => {
-    if (!eventName) {
+    if (eventName === undefined || eventName === null) {
       console.warn(`SWIM Solace event missing: ${label}`);
       return;
     }
@@ -401,9 +401,13 @@ export function startSwimNotamWorker() {
     console.warn("SWIM session disconnected.");
   }, "DISCONNECTED");
 
-  safeOn(session, solclientjs.SessionEventCode.RECONNECTING, () => {
+  safeOn(session, solclientjs.SessionEventCode.RECONNECTING_NOTICE, () => {
     console.warn("SWIM session reconnecting...");
-  }, "RECONNECTING");
+  }, "RECONNECTING_NOTICE");
+
+  safeOn(session, solclientjs.SessionEventCode.RECONNECTED_NOTICE, () => {
+    console.warn("SWIM session reconnected.");
+  }, "RECONNECTED_NOTICE");
 
   session.connect();
   return true;

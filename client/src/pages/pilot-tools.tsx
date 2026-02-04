@@ -384,7 +384,7 @@ export default function PilotTools() {
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
             <Button asChild>
-              <Link href="/tfr-map">Open TFR Map</Link>
+              <Link href={`/tfr-map?icao=${encodeURIComponent(searchIcao)}`}>Open TFR Map</Link>
             </Button>
             <Badge variant="outline">Live airspace</Badge>
           </CardContent>
@@ -815,7 +815,7 @@ export default function PilotTools() {
                     </Button>
 
                     <Button variant="outline" className="justify-start" asChild>
-                      <Link href="/tfr-map">
+                      <Link href={`/tfr-map?icao=${encodeURIComponent(searchIcao)}`}>
                         <AlertTriangle className="h-4 w-4 mr-2" />
                         RSF TFR Map
                       </Link>

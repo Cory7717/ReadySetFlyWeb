@@ -1828,6 +1828,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Serve six-pack trainer panel image from S3 (private buckets supported)
+  app.get('/api/six-pack/panel', async (req, res) => {
+    if (!process.env.AWS_S3_BUCKET) {
+      return res.status(404).json({ error: "Panel image not available" });
+    }
+
+    const panelKey = (process.env.SIX_PACK_PANEL_KEY || "6pack-instrument-panel.png").trim();
+    if (!panelKey || panelKey.includes("..") || panelKey.startsWith("/")) {
+      return res.status(400).json({ error: "Invalid panel key" });
+    }
+
+    try {
+      const { S3StorageService } = await import("./s3Storage.js");
+      const s3Service = new S3StorageService();
+      const { stream, contentType, contentLength } = await s3Service.getObjectStream({ key: panelKey });
+      res.setHeader("Content-Type", contentType || "image/png");
+      if (contentLength) res.setHeader("Content-Length", String(contentLength));
+      res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+      await pipeline(stream, res);
+    } catch (error: any) {
+      const statusCode = error?.$metadata?.httpStatusCode;
+      if (error?.name === "NoSuchKey" || statusCode === 404) {
+        return res.status(404).json({ error: "Panel image not found" });
+      }
+      console.error("Error streaming six-pack panel image:", error);
+      return res.status(500).json({ error: "Failed to load panel image" });
+    }
+  });
+
   // Object Storage Routes (for marketplace listing images)
   // Get upload URL for listing images
   app.post('/api/objects/upload', isAuthenticated, async (req: any, res) => {

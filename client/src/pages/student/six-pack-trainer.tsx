@@ -11,6 +11,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
 import { useStudentProfile } from "@/hooks/useStudentProfile";
 import { trackEvent } from "@/lib/analytics";
+import { apiUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import "./six-pack-trainer.css";
 
@@ -50,14 +51,12 @@ type SixPackProgress = {
   guestClicks: number;
 };
 
-const PANEL_FALLBACK_URL =
-  "https://readysetfly-images.s3.us-east-2.amazonaws.com/6pack-instrument-panel.png";
+const PANEL_FALLBACK_URL = apiUrl("/api/six-pack/panel");
 const rawPanelUrl = import.meta.env.VITE_SIX_PACK_PANEL_URL;
-const panelBaseUrl = PANEL_FALLBACK_URL.slice(0, PANEL_FALLBACK_URL.lastIndexOf("/"));
 const DEFAULT_PANEL_URL = rawPanelUrl
   ? rawPanelUrl.startsWith("http")
     ? rawPanelUrl
-    : `${panelBaseUrl}/${rawPanelUrl.replace(/^\/+/, "")}`
+    : apiUrl(rawPanelUrl.startsWith("/") ? rawPanelUrl : `/${rawPanelUrl.replace(/^\/+/, "")}`)
   : PANEL_FALLBACK_URL;
 
 const INSTRUMENTS: Instrument[] = [

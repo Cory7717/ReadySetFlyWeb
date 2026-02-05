@@ -8,6 +8,7 @@ import { ThemeProvider } from "./components/theme-provider";
 import { Header } from "./components/header";
 import { Footer } from "./components/footer";
 import { useAuth } from "@/hooks/useAuth";
+import { trackEvent } from "@/lib/analytics";
 import Home from "@/pages/home";
 import Landing from "@/pages/landing";
 import Marketplace from "@/pages/marketplace";
@@ -78,15 +79,9 @@ function StudentPageLoader({ component: Component }: { component: ComponentType 
 
 function AnalyticsTracker() {
   const [path] = useLocation();
-  // Fire GA page_view on route change
-  try {
-    if (typeof window !== "undefined" && (window as any).gtag) {
-      (window as any).gtag('event', 'page_view', {
-        page_path: path,
-        page_title: document.title,
-      });
-    }
-  } catch {}
+  useEffect(() => {
+    trackEvent("page_view", { page: path });
+  }, [path]);
   return null;
 }
 

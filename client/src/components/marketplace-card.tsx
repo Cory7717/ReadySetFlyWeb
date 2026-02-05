@@ -1,6 +1,7 @@
 import { MapPin, Image as ImageIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { resolveImageUrl } from "@/lib/images";
 
 interface MarketplaceCardProps {
   id: string;
@@ -47,6 +48,7 @@ export function MarketplaceCard({
   isExample,
   viewCount = 0,
 }: MarketplaceCardProps) {
+  const resolvedImage = resolveImageUrl(image);
   return (
     <Card className="overflow-hidden hover-elevate transition-all duration-200 hover:scale-[1.02]" data-testid={`card-marketplace-${id}`}>
       {isExample && (
@@ -54,10 +56,10 @@ export function MarketplaceCard({
           EXAMPLE LISTING - For Reference Only
         </div>
       )}
-      {image ? (
+      {resolvedImage ? (
         <div className="relative aspect-[3/2] overflow-hidden">
           <img
-            src={image}
+            src={resolvedImage}
             alt={title}
             className="w-full h-full object-cover"
           />

@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
+import { resolveImageUrl } from "@/lib/images";
 import { Link } from "wouter";
 import { JobApplicationModal } from "./job-application-modal";
 import { FavoriteButton } from "./favorite-button";
@@ -272,7 +273,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                       <CarouselItem key={idx}>
                         <div className="aspect-video rounded-xl overflow-hidden bg-muted">
                           <img
-                            src={img}
+                            src={resolveImageUrl(img)}
                             alt={`${listing.title} - Image ${idx + 1}`}
                             className="w-full h-full object-cover"
                           />

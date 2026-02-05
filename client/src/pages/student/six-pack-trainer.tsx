@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
@@ -356,6 +357,7 @@ export default function StudentSixPackTrainer() {
   const [showGuestGate, setShowGuestGate] = useState(false);
   const [panelLoaded, setPanelLoaded] = useState(false);
   const [panelError, setPanelError] = useState(false);
+  const [panelExpanded, setPanelExpanded] = useState(false);
 
   const activeInstrument = instrumentMap.get(activeInstrumentId || "ai") || INSTRUMENTS[0];
   const isGuest = !user;
@@ -555,6 +557,101 @@ export default function StudentSixPackTrainer() {
   const highlightTargetId =
     mode === "guided" && guidedStepIndex < GUIDE_SEQUENCE.length ? guideStepId : activeInstrumentId;
 
+  const renderPanel = (options?: { showExpand?: boolean; className?: string }) => {
+    const showExpand = options?.showExpand ?? false;
+    return (
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-xl border bg-slate-900 aspect-[16/9] min-h-[240px] sm:min-h-[320px]",
+          options?.className
+        )}
+      >
+        <img
+          src={DEFAULT_PANEL_URL}
+          alt="RSF six-pack trainer panel"
+          className="absolute inset-0 h-full w-full object-contain"
+          onLoad={() => {
+            setPanelLoaded(true);
+            setPanelError(false);
+          }}
+          onError={() => {
+            setPanelLoaded(false);
+            setPanelError(true);
+          }}
+        />
+        {showExpand && (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="absolute right-3 top-3 z-20 shadow"
+            onClick={() => setPanelExpanded(true)}
+          >
+            Expand panel
+          </Button>
+        )}
+        {panelLoaded &&
+          !panelError &&
+          HOTSPOTS.map((spot) => {
+            const isSelected = spot.id === activeInstrumentId;
+            const isHighlighted = highlightMode && highlightTargetId === spot.id;
+            const isDimmed = highlightMode && highlightTargetId && !isHighlighted;
+            const instrumentName = instrumentMap.get(spot.id)?.name || "Instrument";
+            return (
+              <button
+                key={spot.id}
+                type="button"
+                aria-label={`Select ${instrumentName}`}
+                data-hotspot={spot.id}
+                className={cn(
+                  "six-pack-hotspot absolute rounded-full border-2 border-transparent transition-all",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isSelected && "border-sky-400 bg-sky-400/20",
+                  isHighlighted && "border-amber-400 bg-amber-400/10",
+                  isDimmed && "bg-black/35"
+                )}
+                disabled={guestLocked}
+                onClick={() => handleInstrumentClick(spot.id)}
+              />
+            );
+          })}
+        {panelError && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/70 p-6 text-center text-white">
+            <div className="space-y-3 max-w-sm">
+              <div className="text-lg font-semibold">Panel image failed to load</div>
+              <p className="text-sm text-white/80">
+                Verify the S3 object is public and the URL is correct.
+              </p>
+              <Button asChild variant="secondary">
+                <a href={DEFAULT_PANEL_URL} target="_blank" rel="noreferrer">
+                  Open image URL
+                </a>
+              </Button>
+            </div>
+          </div>
+        )}
+        {showGuestGate && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6 text-center text-white">
+            <div className="space-y-3 max-w-xs">
+              <div className="text-lg font-semibold">Create a free account to continue</div>
+              <p className="text-sm text-white/80">
+                Guests can explore two instruments. Create an account to unlock the full panel.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+                <Button asChild variant="secondary">
+                  <Link href="/register">Create free account</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/login">Sign in</Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <StudentLayout
       title="6-Pack Panel Trainer"
@@ -596,79 +693,7 @@ export default function StudentSixPackTrainer() {
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
           <div className="space-y-4 min-w-0">
-            <div className="relative overflow-hidden rounded-xl border bg-slate-900 aspect-[16/9] min-h-[240px] sm:min-h-[320px]">
-              <img
-                src={DEFAULT_PANEL_URL}
-                alt="RSF six-pack trainer panel"
-                className="absolute inset-0 h-full w-full object-contain"
-                onLoad={() => {
-                  setPanelLoaded(true);
-                  setPanelError(false);
-                }}
-                onError={() => {
-                  setPanelLoaded(false);
-                  setPanelError(true);
-                }}
-              />
-              {panelLoaded &&
-                !panelError &&
-                HOTSPOTS.map((spot) => {
-                  const isSelected = spot.id === activeInstrumentId;
-                  const isHighlighted = highlightMode && highlightTargetId === spot.id;
-                  const isDimmed = highlightMode && highlightTargetId && !isHighlighted;
-                  const instrumentName = instrumentMap.get(spot.id)?.name || "Instrument";
-                  return (
-                    <button
-                      key={spot.id}
-                      type="button"
-                      aria-label={`Select ${instrumentName}`}
-                      data-hotspot={spot.id}
-                      className={cn(
-                        "six-pack-hotspot absolute rounded-full border-2 border-transparent transition-all",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                        isSelected && "border-sky-400 bg-sky-400/20",
-                        isHighlighted && "border-amber-400 bg-amber-400/10",
-                        isDimmed && "bg-black/35"
-                      )}
-                      disabled={guestLocked}
-                      onClick={() => handleInstrumentClick(spot.id)}
-                    />
-                  );
-                })}
-              {panelError && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/70 p-6 text-center text-white">
-                  <div className="space-y-3 max-w-sm">
-                    <div className="text-lg font-semibold">Panel image failed to load</div>
-                    <p className="text-sm text-white/80">
-                      Verify the S3 object is public and the URL is correct.
-                    </p>
-                    <Button asChild variant="secondary">
-                      <a href={DEFAULT_PANEL_URL} target="_blank" rel="noreferrer">
-                        Open image URL
-                      </a>
-                    </Button>
-                  </div>
-                </div>
-              )}
-              {showGuestGate && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/70 p-6 text-center text-white">
-                  <div className="space-y-3 max-w-xs">
-                    <div className="text-lg font-semibold">Create a free account to continue</div>
-                    <p className="text-sm text-white/80">
-                      Guests can explore two instruments. Create an account to unlock the full panel.
-                    </p>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-                      <Button asChild variant="secondary">
-                        <Link href="/register">Create free account</Link>
-                      </Button>
-                      <Button asChild variant="outline">
-                        <Link href="/login">Sign in</Link>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            {renderPanel({ showExpand: true })}
             <p className="text-sm text-muted-foreground">
               Tap the instruments to learn what they do. This is an instructional trainer, not an FAA briefing.
             </p>
@@ -782,6 +807,17 @@ export default function StudentSixPackTrainer() {
           </SheetContent>
         </Sheet>
       )}
+
+      <Dialog open={panelExpanded} onOpenChange={setPanelExpanded}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>6-Pack Panel Trainer</DialogTitle>
+          </DialogHeader>
+          <div className="mt-3">
+            {renderPanel({ className: "min-h-[70vh] sm:min-h-[75vh]" })}
+          </div>
+        </DialogContent>
+      </Dialog>
     </StudentLayout>
   );
 }

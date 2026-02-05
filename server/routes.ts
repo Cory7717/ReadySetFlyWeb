@@ -8869,7 +8869,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-    const requireMembership = async (req: any, res: any, next: any) => {
+    async function requireMembership(req: any, res: any, next: any) {
       try {
         const userId = req.user?.claims?.sub;
         if (!userId) {
@@ -8889,29 +8889,29 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         console.error("RSF membership guard error:", error);
         res.status(500).json({ error: "Failed to validate membership" });
       }
-    };
+    }
 
-    const requireLogbookPro = async (req: any, res: any, next: any) => {
+    async function requireLogbookPro(req: any, res: any, next: any) {
       try {
         const userId = req.user?.claims?.sub;
         if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        const user = await storage.getUser(userId);
+        if (!user) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        const entitlements = getEntitlementsForUser(user);
+        if (!entitlements.canUseLogbook) {
+          return res.status(403).json({ error: "RSF Pro membership required" });
+        }
+        req.logbookProUser = user;
+        next();
+      } catch (error) {
+        console.error("RSF Pro guard error:", error);
+        res.status(500).json({ error: "Failed to validate subscription" });
       }
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-      const entitlements = getEntitlementsForUser(user);
-      if (!entitlements.canUseLogbook) {
-        return res.status(403).json({ error: "RSF Pro membership required" });
-      }
-      req.logbookProUser = user;
-      next();
-    } catch (error) {
-      console.error("RSF Pro guard error:", error);
-      res.status(500).json({ error: "Failed to validate subscription" });
     }
-  };
 
   // Pilot Logbook Routes (authenticated users only)
   app.get("/api/logbook", isAuthenticated, async (req: any, res) => {

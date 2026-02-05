@@ -51,12 +51,13 @@ type SixPackProgress = {
 };
 
 const PANEL_FALLBACK_URL =
-  "https://readysetfly-images.s3.us-east-2.amazonaws.com/uploads/6pack-instrument-panel.png";
+  "https://readysetfly-images.s3.us-east-2.amazonaws.com/6pack-instrument-panel.png";
 const rawPanelUrl = import.meta.env.VITE_SIX_PACK_PANEL_URL;
+const panelBaseUrl = PANEL_FALLBACK_URL.slice(0, PANEL_FALLBACK_URL.lastIndexOf("/"));
 const DEFAULT_PANEL_URL = rawPanelUrl
   ? rawPanelUrl.startsWith("http")
     ? rawPanelUrl
-    : `${PANEL_FALLBACK_URL.replace(/\\/[^\\/]+$/, "")}/${rawPanelUrl.replace(/^\\//, "")}`
+    : `${panelBaseUrl}/${rawPanelUrl.replace(/^\/+/, "")}`
   : PANEL_FALLBACK_URL;
 
 const INSTRUMENTS: Instrument[] = [
@@ -610,7 +611,7 @@ export default function StudentSixPackTrainer() {
                     key={spot.id}
                     type="button"
                     aria-label={`Select ${instrumentName}`}
-                    aria-pressed={isSelected ? "true" : "false"}
+                    aria-pressed={isSelected}
                     data-hotspot={spot.id}
                     className={cn(
                       "six-pack-hotspot absolute rounded-full border-2 border-transparent transition-all",

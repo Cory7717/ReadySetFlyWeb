@@ -1834,19 +1834,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ error: "Panel image not available" });
     }
 
-    const panelKey = (process.env.SIX_PACK_PANEL_KEY || "6pack-instrument-panel.png").trim();
-    if (!panelKey || panelKey.includes("..") || panelKey.startsWith("/")) {
+    const rawKeys = (process.env.SIX_PACK_PANEL_KEY || "6pack-instrument-panel.png")
+      .split(",")
+      .map((key) => key.trim())
+      .filter(Boolean);
+    const bucketName = process.env.AWS_S3_BUCKET;
+
+    const normalizePanelKey = (value: string) => {
+      let key = value.trim();
+      if (!key) return "";
+      if (key.startsWith("http")) {
+        try {
+          const parsed = new URL(key);
+          key = parsed.pathname.replace(/^\/+/, "");
+          if (key.startsWith(`${bucketName}/`)) {
+            key = key.slice(bucketName.length + 1);
+          }
+        } catch {
+          // Fall back to raw key
+        }
+      }
+      return key;
+    };
+
+    const candidates = Array.from(
+      new Set(
+        rawKeys.flatMap((rawKey) => {
+          const normalized = normalizePanelKey(rawKey);
+          if (!normalized) return [];
+          if (normalized.includes("..") || normalized.startsWith("/")) return [];
+          if (normalized.includes("/")) {
+            return [normalized];
+          }
+          return [normalized, `uploads/${normalized}`];
+        })
+      )
+    );
+
+    if (!candidates.length) {
       return res.status(400).json({ error: "Invalid panel key" });
     }
 
     try {
       const { S3StorageService } = await import("./s3Storage.js");
       const s3Service = new S3StorageService();
-      const { stream, contentType, contentLength } = await s3Service.getObjectStream({ key: panelKey });
-      res.setHeader("Content-Type", contentType || "image/png");
-      if (contentLength) res.setHeader("Content-Length", String(contentLength));
-      res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
-      await pipeline(stream, res);
+      for (const key of candidates) {
+        try {
+          const { stream, contentType, contentLength } = await s3Service.getObjectStream({ key });
+          res.setHeader("Content-Type", contentType || "image/png");
+          if (contentLength) res.setHeader("Content-Length", String(contentLength));
+          res.setHeader("Cache-Control", "public, max-age=86400, stale-while-revalidate=86400");
+          await pipeline(stream, res);
+          return;
+        } catch (error: any) {
+          const statusCode = error?.$metadata?.httpStatusCode;
+          if (error?.name === "NoSuchKey" || statusCode === 404) {
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      return res.status(404).json({ error: "Panel image not found" });
     } catch (error: any) {
       const statusCode = error?.$metadata?.httpStatusCode;
       if (error?.name === "NoSuchKey" || statusCode === 404) {

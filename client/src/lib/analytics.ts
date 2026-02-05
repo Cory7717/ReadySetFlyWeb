@@ -1,3 +1,5 @@
+import { apiUrl } from "@/lib/api";
+
 const VISITOR_ID_KEY = "rsf_visitor_id";
 
 const getStoredVisitorId = (): string | undefined => {
@@ -44,7 +46,7 @@ export function trackEvent(event: string, params?: Record<string, any>) {
 
   const send = async () => {
     try {
-      const response = await fetch("/api/analytics/event", {
+      const response = await fetch(apiUrl("/api/analytics/event"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

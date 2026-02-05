@@ -355,6 +355,8 @@ export default function StudentSixPackTrainer() {
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
   const [quizChecked, setQuizChecked] = useState(false);
   const [showGuestGate, setShowGuestGate] = useState(false);
+  const [panelLoaded, setPanelLoaded] = useState(false);
+  const [panelError, setPanelError] = useState(false);
 
   const activeInstrument = instrumentMap.get(activeInstrumentId || "ai") || INSTRUMENTS[0];
   const isGuest = !user;
@@ -600,30 +602,55 @@ export default function StudentSixPackTrainer() {
                 src={DEFAULT_PANEL_URL}
                 alt="RSF six-pack trainer panel"
                 className="absolute inset-0 h-full w-full object-contain"
+                onLoad={() => {
+                  setPanelLoaded(true);
+                  setPanelError(false);
+                }}
+                onError={() => {
+                  setPanelLoaded(false);
+                  setPanelError(true);
+                }}
               />
-              {HOTSPOTS.map((spot) => {
-                const isSelected = spot.id === activeInstrumentId;
-                const isHighlighted = highlightMode && highlightTargetId === spot.id;
-                const isDimmed = highlightMode && highlightTargetId && !isHighlighted;
-                const instrumentName = instrumentMap.get(spot.id)?.name || "Instrument";
-                return (
-                  <button
-                    key={spot.id}
-                    type="button"
-                    aria-label={`Select ${instrumentName}`}
-                    data-hotspot={spot.id}
-                    className={cn(
-                      "six-pack-hotspot absolute rounded-full border-2 border-transparent transition-all",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      isSelected && "border-sky-400 bg-sky-400/20",
-                      isHighlighted && "border-amber-400 bg-amber-400/10",
-                      isDimmed && "bg-black/35"
-                    )}
-                    disabled={guestLocked}
-                    onClick={() => handleInstrumentClick(spot.id)}
-                  />
-                );
-              })}
+              {panelLoaded &&
+                !panelError &&
+                HOTSPOTS.map((spot) => {
+                  const isSelected = spot.id === activeInstrumentId;
+                  const isHighlighted = highlightMode && highlightTargetId === spot.id;
+                  const isDimmed = highlightMode && highlightTargetId && !isHighlighted;
+                  const instrumentName = instrumentMap.get(spot.id)?.name || "Instrument";
+                  return (
+                    <button
+                      key={spot.id}
+                      type="button"
+                      aria-label={`Select ${instrumentName}`}
+                      data-hotspot={spot.id}
+                      className={cn(
+                        "six-pack-hotspot absolute rounded-full border-2 border-transparent transition-all",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        isSelected && "border-sky-400 bg-sky-400/20",
+                        isHighlighted && "border-amber-400 bg-amber-400/10",
+                        isDimmed && "bg-black/35"
+                      )}
+                      disabled={guestLocked}
+                      onClick={() => handleInstrumentClick(spot.id)}
+                    />
+                  );
+                })}
+              {panelError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/70 p-6 text-center text-white">
+                  <div className="space-y-3 max-w-sm">
+                    <div className="text-lg font-semibold">Panel image failed to load</div>
+                    <p className="text-sm text-white/80">
+                      Verify the S3 object is public and the URL is correct.
+                    </p>
+                    <Button asChild variant="secondary">
+                      <a href={DEFAULT_PANEL_URL} target="_blank" rel="noreferrer">
+                        Open image URL
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              )}
               {showGuestGate && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/70 p-6 text-center text-white">
                   <div className="space-y-3 max-w-xs">

@@ -611,7 +611,6 @@ export default function StudentSixPackTrainer() {
                     key={spot.id}
                     type="button"
                     aria-label={`Select ${instrumentName}`}
-                    aria-pressed={isSelected}
                     data-hotspot={spot.id}
                     className={cn(
                       "six-pack-hotspot absolute rounded-full border-2 border-transparent transition-all",

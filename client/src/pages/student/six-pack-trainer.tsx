@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useStudentProfile } from "@/hooks/useStudentProfile";
 import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
+import "./six-pack-trainer.css";
 
 type Instrument = {
   id: string;
@@ -603,20 +604,15 @@ export default function StudentSixPackTrainer() {
                     key={spot.id}
                     type="button"
                     aria-label={`Select ${instrumentName}`}
-                    aria-pressed={isSelected}
+                    aria-pressed={isSelected ? "true" : "false"}
+                    data-hotspot={spot.id}
                     className={cn(
-                      "absolute rounded-full border-2 border-transparent transition-all",
+                      "six-pack-hotspot absolute rounded-full border-2 border-transparent transition-all",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       isSelected && "border-sky-400 bg-sky-400/20",
                       isHighlighted && "border-amber-400 bg-amber-400/10",
                       isDimmed && "bg-black/35"
                     )}
-                    style={{
-                      left: `${spot.xPct}%`,
-                      top: `${spot.yPct}%`,
-                      width: `${spot.wPct}%`,
-                      height: `${spot.hPct}%`,
-                    }}
                     disabled={guestLocked}
                     onClick={() => handleInstrumentClick(spot.id)}
                   />

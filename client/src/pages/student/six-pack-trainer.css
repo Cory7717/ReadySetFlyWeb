@@ -1,0 +1,41 @@
+.six-pack-hotspot[data-hotspot="asi"] {
+  left: 6%;
+  top: 6%;
+  width: 26%;
+  height: 36%;
+}
+
+.six-pack-hotspot[data-hotspot="ai"] {
+  left: 37%;
+  top: 6%;
+  width: 26%;
+  height: 36%;
+}
+
+.six-pack-hotspot[data-hotspot="altimeter"] {
+  left: 68%;
+  top: 6%;
+  width: 26%;
+  height: 36%;
+}
+
+.six-pack-hotspot[data-hotspot="turn"] {
+  left: 6%;
+  top: 54%;
+  width: 26%;
+  height: 36%;
+}
+
+.six-pack-hotspot[data-hotspot="heading"] {
+  left: 37%;
+  top: 54%;
+  width: 26%;
+  height: 36%;
+}
+
+.six-pack-hotspot[data-hotspot="vsi"] {
+  left: 68%;
+  top: 54%;
+  width: 26%;
+  height: 36%;
+}

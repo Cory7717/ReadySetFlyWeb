@@ -593,13 +593,13 @@ export default function StudentSixPackTrainer() {
           )}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="space-y-4">
-            <div className="relative overflow-hidden rounded-xl border bg-slate-900">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
+          <div className="space-y-4 min-w-0">
+            <div className="relative overflow-hidden rounded-xl border bg-slate-900 aspect-[16/9] min-h-[240px] sm:min-h-[320px]">
               <img
                 src={DEFAULT_PANEL_URL}
                 alt="RSF six-pack trainer panel"
-                className="block h-auto w-full"
+                className="absolute inset-0 h-full w-full object-contain"
               />
               {HOTSPOTS.map((spot) => {
                 const isSelected = spot.id === activeInstrumentId;
@@ -648,7 +648,7 @@ export default function StudentSixPackTrainer() {
             </p>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
             {!isMobile && renderInfoPanel()}
 
             {mode === "guided" && (

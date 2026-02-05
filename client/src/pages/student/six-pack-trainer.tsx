@@ -52,13 +52,16 @@ type SixPackProgress = {
   guestClicks: number;
 };
 
-const PANEL_FALLBACK_URL = apiUrl("/api/six-pack/panel");
+const S3_PUBLIC_BASE = "https://readysetfly-images.s3.us-east-2.amazonaws.com";
+const PANEL_S3_URL = `${S3_PUBLIC_BASE}/6pack-instrument-panel.png`;
 const rawPanelUrl = import.meta.env.VITE_SIX_PACK_PANEL_URL;
 const DEFAULT_PANEL_URL = rawPanelUrl
   ? rawPanelUrl.startsWith("http")
     ? rawPanelUrl
-    : apiUrl(rawPanelUrl.startsWith("/") ? rawPanelUrl : `/${rawPanelUrl.replace(/^\/+/, "")}`)
-  : PANEL_FALLBACK_URL;
+    : rawPanelUrl.startsWith("/")
+      ? apiUrl(rawPanelUrl)
+      : `${S3_PUBLIC_BASE}/${rawPanelUrl.replace(/^\/+/, "")}`
+  : PANEL_S3_URL;
 
 const INSTRUMENTS: Instrument[] = [
   {

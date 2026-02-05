@@ -16,6 +16,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder } from "@shared/schema";
@@ -1325,17 +1326,24 @@ export default function AdminDashboard() {
         const formData = new FormData();
         formData.append('documents', invoiceFile);
         
-        const response = await fetch('/api/upload-documents', {
+        const response = await fetch(apiUrl("/api/upload-documents"), {
           method: 'POST',
           body: formData,
           credentials: 'include',
         });
         
         if (!response.ok) {
-          const errorData = await response.json();
+          const errorText = await response.text();
+          let errorMessage = "Please try again";
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.error || errorMessage;
+          } catch {
+            if (errorText) errorMessage = errorText;
+          }
           toast({ 
             title: "Invoice upload failed", 
-            description: errorData.error || "Please try again",
+            description: errorMessage,
             variant: "destructive" 
           });
           return;
@@ -1372,15 +1380,22 @@ export default function AdminDashboard() {
       const formData = new FormData();
       formData.append('invoice', invoiceFile);
       
-      const response = await fetch('/api/admin/extract-invoice-data', {
+      const response = await fetch(apiUrl("/api/admin/extract-invoice-data"), {
         method: 'POST',
         body: formData,
         credentials: 'include',
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to extract data');
+        const errorText = await response.text();
+        let errorMessage = "Failed to extract data";
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          if (errorText) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
       }
       
       const extracted = await response.json();

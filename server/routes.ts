@@ -6365,6 +6365,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const usage = await storage.getFeatureUsage(days);
       res.json(usage);
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("analytics_events") || message.includes("does not exist")) {
+        const daysParam = Array.isArray(req.query.days) ? req.query.days[0] : req.query.days;
+        const rangeDays = Number(daysParam ?? 7);
+        return res.json({
+          rangeDays,
+          totalEvents: 0,
+          uniqueVisitors: 0,
+          returningVisitors: 0,
+          guestEvents: 0,
+          guestVisitors: 0,
+          pages: [],
+        });
+      }
       console.error("Failed to fetch feature usage:", error);
       res.status(500).json({ error: "Failed to fetch feature usage" });
     }

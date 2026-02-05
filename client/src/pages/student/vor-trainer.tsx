@@ -2,8 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StudentLayout } from "@/components/student/StudentLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { trackEvent } from "@/lib/analytics";
+
+type QuizQuestion = {
+  id: string;
+  prompt: string;
+  options: string[];
+  answer: string;
+  explanation: string;
+};
 
 type Scenario = {
   id: string;
@@ -42,6 +51,38 @@ const SCENARIOS: Scenario[] = [
     targetFlag: "TO",
     targetBearingFrom: 150,
     toleranceDeg: 5,
+  },
+];
+
+const QUIZ: QuizQuestion[] = [
+  {
+    id: "radial-definition",
+    prompt: "A VOR radial is defined as:",
+    options: [
+      "The direction TO the station",
+      "The direction FROM the station",
+      "The aircraft heading when tracking the course",
+    ],
+    answer: "The direction FROM the station",
+    explanation: "Radials are always the magnetic bearing FROM the station.",
+  },
+  {
+    id: "obs-to-flag",
+    prompt: "If your OBS is set to 090 and the TO flag is showing, you are tracking:",
+    options: [
+      "Inbound course 090 to the station",
+      "Outbound radial 090 from the station",
+      "Inbound course 270 to the station",
+    ],
+    answer: "Inbound course 090 to the station",
+    explanation: "With TO flag, the OBS course is the inbound course TO the station.",
+  },
+  {
+    id: "reciprocal-course",
+    prompt: "If you want to fly OUTBOUND on the 180 radial, what OBS course should you set?",
+    options: ["180", "360", "090"],
+    answer: "180",
+    explanation: "Outbound on the 180 radial uses OBS 180 with FROM flag.",
   },
 ];
 
@@ -366,9 +407,25 @@ export function VORTrainerV1() {
 }
 
 export default function StudentVorTrainer() {
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     trackEvent("student_page_view", { page: "vor_trainer" });
   }, []);
+
+  const score = useMemo(
+    () =>
+      QUIZ.reduce(
+        (acc, question) => {
+          if (answers[question.id]) acc.total += 1;
+          if (answers[question.id] === question.answer) acc.correct += 1;
+          return acc;
+        },
+        { correct: 0, total: 0 }
+      ),
+    [answers]
+  );
 
   return (
     <StudentLayout
@@ -384,6 +441,85 @@ export default function StudentVorTrainer() {
       </Alert>
 
       <VORTrainerV1 />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick VOR Quiz</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2 text-sm">
+            <Badge variant="outline">
+              Score: {score.correct}/{score.total}
+            </Badge>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setAnswers({});
+                setRevealed({});
+              }}
+            >
+              Reset
+            </Button>
+          </div>
+
+          {QUIZ.map((question) => {
+            const selected = answers[question.id];
+            const show = revealed[question.id];
+            return (
+              <div key={question.id} className="rounded-lg border p-4 space-y-3">
+                <div className="font-semibold">{question.prompt}</div>
+                <div className="flex flex-wrap gap-2">
+                  {question.options.map((option) => {
+                    const isSelected = selected === option;
+                    const isCorrect = option === question.answer;
+                    const showCorrect = show && isCorrect;
+                    const showIncorrect = show && isSelected && !isCorrect;
+                    return (
+                      <Button
+                        key={option}
+                        type="button"
+                        variant={isSelected ? "default" : "outline"}
+                        className={
+                          showCorrect
+                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                            : showIncorrect
+                              ? "border-destructive bg-destructive/10 text-destructive"
+                              : undefined
+                        }
+                        onClick={() =>
+                          setAnswers((prev) => ({ ...prev, [question.id]: option }))
+                        }
+                      >
+                        {option}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setRevealed((prev) => ({ ...prev, [question.id]: true }))
+                    }
+                    disabled={!selected}
+                  >
+                    Check answer
+                  </Button>
+                  {show && (
+                    <span className="text-sm text-muted-foreground">
+                      {question.explanation}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
     </StudentLayout>
   );
 }

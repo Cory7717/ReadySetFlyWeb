@@ -1,7 +1,7 @@
 import type { User } from "@shared/schema";
 import type { IStorage } from "./storage";
 import { paypalRequest } from "./paypal-client";
-import { mapPayPalStatusToMembership, resolveMembershipFromPlanId } from "./membership";
+import { mapPayPalStatusToMembership, resolveMembershipFromPlanId, type BillingInterval } from "./membership";
 
 const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const subscriptionSyncCache = new Map<string, number>();
@@ -26,14 +26,27 @@ export async function maybeSyncLogbookProSubscription(storage: IStorage, user: U
     const nextStatus = (subscription?.status || "UNKNOWN").toLowerCase();
     const planInfo = resolveMembershipFromPlanId(subscription?.plan_id);
     const startedAt = subscription?.start_time ? new Date(subscription.start_time) : undefined;
-    const endsAt = subscription?.billing_info?.next_billing_time
+    const nextBillingAt = subscription?.billing_info?.next_billing_time
       ? new Date(subscription.billing_info.next_billing_time)
       : undefined;
+    const lastPaymentAt = subscription?.billing_info?.last_payment?.time
+      ? new Date(subscription.billing_info.last_payment.time)
+      : undefined;
+    const interval =
+      planInfo?.interval ||
+      (user.membershipInterval as BillingInterval | null) ||
+      (user.logbookProPlan as BillingInterval | null) ||
+      null;
+    const isTrial = interval === "monthly" && nextBillingAt && !lastPaymentAt;
+    const membershipStatus = isTrial ? "trialing" : mapPayPalStatusToMembership(nextStatus);
 
     const updates: Partial<User> = {
-      membershipStatus: mapPayPalStatusToMembership(nextStatus),
+      membershipStatus,
       membershipProvider: "paypal",
-      membershipEndsAt: endsAt,
+      membershipEndsAt: nextBillingAt,
+      membershipInterval: interval || undefined,
+      membershipTrialEndsAt: isTrial ? nextBillingAt : undefined,
+      membershipNextBillingAt: nextBillingAt,
       paypalSubscriptionId: subscription?.id || subscriptionId,
       paypalPlanId: subscription?.plan_id || user.paypalPlanId,
     };
@@ -44,10 +57,11 @@ export async function maybeSyncLogbookProSubscription(storage: IStorage, user: U
     }
 
     if (startedAt) updates.logbookProStartedAt = startedAt;
-    if (endsAt) updates.logbookProEndsAt = endsAt;
+    if (nextBillingAt) updates.logbookProEndsAt = nextBillingAt;
 
     if (planInfo?.tier || user.logbookProSubscriptionId) {
-      updates.logbookProStatus = nextStatus === "active" ? "active" : nextStatus;
+      updates.logbookProStatus =
+        membershipStatus === "active" || membershipStatus === "trialing" ? "active" : nextStatus;
       updates.logbookProSubscriptionId = subscription?.id || user.logbookProSubscriptionId;
     }
 

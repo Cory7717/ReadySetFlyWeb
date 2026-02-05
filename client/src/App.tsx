@@ -60,6 +60,7 @@ const StudentProgress = lazy(() => import("@/pages/student/progress"));
 const StudentWritten = lazy(() => import("@/pages/student/written"));
 const StudentSyllabi = lazy(() => import("@/pages/student/syllabi"));
 const StudentVorTrainer = lazy(() => import("@/pages/student/vor-trainer"));
+const StudentSixPackTrainer = lazy(() => import("@/pages/student/six-pack-trainer"));
 const StudentChecklists = lazy(() => import("@/pages/student/checklists"));
 const StudentWeather = lazy(() => import("@/pages/student/weather"));
 const GpsSimsHub = lazy(() => import("@/pages/gps-sims"));
@@ -118,6 +119,9 @@ function Router() {
       <Route path="/approach-plates" component={ApproachPlates} />
       <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
       <Route path="/weight-balance" component={WeightBalance} />
+      <Route path="/logbook/pro" component={LogbookPro} />
+      <Route path="/flight-planner" component={FlightPlanner} />
+      <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
       <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
       <Route path="/events" component={() => <StudentPageLoader component={EventsPage} />} />
       <Route path="/admin/invite" component={RequireAuth} />
@@ -130,6 +134,7 @@ function Router() {
       <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
       <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
       <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />
+      <Route path="/student/six-pack-trainer" component={() => <StudentPageLoader component={StudentSixPackTrainer} />} />
       <Route path="/student/checklists" component={() => <StudentPageLoader component={StudentChecklists} />} />
       <Route path="/student/weather" component={() => <StudentPageLoader component={StudentWeather} />} />
       <Route path="/gps-sims" component={() => <StudentPageLoader component={GpsSimsHub} />} />
@@ -161,11 +166,8 @@ function Router() {
           <Route path="/verify-identity" component={VerifyIdentity} />
           <Route path="/settings" component={Settings} />
           <Route path="/logbook" component={Logbook} />
-          <Route path="/logbook/pro" component={LogbookPro} />
           <Route path="/logbook/pro/success" component={LogbookProSuccess} />
           <Route path="/logbook/pro/cancel" component={LogbookProCancel} />
-          <Route path="/flight-planner" component={FlightPlanner} />
-          <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
           <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
           <Route path="/my-aircraft" component={MyAircraft} />
           <Route path="/notifications" component={NotificationsPage} />
@@ -192,11 +194,8 @@ function Router() {
           <Route path="/verify-identity" component={RequireAuth} />
           <Route path="/settings" component={RequireAuth} />
           <Route path="/logbook" component={RequireAuth} />
-          <Route path="/logbook/pro" component={RequireAuth} />
           <Route path="/logbook/pro/success" component={RequireAuth} />
           <Route path="/logbook/pro/cancel" component={RequireAuth} />
-          <Route path="/flight-planner" component={RequireAuth} />
-          <Route path="/radio-comms-trainer" component={RequireAuth} />
           <Route path="/adsb-receiver-help" component={RequireAuth} />
           <Route path="/my-aircraft" component={RequireAuth} />
           <Route path="/notifications" component={RequireAuth} />

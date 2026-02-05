@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "wouter";
 import { StudentLayout } from "@/components/student/StudentLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { trackEvent } from "@/lib/analytics";
+import { useAuth } from "@/hooks/useAuth";
 
 type QuizQuestion = {
   id: string;
@@ -122,7 +124,14 @@ const computeDeflection = (
 
 const formatDeg = (value: number) => normalizeDeg(Math.round(value)).toString().padStart(3, "0");
 
-export function VORTrainerV1() {
+type VorGate = {
+  title: string;
+  message: string;
+  ctaLabel: string;
+  ctaHref: string;
+};
+
+export function VORTrainerV1({ gate }: { gate?: VorGate }) {
   const [obsDeg, setObsDeg] = useState(270);
   const [bearingFromStationDeg, setBearingFromStationDeg] = useState(90);
   const [activeScenario, setActiveScenario] = useState(SCENARIOS[0]);
@@ -343,37 +352,51 @@ export function VORTrainerV1() {
         </div>
 
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Scenario trainer</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <select
-                className="w-full rounded-md border px-3 py-2 text-sm"
-                value={activeScenario.id}
-                onChange={(event) => {
-                  const next = SCENARIOS.find((scenario) => scenario.id === event.target.value);
-                  setActiveScenario(next || SCENARIOS[0]);
-                }}
-              >
-                {SCENARIOS.map((scenario) => (
-                  <option key={scenario.id} value={scenario.id}>
-                    {scenario.title}
-                  </option>
-                ))}
-              </select>
-              <p className="text-sm text-muted-foreground">{activeScenario.description}</p>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={handleLoadScenario}>
-                  Load scenario
+          {gate ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>{gate.title}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">{gate.message}</p>
+                <Button asChild>
+                  <Link href={gate.ctaHref}>{gate.ctaLabel}</Link>
                 </Button>
-                <Button type="button" variant="outline" onClick={handleCheckScenario}>
-                  Check answer
-                </Button>
-              </div>
-              {resultMessage && <div className="text-sm font-medium">{resultMessage}</div>}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Scenario trainer</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <select
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  value={activeScenario.id}
+                  onChange={(event) => {
+                    const next = SCENARIOS.find((scenario) => scenario.id === event.target.value);
+                    setActiveScenario(next || SCENARIOS[0]);
+                  }}
+                >
+                  {SCENARIOS.map((scenario) => (
+                    <option key={scenario.id} value={scenario.id}>
+                      {scenario.title}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-sm text-muted-foreground">{activeScenario.description}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={handleLoadScenario}>
+                    Load scenario
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleCheckScenario}>
+                    Check answer
+                  </Button>
+                </div>
+                {resultMessage && <div className="text-sm font-medium">{resultMessage}</div>}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -407,12 +430,26 @@ export function VORTrainerV1() {
 }
 
 export default function StudentVorTrainer() {
+  const { user, isAuthenticated } = useAuth();
+  const entitlements = (user as any)?.entitlements;
+  const canUseGuided = entitlements?.canUseVorGuided ?? (user?.logbookProStatus === "active");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     trackEvent("student_page_view", { page: "vor_trainer" });
   }, []);
+
+  const gate = canUseGuided
+    ? undefined
+    : {
+        title: isAuthenticated ? "Upgrade to RSF Pro" : "Create a free account",
+        message: isAuthenticated
+          ? "Guided VOR scenarios and checkrides unlock with RSF Pro."
+          : "Create a free RSF account to unlock guided VOR scenarios.",
+        ctaLabel: isAuthenticated ? "Upgrade to RSF Pro" : "Create free account",
+        ctaHref: isAuthenticated ? "/logbook/pro" : "/register",
+      };
 
   const score = useMemo(
     () =>
@@ -440,86 +477,104 @@ export default function StudentVorTrainer() {
         </AlertDescription>
       </Alert>
 
-      <VORTrainerV1 />
+      <VORTrainerV1 gate={gate} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick VOR Quiz</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-2 text-sm">
-            <Badge variant="outline">
-              Score: {score.correct}/{score.total}
-            </Badge>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setAnswers({});
-                setRevealed({});
-              }}
-            >
-              Reset
+      {canUseGuided ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick VOR Quiz</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-2 text-sm">
+              <Badge variant="outline">
+                Score: {score.correct}/{score.total}
+              </Badge>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setAnswers({});
+                  setRevealed({});
+                }}
+              >
+                Reset
+              </Button>
+            </div>
+
+            {QUIZ.map((question) => {
+              const selected = answers[question.id];
+              const show = revealed[question.id];
+              return (
+                <div key={question.id} className="rounded-lg border p-4 space-y-3">
+                  <div className="font-semibold">{question.prompt}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {question.options.map((option) => {
+                      const isSelected = selected === option;
+                      const isCorrect = option === question.answer;
+                      const showCorrect = show && isCorrect;
+                      const showIncorrect = show && isSelected && !isCorrect;
+                      return (
+                        <Button
+                          key={option}
+                          type="button"
+                          variant={isSelected ? "default" : "outline"}
+                          className={
+                            showCorrect
+                              ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                              : showIncorrect
+                                ? "border-destructive bg-destructive/10 text-destructive"
+                                : undefined
+                          }
+                          onClick={() =>
+                            setAnswers((prev) => ({ ...prev, [question.id]: option }))
+                          }
+                        >
+                          {option}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setRevealed((prev) => ({ ...prev, [question.id]: true }))
+                      }
+                      disabled={!selected}
+                    >
+                      Check answer
+                    </Button>
+                    {show && (
+                      <span className="text-sm text-muted-foreground">
+                        {question.explanation}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick VOR Quiz</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Quiz mode unlocks with RSF Pro to help you master TO/FROM logic and intercepts.
+            </p>
+            <Button asChild>
+              <Link href={isAuthenticated ? "/logbook/pro" : "/register"}>
+                {isAuthenticated ? "Upgrade to RSF Pro" : "Create free account"}
+              </Link>
             </Button>
-          </div>
-
-          {QUIZ.map((question) => {
-            const selected = answers[question.id];
-            const show = revealed[question.id];
-            return (
-              <div key={question.id} className="rounded-lg border p-4 space-y-3">
-                <div className="font-semibold">{question.prompt}</div>
-                <div className="flex flex-wrap gap-2">
-                  {question.options.map((option) => {
-                    const isSelected = selected === option;
-                    const isCorrect = option === question.answer;
-                    const showCorrect = show && isCorrect;
-                    const showIncorrect = show && isSelected && !isCorrect;
-                    return (
-                      <Button
-                        key={option}
-                        type="button"
-                        variant={isSelected ? "default" : "outline"}
-                        className={
-                          showCorrect
-                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                            : showIncorrect
-                              ? "border-destructive bg-destructive/10 text-destructive"
-                              : undefined
-                        }
-                        onClick={() =>
-                          setAnswers((prev) => ({ ...prev, [question.id]: option }))
-                        }
-                      >
-                        {option}
-                      </Button>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      setRevealed((prev) => ({ ...prev, [question.id]: true }))
-                    }
-                    disabled={!selected}
-                  >
-                    Check answer
-                  </Button>
-                  {show && (
-                    <span className="text-sm text-muted-foreground">
-                      {question.explanation}
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </StudentLayout>
   );
 }

@@ -90,7 +90,7 @@ const formatDateRange = (start: string, end: string) => {
 };
 
 export default function EventsPage() {
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedEvent, setSelectedEvent] = useState<AviationEvent | null>(null);
@@ -110,6 +110,10 @@ export default function EventsPage() {
   useEffect(() => {
     trackEvent("events_view", { page: "/events" });
   }, []);
+
+  const entitlements = (user as any)?.entitlements;
+  const canCreateEvents =
+    entitlements?.canCreateEvents ?? (user?.logbookProStatus === "active");
 
   const { data, isLoading } = useQuery({
     queryKey: ["aviation-events"],
@@ -286,15 +290,15 @@ export default function EventsPage() {
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold">Upcoming Aviation Events</h1>
           <p className="text-muted-foreground max-w-3xl">
-            Share fly-ins, airshows, safety seminars, and training nights. Events are free to post and
-            automatically removed once they end.
+            Share fly-ins, airshows, safety seminars, and training nights. RSF Pro members can post
+            events that auto-expire after the end date.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline">
               <Link href="/">Back to Home</Link>
             </Button>
             <Badge variant="outline">US-only</Badge>
-            <Badge variant="secondary">Free to post</Badge>
+            <Badge variant="secondary">RSF Pro posting</Badge>
           </div>
         </div>
       </section>
@@ -310,7 +314,7 @@ export default function EventsPage() {
 
           {isLoading ? (
             <Card>
-              <CardContent className="p-6 text-sm text-muted-foreground">Loading events…</CardContent>
+              <CardContent className="p-6 text-sm text-muted-foreground">Loading events...</CardContent>
             </Card>
           ) : hasEvents ? (
             <div className="grid gap-4 md:grid-cols-2">
@@ -379,15 +383,22 @@ export default function EventsPage() {
             <CardHeader>
               <CardTitle>Post an event</CardTitle>
               <CardDescription>
-                Events are free to list. Please post only aviation-related community events.
+                Event posting is included with RSF Pro. Please post only aviation-related community events.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {!isAuthenticated ? (
                 <div className="space-y-4 text-sm text-muted-foreground">
-                  <p>Sign in to add an aviation event.</p>
+                  <p>Create a free RSF account to add an aviation event.</p>
                   <Button asChild>
-                    <Link href="/login">Sign in</Link>
+                    <Link href="/register">Create free account</Link>
+                  </Button>
+                </div>
+              ) : !canCreateEvents ? (
+                <div className="space-y-4 text-sm text-muted-foreground">
+                  <p>Upgrade to RSF Pro to post community events.</p>
+                  <Button asChild>
+                    <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
                   </Button>
                 </div>
               ) : (

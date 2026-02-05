@@ -7,7 +7,7 @@ import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, type MembershipTier } from '@shared/membership-plans';
 
 function formatDate(value?: string | null) {
-  if (!value) return 'â€”';
+  if (!value) return '-';
   try {
     return new Date(value).toLocaleDateString();
   } catch (error) {
@@ -38,6 +38,10 @@ export default function LogbookProScreen({ navigation }: any) {
   const [savingSettings, setSavingSettings] = useState(false);
   const entitlements = (user as any)?.entitlements;
   const hasAccess = entitlements?.tier ? entitlements.tier !== 'free' : user?.logbookProStatus === 'active';
+  const membershipStatus = (user as any)?.membershipStatus;
+  const membershipTrialEndsAt = (user as any)?.membershipTrialEndsAt;
+  const membershipInterval = (user as any)?.membershipInterval;
+  const isTrialing = membershipStatus === 'trialing';
 
   const handleSubscribe = async () => {
     if (!isAuthenticated) {
@@ -132,6 +136,8 @@ export default function LogbookProScreen({ navigation }: any) {
     () => planOptions.find((plan) => plan.interval === selectedInterval) || planOptions[0],
     [planOptions, selectedInterval]
   );
+  const hasTrial = Boolean(selectedPlan?.trialDays);
+  const selectedPlanTotal = hasTrial ? 0 : selectedPlan.price;
 
   if (isAuthenticated && hasAccess) {
     return (
@@ -326,6 +332,9 @@ export default function LogbookProScreen({ navigation }: any) {
               </View>
               <Text style={styles.planPrice}>${plan.price.toFixed(2)}</Text>
               <Text style={styles.planSubtitle}>{membershipTierInfo[selectedTier].subtitle}</Text>
+              {plan.trialDays && (
+                <Text style={styles.trialText}>{plan.trialDays}-day free trial</Text>
+              )}
             </TouchableOpacity>
           );
         })}
@@ -333,15 +342,23 @@ export default function LogbookProScreen({ navigation }: any) {
 
       <View style={styles.totalRow}>
         <Text style={styles.totalLabel}>Total today</Text>
-        <Text style={styles.totalValue}>${selectedPlan.price.toFixed(2)}</Text>
+        <Text style={styles.totalValue}>${selectedPlanTotal.toFixed(2)}</Text>
       </View>
 
       <TouchableOpacity style={styles.primaryButton} onPress={handleSubscribe} disabled={loading}>
-        <Text style={styles.primaryButtonText}>{loading ? 'Redirecting...' : 'Become a Member with PayPal'}</Text>
+        <Text style={styles.primaryButtonText}>
+          {loading ? 'Redirecting...' : hasTrial ? 'Start free trial with PayPal' : 'Become a Member with PayPal'}
+        </Text>
       </TouchableOpacity>
 
-      {user?.membershipStatus && (
-        <Text style={styles.statusText}>Current status: {user.membershipStatus}</Text>
+      {membershipStatus && (
+        <Text style={styles.statusText}>Current status: {membershipStatus}</Text>
+      )}
+      {isTrialing && membershipTrialEndsAt && (
+        <Text style={styles.statusText}>Trial ends {formatDate(membershipTrialEndsAt)}</Text>
+      )}
+      {membershipInterval && hasAccess && (
+        <Text style={styles.statusText}>Billing cadence: {membershipInterval}</Text>
       )}
     </ScrollView>
   );
@@ -423,6 +440,7 @@ const styles = StyleSheet.create({
   planPrice: { fontSize: 20, fontWeight: '700', color: colors.text, marginTop: 4 },
   planSubtitle: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
   planBadge: { fontSize: 10, color: colors.textMuted, fontWeight: '600' },
+  trialText: { fontSize: 11, color: '#10b981', marginTop: 6 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
   totalLabel: { fontSize: 14, color: colors.textMuted },
   totalValue: { fontSize: 16, fontWeight: '600', color: colors.text },

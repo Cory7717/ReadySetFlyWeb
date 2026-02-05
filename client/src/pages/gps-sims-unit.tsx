@@ -18,10 +18,10 @@ function createStepState(task: GpsTrainerTask) {
 export default function GpsSimsUnit() {
   const [, params] = useRoute("/gps-sims/:unitId");
   const unit = gpsTrainerUnits.find((item) => item.id === params?.unitId);
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { profile, saveProfile, saving } = useStudentProfile();
   const entitlements = (user as any)?.entitlements;
-  const isPro = entitlements?.tier ? entitlements.tier !== "free" : user?.logbookProStatus === "active";
+  const isPro = entitlements?.canUseGpsSims ?? (user?.logbookProStatus === "active");
   const canPersist = Boolean(isPro);
 
   const [mode, setMode] = useState<"learn" | "checkride">("learn");
@@ -121,9 +121,58 @@ export default function GpsSimsUnit() {
   const panelFallback = apiUrl(`/api/gps-sims/panels/${unit.panel.imageKey}`);
   const [panelSrc, setPanelSrc] = useState(panelImage);
 
+  const showGate = !isPro;
+  const gateTitle = isAuthenticated ? "Upgrade to RSF Pro" : "Create a free account";
+  const gateMessage = isAuthenticated
+    ? "GPS sims unlock with RSF Pro for full workflows, checkrides, and saved training progress."
+    : "Create a free RSF account to unlock RSF Pro GPS simulator training.";
+  const gateCtaLabel = isAuthenticated ? "Upgrade to RSF Pro" : "Create free account";
+  const gateCtaHref = isAuthenticated ? "/logbook/pro" : "/register";
+
   useEffect(() => {
     setPanelSrc(panelImage);
   }, [panelImage]);
+
+  if (showGate) {
+    return (
+      <div className="min-h-screen bg-background">
+        <section className="bg-muted py-10">
+          <div className="container mx-auto px-4 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">RSF Branded</Badge>
+            </div>
+            <h1 className="font-display text-3xl sm:text-4xl font-bold">{unit.title}</h1>
+            <p className="text-muted-foreground max-w-3xl">{unit.summary}</p>
+          </div>
+        </section>
+
+        <section className="container mx-auto px-4 py-10 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>{gateTitle}</CardTitle>
+              <CardDescription>{gateMessage}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="rounded-xl border bg-slate-950/10 overflow-hidden">
+                <img
+                  src={panelSrc}
+                  alt={unit.panel.alt}
+                  className="h-auto w-full object-cover"
+                  loading="lazy"
+                  onError={() =>
+                    setPanelSrc((current) => (current === panelFallback ? current : panelFallback))
+                  }
+                />
+              </div>
+              <Button asChild>
+                <Link href={gateCtaHref}>{gateCtaLabel}</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
+    );
+  }
 
   const completedCount = progress.filter(Boolean).length;
   const actionHints = selectedTask.actionHints ?? [];

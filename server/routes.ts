@@ -2090,16 +2090,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       subscription?.links?.find((l: any) => l.rel === "approve")?.href ||
       subscription?.links?.[0]?.href;
 
-    await storage.updateUser(userId, {
-      membershipTier: tier,
-      membershipStatus: "inactive",
-      membershipProvider: "paypal",
-      paypalSubscriptionId: subscription.id,
-      paypalPlanId: planId,
-      logbookProStatus: "pending",
-      logbookProPlan: interval,
-      logbookProSubscriptionId: subscription.id,
-    });
+      await storage.updateUser(userId, {
+        membershipTier: tier,
+        membershipStatus: "inactive",
+        membershipProvider: "paypal",
+        membershipInterval: interval,
+        membershipTrialEndsAt: null,
+        membershipNextBillingAt: null,
+        paypalSubscriptionId: subscription.id,
+        paypalPlanId: planId,
+        logbookProStatus: "pending",
+        logbookProPlan: interval,
+        logbookProSubscriptionId: subscription.id,
+      });
 
     return { subscription, approveUrl };
   };
@@ -2125,25 +2128,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       throw new Error("Unknown PayPal plan ID");
     }
 
-    const startedAt = subscription?.start_time ? new Date(subscription.start_time) : new Date();
-    const endsAt = subscription?.billing_info?.next_billing_time
-      ? new Date(subscription.billing_info.next_billing_time)
-      : null;
-
-    const membershipStatus = mapPayPalStatusToMembership(status);
-    await storage.updateUser(userId, {
-      membershipTier: planInfo.tier,
-      membershipStatus,
-      membershipProvider: "paypal",
-      membershipEndsAt: endsAt || undefined,
-      paypalSubscriptionId: subscriptionId,
-      paypalPlanId: planId,
-      logbookProStatus: membershipStatus === "active" ? "active" : status,
-      logbookProPlan: planInfo.interval,
-      logbookProSubscriptionId: subscriptionId,
-      logbookProStartedAt: startedAt,
-      logbookProEndsAt: endsAt || undefined,
-    });
+      const startedAt = subscription?.start_time ? new Date(subscription.start_time) : new Date();
+      const nextBillingAt = subscription?.billing_info?.next_billing_time
+        ? new Date(subscription.billing_info.next_billing_time)
+        : null;
+      const lastPaymentAt = subscription?.billing_info?.last_payment?.time
+        ? new Date(subscription.billing_info.last_payment.time)
+        : null;
+      const isTrial = planInfo.interval === "monthly" && nextBillingAt && !lastPaymentAt;
+      const membershipStatus = isTrial ? "trialing" : mapPayPalStatusToMembership(status);
+      await storage.updateUser(userId, {
+        membershipTier: planInfo.tier,
+        membershipStatus,
+        membershipProvider: "paypal",
+        membershipInterval: planInfo.interval,
+        membershipEndsAt: nextBillingAt || undefined,
+        membershipTrialEndsAt: isTrial ? nextBillingAt : null,
+        membershipNextBillingAt: nextBillingAt || undefined,
+        paypalSubscriptionId: subscriptionId,
+        paypalPlanId: planId,
+        logbookProStatus:
+          membershipStatus === "active" || membershipStatus === "trialing" ? "active" : status,
+        logbookProPlan: planInfo.interval,
+        logbookProSubscriptionId: subscriptionId,
+        logbookProStartedAt: startedAt,
+        logbookProEndsAt: nextBillingAt || undefined,
+      });
 
     return subscription;
   };
@@ -2325,70 +2335,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ received: true });
       }
 
-      const planId = resource?.plan_id;
-      const planInfo = resolveMembershipFromPlanId(planId);
-      const planInterval = planInfo?.interval || user.logbookProPlan;
+        let subscriptionDetails: any = resource;
+        if (subscriptionId && (!resource?.billing_info || !resource?.plan_id)) {
+          try {
+            subscriptionDetails = await paypalRequest(`/v1/billing/subscriptions/${subscriptionId}`, {
+              method: "GET",
+            });
+          } catch {
+            subscriptionDetails = resource;
+          }
+        }
 
-      const startedAt = resource?.start_time ? new Date(resource.start_time) : undefined;
-      const endsAt = resource?.billing_info?.next_billing_time
-        ? new Date(resource.billing_info.next_billing_time)
-        : undefined;
+        const planId = subscriptionDetails?.plan_id || resource?.plan_id;
+        const planInfo = resolveMembershipFromPlanId(planId);
+        const planInterval =
+          planInfo?.interval || user.membershipInterval || user.logbookProPlan;
 
-      const updates: any = {
-        membershipProvider: "paypal",
-        paypalSubscriptionId: subscriptionId || user.paypalSubscriptionId,
-        paypalPlanId: planId || user.paypalPlanId,
-        logbookProSubscriptionId: subscriptionId || user.logbookProSubscriptionId,
-        logbookProPlan: planInterval,
-      };
+        const startedAt = subscriptionDetails?.start_time
+          ? new Date(subscriptionDetails.start_time)
+          : resource?.start_time
+            ? new Date(resource.start_time)
+            : undefined;
+        const nextBillingAt = subscriptionDetails?.billing_info?.next_billing_time
+          ? new Date(subscriptionDetails.billing_info.next_billing_time)
+          : resource?.billing_info?.next_billing_time
+            ? new Date(resource.billing_info.next_billing_time)
+            : undefined;
+        const lastPaymentAt = subscriptionDetails?.billing_info?.last_payment?.time
+          ? new Date(subscriptionDetails.billing_info.last_payment.time)
+          : undefined;
+        const subscriptionStatus = (subscriptionDetails?.status || resource?.status || "UNKNOWN").toLowerCase();
+        const isTrial = planInterval === "monthly" && nextBillingAt && !lastPaymentAt;
+        const computedStatus = isTrial ? "trialing" : mapPayPalStatusToMembership(subscriptionStatus);
 
-      if (planInfo?.tier) {
-        updates.membershipTier = planInfo.tier;
-      }
-      if (endsAt) {
-        updates.membershipEndsAt = endsAt;
-      }
+        const updates: any = {
+          membershipProvider: "paypal",
+          paypalSubscriptionId: subscriptionId || user.paypalSubscriptionId,
+          paypalPlanId: planId || user.paypalPlanId,
+          logbookProSubscriptionId: subscriptionId || user.logbookProSubscriptionId,
+          logbookProPlan: planInterval,
+          membershipInterval: planInterval,
+          membershipTrialEndsAt: isTrial ? nextBillingAt : null,
+          membershipNextBillingAt: nextBillingAt,
+        };
 
-      switch (eventType) {
-        case "BILLING.SUBSCRIPTION.ACTIVATED":
-        case "BILLING.SUBSCRIPTION.RE-ACTIVATED":
-          updates.membershipStatus = "active";
-          updates.logbookProStatus = "active";
-          if (startedAt) updates.logbookProStartedAt = startedAt;
-          if (endsAt) updates.logbookProEndsAt = endsAt;
-          updates.logbookProCancelAtPeriodEnd = false;
-          break;
-        case "BILLING.SUBSCRIPTION.CREATED":
-          updates.membershipStatus = "inactive";
-          updates.logbookProStatus = "pending";
-          if (startedAt) updates.logbookProStartedAt = startedAt;
-          break;
-        case "BILLING.SUBSCRIPTION.CANCELLED":
-        case "BILLING.SUBSCRIPTION.EXPIRED":
-          updates.membershipStatus = "cancelled";
-          updates.logbookProStatus = "cancelled";
-          updates.logbookProCanceledAt = resource?.status_update_time
-            ? new Date(resource.status_update_time)
-            : new Date();
-          updates.logbookProCancelAtPeriodEnd = false;
-          if (endsAt) updates.logbookProEndsAt = endsAt;
-          break;
-        case "BILLING.SUBSCRIPTION.SUSPENDED":
-          updates.membershipStatus = "cancelled";
-          updates.logbookProStatus = "suspended";
-          break;
-        case "BILLING.SUBSCRIPTION.PAYMENT.FAILED":
-          updates.membershipStatus = "past_due";
-          updates.logbookProStatus = "payment_failed";
-          break;
-        case "BILLING.SUBSCRIPTION.PAYMENT.SUCCEEDED":
-          updates.membershipStatus = "active";
-          updates.logbookProStatus = "active";
-          if (endsAt) updates.logbookProEndsAt = endsAt;
-          break;
-        default:
-          break;
-      }
+        if (planInfo?.tier) {
+          updates.membershipTier = planInfo.tier;
+        }
+        if (nextBillingAt) {
+          updates.membershipEndsAt = nextBillingAt;
+          updates.logbookProEndsAt = nextBillingAt;
+        }
+
+        switch (eventType) {
+          case "BILLING.SUBSCRIPTION.ACTIVATED":
+          case "BILLING.SUBSCRIPTION.RE-ACTIVATED":
+            updates.membershipStatus = computedStatus === "trialing" ? "trialing" : "active";
+            updates.logbookProStatus = "active";
+            if (startedAt) updates.logbookProStartedAt = startedAt;
+            updates.logbookProCancelAtPeriodEnd = false;
+            break;
+          case "BILLING.SUBSCRIPTION.CREATED":
+            updates.membershipStatus = "inactive";
+            updates.logbookProStatus = "pending";
+            if (startedAt) updates.logbookProStartedAt = startedAt;
+            break;
+          case "BILLING.SUBSCRIPTION.CANCELLED":
+          case "BILLING.SUBSCRIPTION.EXPIRED":
+            updates.membershipStatus = "cancelled";
+            updates.logbookProStatus = "cancelled";
+            updates.logbookProCanceledAt = resource?.status_update_time
+              ? new Date(resource.status_update_time)
+              : new Date();
+            updates.logbookProCancelAtPeriodEnd = false;
+            break;
+          case "BILLING.SUBSCRIPTION.SUSPENDED":
+            updates.membershipStatus = "cancelled";
+            updates.logbookProStatus = "suspended";
+            break;
+          case "BILLING.SUBSCRIPTION.PAYMENT.FAILED":
+            updates.membershipStatus = "past_due";
+            updates.logbookProStatus = "payment_failed";
+            break;
+          case "BILLING.SUBSCRIPTION.PAYMENT.SUCCEEDED":
+            updates.membershipStatus = computedStatus === "trialing" ? "trialing" : "active";
+            updates.logbookProStatus = "active";
+            break;
+          default:
+            break;
+        }
 
       await storage.updateUser(user.id, updates);
 
@@ -7623,7 +7658,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.post("/api/events", isAuthenticated, async (req: any, res) => {
+  app.post("/api/events", isAuthenticated, requireMembership, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
       if (!userId) {
@@ -8834,10 +8869,32 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  const requireLogbookPro = async (req: any, res: any, next: any) => {
-    try {
-      const userId = req.user?.claims?.sub;
-      if (!userId) {
+    const requireMembership = async (req: any, res: any, next: any) => {
+      try {
+        const userId = req.user?.claims?.sub;
+        if (!userId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        const user = await storage.getUser(userId);
+        if (!user) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        const entitlements = getEntitlementsForUser(user);
+        if (entitlements.tier === "free") {
+          return res.status(403).json({ error: "RSF Pro membership required" });
+        }
+        req.membershipUser = user;
+        next();
+      } catch (error) {
+        console.error("RSF membership guard error:", error);
+        res.status(500).json({ error: "Failed to validate membership" });
+      }
+    };
+
+    const requireLogbookPro = async (req: any, res: any, next: any) => {
+      try {
+        const userId = req.user?.claims?.sub;
+        if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       const user = await storage.getUser(userId);
@@ -9319,10 +9376,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   });
 
   // Flight Planner (Logbook Pro)
-  app.get("/api/flight-plans", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+  app.get("/api/flight-plans", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const plans = await storage.getFlightPlansByUser(userId);
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const entitlements = getEntitlementsForUser(user);
+      let plans = await storage.getFlightPlansByUser(userId);
+      if (!entitlements.canPersist && plans.length > 1) {
+        plans = plans.slice(0, 1);
+      }
       res.json(plans);
     } catch (error) {
       console.error("Failed to fetch flight plans:", error);
@@ -9330,9 +9395,22 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.post("/api/flight-plans", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+  app.post("/api/flight-plans", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const entitlements = getEntitlementsForUser(user);
+      if (!entitlements.canPersist) {
+        const existingPlans = await storage.getFlightPlansByUser(userId);
+        if (existingPlans.length >= 1) {
+          return res.status(403).json({
+            error: "Free accounts can save one flight plan. Upgrade to RSF Pro to save more.",
+          });
+        }
+      }
       const payload = { ...req.body };
       if (payload.fuelOnBoard === "") payload.fuelOnBoard = null;
       if (payload.fuelRequired === "") payload.fuelRequired = null;
@@ -9348,7 +9426,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/flight-plans/:id", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+  app.get("/api/flight-plans/:id", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const plan = await storage.getFlightPlanById(req.params.id);
@@ -9365,7 +9443,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.patch("/api/flight-plans/:id", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+  app.patch("/api/flight-plans/:id", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const plan = await storage.getFlightPlanById(req.params.id);
@@ -9390,7 +9468,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.delete("/api/flight-plans/:id", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+  app.delete("/api/flight-plans/:id", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const plan = await storage.getFlightPlanById(req.params.id);

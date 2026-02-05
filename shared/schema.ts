@@ -135,6 +135,9 @@ export const users = pgTable("users", {
   membershipStatus: text("membership_status").default("inactive"), // active, inactive, cancelled, past_due
   membershipProvider: text("membership_provider"), // paypal or null
   membershipEndsAt: timestamp("membership_ends_at"),
+  membershipInterval: text("membership_interval"), // monthly, biannual, annual
+  membershipTrialEndsAt: timestamp("membership_trial_ends_at"),
+  membershipNextBillingAt: timestamp("membership_next_billing_at"),
   paypalSubscriptionId: text("paypal_subscription_id"),
   paypalPlanId: text("paypal_plan_id"),
   

@@ -6,6 +6,7 @@ export type MembershipPlanOption = {
   label: string;
   price: number;
   badge?: string;
+  trialDays?: number;
 };
 
 export const membershipTierInfo: Record<MembershipTier, { title: string; subtitle: string; features: string[] }> = {
@@ -36,11 +37,11 @@ export const membershipPlanOptions: Record<MembershipTier, MembershipPlanOption[
   pro: [
     { interval: "annual", label: "Annual", price: 149.0, badge: "Best Value" },
     { interval: "biannual", label: "6 Months", price: 79.99 },
-    { interval: "monthly", label: "Monthly", price: 14.99 },
+    { interval: "monthly", label: "Monthly", price: 14.99, trialDays: 7 },
   ],
   pro_plus: [
     { interval: "annual", label: "Annual", price: 249.0, badge: "Best Value" },
     { interval: "biannual", label: "6 Months", price: 139.99 },
-    { interval: "monthly", label: "Monthly", price: 24.99 },
+    { interval: "monthly", label: "Monthly", price: 24.99, trialDays: 7 },
   ],
 };

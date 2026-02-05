@@ -183,15 +183,18 @@ function normalize(text: string) {
 }
 
 export default function RadioCommsTrainer() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canUseScenarioScoring ?? (user?.logbookProStatus === "active");
+  const isGuest = !isAuthenticated;
+  const isFree = isAuthenticated && !isPro;
   const queryClient = useQueryClient();
   const [selectedScenarioId, setSelectedScenarioId] = useState(SCENARIOS[0].id);
   const [stepIndex, setStepIndex] = useState(0);
   const [input, setInput] = useState("");
   const [score, setScore] = useState({ correct: 0, total: 0 });
   const [showFeedback, setShowFeedback] = useState<string | null>(null);
+  const [gateMessage, setGateMessage] = useState<string | null>(null);
   const [enableAudio, setEnableAudio] = useState(true);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoiceUri, setSelectedVoiceUri] = useState<string>("");
@@ -199,6 +202,12 @@ export default function RadioCommsTrainer() {
   const [attempts, setAttempts] = useState<ScenarioAttempt[]>([]);
   const [sessionSaved, setSessionSaved] = useState(false);
   const sessionStartRef = useRef<number | null>(null);
+  const [freeUsageCount, setFreeUsageCount] = useState(0);
+  const [freeUsageDate, setFreeUsageDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [guestUsed, setGuestUsed] = useState(false);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const freeUsageKey = "rsf-radio-free-usage";
+  const guestUsageKey = "rsf-radio-guest-usage";
 
   const { data: sessions = [] } = useQuery<RadioCommsSession[]>({
     queryKey: ["/api/radio-comms/sessions"],
@@ -218,6 +227,62 @@ export default function RadioCommsTrainer() {
   useEffect(() => {
     trackEvent("radio_comms_view", { pro: isPro });
   }, [isPro]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (isFree) {
+      try {
+        const raw = window.localStorage.getItem(freeUsageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { date?: string; count?: number };
+          if (parsed?.date === todayKey) {
+            setFreeUsageDate(parsed.date);
+            setFreeUsageCount(parsed.count ?? 0);
+          } else {
+            setFreeUsageDate(todayKey);
+            setFreeUsageCount(0);
+          }
+        } else {
+          setFreeUsageDate(todayKey);
+          setFreeUsageCount(0);
+        }
+      } catch {
+        setFreeUsageDate(todayKey);
+        setFreeUsageCount(0);
+      }
+    }
+    if (isGuest) {
+      try {
+        const raw = window.sessionStorage.getItem(guestUsageKey);
+        setGuestUsed(raw === "1");
+      } catch {
+        setGuestUsed(false);
+      }
+    }
+  }, [isFree, isGuest, todayKey]);
+
+  const freeLimitReached = isFree && freeUsageDate === todayKey && freeUsageCount >= 1;
+  const guestLimitReached = isGuest && guestUsed;
+  const limitReached = freeLimitReached || guestLimitReached;
+
+  const recordScenarioUsage = () => {
+    if (typeof window === "undefined") return;
+    if (isFree) {
+      const nextCount = freeUsageDate === todayKey ? freeUsageCount + 1 : 1;
+      const payload = { date: todayKey, count: nextCount };
+      window.localStorage.setItem(freeUsageKey, JSON.stringify(payload));
+      setFreeUsageDate(todayKey);
+      setFreeUsageCount(nextCount);
+    }
+    if (isGuest) {
+      window.sessionStorage.setItem(guestUsageKey, "1");
+      setGuestUsed(true);
+    }
+  };
+
+  const gateText = isGuest
+    ? "Create a free RSF account to keep practicing full scenarios."
+    : "Upgrade to RSF Pro for unlimited scenarios and scoring history.";
 
   useEffect(() => {
     if (!sessionStartRef.current) {
@@ -253,9 +318,9 @@ export default function RadioCommsTrainer() {
 
   const scenario = useMemo(() => {
     const found = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[0];
-    if (isPro) return found;
-    return { ...found, steps: found.steps.slice(0, 2) };
-  }, [selectedScenarioId, isPro]);
+    if (isGuest) return { ...found, steps: found.steps.slice(0, 2) };
+    return found;
+  }, [selectedScenarioId, isGuest]);
 
   const currentStep = scenario.steps[stepIndex];
 
@@ -264,6 +329,7 @@ export default function RadioCommsTrainer() {
     setInput("");
     setScore({ correct: 0, total: 0 });
     setShowFeedback(null);
+    setGateMessage(null);
     setAttempts([]);
     setSessionSaved(false);
     sessionStartRef.current = Date.now();
@@ -302,6 +368,10 @@ export default function RadioCommsTrainer() {
   };
 
   const evaluate = () => {
+    if (limitReached) {
+      setGateMessage(gateText);
+      return;
+    }
     if (!currentStep) return;
     const tokens = currentStep.expectedTokens.map((t) => normalize(t));
     const normalizedInput = normalize(input);
@@ -327,6 +397,10 @@ export default function RadioCommsTrainer() {
   };
 
   const nextStep = () => {
+    if (limitReached) {
+      setGateMessage(gateText);
+      return;
+    }
     if (stepIndex < scenario.steps.length - 1) {
       setStepIndex(stepIndex + 1);
       setInput("");
@@ -334,6 +408,10 @@ export default function RadioCommsTrainer() {
       return;
     }
     setShowFeedback("Scenario complete");
+    if (!isPro) {
+      recordScenarioUsage();
+      setGateMessage(gateText);
+    }
     if (isPro && !sessionSaved) {
       setSessionSaved(true);
       const durationSec = sessionStartRef.current
@@ -358,14 +436,27 @@ export default function RadioCommsTrainer() {
             Practice real-world ATC phraseology with guided scenarios.
           </p>
         </div>
-        {!isPro && <Badge variant="outline">Demo preview</Badge>}
+        {isGuest && <Badge variant="outline">Guest preview</Badge>}
+        {isFree && <Badge variant="outline">Free access</Badge>}
       </div>
 
-      {!isPro && (
+      {isGuest && (
         <Alert>
           <AlertDescription>
-            Demo mode includes one scenario with limited steps. RSF Pro unlocks full scenarios, scoring, audio practice, saved history, and advanced flight planning tools.
+            Guest preview includes one scenario with limited steps. Create a free account to unlock daily practice.
           </AlertDescription>
+        </Alert>
+      )}
+      {isFree && (
+        <Alert>
+          <AlertDescription>
+            Free accounts get one full scenario per day. Upgrade to RSF Pro for unlimited scenarios, scoring, and history.
+          </AlertDescription>
+        </Alert>
+      )}
+      {gateMessage && (
+        <Alert>
+          <AlertDescription>{gateMessage}</AlertDescription>
         </Alert>
       )}
       {!("speechSynthesis" in window) && (
@@ -392,14 +483,16 @@ export default function RadioCommsTrainer() {
                 setSelectedScenarioId(item.id);
                 resetScenario();
               }}
-              disabled={!isPro && item.id !== SCENARIOS[0].id}
+              disabled={isGuest && item.id !== SCENARIOS[0].id}
             >
               {item.title}
             </Button>
           ))}
           {!isPro && (
             <Button asChild variant="outline">
-              <Link href="/logbook/pro">Unlock full trainer</Link>
+              <Link href={isAuthenticated ? "/logbook/pro" : "/register"}>
+                {isAuthenticated ? "Unlock full trainer" : "Create free account"}
+              </Link>
             </Button>
           )}
         </CardContent>
@@ -456,12 +549,13 @@ export default function RadioCommsTrainer() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type your radio call..."
+              disabled={limitReached}
             />
             <div className="flex flex-wrap gap-2">
-              <Button onClick={evaluate} disabled={!input}>
+              <Button onClick={evaluate} disabled={!input || limitReached}>
                 Check Call
               </Button>
-              <Button variant="outline" onClick={nextStep}>
+              <Button variant="outline" onClick={nextStep} disabled={limitReached}>
                 Next Step
               </Button>
               <Button variant="ghost" onClick={resetScenario}>

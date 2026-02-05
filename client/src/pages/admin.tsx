@@ -27,6 +27,15 @@ import { AdminUserModal } from "@/components/admin-user-modal";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import type { UploadResult } from "@uppy/core";
 
+const resolveInvoiceUrl = (invoiceUrl?: string | null) => {
+  if (!invoiceUrl) return "";
+  if (/^https?:\/\//i.test(invoiceUrl)) return invoiceUrl;
+  if (invoiceUrl.includes("/")) {
+    return apiUrl(invoiceUrl.startsWith("/") ? invoiceUrl : `/${invoiceUrl}`);
+  }
+  return apiUrl(`/uploads/documents/${invoiceUrl}`);
+};
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
@@ -2226,7 +2235,7 @@ export default function AdminDashboard() {
                           <td className="p-3 text-sm">
                             {expense.invoiceUrl ? (
                               <a 
-                                href={expense.invoiceUrl} 
+                                href={resolveInvoiceUrl(expense.invoiceUrl)} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
                                 className="text-primary hover:underline flex items-center gap-1"

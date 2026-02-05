@@ -214,6 +214,8 @@ export default function FlightPlanner() {
   const queryClient = useQueryClient();
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canPersist ?? (user?.logbookProStatus === "active");
+  const isGuest = !isAuthenticated;
+  const isFree = isAuthenticated && !isPro;
 
   useEffect(() => {
     trackEvent("planner_page_view", { page: "flight-planner" });
@@ -385,12 +387,12 @@ export default function FlightPlanner() {
 
   const { data: savedPlans = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
     queryKey: ["/api/flight-plans"],
-    enabled: isPro,
+    enabled: isAuthenticated,
   });
 
   const { data: savedProfiles = [] } = useQuery<AircraftProfile[]>({
     queryKey: ["/api/aircraft/profiles"],
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && isPro,
   });
 
   const { data: aircraftTypes = [] } = useQuery<AircraftType[]>({
@@ -407,6 +409,7 @@ export default function FlightPlanner() {
     ? null
     : savedProfiles.find((p) => p.id === selectedProfileId) || null;
   const selectedType = aircraftTypes.find((t) => t.id === selectedTypeId) || FALLBACK_TYPE;
+  const planLimitReached = isFree && !editingPlan && savedPlans.length >= 1;
 
   const manualCruise = customProfile.cruiseKtasOverride ? Number(customProfile.cruiseKtasOverride) : null;
   const manualBurn = customProfile.fuelBurnOverrideGph ? Number(customProfile.fuelBurnOverrideGph) : null;
@@ -1433,14 +1436,34 @@ export default function FlightPlanner() {
           </div>
           <Button
             variant="outline"
-            disabled={!isAuthenticated || !customProfile.name || saveProfileMutation.isPending}
-            onClick={() => saveProfileMutation.mutate()}
+            disabled={!isPro || !customProfile.name || saveProfileMutation.isPending}
+            onClick={() => {
+              if (!isAuthenticated) {
+                toast({
+                  title: "Create a free account to continue",
+                  description: "Sign up to save aircraft profiles and keep them synced.",
+                });
+                window.location.href = "/register";
+                return;
+              }
+              if (!isPro) {
+                toast({
+                  title: "Upgrade to RSF Pro",
+                  description: "RSF Pro unlocks saved aircraft profiles.",
+                });
+                window.location.href = "/logbook/pro";
+                return;
+              }
+              saveProfileMutation.mutate();
+            }}
           >
             Save Aircraft Profile
           </Button>
-          {!isAuthenticated && (
-            <p className="text-xs text-muted-foreground">Sign in to save custom aircraft profiles.</p>
-          )}
+          {!isAuthenticated ? (
+            <p className="text-xs text-muted-foreground">Create a free account to save custom aircraft profiles.</p>
+          ) : !isPro ? (
+            <p className="text-xs text-muted-foreground">Upgrade to RSF Pro to save aircraft profiles.</p>
+          ) : null}
         </CardContent>
       </Card>
       <Card>
@@ -1564,9 +1587,25 @@ export default function FlightPlanner() {
       <Card>
         <CardHeader>
           <CardTitle>Save & Sync</CardTitle>
-          <CardDescription>Save plans and send routes to your logbook (RSF Pro only).</CardDescription>
+          <CardDescription>
+            Save one plan with a free account. RSF Pro unlocks unlimited plans and logbook sync.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {isGuest && (
+            <Alert>
+              <AlertDescription>
+                Create a free RSF account to save your first flight plan and keep it synced.
+              </AlertDescription>
+            </Alert>
+          )}
+          {planLimitReached && (
+            <Alert>
+              <AlertDescription>
+                Free accounts can save one active plan. Upgrade to RSF Pro to save more.
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Plan Title</Label>
@@ -1640,9 +1679,21 @@ export default function FlightPlanner() {
           <div className="flex flex-wrap gap-3">
             <Button
               onClick={() => {
-                if (!isPro) {
-                  toast({ title: "Upgrade to RSF Pro to save", description: "RSF Pro membership is required to save flight plans." });
-                  trackEvent("planner_upgrade_prompt", { action: "save_plan" });
+                if (!isAuthenticated) {
+                  toast({
+                    title: "Create a free account to continue",
+                    description: "Save your plan and keep it ready for the next flight.",
+                  });
+                  trackEvent("planner_register_prompt", { action: "save_plan" });
+                  window.location.href = "/register";
+                  return;
+                }
+                if (planLimitReached) {
+                  toast({
+                    title: "Upgrade to RSF Pro",
+                    description: "Free accounts can save one plan. Upgrade to unlock unlimited plans.",
+                  });
+                  trackEvent("planner_upgrade_prompt", { action: "save_plan_limit" });
                   window.location.href = "/logbook/pro";
                   return;
                 }
@@ -1661,8 +1712,20 @@ export default function FlightPlanner() {
             <Button
               variant="outline"
               onClick={() => {
+                if (!isAuthenticated) {
+                  toast({
+                    title: "Create a free account to continue",
+                    description: "RSF Pro syncs plans into your logbook and analytics.",
+                  });
+                  trackEvent("planner_register_prompt", { action: "send_to_logbook" });
+                  window.location.href = "/register";
+                  return;
+                }
                 if (!isPro) {
-                  toast({ title: "Upgrade to RSF Pro to sync", description: "RSF Pro membership is required to sync to logbook." });
+                  toast({
+                    title: "Upgrade to RSF Pro",
+                    description: "RSF Pro membership is required to sync to logbook.",
+                  });
                   trackEvent("planner_upgrade_prompt", { action: "send_to_logbook" });
                   window.location.href = "/logbook/pro";
                   return;
@@ -1683,12 +1746,12 @@ export default function FlightPlanner() {
       <Card>
         <CardHeader>
           <CardTitle>Saved Plans</CardTitle>
-          <CardDescription>Access saved routes and fuel notes (Pro).</CardDescription>
+          <CardDescription>Access saved routes and fuel notes. Free accounts keep one plan.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {!isPro && (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              RSF Pro unlocks saved plans, per-leg breakdowns, and unlimited route storage.
+              Free accounts keep one active plan. RSF Pro unlocks unlimited storage and per-leg breakdowns.
             </div>
           )}
           {plansLoading ? (

@@ -1,7 +1,7 @@
 import type { User } from "@shared/schema";
 
 export type MembershipTier = "free" | "pro" | "pro_plus";
-export type MembershipStatus = "active" | "inactive" | "cancelled" | "past_due";
+export type MembershipStatus = "active" | "inactive" | "cancelled" | "past_due" | "trialing";
 export type BillingInterval = "monthly" | "biannual" | "annual";
 
 type MembershipPlanInfo = { tier: MembershipTier; interval: BillingInterval };
@@ -61,6 +61,7 @@ export function resolveMembershipFromPlanId(planId?: string | null): MembershipP
 function mapLegacyStatus(status?: string | null): MembershipStatus {
   const normalized = (status || "free").toLowerCase();
   if (normalized === "active") return "active";
+  if (normalized === "trialing") return "trialing";
   if (["cancelled", "canceled", "expired", "suspended"].includes(normalized)) return "cancelled";
   if (["payment_failed", "past_due"].includes(normalized)) return "past_due";
   return "inactive";
@@ -69,6 +70,8 @@ function mapLegacyStatus(status?: string | null): MembershipStatus {
 export function mapPayPalStatusToMembership(status?: string | null): MembershipStatus {
   const normalized = (status || "UNKNOWN").toLowerCase();
   if (normalized === "active") return "active";
+  if (normalized === "trialing") return "trialing";
+  if (normalized === "approved") return "active";
   if (["cancelled", "canceled", "expired", "suspended"].includes(normalized)) return "cancelled";
   if (["payment_failed", "past_due"].includes(normalized)) return "past_due";
   return "inactive";
@@ -80,6 +83,9 @@ export function getEffectiveMembership(user?: User | null) {
       tier: "free" as MembershipTier,
       status: "inactive" as MembershipStatus,
       endsAt: null as Date | null,
+      trialEndsAt: null as Date | null,
+      nextBillingAt: null as Date | null,
+      interval: null as BillingInterval | null,
       provider: null as string | null,
       paypalSubscriptionId: null as string | null,
       paypalPlanId: null as string | null,
@@ -89,6 +95,9 @@ export function getEffectiveMembership(user?: User | null) {
   let tier = (user.membershipTier || "free") as MembershipTier;
   let status = (user.membershipStatus || "inactive") as MembershipStatus;
   let endsAt = user.membershipEndsAt ? new Date(user.membershipEndsAt) : null;
+  let trialEndsAt = user.membershipTrialEndsAt ? new Date(user.membershipTrialEndsAt) : null;
+  let nextBillingAt = user.membershipNextBillingAt ? new Date(user.membershipNextBillingAt) : null;
+  let interval = (user.membershipInterval || null) as BillingInterval | null;
   let provider = user.membershipProvider || null;
   let paypalSubscriptionId = user.paypalSubscriptionId || user.logbookProSubscriptionId || null;
   let paypalPlanId = user.paypalPlanId || null;
@@ -101,6 +110,7 @@ export function getEffectiveMembership(user?: User | null) {
       tier = "pro";
       status = legacyStatus;
       endsAt = legacyEndsAt || endsAt;
+      interval = interval || (user.logbookProPlan as BillingInterval | null);
       provider = provider || "paypal";
       paypalSubscriptionId = paypalSubscriptionId || user.logbookProSubscriptionId || null;
     }
@@ -110,6 +120,9 @@ export function getEffectiveMembership(user?: User | null) {
     tier,
     status,
     endsAt,
+    trialEndsAt,
+    nextBillingAt,
+    interval,
     provider,
     paypalSubscriptionId,
     paypalPlanId,
@@ -131,7 +144,14 @@ export function getEntitlementsForUser(user?: User | null) {
         canUseAnalytics: true,
         canUseScenarioScoring: true,
         canUseAdvancedTrends: true,
+        canUseGpsSims: true,
+        canCreateEvents: true,
+        canCreateListings: true,
+        canUseVorGuided: true,
         membershipEndsAt: undefined,
+        membershipTrialEndsAt: undefined,
+        membershipNextBillingAt: undefined,
+        membershipInterval: undefined,
       };
     }
   }
@@ -141,6 +161,7 @@ export function getEntitlementsForUser(user?: User | null) {
   const hasTimeRemaining = membership.endsAt ? membership.endsAt > now : false;
   const isActive =
     membership.status === "active" ||
+    membership.status === "trialing" ||
     (membership.status !== "inactive" && hasTimeRemaining);
   const tier = isActive ? membership.tier : "free";
   const isPro = tier === "pro" || tier === "pro_plus";
@@ -156,6 +177,13 @@ export function getEntitlementsForUser(user?: User | null) {
     canUseAnalytics: isPro,
     canUseScenarioScoring: isPro,
     canUseAdvancedTrends: isProPlus,
+    canUseGpsSims: isPro,
+    canCreateEvents: isPro,
+    canCreateListings: isPro,
+    canUseVorGuided: isPro,
     membershipEndsAt: membership.endsAt ? membership.endsAt.toISOString() : undefined,
+    membershipTrialEndsAt: membership.trialEndsAt ? membership.trialEndsAt.toISOString() : undefined,
+    membershipNextBillingAt: membership.nextBillingAt ? membership.nextBillingAt.toISOString() : undefined,
+    membershipInterval: membership.interval || undefined,
   };
 }

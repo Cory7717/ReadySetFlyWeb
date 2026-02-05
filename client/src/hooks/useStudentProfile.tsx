@@ -49,12 +49,7 @@ export function useStudentProfile() {
 
   const saveMutation = useMutation({
     mutationFn: async (updates: StudentProfileData) => {
-      const payload = {
-        wizardJson: updates.wizardJson ?? null,
-        roadmapJson: updates.roadmapJson ?? null,
-        progressJson: updates.progressJson ?? null,
-      };
-      const res = await apiRequest("PUT", "/api/student/profile", payload);
+      const res = await apiRequest("PUT", "/api/student/profile", updates);
       return res.json();
     },
     onSuccess: () => {
@@ -63,10 +58,15 @@ export function useStudentProfile() {
   });
 
   const saveProfile = (updates: StudentProfileData) => {
+    const base = user ? (serverProfile || {}) : localProfile;
+    const next: StudentProfileData = {
+      wizardJson: updates.wizardJson !== undefined ? updates.wizardJson : base.wizardJson ?? null,
+      roadmapJson: updates.roadmapJson !== undefined ? updates.roadmapJson : base.roadmapJson ?? null,
+      progressJson: updates.progressJson !== undefined ? updates.progressJson : base.progressJson ?? null,
+    };
     if (user) {
-      return saveMutation.mutate(updates);
+      return saveMutation.mutate(next);
     }
-    const next = { ...localProfile, ...updates };
     setLocalProfile(next);
     writeLocalProfile(next);
   };

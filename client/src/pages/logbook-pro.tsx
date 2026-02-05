@@ -32,11 +32,15 @@ export default function LogbookProPage() {
   const membershipTier = (user as any)?.membershipTier || entitlements?.tier || "free";
   const membershipStatus = (user as any)?.membershipStatus || "inactive";
   const membershipEndsAt = (user as any)?.membershipEndsAt || entitlements?.membershipEndsAt;
+  const membershipTrialEndsAt =
+    (user as any)?.membershipTrialEndsAt || entitlements?.membershipTrialEndsAt;
+  const membershipInterval = (user as any)?.membershipInterval || entitlements?.membershipInterval;
   const hasAccess =
     entitlements?.tier
       ? entitlements.tier !== "free"
       : membershipStatus === "active" ||
         (membershipEndsAt && new Date(membershipEndsAt) > new Date());
+  const isTrialing = membershipStatus === "trialing";
 
   const currentTierLabel =
     membershipTierInfo[membershipTier as MembershipTier]?.title || "Free";
@@ -46,6 +50,8 @@ export default function LogbookProPage() {
     () => planOptions.find((plan) => plan.interval === selectedInterval) || planOptions[0],
     [planOptions, selectedInterval]
   );
+  const hasTrial = Boolean(selectedPlan?.trialDays);
+  const selectedPlanTotal = hasTrial ? 0 : selectedPlan.price;
 
   const handleSubscribe = async () => {
     setLoading(true);
@@ -106,16 +112,24 @@ export default function LogbookProPage() {
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={hasAccess ? "default" : "outline"}>
-              Status: {hasAccess ? "active" : membershipStatus}
+              Status: {hasAccess ? (isTrialing ? "trialing" : "active") : membershipStatus}
             </Badge>
             <Badge variant="secondary">Tier: {currentTierLabel}</Badge>
+            {membershipInterval && hasAccess && (
+              <Badge variant="outline">Billing: {membershipInterval}</Badge>
+            )}
           </div>
 
           {hasAccess ? (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Your RSF Pro membership is active.
+                {isTrialing ? "Your RSF trial is active." : "Your RSF Pro membership is active."}
               </p>
+              {isTrialing && membershipTrialEndsAt && (
+                <p className="text-xs text-muted-foreground">
+                  Trial ends {new Date(membershipTrialEndsAt).toLocaleDateString()}.
+                </p>
+              )}
               <Button variant="destructive" onClick={handleCancel} disabled={loading}>Cancel RSF Pro</Button>
               <p className="text-xs text-muted-foreground">
                 Cancel anytime. Your free tools remain available.
@@ -163,6 +177,11 @@ export default function LogbookProPage() {
                       <div className="text-xs text-muted-foreground">
                         {membershipTierInfo[selectedTier].subtitle}
                       </div>
+                      {plan.trialDays && (
+                        <div className="text-xs text-emerald-600 mt-2">
+                          {plan.trialDays}-day free trial (monthly only)
+                        </div>
+                      )}
                     </button>
                   );
                 })}
@@ -174,18 +193,24 @@ export default function LogbookProPage() {
                 <div>
                   <div className="text-muted-foreground">Selected plan</div>
                   <div className="font-medium">{selectedPlan.label}</div>
+                  {hasTrial && (
+                    <div className="text-xs text-muted-foreground">
+                      {selectedPlan.trialDays}-day free trial - cancel before day {selectedPlan.trialDays}
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="text-muted-foreground">Total today</div>
-                  <div className="font-semibold">${selectedPlan.price.toFixed(2)}</div>
+                  <div className="font-semibold">${selectedPlanTotal.toFixed(2)}</div>
                 </div>
               </div>
 
               <Button onClick={handleSubscribe} disabled={loading}>
-                {loading ? "Redirecting..." : "Become a Member with PayPal"}
+                {loading ? "Redirecting..." : hasTrial ? "Start free trial with PayPal" : "Become a Member with PayPal"}
               </Button>
               <p className="text-xs text-muted-foreground">
                 By subscribing you agree to recurring billing at the selected interval.
+                {hasTrial && " Trial converts automatically unless canceled."}
               </p>
             </>
           )}

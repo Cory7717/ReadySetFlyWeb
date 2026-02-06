@@ -1,13 +1,82 @@
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { BookOpen, ClipboardList, CalendarDays, Navigation2, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2 } from "lucide-react";
+import { BookOpen, ClipboardList, CalendarDays, Navigation2, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useEffect, useRef, useState } from "react";
+
+interface WeatherData {
+  icao: string;
+  metar: any;
+  taf: any;
+  timestamp: number;
+  cached: boolean;
+}
+
+const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+
+function parseFlightCategory(metar: any): { category: string; color: string } {
+  if (!metar) return { category: "UNKNOWN", color: "gray" };
+  const raw = metar.rawOb || "";
+  const visMatch = raw.match(/\s(\d{1,2})SM/);
+  const visibility = visMatch ? parseInt(visMatch[1]) : 10;
+  const ceilingMatch = raw.match(/(BKN|OVC)(\d{3})/);
+  const ceiling = ceilingMatch ? parseInt(ceilingMatch[2]) * 100 : 10000;
+  if (ceiling >= 3000 && visibility > 5) return { category: "VFR", color: "green" };
+  if (ceiling >= 1000 && visibility >= 3) return { category: "MVFR", color: "blue" };
+  if (ceiling >= 500 && visibility >= 1) return { category: "IFR", color: "red" };
+  return { category: "LIFR", color: "purple" };
+}
+
+function formatTimeAgo(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m ago`;
+}
+
+function extractAtisIdentifier(metar: any): string | null {
+  if (!metar?.rawOb) return null;
+  const raw = metar.rawOb;
+  const infoMatch = raw.match(/\bINFO\s+([A-Z])\b/i);
+  if (infoMatch) return `Information ${infoMatch[1].toUpperCase()}`;
+  const atisMatch = raw.match(/\bATIS\s+([A-Z])\b/i);
+  if (atisMatch) return `Information ${atisMatch[1].toUpperCase()}`;
+  const rmkIndex = raw.indexOf("RMK");
+  if (rmkIndex !== -1) {
+    const afterRmk = raw.substring(rmkIndex);
+    const endMatch = afterRmk.match(/\s([A-Z])\s*$/);
+    if (endMatch) return `Information ${endMatch[1]}`;
+  }
+  return null;
+}
+
+function extractRunwayInUse(metar: any): string | null {
+  if (!metar?.rawOb) return null;
+  const raw = metar.rawOb;
+  const rwyMatch = raw.match(/\b(?:RWY|RUNWAY)\s+(\d{2}[LCR]?(?:\s*(?:AND|\/|&)\s*\d{2}[LCR]?)*)/i);
+  if (rwyMatch) return rwyMatch[1].replace(/\s+/g, " ").trim();
+  const arrRwyMatch = raw.match(/\bARR\s+(?:RWY|RUNWAY)\s+(\d{2}[LCR]?)/i);
+  const depRwyMatch = raw.match(/\bDEP\s+(?:RWY|RUNWAY)\s+(\d{2}[LCR]?)/i);
+  if (arrRwyMatch || depRwyMatch) {
+    const runways = [];
+    if (arrRwyMatch) runways.push(`${arrRwyMatch[1]} (arr)`);
+    if (depRwyMatch) runways.push(`${depRwyMatch[1]} (dep)`);
+    return runways.join(", ");
+  }
+  return null;
+}
 
 export default function Landing() {
   const { data: eventsData } = useQuery({
@@ -39,6 +108,71 @@ export default function Landing() {
   const autoScrollActiveRef = useRef(false);
   const [eventsHovering, setEventsHovering] = useState(false);
   const [autoPauseUntil, setAutoPauseUntil] = useState(0);
+  const [icaoInput, setIcaoInput] = useState("KAUS");
+  const [searchIcao, setSearchIcao] = useState("KAUS");
+
+  const { data: weather, isLoading: weatherLoading } = useQuery<WeatherData>({
+    queryKey: [`/api/aviation-weather/${searchIcao}`],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/aviation-weather/${searchIcao}`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch weather data");
+      return res.json();
+    },
+    enabled: Boolean(searchIcao),
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const { data: runwayBriefing, isLoading: runwayLoading } = useQuery<{
+    icao: string;
+    runwayInUse: string | null;
+    advisory: { runway: string; heading: number; headwind: number; crosswind: number } | null;
+    runways: Array<{
+      leIdent: string | null;
+      heIdent: string | null;
+      lengthFt: number | null;
+      surface: string | null;
+    }>;
+  }>({
+    queryKey: [`/api/airports/${searchIcao}/runway-briefing`],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/airports/${searchIcao}/runway-briefing`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch runway briefing");
+      return res.json();
+    },
+    enabled: Boolean(searchIcao),
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const { data: notams, isLoading: notamsLoading } = useQuery<{
+    icao: string;
+    notams: Array<{ id: string; text: string; effective?: string; expires?: string }>;
+  }>({
+    queryKey: [`/api/notams/${searchIcao}`],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/notams/${searchIcao}`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch NOTAMs");
+      return res.json();
+    },
+    enabled: Boolean(searchIcao),
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const flightCategory = parseFlightCategory(weather?.metar);
+  const runwayInUseDisplay =
+    runwayBriefing?.runwayInUse || extractRunwayInUse(weather?.metar) || null;
+  const atisInfo = extractAtisIdentifier(weather?.metar);
+
+  const submitIcao = () => {
+    const normalized = icaoInput.trim().toUpperCase();
+    if (!ICAO_REGEX.test(normalized)) return;
+    setSearchIcao(normalized);
+  };
 
   const pauseAutoScroll = (ms = 8000) => {
     setAutoPauseUntil(Date.now() + ms);
@@ -151,6 +285,217 @@ export default function Landing() {
             </div>
           </div>
       </div>
+      </div>
+
+      {/* Current Conditions */}
+      <div className="py-10 sm:py-12">
+        <div className="container mx-auto px-4 space-y-6">
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-semibold">Current Conditions</h2>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              Live weather and airport conditions for quick planning context.
+            </p>
+          </div>
+
+          <Card className="border-muted-foreground/20">
+            <CardContent className="p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="space-y-2">
+                  <Label htmlFor="landing-icao" className="text-sm font-semibold">
+                    Airport ICAO
+                  </Label>
+                  <Input
+                    id="landing-icao"
+                    value={icaoInput}
+                    onChange={(event) => setIcaoInput(event.target.value)}
+                    onBlur={submitIcao}
+                    placeholder="KAUS"
+                    className="max-w-xs"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={submitIcao}
+                  disabled={!ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
+                >
+                  Update conditions
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <Card id="airport-weather" className="border-muted-foreground/20">
+              <CardHeader>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <CardTitle>{weather?.icao || searchIcao} - Current Conditions</CardTitle>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge
+                      variant="secondary"
+                      className={`text-white ${
+                        flightCategory.color === "green"
+                          ? "bg-green-600"
+                          : flightCategory.color === "blue"
+                          ? "bg-blue-600"
+                          : flightCategory.color === "red"
+                          ? "bg-red-600"
+                          : "bg-purple-600"
+                      }`}
+                    >
+                      {flightCategory.category}
+                    </Badge>
+                    {runwayInUseDisplay && (
+                      <Badge variant="outline" className="bg-amber-50 text-amber-800">
+                        Active RWY: {runwayInUseDisplay}
+                      </Badge>
+                    )}
+                    {atisInfo && (
+                      <Badge variant="outline" className="bg-sky-100 text-sky-800">
+                        ATIS: {atisInfo}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <CardDescription className="flex items-center gap-2 flex-wrap">
+                  {weather?.metar && (
+                    <span className="text-xs">
+                      Updated: {formatTimeAgo(new Date(weather.metar.obsTime).getTime())}
+                    </span>
+                  )}
+                  {weather?.cached && <Badge variant="secondary" className="text-xs">Cached</Badge>}
+                  {weatherLoading && <Badge variant="secondary">Loading</Badge>}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {weather?.metar ? (
+                  <div>
+                    <Label className="text-sm font-semibold">METAR</Label>
+                    <p className="font-mono text-sm bg-muted p-3 rounded-md mt-1">
+                      {weather.metar.rawOb}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No METAR data available.
+                  </p>
+                )}
+
+                <Separator />
+
+                {weather?.taf ? (
+                  <div>
+                    <Label className="text-sm font-semibold">TAF (Forecast)</Label>
+                    <p className="font-mono text-sm bg-muted p-3 rounded-md mt-1 whitespace-pre-wrap">
+                      {weather.taf.rawTAF}
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <Label className="text-sm font-semibold">TAF (Forecast)</Label>
+                    <p className="text-sm text-muted-foreground mt-1">No TAF data available.</p>
+                  </div>
+                )}
+
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    <strong>Disclaimer:</strong> Planning use only. Always obtain an official weather briefing before flight.
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+
+            <Card id="airport-briefing" className="border-muted-foreground/20">
+              <CardHeader>
+                <CardTitle>Airport Briefing</CardTitle>
+                <CardDescription>Runway guidance and live NOTAMs for {searchIcao}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <Label className="text-sm font-semibold">Runway Advisory</Label>
+                    {runwayLoading && <Badge variant="secondary">Loading runways</Badge>}
+                  </div>
+                  {(runwayInUseDisplay || atisInfo) && (
+                    <div className="flex flex-wrap gap-2">
+                      {runwayInUseDisplay && (
+                        <Badge variant="outline" className="bg-amber-50 text-amber-800">
+                          Active RWY: {runwayInUseDisplay}
+                        </Badge>
+                      )}
+                      {atisInfo && (
+                        <Badge variant="outline" className="bg-sky-100 text-sky-800">
+                          ATIS: {atisInfo}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                  {runwayBriefing?.advisory ? (
+                    <div className="rounded-lg border p-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">Recommended: {runwayBriefing.advisory.runway}</Badge>
+                        <span className="text-muted-foreground">
+                          Headwind {runwayBriefing.advisory.headwind} kt - Crosswind {runwayBriefing.advisory.crosswind} kt
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Advisory only. ATC assigns runways; verify with ATIS and tower.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Runway advisory unavailable. Check ATIS or tower for active runway.
+                    </p>
+                  )}
+
+                  {runwayBriefing?.runways?.length ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {runwayBriefing.runways.slice(0, 6).map((runway, index) => (
+                        <div key={`${runway.leIdent}-${runway.heIdent}-${index}`} className="rounded-lg border p-2 text-xs">
+                          <div className="font-semibold">
+                            {runway.leIdent || "--"} / {runway.heIdent || "--"}
+                          </div>
+                          <div className="text-muted-foreground">
+                            {runway.surface || "Surface N/A"} - {runway.lengthFt ? `${runway.lengthFt} ft` : "Length N/A"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Runway details not available.</p>
+                  )}
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <Label className="text-sm font-semibold">NOTAMs</Label>
+                    {notamsLoading && <Badge variant="secondary">Loading NOTAMs</Badge>}
+                  </div>
+                  {notams?.notams?.length ? (
+                    <div className="space-y-2">
+                      {notams.notams.slice(0, 6).map((item) => (
+                        <div key={item.id} className="rounded-lg border p-3 text-xs space-y-1">
+                          <div className="font-semibold">{item.text}</div>
+                          {(item.effective || item.expires) && (
+                            <div className="text-muted-foreground">
+                              {item.effective ? `Effective ${item.effective}` : ""}{" "}
+                              {item.expires ? `- Expires ${item.expires}` : ""}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No NOTAMs available at this time.</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">NOTAMs powered by FAA SWIM.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
 
       {/* Choose your starting point */}

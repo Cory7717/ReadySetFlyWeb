@@ -128,7 +128,7 @@ export default function Landing() {
                   href="/flight-planner"
                   onClick={() => trackEvent("cta_click", { label: "plan_flight", target: "/flight-planner" })}
                 >
-                  Plan a flight -> Get a safety briefing
+                  Plan a flight, get a safety briefing
                 </Link>
               </Button>
               <Button 

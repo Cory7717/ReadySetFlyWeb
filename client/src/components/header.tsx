@@ -28,7 +28,6 @@ export function Header() {
   const unreadCount = unreadNotifications?.count ?? 0;
   
   const isPlanner = location.startsWith("/flight-planner");
-  const isSafety = location.startsWith("/flight-planner");
   const isTraining = location.startsWith("/student") || location.startsWith("/start-flying");
   const isFaq = location === "/faq";
   
@@ -62,16 +61,6 @@ export function Header() {
                 Plan Flight
               </Button>
             </Link>
-            <Link href="/flight-planner#safety-briefing" data-testid="link-safety-briefing">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isSafety ? "bg-background shadow-sm" : ""}`}
-                onClick={() => trackEvent("nav_click", { label: "safety_briefing", target: "/flight-planner#safety-briefing" })}
-              >
-                Safety Briefing
-              </Button>
-            </Link>
             <Link href="/student" data-testid="link-training">
               <Button
                 variant="ghost"
@@ -94,20 +83,20 @@ export function Header() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="rounded-full text-xs sm:text-sm px-2 sm:px-4 text-muted-foreground"
+                className="rounded-full text-xs sm:text-sm px-2 sm:px-4"
                 onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}
               >
-                Rentals (when ready)
+                Rentals
               </Button>
             </Link>
             <Link href="/marketplace" data-testid="link-marketplace">
               <Button
                 variant="ghost"
                 size="sm"
-                className="rounded-full text-xs sm:text-sm px-2 sm:px-4 text-muted-foreground"
+                className="rounded-full text-xs sm:text-sm px-2 sm:px-4"
                 onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}
               >
-                Marketplace (when ready)
+                Marketplace
               </Button>
             </Link>
           </nav>

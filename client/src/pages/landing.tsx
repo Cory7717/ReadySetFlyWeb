@@ -107,7 +107,7 @@ export default function Landing() {
               Ready Set Fly
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4">
-              Plan a flight. Get a safety briefing. Learn and log with confidence.
+              Plan a flight. Get route analysis. Learn and log with confidence.
             </p>
             <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
               Ready Set Fly is a planning-first, safety-oriented pilot tool. Training and logging are embedded into the planning flow so risk surfaces earlier and decisions stay sharper.
@@ -131,7 +131,7 @@ export default function Landing() {
                   href="/flight-planner"
                   onClick={() => trackEvent("cta_click", { label: "plan_flight", target: "/flight-planner" })}
                 >
-                  Plan a flight &rarr; Get a safety briefing
+                  Plan a flight
                 </Link>
               </Button>
               <Button 
@@ -258,7 +258,7 @@ export default function Landing() {
               },
               {
                 title: "Assess",
-                description: "Get a safety briefing that surfaces issues early.",
+                description: "Get route analysis that surfaces issues early.",
                 icon: Shield,
               },
               {
@@ -532,7 +532,7 @@ export default function Landing() {
                 </div>
                 <h3 className="text-xl font-semibold">Flight Planning</h3>
                 <p className="text-muted-foreground">
-                  Build a route, choose altitude, and get a safety briefing tailored to your flight.
+                  Build a route, choose altitude, and get route analysis tailored to your flight.
                 </p>
               </div>
             </CardContent>
@@ -544,7 +544,7 @@ export default function Landing() {
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <Shield className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-xl font-semibold">Safety Briefing</h3>
+                <h3 className="text-xl font-semibold">Route Analysis</h3>
                 <p className="text-muted-foreground">
                   Surface weather, crosswinds, and route risks early without alarmist noise.
                 </p>
@@ -575,7 +575,7 @@ export default function Landing() {
             Ready to Plan a Flight?
           </h2>
           <p className="text-base sm:text-xl text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-            Build a route and get a safety briefing in minutes.
+            Build a route and get route analysis in minutes.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild size="lg" data-testid="button-cta-plan-flight">
@@ -619,7 +619,7 @@ export default function Landing() {
                       Take Ready Set Fly Anywhere
                     </h2>
                     <p className="text-muted-foreground mb-6">
-                      Our mobile app is coming soon to iOS and Android. Plan flights, review safety briefings,
+                      Our mobile app is coming soon to iOS and Android. Plan flights, review route analysis,
                       and keep training tools handy on the go.
                     </p>
                     <div className="space-y-3">

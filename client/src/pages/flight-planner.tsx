@@ -1155,7 +1155,7 @@ export default function FlightPlanner() {
           <div>
             <h1 className="text-3xl font-bold">Plan a Flight</h1>
             <p className="text-muted-foreground">
-              Build a route and get a safety briefing before you fly.
+              Build a route and get route analysis before you fly.
             </p>
             {!isPro && (
               <p className="text-xs text-muted-foreground mt-2">
@@ -1251,7 +1251,7 @@ export default function FlightPlanner() {
                 placeholder="17L"
               />
               <p className="text-xs text-muted-foreground">
-                Add a runway to surface crosswind guidance in the safety briefing.
+                Add a runway to surface crosswind guidance in the route analysis.
               </p>
             </div>
             <div className="space-y-2 md:col-span-2">
@@ -1690,15 +1690,15 @@ export default function FlightPlanner() {
           ) : null}
         </CardContent>
       </Card>
-      <Card id="safety-briefing" className="relative">
+      <Card id="route-analysis" className="relative">
         <CardHeader>
-          <CardTitle>Safety Briefing</CardTitle>
+          <CardTitle>Route Analysis</CardTitle>
           <CardDescription>Advisory summary based on your route, altitude, and weather.</CardDescription>
         </CardHeader>
         <CardContent className={cn("space-y-4", briefingLocked && "opacity-30 pointer-events-none")}>
           {!briefingReady && (
             <div className="text-sm text-muted-foreground">
-              Enter a departure and destination to generate a safety briefing.
+              Enter a departure and destination to generate route analysis.
             </div>
           )}
             {forecastNotice && (
@@ -1774,7 +1774,7 @@ export default function FlightPlanner() {
             <div className="space-y-3 max-w-sm">
               <div className="text-lg font-semibold">Create a free account to continue</div>
               <p className="text-sm text-white/80">
-                Save your planning history and unlock additional safety briefings.
+                Save your planning history and unlock additional route analysis.
               </p>
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
                 <Button asChild variant="secondary">

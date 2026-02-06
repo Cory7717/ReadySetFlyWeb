@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { trackEvent } from "@/lib/analytics";
 import { apiUrl } from "@/lib/api";
+import { useAvionicsSimulator } from "@/lib/avionics-sim";
 import { gpsTrainerDisclaimer, gpsTrainerUnits, type GpsTrainerTask } from "@shared/gps-sims";
 import { useAuth } from "@/hooks/useAuth";
 import { useStudentProfile } from "@/hooks/useStudentProfile";
@@ -18,6 +20,25 @@ function createStepState(task: GpsTrainerTask) {
 export default function GpsSimsUnit() {
   const [, params] = useRoute("/gps-sims/:unitId");
   const unit = gpsTrainerUnits.find((item) => item.id === params?.unitId);
+  const routeSeed = useMemo(() => {
+    switch (params?.unitId) {
+      case "rsf-navstack-530":
+        return ["KDAL", "KACT", "KCLL"];
+      case "rsf-touch-750":
+        return ["KMCI", "KMKC", "KICT"];
+      case "rsf-ifd-style":
+        return ["KPAO", "KSNS", "KMRY"];
+      case "rsf-glass-classic":
+        return ["KAUS", "KGTU", "KHYI"];
+      default:
+        return ["KAUS", "KGTU", "KHYI"];
+    }
+  }, [params?.unitId]);
+
+  const { state: avionics, derived, actions, scenarios: avionicsScenarios } =
+    useAvionicsSimulator(routeSeed);
+
+  const [newWaypoint, setNewWaypoint] = useState("");
   const { user, isAuthenticated } = useAuth();
   const { profile, saveProfile, saving } = useStudentProfile();
   const entitlements = (user as any)?.entitlements;
@@ -37,9 +58,35 @@ export default function GpsSimsUnit() {
   const [actionLog, setActionLog] = useState<Array<{ id: string; label: string; matched: boolean }>>(
     []
   );
+  const [showAvionicsExplain, setShowAvionicsExplain] = useState(true);
+  const [activeScenarioId, setActiveScenarioId] = useState<string | null>(
+    avionicsScenarios[0]?.id ?? null
+  );
   const [knobValues, setKnobValues] = useState<Record<string, number>>({});
   const panelRef = useRef<HTMLDivElement | null>(null);
   const knobDragRef = useRef<{ hotspotId: string; lastAngle: number } | null>(null);
+  const {
+    pressButton,
+    rotateKnob,
+    pushKnob,
+    addWaypoint,
+    removeWaypoint,
+    activateLeg,
+    setPage,
+    setDirectToTarget,
+    applyScenario,
+    setInputBuffer,
+    clearMessages,
+  } = actions;
+  const {
+    routePoints,
+    aircraftPoint,
+    targetPoint,
+    mapRangeNm,
+    nearestAirports,
+    directToOptions,
+    activeLegIdent,
+  } = derived;
 
   useEffect(() => {
     if (unit) {
@@ -69,6 +116,10 @@ export default function GpsSimsUnit() {
     setActionLog([]);
     setKnobValues({});
   }, [unit?.id]);
+
+  useEffect(() => {
+    setActiveScenarioId(avionicsScenarios[0]?.id ?? null);
+  }, [unit?.id, avionicsScenarios]);
 
   useEffect(() => {
     if (!unit || !canPersist || loadedFromProfile) return;
@@ -177,6 +228,12 @@ export default function GpsSimsUnit() {
   const completedCount = progress.filter(Boolean).length;
   const actionHints = selectedTask.actionHints ?? [];
   const rotationStep = 18;
+  const activePage = avionics.activePage;
+  const directToSelection =
+    directToOptions[avionics.directToIndex] ?? directToOptions[0] ?? null;
+  const mapPolyline = routePoints.map((point) => `${point.x},${point.y}`).join(" ");
+  const cdiOffset = Math.round(avionics.cdiDeflection * 28);
+  const mapHeading = Math.round(avionics.simulatedAircraft.groundTrackDeg);
 
   const handleToggleStep = (index: number) => {
     setStepProgress((prev) => {
@@ -218,7 +275,43 @@ export default function GpsSimsUnit() {
 
   const handleButtonPress = (hotspotId: string) => {
     setSelectedHotspotId(hotspotId);
+    pressButton(hotspotId);
     recordAction({ type: "press", hotspotId });
+  };
+
+  const handleActivateDirectTo = (ident: string | null) => {
+    if (!ident) return;
+    setDirectToTarget(ident);
+    trackEvent("direct_to_activate", { unit: unit.id, ident });
+  };
+
+  const handleAddWaypoint = () => {
+    const trimmed = newWaypoint.trim().toUpperCase();
+    if (!trimmed) return;
+    addWaypoint(trimmed);
+    setNewWaypoint("");
+    trackEvent("fpl_create", { unit: unit.id, ident: trimmed });
+  };
+
+  const handleScenarioStart = (scenarioId: string) => {
+    const scenario = avionicsScenarios.find((item) => item.id === scenarioId);
+    if (!scenario) return;
+    setActiveScenarioId(scenarioId);
+    applyScenario(scenario);
+    trackEvent("scenario_start", { unit: unit.id, scenario: scenarioId });
+  };
+
+  const handleScenarioReset = () => {
+    setActiveScenarioId(null);
+    applyScenario({
+      id: "reset",
+      title: "Reset",
+      description: "Reset avionics state.",
+      route: routeSeed,
+      activePage: "MAP",
+    });
+    setDirectToTarget(null);
+    setPage("MAP");
   };
 
   const getHotspotCenter = (hotspotId: string) => {
@@ -260,7 +353,9 @@ export default function GpsSimsUnit() {
         ...prev,
         [hotspotId]: (prev[hotspotId] ?? 0) + (direction === "cw" ? 1 : -1),
       }));
+      rotateKnob(hotspotId, direction === "cw" ? 1 : -1);
       recordAction({ type: "rotate", hotspotId, direction });
+      trackEvent("knob_rotate", { unit: unit.id, knob: hotspotId, direction });
     }
   };
 
@@ -271,6 +366,23 @@ export default function GpsSimsUnit() {
     } catch {
       // ignore if pointer capture was not set
     }
+  };
+
+  const handleKnobWheel = (event: React.WheelEvent, hotspotId: string) => {
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -1 : 1;
+    rotateKnob(hotspotId, direction);
+    setKnobValues((prev) => ({
+      ...prev,
+      [hotspotId]: (prev[hotspotId] ?? 0) + direction,
+    }));
+    recordAction({ type: "rotate", hotspotId, direction: direction > 0 ? "cw" : "ccw" });
+    trackEvent("knob_rotate", { unit: unit.id, knob: hotspotId, direction: direction > 0 ? "cw" : "ccw" });
+  };
+
+  const handleKnobPush = (hotspotId: string) => {
+    pushKnob(hotspotId);
+    recordAction({ type: "press", hotspotId });
   };
 
   const handleSaveProgress = () => {
@@ -293,6 +405,190 @@ export default function GpsSimsUnit() {
   };
 
   const showSteps = mode === "learn" || revealed[selectedTask.id];
+
+  const renderMapPanel = () => (
+    <div className="relative h-56 rounded-lg border bg-slate-950/80 overflow-hidden">
+      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full">
+        {routePoints.length > 1 && (
+          <polyline points={mapPolyline} fill="none" stroke="#1d4ed8" strokeWidth="0.8" />
+        )}
+        {targetPoint && aircraftPoint && (
+          <line
+            x1={aircraftPoint.x}
+            y1={aircraftPoint.y}
+            x2={targetPoint.x}
+            y2={targetPoint.y}
+            stroke="#f59e0b"
+            strokeDasharray="2 2"
+            strokeWidth="0.6"
+          />
+        )}
+        {routePoints.map((point) => (
+          <g key={point.ident}>
+            <circle cx={point.x} cy={point.y} r={1.6} fill="#60a5fa" />
+            <text x={point.x + 2} y={point.y - 2} fontSize="4" fill="#e2e8f0">
+              {point.ident}
+            </text>
+          </g>
+        ))}
+        <circle cx={aircraftPoint.x} cy={aircraftPoint.y} r={2.2} fill="#22c55e" />
+      </svg>
+      <div className="absolute left-2 top-2 rounded bg-black/50 px-2 py-1 text-[11px] text-slate-100">
+        {avionics.navSource} · {mapHeading} deg
+      </div>
+      <div className="absolute bottom-2 left-2 rounded bg-black/50 px-2 py-1 text-[11px] text-slate-100">
+        Range {mapRangeNm} nm
+      </div>
+      <div className="absolute bottom-2 right-2 flex items-center gap-2 rounded bg-black/50 px-2 py-1 text-[11px] text-slate-100">
+        <span>CDI</span>
+        <div className="relative h-1 w-16 rounded-full bg-slate-700">
+          <div
+            className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-amber-400"
+            style={{ left: `calc(50% + ${cdiOffset}px)` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAvionicsPage = () => {
+    switch (activePage) {
+      case "FPL":
+        return (
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground">
+              Rotate the knob to move the cursor. Click a leg to activate it.
+            </div>
+            <div className="space-y-2">
+              {avionics.route.map((ident, index) => (
+                <div
+                  key={`${ident}-${index}`}
+                  className="flex items-center justify-between rounded-md border px-2 py-1 text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">{ident}</span>
+                    {index === avionics.activeLegIndex && (
+                      <Badge variant="secondary">Active</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => activateLeg(index)}
+                    >
+                      Activate
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => removeWaypoint(index)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={newWaypoint}
+                onChange={(event) => setNewWaypoint(event.target.value.toUpperCase())}
+                placeholder="Add waypoint"
+                className="h-9 w-36 rounded-md border bg-background px-2 text-sm"
+              />
+              <Button type="button" size="sm" onClick={handleAddWaypoint}>
+                Add
+              </Button>
+            </div>
+          </div>
+        );
+      case "DIRECT":
+        return (
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground">
+              Rotate the knob or pick a waypoint to activate direct-to.
+            </div>
+            <div className="space-y-2">
+              {directToOptions.map((ident) => (
+                <Button
+                  key={ident}
+                  type="button"
+                  variant={ident === directToSelection ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleActivateDirectTo(ident)}
+                >
+                  {ident}
+                </Button>
+              ))}
+            </div>
+            {directToSelection && (
+              <Button type="button" onClick={() => handleActivateDirectTo(directToSelection)}>
+                Activate Direct-To {directToSelection}
+              </Button>
+            )}
+          </div>
+        );
+      case "NRST":
+        return (
+          <div className="space-y-2 text-sm">
+            {nearestAirports.map((ident) => (
+              <div key={ident} className="flex items-center justify-between rounded-md border px-2 py-1">
+                <span>{ident}</span>
+                <Button type="button" size="sm" variant="outline" onClick={() => handleActivateDirectTo(ident)}>
+                  Direct-To
+                </Button>
+              </div>
+            ))}
+          </div>
+        );
+      case "PROC":
+        return (
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center gap-2">
+              <Badge variant={avionics.approachLoaded ? "default" : "outline"}>
+                {avionics.approachLoaded ? "Approach loaded" : "Approach not loaded"}
+              </Badge>
+              {avionics.approachActivated && <Badge>Active</Badge>}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => pressButton("approach-load")}>
+                Load approach
+              </Button>
+              <Button type="button" size="sm" onClick={() => pressButton("approach-activate")}>
+                Activate approach
+              </Button>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Use PROC then verify the fixes on the flight plan.
+            </div>
+          </div>
+        );
+      case "MENU":
+        return (
+          <div className="space-y-2 text-sm">
+            {avionics.messages.length ? (
+              avionics.messages.map((message) => (
+                <div key={message} className="rounded-md border px-2 py-1">
+                  {message}
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-muted-foreground">No active messages.</div>
+            )}
+            <Button type="button" size="sm" variant="outline" onClick={clearMessages}>
+              Clear messages
+            </Button>
+          </div>
+        );
+      case "NAV":
+      case "MAP":
+      default:
+        return renderMapPanel();
+    }
+  };
 
   return (
     <div className="min-h-screen">
@@ -413,6 +709,12 @@ export default function GpsSimsUnit() {
                   onPointerLeave={(event) =>
                     hotspot.interaction?.type === "knob" ? handleKnobPointerUp(event) : undefined
                   }
+                  onDoubleClick={() =>
+                    hotspot.interaction?.type === "knob" ? handleKnobPush(hotspot.id) : undefined
+                  }
+                  onWheel={(event) =>
+                    hotspot.interaction?.type === "knob" ? handleKnobWheel(event, hotspot.id) : undefined
+                  }
                   aria-label={hotspot.label}
                 >
                   <span className="sr-only">{hotspot.label}</span>
@@ -462,11 +764,78 @@ export default function GpsSimsUnit() {
                         ))}
                       </div>
                     )}
+                    {avionics.lastAction && (
+                      <div className="text-xs text-muted-foreground">
+                        Sim: {avionics.lastAction}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-xs">Try a button or knob to see feedback.</div>
                 )}
               </div>
+              <Card className="border-dashed">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Avionics Console</CardTitle>
+                  <CardDescription>
+                    Live trainer state powered by RSF avionics logic.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {(["MAP", "NAV", "FPL", "NRST", "PROC", "DIRECT", "MENU"] as const).map(
+                      (page) => (
+                        <Button
+                          key={page}
+                          type="button"
+                          size="sm"
+                          variant={activePage === page ? "default" : "outline"}
+                          onClick={() => setPage(page)}
+                        >
+                          {page}
+                        </Button>
+                      )
+                    )}
+                  </div>
+                  <div className="rounded-lg border bg-background/80 p-3">
+                    {renderAvionicsPage()}
+                  </div>
+                  <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                    <div>Active leg: {activeLegIdent ?? "—"}</div>
+                    <div>Source: {avionics.navSource}</div>
+                    <div>Cursor mode: {avionics.cursorMode ? "On" : "Off"}</div>
+                    <div>Range: {mapRangeNm} nm</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={showAvionicsExplain} onCheckedChange={setShowAvionicsExplain} />
+                    <span className="text-xs text-muted-foreground">What just happened</span>
+                  </div>
+                  {showAvionicsExplain && avionics.lastAction && (
+                    <div className="rounded-md border bg-muted/50 p-2 text-xs text-muted-foreground">
+                      {avionics.lastAction}
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-foreground">Scenario presets</div>
+                    <div className="flex flex-wrap gap-2">
+                      {avionicsScenarios.map((scenario) => (
+                        <Button
+                          key={scenario.id}
+                          type="button"
+                          size="sm"
+                          variant={activeScenarioId === scenario.id ? "default" : "outline"}
+                          onClick={() => handleScenarioStart(scenario.id)}
+                        >
+                          {scenario.title}
+                        </Button>
+                      ))}
+                      <Button type="button" size="sm" variant="outline" onClick={handleScenarioReset}>
+                        Reset
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
               <p className="text-xs text-muted-foreground">
                 Want more realism? Drop in actual panel artwork and we can remap hotspots.
               </p>

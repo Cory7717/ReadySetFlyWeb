@@ -1,3 +1,33 @@
+.six-pack-panel-slot {
+  position: absolute;
+}
+
+.six-pack-panel-overlay {
+  pointer-events: none;
+}
+
+.six-pack-overlay-surface {
+  background: rgba(15, 23, 42, 0.45);
+  transition: opacity 0.2s ease;
+}
+
+.six-pack-overlay-loaded {
+  opacity: 0.85;
+}
+
+.six-pack-overlay-loading {
+  opacity: 0.6;
+}
+
+.six-pack-pad-dot {
+  transform: translate(-50%, -50%);
+}
+
+.six-pack-control-pad {
+  touch-action: none;
+}
+
+.six-pack-panel-slot[data-hotspot="asi"],
 .six-pack-hotspot[data-hotspot="asi"] {
   left: 5%;
   top: 9%;
@@ -5,6 +35,7 @@
   height: 30%;
 }
 
+.six-pack-panel-slot[data-hotspot="ai"],
 .six-pack-hotspot[data-hotspot="ai"] {
   left: 39%;
   top: 9%;
@@ -12,6 +43,7 @@
   height: 30%;
 }
 
+.six-pack-panel-slot[data-hotspot="altimeter"],
 .six-pack-hotspot[data-hotspot="altimeter"] {
   left: 73%;
   top: 9%;
@@ -19,6 +51,7 @@
   height: 30%;
 }
 
+.six-pack-panel-slot[data-hotspot="turn"],
 .six-pack-hotspot[data-hotspot="turn"] {
   left: 5%;
   top: 55%;
@@ -26,6 +59,7 @@
   height: 30%;
 }
 
+.six-pack-panel-slot[data-hotspot="heading"],
 .six-pack-hotspot[data-hotspot="heading"] {
   left: 39%;
   top: 55%;
@@ -33,6 +67,7 @@
   height: 30%;
 }
 
+.six-pack-panel-slot[data-hotspot="vsi"],
 .six-pack-hotspot[data-hotspot="vsi"] {
   left: 73%;
   top: 55%;

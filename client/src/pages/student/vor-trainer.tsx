@@ -349,6 +349,31 @@ export function VORTrainerV1({ gate }: { gate?: VorGate }) {
               +10°
             </Button>
           </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>OBS knob</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div
+                ref={knobRef}
+                className="relative h-24 w-24 rounded-full border bg-slate-900 shadow-inner select-none"
+                onPointerDown={handleKnobPointerDown}
+                onPointerMove={handleKnobPointerMove}
+                onPointerUp={handleKnobPointerUp}
+                onPointerCancel={handleKnobPointerUp}
+                onWheel={handleKnobWheel}
+              >
+                <div className="absolute inset-3 rounded-full border bg-slate-800" />
+                <div
+                  className="absolute left-1/2 top-1/2 h-10 w-1 -translate-x-1/2 -translate-y-full rounded-full bg-yellow-400"
+                  style={knobPointerStyle}
+                />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Drag to rotate. Scroll to adjust by 1Â° (Shift = 5Â°).
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="space-y-4">
@@ -398,32 +423,7 @@ export function VORTrainerV1({ gate }: { gate?: VorGate }) {
             </Card>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>OBS knob</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div
-                ref={knobRef}
-                className="relative h-24 w-24 rounded-full border bg-slate-900 shadow-inner select-none"
-                onPointerDown={handleKnobPointerDown}
-                onPointerMove={handleKnobPointerMove}
-                onPointerUp={handleKnobPointerUp}
-                onPointerCancel={handleKnobPointerUp}
-                onWheel={handleKnobWheel}
-              >
-                <div className="absolute inset-3 rounded-full border bg-slate-800" />
-                <div
-                  className="absolute left-1/2 top-1/2 h-10 w-1 -translate-x-1/2 -translate-y-full rounded-full bg-yellow-400"
-                  style={knobPointerStyle}
-                />
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Drag to rotate. Scroll to adjust by 1° (Shift = 5°).
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                  </div>
       </div>
     </div>
   );

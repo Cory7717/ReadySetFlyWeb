@@ -306,6 +306,46 @@ export function startSwimNotamWorker() {
     return false;
   }
 
+  const sessionEvents = solclientjs.SessionEventCode;
+  const consumerEvents = solclientjs.MessageConsumerEventName;
+  const pickEvent = (source: Record<string, any>, labels: string[], fallbackLabel: string) => {
+    for (const label of labels) {
+      const value = source?.[label];
+      if (value !== undefined && value !== null) return value;
+    }
+    console.warn(`SWIM Solace event missing: ${fallbackLabel}`);
+    return undefined;
+  };
+
+  const sessionUpEvent = pickEvent(sessionEvents, ["UP_NOTICE", "UP", "CONNECTED"], "UP_NOTICE");
+  const sessionConnectFailedEvent = pickEvent(
+    sessionEvents,
+    ["CONNECT_FAILED_ERROR", "CONNECT_FAILED", "DOWN_ERROR"],
+    "CONNECT_FAILED_ERROR"
+  );
+  const sessionDisconnectedEvent = pickEvent(sessionEvents, ["DISCONNECTED", "DISCONNECT"], "DISCONNECTED");
+  const sessionReconnectingEvent = pickEvent(
+    sessionEvents,
+    ["RECONNECTING_NOTICE", "RECONNECTING"],
+    "RECONNECTING_NOTICE"
+  );
+  const sessionReconnectedEvent = pickEvent(
+    sessionEvents,
+    ["RECONNECTED_NOTICE", "RECONNECTED"],
+    "RECONNECTED_NOTICE"
+  );
+  const consumerMessageEvent = pickEvent(consumerEvents, ["MESSAGE", "MESSAGE_RECEIVED"], "MESSAGE");
+  const consumerConnectFailedEvent = pickEvent(
+    consumerEvents,
+    ["CONNECT_FAILED_ERROR", "CONNECT_FAILED"],
+    "CONSUMER_CONNECT_FAILED"
+  );
+  const consumerDownEvent = pickEvent(
+    consumerEvents,
+    ["DOWN_ERROR", "DOWN"],
+    "CONSUMER_DOWN_ERROR"
+  );
+
   try {
     initSolace();
   } catch (error) {
@@ -346,7 +386,7 @@ export function startSwimNotamWorker() {
     }
   };
 
-  safeOn(session, solclientjs.SessionEventCode.UP_NOTICE, () => {
+  safeOn(session, sessionUpEvent, () => {
     console.log("SWIM Solace session up. Subscribing to queue:", queueName);
     if (consumer) return;
     try {
@@ -359,7 +399,7 @@ export function startSwimNotamWorker() {
       return;
     }
 
-    safeOn(consumer, solclientjs.MessageConsumerEventName.MESSAGE, async (message: any) => {
+    safeOn(consumer, consumerMessageEvent, async (message: any) => {
       try {
         const body = messageToString(message);
         const payload = parsePayload(body);
@@ -382,30 +422,30 @@ export function startSwimNotamWorker() {
       }
     }, "MESSAGE");
 
-    safeOn(consumer, solclientjs.MessageConsumerEventName.CONNECT_FAILED_ERROR, (err: any) => {
+    safeOn(consumer, consumerConnectFailedEvent, (err: any) => {
       console.error("SWIM consumer connect failed:", err?.message || err);
     }, "CONSUMER_CONNECT_FAILED");
 
-    safeOn(consumer, solclientjs.MessageConsumerEventName.DOWN_ERROR, (err: any) => {
+    safeOn(consumer, consumerDownEvent, (err: any) => {
       console.error("SWIM consumer down:", err?.message || err);
     }, "CONSUMER_DOWN_ERROR");
 
     consumer.connect();
   }, "UP_NOTICE");
 
-  safeOn(session, solclientjs.SessionEventCode.CONNECT_FAILED_ERROR, (err: any) => {
+  safeOn(session, sessionConnectFailedEvent, (err: any) => {
     console.error("SWIM session connect failed:", err?.message || err);
   }, "CONNECT_FAILED_ERROR");
 
-  safeOn(session, solclientjs.SessionEventCode.DISCONNECTED, () => {
+  safeOn(session, sessionDisconnectedEvent, () => {
     console.warn("SWIM session disconnected.");
   }, "DISCONNECTED");
 
-  safeOn(session, solclientjs.SessionEventCode.RECONNECTING_NOTICE, () => {
+  safeOn(session, sessionReconnectingEvent, () => {
     console.warn("SWIM session reconnecting...");
   }, "RECONNECTING_NOTICE");
 
-  safeOn(session, solclientjs.SessionEventCode.RECONNECTED_NOTICE, () => {
+  safeOn(session, sessionReconnectedEvent, () => {
     console.warn("SWIM session reconnected.");
   }, "RECONNECTED_NOTICE");
 

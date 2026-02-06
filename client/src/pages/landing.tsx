@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { BookOpen, ClipboardList, CalendarDays, Navigation2, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, Store } from "lucide-react";
+import { BookOpen, ClipboardList, CalendarDays, Navigation2, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -107,13 +107,13 @@ export default function Landing() {
               Ready Set Fly
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4">
-              Plan a flight. Get a risk overview. Learn and log with confidence.
+              Plan a flight. Get a safety briefing. Learn and log with confidence.
             </p>
             <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
               Ready Set Fly is a planning-first, safety-oriented pilot tool. Training and logging are embedded into the planning flow so risk surfaces earlier and decisions stay sharper.
             </p>
             <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto px-4">
-              RSF is built for pilots who want clearer overviews, smarter route decisions, and post-flight reflection -- before any transactions ever enter the picture.
+              RSF is built for pilots who want clearer planning, smarter route decisions, and post-flight reflection -- before any transactions ever enter the picture.
             </p>
             <p className="text-sm sm:text-base font-semibold text-primary">
               Plan first. Train smart. Then connect with rentals and listings.
@@ -131,7 +131,7 @@ export default function Landing() {
                   href="/flight-planner"
                   onClick={() => trackEvent("cta_click", { label: "plan_flight", target: "/flight-planner" })}
                 >
-                  Plan a flight, get a risk overview
+                  Plan a flight &rarr; Get a safety briefing
                 </Link>
               </Button>
               <Button 
@@ -153,49 +153,88 @@ export default function Landing() {
       </div>
       </div>
 
-      {/* Beyond planning pointers */}
-      <div className="py-8 sm:py-10">
+      {/* Choose your starting point */}
+      <div className="py-10 sm:py-12">
         <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto space-y-4 text-center">
-            <div className="text-sm text-muted-foreground">Beyond planning</div>
-            <h2 className="text-2xl sm:text-3xl font-semibold">
-              Rentals and listings are here when you are ready
-            </h2>
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-semibold">Choose your starting point</h2>
             <p className="text-sm sm:text-base text-muted-foreground">
-              RSF keeps planning first, but the marketplace and rental network are built into the same workflow.
+              RSF supports pilots at every stage -- pick a starting point.
             </p>
           </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <Link href="/rentals" onClick={() => trackEvent("cta_click", { label: "rentals_secondary", target: "/rentals" })}>
-              <Card className="border-muted-foreground/20 hover:shadow-md transition-shadow">
-                <CardContent className="p-5 flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                    <Plane className="h-5 w-5" />
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                title: "Experienced Pilot",
+                subtitle: "Planning, performance, currency, and proficiency tools",
+                primary: { label: "Open flight planning", href: "/flight-planner", track: "start_experienced_primary" },
+                links: [
+                  { label: "Pilot calculators", href: "/pilot-tools", track: "start_experienced_calculators" },
+                  { label: "Digital logbook", href: "/logbook", track: "start_experienced_logbook" },
+                  { label: "Currency tracking", href: "/logbook", track: "start_experienced_currency" },
+                  { label: "IFR tools", href: "/ifr-tools", track: "start_experienced_ifr" },
+                ],
+              },
+              {
+                title: "Student Pilot",
+                subtitle: "Training guidance, fundamentals, and progress tracking",
+                primary: { label: "Open Student Hub", href: "/student", track: "start_student_primary" },
+                links: [
+                  { label: "6-Pack trainer", href: "/student/six-pack-trainer", track: "start_student_six_pack" },
+                  { label: "Training syllabi", href: "/student/syllabi", track: "start_student_syllabi" },
+                  { label: "Cost calculator", href: "/student/cost", track: "start_student_cost" },
+                  { label: "Student weather", href: "/student/weather", track: "start_student_weather" },
+                ],
+              },
+              {
+                title: "Rent an Aircraft",
+                subtitle: "Find rentals, flight schools, and verified access",
+                primary: { label: "Browse rentals", href: "/rentals", track: "start_rentals_primary" },
+                links: [
+                  { label: "Flight schools", href: "/rentals", track: "start_rentals_schools" },
+                  { label: "Verification & safety", href: "/faq", track: "start_rentals_verification" },
+                ],
+              },
+              {
+                title: "Marketplace & Jobs",
+                subtitle: "Aircraft, jobs, services, and charter listings",
+                primary: { label: "Open marketplace", href: "/marketplace", track: "start_marketplace_primary" },
+                links: [
+                  { label: "Aircraft listings", href: "/marketplace", track: "start_marketplace_aircraft" },
+                  { label: "Aviation jobs", href: "/marketplace", track: "start_marketplace_jobs" },
+                  { label: "Services & charter", href: "/marketplace", track: "start_marketplace_services" },
+                ],
+              },
+            ].map((card) => (
+              <Card key={card.title} className="border-muted-foreground/20">
+                <CardContent className="p-5 space-y-4">
+                  <div className="space-y-2">
+                    <div className="text-lg font-semibold">{card.title}</div>
+                    <p className="text-sm text-muted-foreground">{card.subtitle}</p>
                   </div>
-                  <div className="text-left">
-                    <div className="font-semibold">Rentals & Flight Schools</div>
-                    <p className="text-sm text-muted-foreground">
-                      Browse available aircraft and trusted flight schools when you are ready to fly.
-                    </p>
+                  <div className="flex flex-wrap gap-2">
+                    {card.links.map((link) => (
+                      <Button key={link.label} size="sm" variant="outline" asChild>
+                        <Link
+                          href={link.href}
+                          onClick={() => trackEvent("cta_click", { label: link.track, target: link.href })}
+                        >
+                          {link.label}
+                        </Link>
+                      </Button>
+                    ))}
                   </div>
+                  <Button size="sm" variant="secondary" className="w-fit" asChild>
+                    <Link
+                      href={card.primary.href}
+                      onClick={() => trackEvent("cta_click", { label: card.primary.track, target: card.primary.href })}
+                    >
+                      {card.primary.label}
+                    </Link>
+                  </Button>
                 </CardContent>
               </Card>
-            </Link>
-            <Link href="/marketplace" onClick={() => trackEvent("cta_click", { label: "marketplace_secondary", target: "/marketplace" })}>
-              <Card className="border-muted-foreground/20 hover:shadow-md transition-shadow">
-                <CardContent className="p-5 flex items-start gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                    <Store className="h-5 w-5" />
-                  </div>
-                  <div className="text-left">
-                    <div className="font-semibold">Marketplace Listings</div>
-                    <p className="text-sm text-muted-foreground">
-                      Discover instructors, services, and listings once your plan is set.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+            ))}
           </div>
         </div>
       </div>
@@ -219,7 +258,7 @@ export default function Landing() {
               },
               {
                 title: "Assess",
-                description: "Get a risk overview that surfaces issues early.",
+                description: "Get a safety briefing that surfaces issues early.",
                 icon: Shield,
               },
               {
@@ -245,74 +284,6 @@ export default function Landing() {
             ))}
           </div>
       </div>
-      </div>
-
-      {/* Explore by category */}
-      <div className="py-10 sm:py-14">
-        <div className="container mx-auto px-4">
-          <div className="text-center space-y-2">
-            <div className="text-sm text-muted-foreground">Explore RSF</div>
-            <h2 className="text-2xl sm:text-3xl font-semibold">Find tools by category</h2>
-            <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto">
-              Jump to the areas you need most. Planning stays first, but every workflow lives here.
-            </p>
-          </div>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {[
-              {
-                title: "Flight Planning",
-                description: "Build routes and risk overviews.",
-                icon: Navigation2,
-                href: "/flight-planner",
-                label: "flight_planning_category",
-              },
-              {
-                title: "Pilot Tools",
-                description: "Calculators and planning support.",
-                icon: ClipboardList,
-                href: "/pilot-tools",
-                label: "pilot_tools_category",
-              },
-              {
-                title: "Student Tools",
-                description: "Training paths and core trainers.",
-                icon: BookOpen,
-                href: "/student",
-                label: "student_tools_category",
-              },
-              {
-                title: "Rentals & Schools",
-                description: "Connect with aircraft access.",
-                icon: Plane,
-                href: "/rentals",
-                label: "rentals_category",
-              },
-              {
-                title: "Marketplace",
-                description: "Listings, CFIs, and services.",
-                icon: Store,
-                href: "/marketplace",
-                label: "marketplace_category",
-              },
-            ].map((item) => (
-              <Link
-                key={item.title}
-                href={item.href}
-                onClick={() => trackEvent("cta_click", { label: item.label, target: item.href })}
-              >
-                <Card className="h-full border-muted-foreground/20 hover:shadow-md transition-shadow">
-                  <CardContent className="pt-6 space-y-3 text-center">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <item.icon className="h-5 w-5" />
-                    </div>
-                    <div className="text-base font-semibold">{item.title}</div>
-                    <p className="text-xs text-muted-foreground">{item.description}</p>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Safety-first intent */}
@@ -561,7 +532,7 @@ export default function Landing() {
                 </div>
                 <h3 className="text-xl font-semibold">Flight Planning</h3>
                 <p className="text-muted-foreground">
-                  Build a route, choose altitude, and get a risk overview tailored to your flight.
+                  Build a route, choose altitude, and get a safety briefing tailored to your flight.
                 </p>
               </div>
             </CardContent>
@@ -573,7 +544,7 @@ export default function Landing() {
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <Shield className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-xl font-semibold">Risk Overview</h3>
+                <h3 className="text-xl font-semibold">Safety Briefing</h3>
                 <p className="text-muted-foreground">
                   Surface weather, crosswinds, and route risks early without alarmist noise.
                 </p>
@@ -604,7 +575,7 @@ export default function Landing() {
             Ready to Plan a Flight?
           </h2>
           <p className="text-base sm:text-xl text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-            Build a route and get a risk overview in minutes.
+            Build a route and get a safety briefing in minutes.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild size="lg" data-testid="button-cta-plan-flight">
@@ -648,7 +619,7 @@ export default function Landing() {
                       Take Ready Set Fly Anywhere
                     </h2>
                     <p className="text-muted-foreground mb-6">
-                      Our mobile app is coming soon to iOS and Android. Plan flights, review risk overviews,
+                      Our mobile app is coming soon to iOS and Android. Plan flights, review safety briefings,
                       and keep training tools handy on the go.
                     </p>
                     <div className="space-y-3">

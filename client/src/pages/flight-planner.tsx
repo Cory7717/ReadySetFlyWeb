@@ -1155,7 +1155,7 @@ export default function FlightPlanner() {
           <div>
             <h1 className="text-3xl font-bold">Plan a Flight</h1>
             <p className="text-muted-foreground">
-              Build a route and get a risk overview before you fly.
+              Build a route and get a safety briefing before you fly.
             </p>
             {!isPro && (
               <p className="text-xs text-muted-foreground mt-2">
@@ -1251,7 +1251,7 @@ export default function FlightPlanner() {
                 placeholder="17L"
               />
               <p className="text-xs text-muted-foreground">
-                Add a runway to surface crosswind guidance in the risk overview.
+                Add a runway to surface crosswind guidance in the safety briefing.
               </p>
             </div>
             <div className="space-y-2 md:col-span-2">
@@ -1690,17 +1690,17 @@ export default function FlightPlanner() {
           ) : null}
         </CardContent>
       </Card>
-        <Card id="risk-overview" className="relative">
-          <CardHeader>
-            <CardTitle>Risk Overview</CardTitle>
-            <CardDescription>Advisory summary based on your route, altitude, and weather.</CardDescription>
-          </CardHeader>
-          <CardContent className={cn("space-y-4", briefingLocked && "opacity-30 pointer-events-none")}>
-            {!briefingReady && (
-              <div className="text-sm text-muted-foreground">
-                Enter a departure and destination to generate a risk overview.
-              </div>
-            )}
+      <Card id="safety-briefing" className="relative">
+        <CardHeader>
+          <CardTitle>Safety Briefing</CardTitle>
+          <CardDescription>Advisory summary based on your route, altitude, and weather.</CardDescription>
+        </CardHeader>
+        <CardContent className={cn("space-y-4", briefingLocked && "opacity-30 pointer-events-none")}>
+          {!briefingReady && (
+            <div className="text-sm text-muted-foreground">
+              Enter a departure and destination to generate a safety briefing.
+            </div>
+          )}
             {forecastNotice && (
               <Alert>
                 <AlertDescription>{forecastNotice}</AlertDescription>
@@ -1774,7 +1774,7 @@ export default function FlightPlanner() {
             <div className="space-y-3 max-w-sm">
               <div className="text-lg font-semibold">Create a free account to continue</div>
               <p className="text-sm text-white/80">
-                Save your planning history and unlock additional risk overviews.
+                Save your planning history and unlock additional safety briefings.
               </p>
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
                 <Button asChild variant="secondary">

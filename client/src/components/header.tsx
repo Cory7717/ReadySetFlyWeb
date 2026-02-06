@@ -62,14 +62,14 @@ export function Header() {
                 Plan Flight
               </Button>
             </Link>
-            <Link href="/flight-planner#risk-overview" data-testid="link-safety-briefing">
+            <Link href="/flight-planner#safety-briefing" data-testid="link-safety-briefing">
               <Button
                 variant="ghost"
                 size="sm"
                 className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isSafety ? "bg-background shadow-sm" : ""}`}
-                onClick={() => trackEvent("nav_click", { label: "risk_overview", target: "/flight-planner#risk-overview" })}
+                onClick={() => trackEvent("nav_click", { label: "safety_briefing", target: "/flight-planner#safety-briefing" })}
               >
-                Risk Overview
+                Safety Briefing
               </Button>
             </Link>
             <Link href="/student" data-testid="link-training">

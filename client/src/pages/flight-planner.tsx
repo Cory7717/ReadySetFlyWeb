@@ -18,7 +18,7 @@ import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useStudentProfile } from "@/hooks/useStudentProfile";
 import { trackEvent } from "@/lib/analytics";
-import { buildLegs, sumDistance, type AirportPoint } from "@/lib/flightPlanner";
+import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/flightPlanner";
 import { cn } from "@/lib/utils";
 import type { FlightPlan } from "@shared/schema";
 
@@ -536,16 +536,56 @@ export default function FlightPlanner() {
 
   const waypoints = useMemo(() => parseWaypoints(waypointsInput), [waypointsInput]);
   const plannedStops = useMemo(() => parseWaypoints(plannedStopsInput), [plannedStopsInput]);
+  const isUsingSuggestedWaypoints = useMemo(() => {
+    if (suggestedWaypoints.length === 0) return false;
+    const normalized = waypointsInput.trim().toUpperCase();
+    return normalized === suggestedWaypoints.join(" ");
+  }, [suggestedWaypoints, waypointsInput]);
+  const isUsingSuggestedStops = useMemo(() => {
+    if (suggestedStops.length === 0) return false;
+    const normalized = plannedStopsInput.trim().toUpperCase();
+    return normalized === suggestedStops.join(" ");
+  }, [suggestedStops, plannedStopsInput]);
+  const shouldOrderSuggestions = isUsingSuggestedWaypoints || isUsingSuggestedStops;
+
+  const orderedIntermediates = useMemo(() => {
+    const combined = [...plannedStops, ...waypoints].filter((icao) => ICAO_REGEX.test(icao));
+    if (!shouldOrderSuggestions) return combined;
+    const departureKey = departureResolved.trim().toUpperCase();
+    const departurePoint = airportMap.get(departureKey);
+    if (!departurePoint || !Number.isFinite(departurePoint.lat) || !Number.isFinite(departurePoint.lon)) {
+      return combined;
+    }
+    const basePoint: AirportPoint = {
+      icao: departureKey,
+      lat: Number(departurePoint.lat),
+      lon: Number(departurePoint.lon),
+    };
+    return combined
+      .map((icao, index) => {
+        const data = airportMap.get(icao);
+        if (!data || !Number.isFinite(data.lat) || !Number.isFinite(data.lon)) {
+          return { icao, index, distance: Number.POSITIVE_INFINITY };
+        }
+        const dist = distanceNm(basePoint, {
+          icao,
+          lat: Number(data.lat),
+          lon: Number(data.lon),
+        });
+        return { icao, index, distance: dist };
+      })
+      .sort((a, b) => (a.distance === b.distance ? a.index - b.index : a.distance - b.distance))
+      .map((item) => item.icao);
+  }, [plannedStops, waypoints, shouldOrderSuggestions, airportMap, departureResolved]);
   const routeSequence = useMemo(() => {
     return [
       departureResolved.trim().toUpperCase(),
-      ...plannedStops,
-      ...waypoints,
+      ...orderedIntermediates,
       destinationResolved.trim().toUpperCase(),
     ]
       .filter(Boolean)
       .filter((icao) => ICAO_REGEX.test(icao));
-  }, [departureResolved, destinationResolved, waypoints, plannedStops]);
+  }, [departureResolved, destinationResolved, orderedIntermediates]);
 
   const routeIcaos = useMemo(() => {
     return Array.from(new Set(routeSequence));

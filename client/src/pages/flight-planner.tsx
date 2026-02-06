@@ -548,6 +548,45 @@ export default function FlightPlanner() {
   }, [suggestedStops, plannedStopsInput]);
   const shouldOrderSuggestions = isUsingSuggestedWaypoints || isUsingSuggestedStops;
 
+  const routeSequenceRaw = useMemo(() => {
+    return [
+      departureResolved.trim().toUpperCase(),
+      ...plannedStops,
+      ...waypoints,
+      destinationResolved.trim().toUpperCase(),
+    ]
+      .filter(Boolean)
+      .filter((icao) => ICAO_REGEX.test(icao));
+  }, [departureResolved, destinationResolved, plannedStops, waypoints]);
+
+  const routeIcaos = useMemo(() => {
+    return Array.from(new Set(routeSequenceRaw));
+  }, [routeSequenceRaw]);
+
+  const airportQueries = useQueries({
+    queries: routeIcaos.map((icao) => ({
+      queryKey: ["/api/airports", icao],
+      queryFn: async () => {
+        const res = await fetch(apiUrl(`/api/airports/${icao}`), { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to fetch airport data");
+        return res.json();
+      },
+      enabled: routeIcaos.length > 0,
+      staleTime: 1000 * 60 * 60,
+    })),
+  });
+
+  const airportMap = useMemo(() => {
+    const map = new Map<string, any>();
+    airportQueries.forEach((query, index) => {
+      const icao = routeIcaos[index];
+      if (query.data && icao) {
+        map.set(icao, query.data);
+      }
+    });
+    return map;
+  }, [airportQueries, routeIcaos]);
+
   const orderedIntermediates = useMemo(() => {
     const combined = [...plannedStops, ...waypoints].filter((icao) => ICAO_REGEX.test(icao));
     if (!shouldOrderSuggestions) return combined;
@@ -577,7 +616,8 @@ export default function FlightPlanner() {
       .sort((a, b) => (a.distance === b.distance ? a.index - b.index : a.distance - b.distance))
       .map((item) => item.icao);
   }, [plannedStops, waypoints, shouldOrderSuggestions, airportMap, departureResolved]);
-  const routeSequence = useMemo(() => {
+
+  const routeSequenceOrdered = useMemo(() => {
     return [
       departureResolved.trim().toUpperCase(),
       ...orderedIntermediates,
@@ -586,34 +626,6 @@ export default function FlightPlanner() {
       .filter(Boolean)
       .filter((icao) => ICAO_REGEX.test(icao));
   }, [departureResolved, destinationResolved, orderedIntermediates]);
-
-  const routeIcaos = useMemo(() => {
-    return Array.from(new Set(routeSequence));
-  }, [routeSequence]);
-
-  const airportQueries = useQueries({
-    queries: routeIcaos.map((icao) => ({
-      queryKey: ["/api/airports", icao],
-      queryFn: async () => {
-        const res = await fetch(apiUrl(`/api/airports/${icao}`), { credentials: "include" });
-        if (!res.ok) throw new Error("Failed to fetch airport data");
-        return res.json();
-      },
-      enabled: routeIcaos.length > 0,
-      staleTime: 1000 * 60 * 60,
-    })),
-  });
-
-  const airportMap = useMemo(() => {
-    const map = new Map<string, any>();
-    airportQueries.forEach((query, index) => {
-      const icao = routeIcaos[index];
-      if (query.data && icao) {
-        map.set(icao, query.data);
-      }
-    });
-    return map;
-  }, [airportQueries, routeIcaos]);
 
   const browserTimeZone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -663,14 +675,14 @@ export default function FlightPlanner() {
   }, [routeIcaos, airportMap]);
 
   const airportPoints: AirportPoint[] = useMemo(() => {
-    return routeSequence
+    return routeSequenceOrdered
       .map((icao) => {
         const data = airportMap.get(icao);
         if (!data || !Number.isFinite(data.lat) || !Number.isFinite(data.lon)) return null;
         return { icao, lat: Number(data.lat), lon: Number(data.lon) };
       })
       .filter(Boolean) as AirportPoint[];
-  }, [airportMap, routeSequence]);
+  }, [airportMap, routeSequenceOrdered]);
 
   const suggestedWaypoint = useMemo(() => {
     if (routeSuggestion !== "midpoint") return null;

@@ -8480,8 +8480,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const tafUrl = `https://aviationweather.gov/api/data/taf?ids=${candidate}&format=json`;
 
         const [metarRes, tafRes] = await Promise.all([
-          fetch(metarUrl, { headers: { 'User-Agent': 'ReadySetFly/1.0' } }),
-          fetch(tafUrl, { headers: { 'User-Agent': 'ReadySetFly/1.0' } })
+          fetch(metarUrl, { headers: { "User-Agent": "ReadySetFly/1.0" } }),
+          fetch(tafUrl, { headers: { "User-Agent": "ReadySetFly/1.0" } }),
         ]);
 
         let metar = null;
@@ -8489,31 +8489,30 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         let metarError = null;
         let tafError = null;
 
-        if (metarRes.ok) {
-          try {
-            const metarData = await metarRes.json();
-            metar = metarData.length > 0 ? metarData[0] : null;
-          } catch (e) {
-            metarError = "Failed to parse METAR response";
-            console.error(`METAR parse error for ${candidate}:`, e);
+        const parseWeatherPayload = async (response: Response, label: string) => {
+          if (!response.ok) {
+            return { data: null, error: `${label} unavailable (${response.status})` };
           }
-        } else {
-          metarError = `METAR unavailable (${metarRes.status})`;
-          console.log(`METAR fetch failed for ${candidate}: ${metarRes.status}`);
-        }
+          const body = await response.text();
+          if (!body.trim()) {
+            return { data: null, error: `${label} empty response` };
+          }
+          try {
+            const parsed = JSON.parse(body);
+            const data = Array.isArray(parsed) ? parsed[0] ?? null : parsed ?? null;
+            return { data, error: null };
+          } catch (e) {
+            console.error(`${label} parse error for ${candidate}:`, e);
+            return { data: null, error: `Failed to parse ${label} response` };
+          }
+        };
 
-        if (tafRes.ok) {
-          try {
-            const tafData = await tafRes.json();
-            taf = tafData.length > 0 ? tafData[0] : null;
-          } catch (e) {
-            tafError = "Failed to parse TAF response";
-            console.error(`TAF parse error for ${candidate}:`, e);
-          }
-        } else {
-          tafError = `TAF unavailable (${tafRes.status})`;
-          console.log(`TAF fetch failed for ${candidate}: ${tafRes.status}`);
-        }
+        const metarPayload = await parseWeatherPayload(metarRes, "METAR");
+        const tafPayload = await parseWeatherPayload(tafRes, "TAF");
+        metar = metarPayload.data;
+        taf = tafPayload.data;
+        metarError = metarPayload.error;
+        tafError = tafPayload.error;
 
         if (!metar && !taf && metarError && tafError) {
           continue;

@@ -516,11 +516,17 @@ export default function FlightPlanner() {
       }
       const res = await fetch(apiUrl(`/api/airports/route-suggestions?${params.toString()}`));
       if (!res.ok) {
+        if (res.status === 400 || res.status === 404) {
+          return { waypoints: [], plannedStops: [], meta: null };
+        }
         throw new Error("Failed to load route suggestions");
       }
       return res.json();
     },
-    enabled: Boolean(departureResolved && destinationResolved),
+    enabled:
+      Boolean(departureResolved && destinationResolved) &&
+      ICAO_REGEX.test(departureResolved.trim().toUpperCase()) &&
+      ICAO_REGEX.test(destinationResolved.trim().toUpperCase()),
     staleTime: 1000 * 60 * 10,
   });
 

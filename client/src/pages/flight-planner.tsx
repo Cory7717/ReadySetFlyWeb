@@ -16,13 +16,20 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { useStudentProfile } from "@/hooks/useStudentProfile";
 import { trackEvent } from "@/lib/analytics";
 import { buildLegs, sumDistance, type AirportPoint } from "@/lib/flightPlanner";
+import { cn } from "@/lib/utils";
 import type { FlightPlan } from "@shared/schema";
 
 const PlannerMap = lazy(() => import("@/components/flight-planner/PlannerMap"));
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+const CONTROLLED_AIRPORTS = new Set([
+  "KATL", "KDFW", "KDEN", "KORD", "KLAX", "KJFK", "KSFO", "KSEA", "KLAS", "KPHX",
+  "KCLT", "KIAH", "KMIA", "KBOS", "KMSP", "KDCA", "KIAD", "KEWR", "KLGA", "KPDX",
+  "KPHL", "KDTW", "KSTL", "KMDW", "KSAN", "KTPA", "KAUS", "KDAL", "KHOU",
+]);
 
 type AircraftProfile = {
   id: string;
@@ -93,6 +100,14 @@ type RouteSuggestionResponse = {
   meta: RouteSuggestionMeta;
 };
 
+type ContextualTool = {
+  id: string;
+  title: string;
+  description: string;
+  cta: string;
+  href: string;
+};
+
 function parseFlightCategory(metar: any): "VFR" | "MVFR" | "IFR" | "LIFR" | "UNKNOWN" {
   if (!metar?.rawOb) return "UNKNOWN";
   const raw = metar.rawOb || "";
@@ -110,6 +125,34 @@ function parseFlightCategory(metar: any): "VFR" | "MVFR" | "IFR" | "LIFR" | "UNK
 function hasThunder(taf: any) {
   const raw = taf?.rawTAF || "";
   return raw.includes("TS");
+}
+
+function parseMetarTempC(metar: any) {
+  const raw = metar?.rawOb || "";
+  const match = raw.match(/\s(M?\d{2})\/M?\d{2}\s/);
+  if (!match) return null;
+  const value = match[1];
+  const temp = value.startsWith("M") ? -Number(value.slice(1)) : Number(value);
+  return Number.isFinite(temp) ? temp : null;
+}
+
+function parseMetarWind(metar: any) {
+  const raw = metar?.rawOb || "";
+  const match = raw.match(/\s(\d{3}|VRB)(\d{2,3})KT/);
+  if (!match) return null;
+  if (match[1] === "VRB") return null;
+  const direction = Number(match[1]);
+  const speed = Number(match[2]);
+  if (!Number.isFinite(direction) || !Number.isFinite(speed)) return null;
+  return { direction, speed };
+}
+
+function parseRunwayHeading(runway: string) {
+  const match = runway.trim().toUpperCase().match(/^(\d{1,2})/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return (value % 36) * 10;
 }
 
 function parseWaypoints(input: string) {
@@ -210,12 +253,16 @@ const checklistDefaults = {
 };
 export default function FlightPlanner() {
   const { user, isAuthenticated } = useAuth();
+  const { profile: studentProfile } = useStudentProfile();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canPersist ?? (user?.logbookProStatus === "active");
   const isGuest = !isAuthenticated;
   const isFree = isAuthenticated && !isPro;
+  const isStudent = Boolean(
+    studentProfile?.wizardJson || studentProfile?.roadmapJson || studentProfile?.progressJson
+  );
 
   useEffect(() => {
     trackEvent("planner_page_view", { page: "flight-planner" });
@@ -237,6 +284,7 @@ export default function FlightPlanner() {
   });
   const [waypointsInput, setWaypointsInput] = useState("");
   const [plannedStopsInput, setPlannedStopsInput] = useState("");
+  const [departureRunway, setDepartureRunway] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState<string>("none");
   const [selectedTypeId, setSelectedTypeId] = useState<string>(FALLBACK_TYPE.id);
   const [reserveMinutes, setReserveMinutes] = useState("45");
@@ -695,6 +743,169 @@ export default function FlightPlanner() {
     }));
   }, [weatherData]);
 
+  const hasIfrWeather = useMemo(
+    () => weatherFindings.some((item) => item.category === "IFR" || item.category === "LIFR"),
+    [weatherFindings]
+  );
+
+  const isIfrFlight = hasIfrWeather || plannedAltitudeFt >= 18000;
+  const isVfrFlight = !isIfrFlight;
+
+  const departureMetar = useMemo(() => {
+    return weatherData.find((item) => item.icao === departureResolved.trim().toUpperCase())?.data?.metar;
+  }, [weatherData, departureResolved]);
+
+  const departureTempC = useMemo(() => parseMetarTempC(departureMetar), [departureMetar]);
+  const departureElevationFt = useMemo(() => {
+    const airport = airportMap.get(departureResolved.trim().toUpperCase());
+    const elevation = airport?.elevationFt ?? airport?.elevation_ft ?? airport?.elevation ?? null;
+    const value = Number(elevation);
+    return Number.isFinite(value) ? value : null;
+  }, [airportMap, departureResolved]);
+
+  const runwayHeading = useMemo(() => parseRunwayHeading(departureRunway), [departureRunway]);
+  const metarWind = useMemo(() => parseMetarWind(departureMetar), [departureMetar]);
+  const crosswindComponent = useMemo(() => {
+    if (!runwayHeading || !metarWind) return null;
+    const diff = Math.abs(((metarWind.direction - runwayHeading + 540) % 360) - 180);
+    const radians = (diff * Math.PI) / 180;
+    return Math.abs(metarWind.speed * Math.sin(radians));
+  }, [metarWind, runwayHeading]);
+  const crosswindTrigger = crosswindComponent !== null && crosswindComponent >= 10;
+  const densityAltitudeTrigger =
+    (departureTempC !== null && departureTempC >= 25) ||
+    (departureElevationFt !== null && departureElevationFt >= 3000);
+
+  const routeAirports = useMemo(() => {
+    return [
+      departureResolved.trim().toUpperCase(),
+      destinationResolved.trim().toUpperCase(),
+      ...plannedStops,
+      ...waypoints,
+    ].filter(Boolean);
+  }, [departureResolved, destinationResolved, plannedStops, waypoints]);
+
+  const hasControlledAirport = useMemo(
+    () => routeAirports.some((icao) => CONTROLLED_AIRPORTS.has(icao)),
+    [routeAirports]
+  );
+
+  const trainingCostTrigger = isStudent || eteHours >= 3;
+
+  const contextualTools = useMemo<ContextualTool[]>(() => {
+    const tools: ContextualTool[] = [];
+
+    if (densityAltitudeTrigger) {
+      tools.push({
+        id: "density-altitude",
+        title: "Density altitude check",
+        description: "Performance may be impacted at the departure airport based on temperature and elevation.",
+        cta: "Open density altitude calculator",
+        href: "/pilot-tools",
+      });
+    }
+
+    if (crosswindTrigger) {
+      tools.push({
+        id: "crosswind",
+        title: "Crosswind component",
+        description: "Winds and runway heading suggest a notable crosswind component for departure.",
+        cta: "Review crosswind calculator",
+        href: "/pilot-tools",
+      });
+    }
+
+    if (trainingCostTrigger) {
+      tools.push({
+        id: "training-cost",
+        title: "Training time & cost",
+        description: "Longer routes are a good moment to estimate training time and budget.",
+        cta: "Open training cost calculator",
+        href: "/student/cost",
+      });
+    }
+
+    if (isIfrFlight) {
+      tools.push({
+        id: "vor-trainer",
+        title: "VOR trainer",
+        description: "Practice intercepts and tracking for IFR routing or VOR-based segments.",
+        cta: "Open VOR trainer",
+        href: "/student/vor-trainer",
+      });
+    }
+
+    if (hasControlledAirport) {
+      tools.push({
+        id: "radio-trainer",
+        title: "Radio comms trainer",
+        description: "Your route includes controlled airspace. Rehearse clearances and handoffs.",
+        cta: "Open radio trainer",
+        href: "/radio-comms-trainer",
+      });
+    }
+
+    if (isStudent && isVfrFlight) {
+      tools.push({
+        id: "six-pack",
+        title: "6-pack panel trainer",
+        description: "Sharpen scan fundamentals before a VFR flight.",
+        cta: "Open 6-pack trainer",
+        href: "/student/six-pack-trainer",
+      });
+    }
+
+    return tools;
+  }, [
+    densityAltitudeTrigger,
+    crosswindTrigger,
+    trainingCostTrigger,
+    isIfrFlight,
+    hasControlledAirport,
+    isStudent,
+    isVfrFlight,
+  ]);
+
+  const [briefingLocked, setBriefingLocked] = useState(false);
+  const briefingKey = useMemo(() => {
+    return [
+      departureResolved.trim().toUpperCase(),
+      destinationResolved.trim().toUpperCase(),
+      waypointsInput.trim().toUpperCase(),
+      plannedStopsInput.trim().toUpperCase(),
+      plannedAltitude.trim(),
+    ]
+      .filter(Boolean)
+      .join("|");
+  }, [departureResolved, destinationResolved, waypointsInput, plannedStopsInput, plannedAltitude]);
+
+  const briefingReady = Boolean(departureResolved && destinationResolved);
+
+  useEffect(() => {
+    if (!isGuest || !briefingReady) {
+      setBriefingLocked(false);
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const storageKey = "rsf.briefingViews";
+    let views: string[] = [];
+    try {
+      views = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    } catch {
+      views = [];
+    }
+    if (views.includes(briefingKey)) {
+      setBriefingLocked(false);
+      return;
+    }
+    if (views.length === 0) {
+      localStorage.setItem(storageKey, JSON.stringify([briefingKey]));
+      setBriefingLocked(false);
+      return;
+    }
+    setBriefingLocked(true);
+  }, [briefingKey, briefingReady, isGuest]);
+
   const enrouteFindings = useMemo(() => {
     return weatherFindings.filter(
       (item) =>
@@ -941,15 +1152,17 @@ export default function FlightPlanner() {
   return (
     <div className="container mx-auto py-10 px-4 max-w-6xl space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl font-bold">Flight Planner</h1>
-          <p className="text-muted-foreground">Build a route, estimate time and fuel, then save with RSF Pro.</p>
-          {!isPro && (
-            <p className="text-xs text-muted-foreground mt-2">
-              RSF Pro adds saved plans, per-leg breakdowns, wind-adjusted ETE, advanced reports, and the Radio Comms Trainer. Save, alerts, analytics require RSF Pro.
+          <div>
+            <h1 className="text-3xl font-bold">Plan a Flight</h1>
+            <p className="text-muted-foreground">
+              Build a route and get a safety-focused briefing before you fly.
             </p>
-          )}
-        </div>
+            {!isPro && (
+              <p className="text-xs text-muted-foreground mt-2">
+                RSF Pro adds saved plans, alerts, analytics, and full training scenarios.
+              </p>
+            )}
+          </div>
         <div className="flex items-center gap-2">
           {!isPro && <Badge variant="outline">Preview mode</Badge>}
           <Button
@@ -973,10 +1186,10 @@ export default function FlightPlanner() {
           <CardTitle>Route Builder</CardTitle>
           <CardDescription>Enter airports and optional waypoints to plot your route.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Departure (ICAO)</Label>
-            <Input
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Departure (ICAO)</Label>
+              <Input
               value={form.departure}
               onChange={(e) => setForm({ ...form, departure: e.target.value.toUpperCase() })}
               placeholder="KJFK or Austin, TX"
@@ -1000,11 +1213,11 @@ export default function FlightPlanner() {
                   </button>
                 ))}
               </div>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label>Destination (ICAO)</Label>
-            <Input
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Destination (ICAO)</Label>
+              <Input
               value={form.destination}
               onChange={(e) => setForm({ ...form, destination: e.target.value.toUpperCase() })}
               placeholder="KBOS or Dallas, TX"
@@ -1026,10 +1239,21 @@ export default function FlightPlanner() {
                     {airport.name ? ` — ${airport.name}` : ""}
                     {airport.city ? ` (${airport.city}${airport.state ? `, ${airport.state}` : ""})` : ""}
                   </button>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Departure runway (optional)</Label>
+              <Input
+                value={departureRunway}
+                onChange={(e) => setDepartureRunway(e.target.value.toUpperCase())}
+                placeholder="17L"
+              />
+              <p className="text-xs text-muted-foreground">
+                Add a runway to surface crosswind guidance in the safety briefing.
+              </p>
+            </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Waypoints (optional)</Label>
               <Input
@@ -1466,65 +1690,133 @@ export default function FlightPlanner() {
           ) : null}
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Weather & ATIS Awareness</CardTitle>
-          <CardDescription>Quick look at departure, enroute, and destination weather.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {forecastNotice && (
-            <Alert>
-              <AlertDescription>{forecastNotice}</AlertDescription>
-            </Alert>
-          )}
-          {weatherData.length === 0 ? (
-            <div className="text-sm text-muted-foreground">Enter airports to load weather summaries.</div>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-3">
-              {weatherData.map(({ icao, data }) => {
-                const category = parseFlightCategory(data?.metar);
-                return (
-                  <div key={icao} className="rounded-lg border p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="font-semibold">{icao}</div>
-                      <Badge variant="outline">{category}</Badge>
+        <Card id="safety-briefing" className="relative">
+          <CardHeader>
+            <CardTitle>Safety Briefing</CardTitle>
+            <CardDescription>Advisory summary based on your route, altitude, and weather.</CardDescription>
+          </CardHeader>
+          <CardContent className={cn("space-y-4", briefingLocked && "opacity-30 pointer-events-none")}>
+            {!briefingReady && (
+              <div className="text-sm text-muted-foreground">
+                Enter a departure and destination to generate a safety briefing.
+              </div>
+            )}
+            {forecastNotice && (
+              <Alert>
+                <AlertDescription>{forecastNotice}</AlertDescription>
+              </Alert>
+            )}
+            {densityAltitudeTrigger && (
+              <Alert>
+                <AlertDescription>
+                  Density altitude may affect performance at departure. Consider running the density altitude
+                  calculation before dispatch.
+                </AlertDescription>
+              </Alert>
+            )}
+            {crosswindTrigger && (
+              <Alert>
+                <AlertDescription>
+                  Crosswind component estimated at{" "}
+                  <strong>{crosswindComponent?.toFixed(0)} kt</strong>. Review crosswind limits for the selected runway.
+                </AlertDescription>
+              </Alert>
+            )}
+            {weatherData.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Enter airports to load weather summaries.</div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-3">
+                {weatherData.map(({ icao, data }) => {
+                  const category = parseFlightCategory(data?.metar);
+                  return (
+                    <div key={icao} className="rounded-lg border p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold">{icao}</div>
+                        <Badge variant="outline">{category}</Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-2 line-clamp-3">
+                        {data?.metar?.rawOb || "No METAR data"}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-2 line-clamp-3">
+                        {data?.taf?.rawTAF || "No TAF data"}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-2 line-clamp-3">
-                      {data?.metar?.rawOb || "No METAR data"}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-2 line-clamp-3">
-                      {data?.taf?.rawTAF || "No TAF data"}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {routeVariationNotes.length > 0 ? (
+                  );
+                })}
+              </div>
+            )}
+            {routeVariationNotes.length > 0 ? (
+              <Alert>
+                <AlertDescription>
+                  <div className="font-semibold">Potential routing adjustments</div>
+                  <ul className="list-disc pl-5 text-sm mt-1 space-y-1">
+                    {routeVariationNotes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            ) : (
+              enrouteFindings.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  No enroute weather flags in selected waypoints/stops.
+                </div>
+              )
+            )}
             <Alert>
               <AlertDescription>
-                <div className="font-semibold">Potential routing adjustments</div>
-                <ul className="list-disc pl-5 text-sm mt-1 space-y-1">
-                  {routeVariationNotes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
+                Route Risk: <strong>{routeRisk}</strong>. Always obtain an official briefing and review NOTAMs before flight.
               </AlertDescription>
             </Alert>
-          ) : (
-            enrouteFindings.length > 0 && (
-              <div className="text-xs text-muted-foreground">
-                No enroute weather flags in selected waypoints/stops.
+          </CardContent>
+        {briefingLocked && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/70 p-6 text-center text-white">
+            <div className="space-y-3 max-w-sm">
+              <div className="text-lg font-semibold">Create a free account to continue</div>
+              <p className="text-sm text-white/80">
+                Save your planning history and unlock additional safety briefings.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+                <Button asChild variant="secondary">
+                  <Link href="/register">Create free account</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/login">Sign in</Link>
+                </Button>
               </div>
-            )
-          )}
-          <Alert>
-            <AlertDescription>
-              Route Risk: <strong>{routeRisk}</strong>. Always obtain an official briefing and review NOTAMs before flight.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
+            </div>
+          </div>
+        )}
       </Card>
+
+      {contextualTools.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Suggested Tools for This Flight</CardTitle>
+            <CardDescription>Recommended based on your route, altitude, and aircraft details.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-2">
+              {contextualTools.map((tool) => (
+                <div key={tool.id} className="rounded-lg border p-4 space-y-2">
+                  <div className="font-semibold">{tool.title}</div>
+                  <p className="text-sm text-muted-foreground">{tool.description}</p>
+                  <Button asChild size="sm" variant="outline">
+                    <Link
+                      href={tool.href}
+                      onClick={() =>
+                        trackEvent("planner_contextual_tool_open", { tool: tool.id, target: tool.href })
+                      }
+                    >
+                      {tool.cta}
+                    </Link>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -1586,9 +1878,9 @@ export default function FlightPlanner() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Save & Sync</CardTitle>
+          <CardTitle>Save Flight Plan</CardTitle>
           <CardDescription>
-            Save one plan with a free account. RSF Pro unlocks unlimited plans and logbook sync.
+            Save one plan with a free account. After you fly, log it to update currency and history.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1734,7 +2026,7 @@ export default function FlightPlanner() {
                 sendToLogbookMutation.mutate();
               }}
             >
-              Send Planned Flight to Logbook
+              Log this flight (after you fly)
             </Button>
             <Button variant="ghost" onClick={resetForm}>
               Clear Form

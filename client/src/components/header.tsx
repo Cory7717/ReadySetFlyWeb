@@ -1,5 +1,5 @@
 ﻿import { Link, useLocation } from "wouter";
-import { User, Bell, LogOut } from "lucide-react";
+import { User, Bell, LogOut, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "./theme-toggle";
@@ -27,10 +27,10 @@ export function Header() {
   });
   const unreadCount = unreadNotifications?.count ?? 0;
   
-  const isRentals = location === "/rentals" || location.startsWith("/aircraft");
-  const isMarketplace = location.startsWith("/marketplace");
+  const isPlanner = location.startsWith("/flight-planner");
+  const isSafety = location.startsWith("/flight-planner");
+  const isTraining = location.startsWith("/student") || location.startsWith("/start-flying");
   const isFaq = location === "/faq";
-  const isStudent = location.startsWith("/student") || location.startsWith("/start-flying");
   
   const displayName = user?.firstName && user?.lastName 
     ? `${user.firstName} ${user.lastName}`
@@ -52,33 +52,33 @@ export function Header() {
 
           {/* Main Navigation Tabs - Compact on mobile */}
           <nav className="flex items-center gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 max-w-[58vw] sm:max-w-none overflow-x-auto whitespace-nowrap" role="navigation" aria-label="Main navigation">
-            <Link href="/rentals" data-testid="link-rentals">
+            <Link href="/flight-planner" data-testid="link-plan-flight">
               <Button
                 variant="ghost"
                 size="sm"
-                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isRentals ? "bg-background shadow-sm" : ""}`}
-                onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}
+                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isPlanner ? "bg-background shadow-sm" : ""}`}
+                onClick={() => trackEvent("nav_click", { label: "plan_flight", target: "/flight-planner" })}
               >
-                Rentals
+                Plan Flight
               </Button>
             </Link>
-            <Link href="/marketplace" data-testid="link-marketplace">
+            <Link href="/flight-planner#safety-briefing" data-testid="link-safety-briefing">
               <Button
                 variant="ghost"
                 size="sm"
-                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isMarketplace ? "bg-background shadow-sm" : ""}`}
-                onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}
+                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isSafety ? "bg-background shadow-sm" : ""}`}
+                onClick={() => trackEvent("nav_click", { label: "safety_briefing", target: "/flight-planner#safety-briefing" })}
               >
-                Marketplace
+                Safety Briefing
               </Button>
             </Link>
-            <Link href="/student" data-testid="link-student">
+            <Link href="/student" data-testid="link-training">
               <Button
                 variant="ghost"
                 size="sm"
-                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isStudent ? "bg-background shadow-sm" : ""}`}
+                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isTraining ? "bg-background shadow-sm" : ""}`}
               >
-                Student Pilots
+                Training
               </Button>
             </Link>
             <Link href="/faq" data-testid="link-faq">
@@ -90,26 +90,34 @@ export function Header() {
                 FAQ
               </Button>
             </Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full text-xs sm:text-sm px-2 sm:px-3 text-muted-foreground"
+                  aria-label="More navigation"
+                >
+                  More <ChevronDown className="ml-1 h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link href="/marketplace" onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}>
+                    Marketplace
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/rentals" onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}>
+                    Rentals
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </nav>
 
           {/* Right side actions */}
           <div className="flex items-center gap-1 sm:gap-2">
-            <Link href="/create-marketplace-listing" className="hidden lg:block" data-testid="link-post-listing">
-              <Button
-                variant="outline"
-                onClick={() => trackEvent("cta_click", { label: "post_listing_header", target: "/create-marketplace-listing" })}
-              >
-                Post Listing
-              </Button>
-            </Link>
-            {user && (
-              <Link href="/list-aircraft" data-testid="link-list-aircraft" className="hidden sm:block">
-                <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent" data-testid="button-list-aircraft">
-                  List Your Aircraft
-                </Button>
-              </Link>
-            )}
-
             {user && (
               <Link href="/notifications" className="hidden sm:flex" data-testid="link-notifications">
                 <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications" aria-label="Notifications">

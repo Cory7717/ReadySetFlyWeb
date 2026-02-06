@@ -2,16 +2,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { Plane, Shield, DollarSign, MessageSquare, CheckCircle2, Smartphone, BookOpen, ClipboardList, CloudSun, Calculator, Radio, Gauge, Scale, CalendarDays, Navigation2, ChevronLeft, ChevronRight } from "lucide-react";
+import { BookOpen, ClipboardList, CalendarDays, Navigation2, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useEffect, useRef, useState } from "react";
 
 export default function Landing() {
-  const { isAuthenticated } = useAuth();
   const { data: eventsData } = useQuery({
     queryKey: ["aviation-events", "feed"],
     queryFn: async () => {
@@ -109,60 +107,121 @@ export default function Landing() {
               Ready Set Fly
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4">
-              The premier hub for General Aviation tools, training, and community
+              Plan a flight. Get a safety briefing. Learn and log with confidence.
             </p>
             <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
-              Ready Set Fly brings pilots, students, and aircraft owners together with modern tools for planning, training, weather, and logbooks - plus a growing marketplace for rentals, schools, and services.
+              Ready Set Fly is a planning-first, safety-oriented pilot tool. Training and logging are embedded into the planning flow so risk surfaces earlier and decisions stay sharper.
             </p>
             <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto px-4">
-              Discover flight planning, approach plates, student pilot resources, aviation weather, and ownership calculators in one place. Our mission is to create the most trusted General Aviation platform for pilots at every stage.
+              RSF is built for pilots who want clearer briefings, smarter route decisions, and post-flight reflection -- before any transactions ever enter the picture.
             </p>
             <Badge variant="outline" className="mx-auto text-xs px-3 py-1">
               Available for US Residents Only
             </Badge>
-            <p className="text-xs sm:text-sm text-muted-foreground">
-              Marketplace listings are growing weekly as more schools, instructors, and owners join the community.
-            </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
               <Button 
                 size="lg" 
                 asChild
-                data-testid="button-student-hub"
+                data-testid="button-plan-flight"
+              >
+                <Link
+                  href="/flight-planner"
+                  onClick={() => trackEvent("cta_click", { label: "plan_flight", target: "/flight-planner" })}
+                >
+                  Plan a flight -> Get a safety briefing
+                </Link>
+              </Button>
+              <Button 
+                size="lg" 
+                variant="outline"
+                asChild
+                data-testid="button-training"
               >
                 <Link
                   href="/student"
-                  onClick={() => trackEvent("cta_click", { label: "start_flying", target: "/student" })}
-                >
-                  Start Flying
-                </Link>
-              </Button>
-              <Button 
-                size="lg" 
-                variant="outline"
-                asChild
-                data-testid="button-pilot-tools"
-              >
-                <Link
-                  href="/pilot-tools"
-                  onClick={() => trackEvent("cta_click", { label: "pilot_tools", target: "/pilot-tools" })}
+                  onClick={() => trackEvent("cta_click", { label: "training", target: "/student" })}
                 >
                   <BookOpen className="h-4 w-4 mr-2" />
-                  Explore Pilot Tools
+                  Training tools
                 </Link>
               </Button>
-              <Button 
-                size="lg" 
-                variant="outline"
-                asChild
-                data-testid="button-marketplace"
-              >
-                <Link
-                  href="/marketplace"
-                  onClick={() => trackEvent("cta_click", { label: "marketplace", target: "/marketplace" })}
-                >
-                  Visit Marketplace
-                </Link>
-              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Planning-first flow */}
+      <div className="py-10 sm:py-14">
+        <div className="container mx-auto px-4 space-y-8">
+          <div className="text-center space-y-2">
+            <div className="text-sm text-muted-foreground">Planning-first flow</div>
+            <h2 className="text-2xl sm:text-3xl font-semibold">RSF quietly watches the whole flight</h2>
+            <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto">
+              Before, during, and after -- planning is the spine. Tools appear when they matter, not as a menu.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-4">
+            {[
+              {
+                title: "Plan",
+                description: "Enter route, altitude, and aircraft details.",
+                icon: Navigation2,
+              },
+              {
+                title: "Brief",
+                description: "Get a safety-focused briefing that surfaces risk early.",
+                icon: Shield,
+              },
+              {
+                title: "Train",
+                description: "Contextual trainers appear based on your flight.",
+                icon: BookOpen,
+              },
+              {
+                title: "Log",
+                description: "Capture the flight and reflect while it's fresh.",
+                icon: ClipboardList,
+              },
+            ].map((item) => (
+              <Card key={item.title} className="border-muted-foreground/20">
+                <CardContent className="pt-6 space-y-2 text-center">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  <div className="text-base font-semibold">{item.title}</div>
+                  <p className="text-xs text-muted-foreground">{item.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Safety-first intent */}
+      <div className="py-10 sm:py-12 bg-muted/30">
+        <div className="container mx-auto px-4">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start">
+            <div className="space-y-3">
+              <div className="text-sm text-muted-foreground">Safety-first decision support</div>
+              <h2 className="text-2xl sm:text-3xl font-semibold">Risk is surfaced early, not after the fact</h2>
+              <p className="text-sm sm:text-base text-muted-foreground">
+                RSF is a safety-first decision-support tool. Planning drives what you see, and each alert feels like a
+                quiet copilot -- not a loud warning.
+              </p>
+            </div>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <div className="flex items-start gap-2">
+                <Shield className="mt-1 h-4 w-4 text-primary" />
+                <span>Weather, altitude, and route risks are summarized in one briefing.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Shield className="mt-1 h-4 w-4 text-primary" />
+                <span>Training tools appear only when they support the plan you're building.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Shield className="mt-1 h-4 w-4 text-primary" />
+                <span>Logging happens after the plan -- so reflection stays tied to real decisions.</span>
+              </div>
             </div>
           </div>
         </div>
@@ -267,70 +326,6 @@ export default function Landing() {
         className="container mx-auto px-4 py-8 max-w-7xl"
       />
 
-      {/* Marketplace + Rentals Spotlight */}
-      <div className="py-12 sm:py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-5xl mx-auto">
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card className="border-primary/20">
-                <CardContent className="p-6 sm:p-8 space-y-4">
-                  <Badge variant="outline" className="text-xs w-fit">Rentals</Badge>
-                  <h3 className="text-2xl font-semibold">Book verified aircraft fast</h3>
-                  <p className="text-muted-foreground">
-                    Browse rental-ready aircraft from trusted owners with transparent pricing and messaging.
-                  </p>
-                  <div className="flex flex-wrap gap-3">
-                    <Button asChild>
-                      <Link
-                        href="/rentals"
-                        onClick={() => trackEvent("cta_click", { label: "browse_rentals_home", target: "/rentals" })}
-                      >
-                        Browse Rentals
-                      </Link>
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <Link
-                        href="/list-aircraft"
-                        onClick={() => trackEvent("cta_click", { label: "list_aircraft_home", target: "/list-aircraft" })}
-                      >
-                        List Your Aircraft
-                      </Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-primary/20">
-                <CardContent className="p-6 sm:p-8 space-y-4">
-                  <Badge variant="outline" className="text-xs w-fit">Marketplace</Badge>
-                  <h3 className="text-2xl font-semibold">Find CFIs, schools, jobs, and services</h3>
-                  <p className="text-muted-foreground">
-                    Explore the aviation marketplace for training, maintenance, and career opportunities.
-                  </p>
-                  <div className="flex flex-wrap gap-3">
-                    <Button asChild>
-                      <Link
-                        href="/marketplace"
-                        onClick={() => trackEvent("cta_click", { label: "browse_marketplace_home", target: "/marketplace" })}
-                      >
-                        Explore Marketplace
-                      </Link>
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <Link
-                        href="/create-marketplace-listing"
-                        onClick={() => trackEvent("cta_click", { label: "post_listing_home", target: "/create-marketplace-listing" })}
-                      >
-                        Post a Listing
-                      </Link>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Student Pilot Hub Section */}
       <div className="bg-primary/5 py-12 sm:py-16">
         <div className="container mx-auto px-4">
@@ -354,14 +349,6 @@ export default function Landing() {
                           onClick={() => trackEvent("cta_click", { label: "student_hub", target: "/student" })}
                         >
                           Open Student Pilot Hub
-                        </Link>
-                      </Button>
-                      <Button variant="outline" asChild>
-                        <Link
-                          href="/marketplace?type=flight-school"
-                          onClick={() => trackEvent("cta_click", { label: "find_flight_school", target: "/marketplace" })}
-                        >
-                          Find a Flight School
                         </Link>
                       </Button>
                     </div>
@@ -393,412 +380,98 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* Free Pilot Tools Section */}
+            {/* Safety Tools In Context */}
       <div className="bg-gradient-to-br from-blue-50 to-background dark:from-blue-950/20 dark:to-background py-12 sm:py-16">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-8 sm:mb-12">
-            <h2 className="text-2xl sm:text-3xl font-bold mb-4">
-              FREE Pilot Resources
-            </h2>
-            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
-              Professional tools for pilots and students - free to use, no credit card required
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            {/* Digital Logbook Card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="h-16 w-16 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                    <ClipboardList className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold">Digital Logbook</h3>
-                  <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                    FREE Forever
-                  </Badge>
-                  <p className="text-muted-foreground">
-                    Track your flight hours, aircraft types, and build your professional flight log. 
-                    Export to CSV for your records or applications.
-                  </p>
-                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                      <span>Track PIC, SIC, dual, instrument time & more</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                      <span>Digital signatures with lock protection</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                      <span>CSV export for backup & reporting</span>
-                    </li>
-                  </ul>
-                  <Button 
-                    className="w-full"
-                    asChild
-                  >
-                    <Link href={isAuthenticated ? '/logbook' : '/login'}>
-                      {isAuthenticated ? 'Open Logbook' : 'Sign In to Access'}
-                    </Link>
-                  </Button>
-                  {!isAuthenticated && (
-                    <p className="text-xs text-muted-foreground">
-                      Free account required - takes 30 seconds
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Pilot Tools Card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="h-16 w-16 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
-                    <CloudSun className="h-8 w-8 text-sky-600 dark:text-sky-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold">Aviation Weather & Tools</h3>
-                  <Badge variant="secondary" className="bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-400">
-                    No Sign In Required
-                  </Badge>
-                  <p className="text-muted-foreground">
-                    Get current METAR, TAF, and quick access to essential aviation resources like NOTAMs, TFRs, and flight planning tools.
-                  </p>
-                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-sky-600 dark:text-sky-400 mt-0.5 flex-shrink-0" />
-                      <span>Live METAR & TAF for any airport</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-sky-600 dark:text-sky-400 mt-0.5 flex-shrink-0" />
-                      <span>Quick links to NOTAMs, TFRs & charts</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-sky-600 dark:text-sky-400 mt-0.5 flex-shrink-0" />
-                      <span>Flight planning & briefing resources</span>
-                    </li>
-                  </ul>
-                  <Button 
-                    className="w-full"
-                    variant="outline"
-                    asChild
-                  >
-                    <Link href="/pilot-tools">
-                      Open Pilot Tools
-                    </Link>
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Free for everyone - no account needed
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Radio Comms Trainer Card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="h-16 w-16 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                    <Radio className="h-8 w-8 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold">Radio Comms Trainer</h3>
-                  <Badge variant="secondary" className="bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400">
-                    Demo Included
-                  </Badge>
-                  <p className="text-muted-foreground">
-                    Practice ATC phraseology with guided scenarios. Try the demo and unlock full scenarios with RSF Pro.
-                  </p>
-                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
-                      <span>Towered pattern, departures, and arrivals</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
-                      <span>ATC response audio + transcripts</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 mt-0.5 flex-shrink-0" />
-                      <span>Scoring and coaching tips</span>
-                    </li>
-                  </ul>
-                  <Button 
-                    className="w-full"
-                    variant="outline"
-                    asChild
-                  >
-                    <Link href="/radio-comms-trainer">
-                      Open Radio Trainer
-                    </Link>
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Demo available - full access with RSF Pro
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* GPS Sims Card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="h-16 w-16 rounded-full bg-slate-100 dark:bg-slate-900/30 flex items-center justify-center">
-                    <Navigation2 className="h-8 w-8 text-slate-600 dark:text-slate-300" />
-                  </div>
-                  <h3 className="text-xl font-semibold">RSF GPS Simulators</h3>
-                  <Badge variant="secondary" className="bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300">
-                    New Trainer
-                  </Badge>
-                  <p className="text-muted-foreground">
-                    Interactive glass and GPS panel walkthroughs for IFR procedures, holds, and flight plan workflows.
-                  </p>
-                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300 mt-0.5 flex-shrink-0" />
-                      <span>Hotspot drills for knobs, softkeys, and menus</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300 mt-0.5 flex-shrink-0" />
-                      <span>Scenario-based IFR workflows and checklists</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-slate-600 dark:text-slate-300 mt-0.5 flex-shrink-0" />
-                      <span>Designed for US training data</span>
-                    </li>
-                  </ul>
-                  <Button className="w-full" variant="outline" asChild>
-                    <Link href="/gps-sims">Open GPS Sims</Link>
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Free to explore - save progress with RSF Pro
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Ownership Cost Calculator Card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                    <Calculator className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold">Ownership Cost Calculator</h3>
-                  <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
-                    New
-                  </Badge>
-                  <p className="text-muted-foreground">
-                    Estimate hourly ownership costs and get a suggested rental price with a built-in 15% margin.
-                  </p>
-                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
-                      <span>Include annual fixed and per-hour variable costs</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
-                      <span>Adjust utilization to see impact on cost/hr</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" />
-                      <span>Instant recommended rental rate (+15%)</span>
-                    </li>
-                  </ul>
-                  <Button 
-                    className="w-full"
-                    variant="outline"
-                    asChild
-                  >
-                    <Link href="/ownership-cost-calculator">
-                      Open Calculator
-                    </Link>
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Free for everyone - no account needed
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Density Altitude Calculator Card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="h-16 w-16 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-                    <Gauge className="h-8 w-8 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold">Density Altitude</h3>
-                  <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
-                    Quick Tool
-                  </Badge>
-                  <p className="text-muted-foreground">
-                    Estimate pressure and density altitude for performance planning before you fly.
-                  </p>
-                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
-                      <span>Field elevation + altimeter inputs</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
-                      <span>OAT-based density altitude estimate</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
-                      <span>Fast training-ready reference</span>
-                    </li>
-                  </ul>
-                  <Button 
-                    className="w-full"
-                    variant="outline"
-                    asChild
-                  >
-                    <Link href="/pilot-tools">
-                      Open Calculator
-                    </Link>
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Free for everyone - no account needed
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Weight & Balance Card */}
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="pt-6">
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="h-16 w-16 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-                    <Scale className="h-8 w-8 text-violet-600 dark:text-violet-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold">Weight & Balance</h3>
-                  <Badge variant="secondary" className="bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400">
-                    New
-                  </Badge>
-                  <p className="text-muted-foreground">
-                    Calculate CG and total weight with quick access to RSF aircraft library data.
-                  </p>
-                  <ul className="text-sm text-muted-foreground space-y-2 text-left w-full">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
-                      <span>Library-backed max gross reference</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
-                      <span>Station-by-station CG calculator</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-violet-600 dark:text-violet-400 mt-0.5 flex-shrink-0" />
-                      <span>Planning-only safety disclaimer</span>
-                    </li>
-                  </ul>
-                  <Button 
-                    className="w-full"
-                    variant="outline"
-                    asChild
-                  >
-                    <Link href="/weight-balance">
-                      Open Weight & Balance
-                    </Link>
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Free for everyone - no account needed
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-
-      {/* Features Section */}
-      <div id="features" className="container mx-auto px-4 py-12 sm:py-16">
-        <h2 className="text-2xl sm:text-3xl font-bold text-center mb-8 sm:mb-12">
-          Why Choose Ready Set Fly?
-        </h2>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          <Card data-testid="card-feature-student-hub">
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <BookOpen className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold">Student Pilot Hub</h3>
-                <p className="text-muted-foreground">
-                  Start flying with a guided roadmap, cost estimates, and discovery flight tools built for new pilots.
+          <Card className="max-w-4xl mx-auto border-primary/20">
+            <CardContent className="p-6 sm:p-8 space-y-6">
+              <div className="space-y-2 text-center">
+                <h2 className="text-2xl sm:text-3xl font-bold">Safety tools, surfaced at the right time</h2>
+                <p className="text-base sm:text-lg text-muted-foreground">
+                  RSF keeps the focus on the plan. As you build a route, the right calculators and trainers appear automatically.
                 </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3 text-sm">
+                <div className="rounded-lg border p-4">
+                  <div className="font-semibold">Performance</div>
+                  <p className="text-muted-foreground">
+                    Density altitude and crosswind checks surface when conditions warrant.
+                  </p>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <div className="font-semibold">Training</div>
+                  <p className="text-muted-foreground">
+                    VOR, comms, and six-pack trainers appear when the route needs them.
+                  </p>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <div className="font-semibold">Post-flight</div>
+                  <p className="text-muted-foreground">
+                    Log the flight, update currency, and reflect once you are done.
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-center">
+                <Button asChild>
+                  <Link
+                    href="/flight-planner"
+                    onClick={() => trackEvent("cta_click", { label: "plan_flight_secondary", target: "/flight-planner" })}
+                  >
+                    Plan a flight
+                  </Link>
+                </Button>
               </div>
             </CardContent>
           </Card>
+        </div>
+      </div>
+{/* Features Section */}
+      <div id="features" className="container mx-auto px-4 py-12 sm:py-16">
+        <h2 className="text-2xl sm:text-3xl font-bold text-center mb-3">
+          Plan. Brief. Train. Reflect.
+        </h2>
+        <p className="text-center text-muted-foreground max-w-2xl mx-auto mb-8 sm:mb-12">
+          Ready Set Fly keeps the focus on planning-first safety. Tools appear when your flight needs them.
+        </p>
 
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
           <Card data-testid="card-feature-planning">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center space-y-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <Plane className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-xl font-semibold">Flight Planning Tools</h3>
+                <h3 className="text-xl font-semibold">Flight Planning</h3>
                 <p className="text-muted-foreground">
-                  Plan routes, estimate time and fuel, and review weather with a modern GA-first flight planner.
+                  Build a route, choose altitude, and get a briefing tailored to your flight.
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          <Card data-testid="card-feature-plates">
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <ClipboardList className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold">Approach Plates</h3>
-                <p className="text-muted-foreground">
-                  Fast access to current procedures and charts with safety-first updates for training and IFR prep.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card data-testid="card-feature-logbook">
+          <Card data-testid="card-feature-briefing">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center space-y-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <Shield className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-xl font-semibold">Logbook + Pro Tools</h3>
+                <h3 className="text-xl font-semibold">Safety Briefing</h3>
                 <p className="text-muted-foreground">
-                  Track hours, endorsements, and progress in one place, with Pro upgrades for serious pilots.
+                  Surface weather, crosswinds, and route risks early without alarmist noise.
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          <Card data-testid="card-feature-community">
+          <Card data-testid="card-feature-training">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center space-y-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <MessageSquare className="h-6 w-6 text-primary" />
+                  <BookOpen className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-xl font-semibold">Growing GA Community</h3>
+                <h3 className="text-xl font-semibold">Training + Logbook</h3>
                 <p className="text-muted-foreground">
-                  Find instructors, schools, and services as the marketplace grows alongside engaged pilot tools.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card data-testid="card-feature-transparency">
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <DollarSign className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold">Transparent Pricing</h3>
-                <p className="text-muted-foreground">
-                  Clear pricing and trusted listings built to scale with the community over time.
+                  Reinforce skills during planning and log your flight once it's complete.
                 </p>
               </div>
             </CardContent>
@@ -810,32 +483,27 @@ export default function Landing() {
       <div className="bg-muted/50 py-12 sm:py-16">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-2xl sm:text-3xl font-bold mb-4">
-            Ready to Take Flight?
+            Ready to Plan a Flight?
           </h2>
           <p className="text-base sm:text-xl text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-            Join thousands of pilots and aircraft owners in the most trusted aviation marketplace.
+            Build a route and get a safety-focused briefing in minutes.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              size="lg"
-              onClick={() => {
-                trackEvent("cta_click", { label: "create_account", target: "/api/auth/google" });
-                window.location.href = apiUrl('/api/auth/google');
-              }}
-              data-testid="button-cta-login"
-            >
-              Create Your Account
+            <Button asChild size="lg" data-testid="button-cta-plan-flight">
+              <Link
+                href="/flight-planner"
+                onClick={() => trackEvent("cta_click", { label: "plan_flight_cta", target: "/flight-planner" })}
+              >
+                Plan a Flight
+              </Link>
             </Button>
-            <Button 
-              size="lg"
-              variant="outline"
-              onClick={() => {
-                trackEvent("cta_click", { label: "browse_listings", target: "/rentals" });
-                window.location.href = '/rentals';
-              }}
-              data-testid="button-cta-browse"
-            >
-              Browse Listings
+            <Button asChild size="lg" variant="outline" data-testid="button-cta-student-hub">
+              <Link
+                href="/student"
+                onClick={() => trackEvent("cta_click", { label: "student_hub_cta", target: "/student" })}
+              >
+                Training Tools
+              </Link>
             </Button>
           </div>
         </div>
@@ -862,21 +530,21 @@ export default function Landing() {
                       Take Ready Set Fly Anywhere
                     </h2>
                     <p className="text-muted-foreground mb-6">
-                      Our mobile app is coming soon to iOS and Android. Book aircraft rentals, 
-                      browse marketplace listings, and manage your account on the go.
+                      Our mobile app is coming soon to iOS and Android. Plan flights, review safety briefings,
+                      and keep training tools handy on the go.
                     </p>
                     <div className="space-y-3">
                       <div className="flex items-center gap-3">
                         <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-                        <span className="text-sm">Browse and book aircraft on your phone</span>
+                        <span className="text-sm">Build and review flight plans anywhere</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-                        <span className="text-sm">Real-time messaging with owners</span>
+                        <span className="text-sm">Run briefings and training tools on the go</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-                        <span className="text-sm">Manage your listings and rentals anywhere</span>
+                        <span className="text-sm">Log flights and track currency after landing</span>
                       </div>
                     </div>
                   </div>
@@ -937,3 +605,4 @@ export default function Landing() {
     </div>
   );
 }
+

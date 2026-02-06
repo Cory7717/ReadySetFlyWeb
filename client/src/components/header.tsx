@@ -1,5 +1,5 @@
 ﻿import { Link, useLocation } from "wouter";
-import { User, Bell, LogOut, ChevronDown } from "lucide-react";
+import { User, Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "./theme-toggle";
@@ -62,14 +62,14 @@ export function Header() {
                 Plan Flight
               </Button>
             </Link>
-            <Link href="/flight-planner#safety-briefing" data-testid="link-safety-briefing">
+            <Link href="/flight-planner#risk-overview" data-testid="link-safety-briefing">
               <Button
                 variant="ghost"
                 size="sm"
                 className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isSafety ? "bg-background shadow-sm" : ""}`}
-                onClick={() => trackEvent("nav_click", { label: "safety_briefing", target: "/flight-planner#safety-briefing" })}
+                onClick={() => trackEvent("nav_click", { label: "risk_overview", target: "/flight-planner#risk-overview" })}
               >
-                Safety Briefing
+                Risk Overview
               </Button>
             </Link>
             <Link href="/student" data-testid="link-training">
@@ -90,30 +90,26 @@ export function Header() {
                 FAQ
               </Button>
             </Link>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full text-xs sm:text-sm px-2 sm:px-3 text-muted-foreground"
-                  aria-label="More navigation"
-                >
-                  More <ChevronDown className="ml-1 h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem asChild>
-                  <Link href="/marketplace" onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}>
-                    Marketplace
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/rentals" onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}>
-                    Rentals
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Link href="/rentals" data-testid="link-rentals">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-full text-xs sm:text-sm px-2 sm:px-4 text-muted-foreground"
+                onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}
+              >
+                Rentals (when ready)
+              </Button>
+            </Link>
+            <Link href="/marketplace" data-testid="link-marketplace">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-full text-xs sm:text-sm px-2 sm:px-4 text-muted-foreground"
+                onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}
+              >
+                Marketplace (when ready)
+              </Button>
+            </Link>
           </nav>
 
           {/* Right side actions */}

@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { BookOpen, ClipboardList, CalendarDays, Navigation2, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2 } from "lucide-react";
+import { BookOpen, ClipboardList, CalendarDays, Navigation2, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, Store } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -107,13 +107,16 @@ export default function Landing() {
               Ready Set Fly
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4">
-              Plan a flight. Get a safety briefing. Learn and log with confidence.
+              Plan a flight. Get a risk overview. Learn and log with confidence.
             </p>
             <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
               Ready Set Fly is a planning-first, safety-oriented pilot tool. Training and logging are embedded into the planning flow so risk surfaces earlier and decisions stay sharper.
             </p>
             <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto px-4">
-              RSF is built for pilots who want clearer briefings, smarter route decisions, and post-flight reflection -- before any transactions ever enter the picture.
+              RSF is built for pilots who want clearer overviews, smarter route decisions, and post-flight reflection -- before any transactions ever enter the picture.
+            </p>
+            <p className="text-sm sm:text-base font-semibold text-primary">
+              Plan first. Train smart. Then connect with rentals and listings.
             </p>
             <Badge variant="outline" className="mx-auto text-xs px-3 py-1">
               Available for US Residents Only
@@ -128,7 +131,7 @@ export default function Landing() {
                   href="/flight-planner"
                   onClick={() => trackEvent("cta_click", { label: "plan_flight", target: "/flight-planner" })}
                 >
-                  Plan a flight, get a safety briefing
+                  Plan a flight, get a risk overview
                 </Link>
               </Button>
               <Button 
@@ -146,6 +149,53 @@ export default function Landing() {
                 </Link>
               </Button>
             </div>
+          </div>
+      </div>
+      </div>
+
+      {/* Beyond planning pointers */}
+      <div className="py-8 sm:py-10">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto space-y-4 text-center">
+            <div className="text-sm text-muted-foreground">Beyond planning</div>
+            <h2 className="text-2xl sm:text-3xl font-semibold">
+              Rentals and listings are here when you are ready
+            </h2>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              RSF keeps planning first, but the marketplace and rental network are built into the same workflow.
+            </p>
+          </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <Link href="/rentals" onClick={() => trackEvent("cta_click", { label: "rentals_secondary", target: "/rentals" })}>
+              <Card className="border-muted-foreground/20 hover:shadow-md transition-shadow">
+                <CardContent className="p-5 flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <Plane className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <div className="font-semibold">Rentals & Flight Schools</div>
+                    <p className="text-sm text-muted-foreground">
+                      Browse available aircraft and trusted flight schools when you are ready to fly.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+            <Link href="/marketplace" onClick={() => trackEvent("cta_click", { label: "marketplace_secondary", target: "/marketplace" })}>
+              <Card className="border-muted-foreground/20 hover:shadow-md transition-shadow">
+                <CardContent className="p-5 flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <Store className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <div className="font-semibold">Marketplace Listings</div>
+                    <p className="text-sm text-muted-foreground">
+                      Discover instructors, services, and listings once your plan is set.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           </div>
         </div>
       </div>
@@ -168,8 +218,8 @@ export default function Landing() {
                 icon: Navigation2,
               },
               {
-                title: "Brief",
-                description: "Get a safety-focused briefing that surfaces risk early.",
+                title: "Assess",
+                description: "Get a risk overview that surfaces issues early.",
                 icon: Shield,
               },
               {
@@ -194,6 +244,74 @@ export default function Landing() {
               </Card>
             ))}
           </div>
+      </div>
+      </div>
+
+      {/* Explore by category */}
+      <div className="py-10 sm:py-14">
+        <div className="container mx-auto px-4">
+          <div className="text-center space-y-2">
+            <div className="text-sm text-muted-foreground">Explore RSF</div>
+            <h2 className="text-2xl sm:text-3xl font-semibold">Find tools by category</h2>
+            <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto">
+              Jump to the areas you need most. Planning stays first, but every workflow lives here.
+            </p>
+          </div>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              {
+                title: "Flight Planning",
+                description: "Build routes and risk overviews.",
+                icon: Navigation2,
+                href: "/flight-planner",
+                label: "flight_planning_category",
+              },
+              {
+                title: "Pilot Tools",
+                description: "Calculators and planning support.",
+                icon: ClipboardList,
+                href: "/pilot-tools",
+                label: "pilot_tools_category",
+              },
+              {
+                title: "Student Tools",
+                description: "Training paths and core trainers.",
+                icon: BookOpen,
+                href: "/student",
+                label: "student_tools_category",
+              },
+              {
+                title: "Rentals & Schools",
+                description: "Connect with aircraft access.",
+                icon: Plane,
+                href: "/rentals",
+                label: "rentals_category",
+              },
+              {
+                title: "Marketplace",
+                description: "Listings, CFIs, and services.",
+                icon: Store,
+                href: "/marketplace",
+                label: "marketplace_category",
+              },
+            ].map((item) => (
+              <Link
+                key={item.title}
+                href={item.href}
+                onClick={() => trackEvent("cta_click", { label: item.label, target: item.href })}
+              >
+                <Card className="h-full border-muted-foreground/20 hover:shadow-md transition-shadow">
+                  <CardContent className="pt-6 space-y-3 text-center">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <item.icon className="h-5 w-5" />
+                    </div>
+                    <div className="text-base font-semibold">{item.title}</div>
+                    <p className="text-xs text-muted-foreground">{item.description}</p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -212,7 +330,7 @@ export default function Landing() {
             <div className="space-y-3 text-sm text-muted-foreground">
               <div className="flex items-start gap-2">
                 <Shield className="mt-1 h-4 w-4 text-primary" />
-                <span>Weather, altitude, and route risks are summarized in one briefing.</span>
+                <span>Weather, altitude, and route risks are summarized in one overview.</span>
               </div>
               <div className="flex items-start gap-2">
                 <Shield className="mt-1 h-4 w-4 text-primary" />
@@ -443,19 +561,19 @@ export default function Landing() {
                 </div>
                 <h3 className="text-xl font-semibold">Flight Planning</h3>
                 <p className="text-muted-foreground">
-                  Build a route, choose altitude, and get a briefing tailored to your flight.
+                  Build a route, choose altitude, and get a risk overview tailored to your flight.
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          <Card data-testid="card-feature-briefing">
+          <Card data-testid="card-feature-overview">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center space-y-4">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <Shield className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="text-xl font-semibold">Safety Briefing</h3>
+                <h3 className="text-xl font-semibold">Risk Overview</h3>
                 <p className="text-muted-foreground">
                   Surface weather, crosswinds, and route risks early without alarmist noise.
                 </p>
@@ -486,7 +604,7 @@ export default function Landing() {
             Ready to Plan a Flight?
           </h2>
           <p className="text-base sm:text-xl text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-            Build a route and get a safety-focused briefing in minutes.
+            Build a route and get a risk overview in minutes.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild size="lg" data-testid="button-cta-plan-flight">
@@ -530,7 +648,7 @@ export default function Landing() {
                       Take Ready Set Fly Anywhere
                     </h2>
                     <p className="text-muted-foreground mb-6">
-                      Our mobile app is coming soon to iOS and Android. Plan flights, review safety briefings,
+                      Our mobile app is coming soon to iOS and Android. Plan flights, review risk overviews,
                       and keep training tools handy on the go.
                     </p>
                     <div className="space-y-3">
@@ -540,7 +658,7 @@ export default function Landing() {
                       </div>
                       <div className="flex items-center gap-3">
                         <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-                        <span className="text-sm">Run briefings and training tools on the go</span>
+                        <span className="text-sm">Review overviews and training tools on the go</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />

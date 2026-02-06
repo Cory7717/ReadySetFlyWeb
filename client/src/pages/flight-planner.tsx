@@ -1155,7 +1155,7 @@ export default function FlightPlanner() {
           <div>
             <h1 className="text-3xl font-bold">Plan a Flight</h1>
             <p className="text-muted-foreground">
-              Build a route and get a safety-focused briefing before you fly.
+              Build a route and get a risk overview before you fly.
             </p>
             {!isPro && (
               <p className="text-xs text-muted-foreground mt-2">
@@ -1251,7 +1251,7 @@ export default function FlightPlanner() {
                 placeholder="17L"
               />
               <p className="text-xs text-muted-foreground">
-                Add a runway to surface crosswind guidance in the safety briefing.
+                Add a runway to surface crosswind guidance in the risk overview.
               </p>
             </div>
             <div className="space-y-2 md:col-span-2">
@@ -1460,7 +1460,7 @@ export default function FlightPlanner() {
             {(mapStyle === "radar" || mapStyle === "winds") && (
               <div className="text-xs text-muted-foreground mt-2">
                 Weather layers are for situational awareness only. Radar shows current precip; blank means no returns.
-                Winds is a surface analysis layer (beta). Always verify with an official briefing.
+                Winds is a surface analysis layer (beta). Always verify with official weather sources.
               </div>
             )}
           </CardContent>
@@ -1690,15 +1690,15 @@ export default function FlightPlanner() {
           ) : null}
         </CardContent>
       </Card>
-        <Card id="safety-briefing" className="relative">
+        <Card id="risk-overview" className="relative">
           <CardHeader>
-            <CardTitle>Safety Briefing</CardTitle>
+            <CardTitle>Risk Overview</CardTitle>
             <CardDescription>Advisory summary based on your route, altitude, and weather.</CardDescription>
           </CardHeader>
           <CardContent className={cn("space-y-4", briefingLocked && "opacity-30 pointer-events-none")}>
             {!briefingReady && (
               <div className="text-sm text-muted-foreground">
-                Enter a departure and destination to generate a safety briefing.
+                Enter a departure and destination to generate a risk overview.
               </div>
             )}
             {forecastNotice && (
@@ -1765,7 +1765,7 @@ export default function FlightPlanner() {
             )}
             <Alert>
               <AlertDescription>
-                Route Risk: <strong>{routeRisk}</strong>. Always obtain an official briefing and review NOTAMs before flight.
+                Route Risk: <strong>{routeRisk}</strong>. Always verify with official weather sources and review NOTAMs before flight.
               </AlertDescription>
             </Alert>
           </CardContent>
@@ -1774,7 +1774,7 @@ export default function FlightPlanner() {
             <div className="space-y-3 max-w-sm">
               <div className="text-lg font-semibold">Create a free account to continue</div>
               <p className="text-sm text-white/80">
-                Save your planning history and unlock additional safety briefings.
+                Save your planning history and unlock additional risk overviews.
               </p>
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
                 <Button asChild variant="secondary">
@@ -1842,7 +1842,7 @@ export default function FlightPlanner() {
       <Card>
         <CardHeader>
           <CardTitle>Flight Plan Summary (Preparation)</CardTitle>
-          <CardDescription>ReadySetFly does not file flight plans. Use this summary as a briefing aid.</CardDescription>
+          <CardDescription>ReadySetFly does not file flight plans. Use this summary as a planning aid.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div className="grid gap-2 md:grid-cols-2">

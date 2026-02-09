@@ -7446,6 +7446,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const validatedData = insertBannerAdSchema.parse(payload);
+      if (!validatedData.endDate) {
+        return res.status(400).json({ error: "End date is required for manual banner creation" });
+      }
       const ad = await storage.createBannerAd(validatedData);
       res.status(201).json(ad);
     } catch (error: any) {

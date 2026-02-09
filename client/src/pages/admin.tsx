@@ -251,6 +251,14 @@ export default function AdminDashboard() {
   
   const { toast } = useToast();
 
+  const getBannerDurationDays = (start?: Date, end?: Date) => {
+    if (!start || !end) return null;
+    const dayMs = 24 * 60 * 60 * 1000;
+    const diff = end.getTime() - start.getTime();
+    if (!Number.isFinite(diff) || diff < 0) return null;
+    return Math.max(1, Math.ceil(diff / dayMs));
+  };
+
   // User search query
   const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
     queryKey: [`/api/admin/users?q=${userSearch}`],
@@ -5263,6 +5271,15 @@ export default function AdminDashboard() {
                     return;
                   }
 
+                  if (!data.endDate) {
+                    toast({
+                      title: "End date required",
+                      description: "Please select an end date to set the banner duration.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+
                   createBannerAdMutation.mutate(payload);
                 })} 
                 className="flex flex-col flex-1 min-h-0"
@@ -5440,6 +5457,21 @@ export default function AdminDashboard() {
                         )}
                       />
                     </div>
+
+                    {(() => {
+                      const startDate = bannerForm.getValues("startDate");
+                      const endDate = bannerForm.getValues("endDate");
+                      const durationDays = getBannerDurationDays(
+                        startDate instanceof Date ? startDate : startDate ? new Date(startDate) : undefined,
+                        endDate instanceof Date ? endDate : endDate ? new Date(endDate) : undefined
+                      );
+                      if (!durationDays) return null;
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Duration: {durationDays} day{durationDays === 1 ? "" : "s"}
+                        </p>
+                      );
+                    })()}
                     
                     <FormField
                       control={bannerForm.control}

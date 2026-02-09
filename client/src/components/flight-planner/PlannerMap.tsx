@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { MapContainer, Marker, Polyline, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { MapContainer, Marker, Polyline, TileLayer, Tooltip, WMSTileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -101,24 +101,24 @@ export default function PlannerMap({ points, height = "380px", mapStyle = "stand
           />
         )}
         {showRadar && (
-          <TileLayer
-            attribution="NOAA nowCOAST (radar)"
-            url="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer/tile/{z}/{y}/{x}"
+          <WMSTileLayer
+            attribution="IEM NEXRAD Base Reflectivity"
+            url="https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi"
+            layers="nexrad-n0r-900913"
+            format="image/png"
+            transparent
             opacity={0.75}
-            maxZoom={18}
-            maxNativeZoom={11}
-            minZoom={4}
             zIndex={600}
           />
         )}
         {showWinds && (
           <TileLayer
-            attribution="NOAA nowCOAST (winds)"
-            url="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/analysis/wind_speed/MapServer/tile/{z}/{y}/{x}"
+            attribution="Windy.com"
+            url="https://tiles.windy.com/tiles/v9.0/wind/{z}/{x}/{y}.png"
             opacity={0.7}
             maxZoom={18}
-            maxNativeZoom={11}
-            minZoom={4}
+            maxNativeZoom={12}
+            minZoom={2}
             zIndex={600}
           />
         )}

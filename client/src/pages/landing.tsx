@@ -21,6 +21,13 @@ interface WeatherData {
   cached: boolean;
 }
 
+interface AirportSearchResult {
+  icao: string;
+  name?: string | null;
+  city?: string | null;
+  state?: string | null;
+}
+
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 
 function parseFlightCategory(metar: any): { category: string; color: string } {
@@ -110,6 +117,8 @@ export default function Landing() {
   const [autoPauseUntil, setAutoPauseUntil] = useState(0);
   const [icaoInput, setIcaoInput] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
+  const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   const { data: weather, isLoading: weatherLoading } = useQuery<WeatherData>({
     queryKey: [`/api/aviation-weather/${searchIcao}`],
@@ -173,6 +182,39 @@ export default function Landing() {
     if (!ICAO_REGEX.test(normalized)) return;
     setSearchIcao(normalized);
   };
+
+  const applySuggestion = (suggestion: AirportSearchResult) => {
+    const normalized = suggestion.icao.toUpperCase();
+    setIcaoInput(normalized);
+    setSearchIcao(normalized);
+    setAirportSuggestions([]);
+  };
+
+  useEffect(() => {
+    const trimmed = icaoInput.trim();
+    const normalized = trimmed.toUpperCase();
+    if (trimmed.length < 2 || ICAO_REGEX.test(normalized)) {
+      setAirportSuggestions([]);
+      setLoadingSuggestions(false);
+      return;
+    }
+
+    const handle = window.setTimeout(async () => {
+      setLoadingSuggestions(true);
+      try {
+        const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(trimmed)}`));
+        if (!res.ok) throw new Error("Failed to search airports");
+        const results = (await res.json()) as AirportSearchResult[];
+        setAirportSuggestions(results.slice(0, 6));
+      } catch {
+        setAirportSuggestions([]);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(handle);
+  }, [icaoInput]);
 
   const pauseAutoScroll = (ms = 8000) => {
     setAutoPauseUntil(Date.now() + ms);
@@ -304,14 +346,48 @@ export default function Landing() {
                   <Label htmlFor="landing-icao" className="text-sm font-semibold">
                     Airport ICAO
                   </Label>
-                  <Input
-                    id="landing-icao"
-                    value={icaoInput}
-                    onChange={(event) => setIcaoInput(event.target.value)}
-                    onBlur={submitIcao}
-                    placeholder="KAUS"
-                    className="max-w-xs"
-                  />
+                  <div className="relative max-w-xs">
+                    <Input
+                      id="landing-icao"
+                      value={icaoInput}
+                      onChange={(event) => setIcaoInput(event.target.value)}
+                      onBlur={submitIcao}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          submitIcao();
+                        }
+                      }}
+                      placeholder="KAUS or Austin, TX"
+                    />
+                    {(loadingSuggestions || airportSuggestions.length > 0) && (
+                      <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-sm">
+                        {loadingSuggestions ? (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">Searching airports...</div>
+                        ) : (
+                          <ul className="max-h-56 overflow-auto">
+                            {airportSuggestions.map((suggestion) => (
+                              <li key={suggestion.icao}>
+                                <button
+                                  type="button"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => applySuggestion(suggestion)}
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-muted/60"
+                                >
+                                  <div className="font-semibold">{suggestion.icao}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {suggestion.name}
+                                    {suggestion.city ? ` • ${suggestion.city}` : ""}
+                                    {suggestion.state ? `, ${suggestion.state}` : ""}
+                                  </div>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <Button
                   variant="outline"

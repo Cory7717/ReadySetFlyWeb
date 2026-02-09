@@ -7,8 +7,17 @@ export type BillingInterval = "monthly" | "biannual" | "annual";
 type MembershipPlanInfo = { tier: MembershipTier; interval: BillingInterval };
 
 const SUPER_ADMIN_EMAILS = new Set(
-  ["coryarmer@gmail.com", "bentley.amy24@gmail.com"].map((email) => email.toLowerCase())
+  (process.env.RSF_SUPER_ADMIN_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
 );
+
+export function isSuperAdminEmail(email?: string | null) {
+  const normalized = (email || "").trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized.endsWith("@readysetfly.us") || SUPER_ADMIN_EMAILS.has(normalized);
+}
 
 const PLAN_ENV_MAP: Record<string, MembershipPlanInfo> = {};
 
@@ -132,8 +141,7 @@ export function getEffectiveMembership(user?: User | null) {
 export function getEntitlementsForUser(user?: User | null) {
   const isGuest = !user;
   if (user) {
-    const email = (user.email || "").toLowerCase();
-    if (user.isSuperAdmin || SUPER_ADMIN_EMAILS.has(email)) {
+    if (user.isSuperAdmin || isSuperAdminEmail(user.email)) {
       return {
         isGuest: false,
         tier: "pro_plus" as MembershipTier,

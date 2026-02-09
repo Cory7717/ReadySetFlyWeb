@@ -30,7 +30,7 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { getBasePrice, getUpgradeDelta, calculateTotalWithTax, isValidUpgrade, VALID_TIERS } from "@shared/config/listingPricing";
 import { paypalRequest } from "./paypal-client";
-import { getEntitlementsForUser, mapPayPalStatusToMembership, resolveMembershipFromPlanId, resolvePayPalPlanId } from "./membership";
+import { getEntitlementsForUser, isSuperAdminEmail, mapPayPalStatusToMembership, resolveMembershipFromPlanId, resolvePayPalPlanId } from "./membership";
 import { maybeSyncLogbookProSubscription } from "./paypal-subscription-sync";
 
 // Initialize OpenAI client with fallback to standard OpenAI if Replit integration vars are missing
@@ -53,21 +53,35 @@ if (!process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) {
   throw new Error('Missing required PayPal secrets: PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET');
 }
 
+const isProd = process.env.NODE_ENV === "production";
+
 const paypalClient = new Client({
   clientCredentialsAuthCredentials: {
     oAuthClientId: process.env.PAYPAL_CLIENT_ID,
     oAuthClientSecret: process.env.PAYPAL_CLIENT_SECRET,
   },
   timeout: 0,
-  environment: process.env.NODE_ENV === "production" ? Environment.Production : Environment.Sandbox,
-  logging: {
-    logLevel: LogLevel.Info,
-    logRequest: { logBody: true },
-    logResponse: { logHeaders: true },
-  },
+  environment: isProd ? Environment.Production : Environment.Sandbox,
+  logging: isProd
+    ? {
+        logLevel: LogLevel.Error,
+        logRequest: { logBody: false },
+        logResponse: { logHeaders: false },
+      }
+    : {
+        logLevel: LogLevel.Info,
+        logRequest: { logBody: true },
+        logResponse: { logHeaders: true },
+      },
 });
 
 const ordersController = new OrdersController(paypalClient);
+
+const logDebug = (...args: unknown[]) => {
+  if (!isProd) {
+    console.log(...args);
+  }
+};
 
 
 function getPublicBaseUrl() {
@@ -1999,37 +2013,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           req.socket?.remoteAddress ||
           'unknown';
         const userAgent = String(req.headers['user-agent'] || 'unknown');
-        console.log(`[AUTH META] ip=${ip} ua="${userAgent}"`);
+        logDebug(`[AUTH META] ip=${ip} ua="${userAgent}"`);
       }
       const sessionUserId = req.user.claims.sub;
-      console.log("[AUTH /api/auth/user] Looking up user with session ID:", sessionUserId);
+      logDebug("[AUTH /api/auth/user] Looking up user with session ID:", sessionUserId);
       let user = await storage.getUser(sessionUserId);
       
       if (!user) {
-        console.log("[AUTH /api/auth/user] User not found by ID, trying email lookup");
+        logDebug("[AUTH /api/auth/user] User not found by ID, trying email lookup");
         // Try to find by email as fallback (for testing scenarios where sub may change)
         const email = req.user.claims.email;
         if (email) {
           user = await storage.getUserByEmail(email);
-          console.log("[AUTH /api/auth/user] Email lookup result:", user ? `Found user ${user.id}` : "Not found");
+          logDebug("[AUTH /api/auth/user] Email lookup result:", user ? `Found user ${user.id}` : "Not found");
         }
         
         if (!user) {
-          console.log("[AUTH /api/auth/user] User not found by ID or email");
+          logDebug("[AUTH /api/auth/user] User not found by ID or email");
           return res.status(404).json({ message: "User not found" });
         }
       }
       
       // Grant Super Admin access to @readysetfly.us emails and allowed founders
       const email = user.email?.toLowerCase();
-      const shouldBeSuperAdmin = 
-        email?.endsWith('@readysetfly.us') || 
-        email === 'coryarmer@gmail.com' ||
-        email === 'bentley.amy24@gmail.com';
+      const shouldBeSuperAdmin = isSuperAdminEmail(email);
       
       // Update super admin status if needed - use the FOUND user's ID, not the session ID
       if (shouldBeSuperAdmin && !user.isSuperAdmin) {
-        console.log("[AUTH /api/auth/user] Granting super admin to user:", user.id);
+        logDebug("[AUTH /api/auth/user] Granting super admin to user:", user.id);
         await storage.updateUser(user.id, { 
           isSuperAdmin: true,
           isAdmin: true,
@@ -2056,7 +2067,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      console.log("[DELETE /api/auth/user] Deleting user account:", userId);
+      logDebug("[DELETE /api/auth/user] Deleting user account:", userId);
       
       const success = await storage.deleteUser(userId);
       
@@ -2693,7 +2704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Normalize to 2 decimal places
       const amount = Math.round(totalWithTax * 100) / 100;
       
-      console.log(`Creating upgrade order for listing ${listingId}: ${listing.tier} → ${newTier}, amount: $${amount}`);
+      logDebug(`Creating upgrade order for listing ${listingId}: ${listing.tier} → ${newTier}, amount: $${amount}`);
       
       const collect = {
         body: {
@@ -2820,7 +2831,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             discountAmount: discountAmount.toFixed(2),
           });
           
-          console.log(`Promo code ${promoCode} applied to order ${orderId}: -$${discountAmount.toFixed(2)}`);
+          logDebug(`Promo code ${promoCode} applied to order ${orderId}: -$${discountAmount.toFixed(2)}`);
         }
       }
       
@@ -2840,7 +2851,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           { expiresIn: '15m' } // Token expires in 15 minutes
         );
         
-        console.log(`✅ Generated free completion token for banner ad order ${orderId} (100% discount applied)`);
+        logDebug(`✅ Generated free completion token for banner ad order ${orderId} (100% discount applied)`);
         
         return res.json({
           useFreeCompletion: true,
@@ -2850,7 +2861,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      console.log(`Creating PayPal order for ${orderId}: original=$${originalAmount.toFixed(2)}, discount=$${discountAmount.toFixed(2)}, final=$${finalAmount.toFixed(2)}`);
+      logDebug(`Creating PayPal order for ${orderId}: original=$${originalAmount.toFixed(2)}, discount=$${discountAmount.toFixed(2)}, final=$${finalAmount.toFixed(2)}`);
       
       
       const collect = {
@@ -2956,7 +2967,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 promoCodeId: promoCodeRecord.id,
                 bannerAdOrderId: bannerAdOrderId,
               });
-              console.log(`✅ Promo code ${promoCode} usage recorded for banner ad order ${bannerAdOrderId}`);
+              logDebug(`✅ Promo code ${promoCode} usage recorded for banner ad order ${bannerAdOrderId}`);
             }
           } catch (error) {
             console.error(`⚠️ Failed to record promo code usage for ${promoCode}:`, error);
@@ -2971,7 +2982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           paypalPaymentDate: new Date(),
         });
         
-        console.log(`✅ Banner ad order ${bannerAdOrderId} payment captured: ${orderID}`);
+        logDebug(`✅ Banner ad order ${bannerAdOrderId} payment captured: ${orderID}`);
       }
       
       res.status(httpResponse.statusCode).json(jsonResponse);
@@ -3067,7 +3078,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               promoCodeId: promoCodeRecord.id,
               bannerAdOrderId: bannerAdOrderId,
             });
-            console.log(`✅ Promo code ${order.promoCode} usage recorded for FREE banner ad order ${bannerAdOrderId}`);
+            logDebug(`✅ Promo code ${order.promoCode} usage recorded for FREE banner ad order ${bannerAdOrderId}`);
           }
         } catch (error) {
           console.error(`⚠️ Failed to record promo code usage for ${order.promoCode}:`, error);
@@ -3083,7 +3094,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paypalPaymentDate: new Date(),
       });
       
-      console.log(`✅ FREE banner ad order ${bannerAdOrderId} completed with promo code ${order.promoCode} by ${order.sponsorEmail}`);
+      logDebug(`✅ FREE banner ad order ${bannerAdOrderId} completed with promo code ${order.promoCode} by ${order.sponsorEmail}`);
       
       res.json({ 
         status: 'COMPLETED',
@@ -3246,7 +3257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             userId: userId,
             marketplaceListingId: listing.id,
           });
-          console.log(`✅ Promo code ${validatedPromo.code} usage recorded for marketplace listing ${listing.id}`);
+          logDebug(`✅ Promo code ${validatedPromo.code} usage recorded for marketplace listing ${listing.id}`);
         } catch (error) {
           console.error(`⚠️ Failed to record promo code usage for ${validatedPromo.code}:`, error);
         }
@@ -3355,7 +3366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               userId: userId,
               marketplaceListingId: listing.id,
             });
-            console.log(`✅ Promo code ${tokenData.promoCode} usage recorded for FREE marketplace listing ${listing.id}`);
+            logDebug(`✅ Promo code ${tokenData.promoCode} usage recorded for FREE marketplace listing ${listing.id}`);
           } catch (error) {
             console.error(`⚠️ Failed to record promo code usage for ${tokenData.promoCode}:`, error);
             // Don't fail the listing creation - just log the error
@@ -3382,7 +3393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.error("Failed to create threshold notification:", notifError);
           }
           
-          console.log(`✅ FREE marketplace listing ${listing.id} completed with promo code ${tokenData.promoCode} by user ${userId}`);
+          logDebug(`✅ FREE marketplace listing ${listing.id} completed with promo code ${tokenData.promoCode} by user ${userId}`);
           
           return res.status(201).json({ 
             status: 'COMPLETED',
@@ -3414,7 +3425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           adminNotes: `Admin free listing grant (${durationDays}d) by ${tokenData.issuedBy || 'admin'}`,
         });
 
-        console.log(`✅ Admin free marketplace listing ${listing.id} created for user ${userId} by ${tokenData.issuedBy || 'admin'}`);
+        logDebug(`✅ Admin free marketplace listing ${listing.id} created for user ${userId} by ${tokenData.issuedBy || 'admin'}`);
 
         return res.status(201).json({
           status: 'COMPLETED',
@@ -3759,7 +3770,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         process.env.SESSION_SECRET || 'dev-secret',
         { expiresIn: '15m' } // Token expires in 15 minutes
       );
-      console.log(`Generated free order completion token for ${orderId}`);
+      logDebug(`Generated free order completion token for ${orderId}`);
     }
     
     res.send(`
@@ -4190,14 +4201,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ipAddress: ip,
       });
       
-      console.log(`Contact form submission persisted: ${submission.id} from ${data.email}`);
+      logDebug(`Contact form submission persisted: ${submission.id} from ${data.email}`);
       
       // Send email asynchronously (non-blocking)
       sendContactFormEmail(data)
         .then(async () => {
           // Update email status on success
           await storage.updateContactSubmissionEmailStatus(submission.id, true);
-          console.log(`Email sent successfully for submission ${submission.id}`);
+          logDebug(`Email sent successfully for submission ${submission.id}`);
         })
         .catch((error) => {
           // Log error but don't block response - submission is already persisted
@@ -4274,7 +4285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           
           bannersProcessed++;
-          console.log(`Sent expiration reminder for banner ad order ${banner.id} to ${banner.sponsorEmail}`);
+          logDebug(`Sent expiration reminder for banner ad order ${banner.id} to ${banner.sponsorEmail}`);
         } catch (error: any) {
           console.error(`Failed to send reminder for banner ad ${banner.id}:`, error);
           errors.push(`Banner ${banner.id}: ${error.message}`);
@@ -4325,7 +4336,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           
           listingsProcessed++;
-          console.log(`Sent expiration reminder for marketplace listing ${listing.id} to ${user.email}`);
+          logDebug(`Sent expiration reminder for marketplace listing ${listing.id} to ${user.email}`);
         } catch (error: any) {
           console.error(`Failed to send reminder for listing ${listing.id}:`, error);
           errors.push(`Listing ${listing.id}: ${error.message}`);
@@ -5320,7 +5331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         upgradeTransactions: [...transactionHistory, orderId],
       } as any);
       
-      console.log(`✅ Listing ${listingId} upgraded: ${listing.tier} → ${newTier}, PayPal order: ${orderId}`);
+      logDebug(`✅ Listing ${listingId} upgraded: ${listing.tier} → ${newTier}, PayPal order: ${orderId}`);
       
       res.json({
         message: "Listing upgraded successfully",
@@ -5587,7 +5598,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Credit owner's balance with their payout amount
       const ownerPayoutAmount = parseFloat(rental.ownerPayout);
       await storage.addToUserBalance(rental.ownerId, ownerPayoutAmount);
-      console.log(`[RENTAL PAYMENT] Credited $${ownerPayoutAmount} to owner ${rental.ownerId} for rental ${rental.id}`);
+      logDebug(`[RENTAL PAYMENT] Credited $${ownerPayoutAmount} to owner ${rental.ownerId} for rental ${rental.id}`);
 
       res.json(updatedRental);
     } catch (error: any) {
@@ -6080,7 +6091,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             processedAt: new Date()
           });
 
-          console.log(`[PAYOUT SUCCESS] User ${userId} withdrawal ${request.id}: $${parsedAmount} sent to ${paypalEmail}`);
+          logDebug(`[PAYOUT SUCCESS] User ${userId} withdrawal ${request.id}: $${parsedAmount} sent to ${paypalEmail}`);
           res.json(completedRequest);
         } else {
           // Payout failed - refund user balance
@@ -7249,7 +7260,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }),
           });
           
-          console.log(`✅ Banner ad order confirmation email sent to ${order.sponsorEmail ?? "admin"}`);
+          logDebug(`✅ Banner ad order confirmation email sent to ${order.sponsorEmail ?? "admin"}`);
         } catch (emailError) {
           console.error('❌ Failed to send banner ad order email:', emailError);
         }
@@ -7396,7 +7407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         adminNotes: adminNotes || order.adminNotes
       });
       
-      console.log(`✅ Banner ad order ${req.params.id} approval status updated to: ${approvalStatus}`);
+      logDebug(`✅ Banner ad order ${req.params.id} approval status updated to: ${approvalStatus}`);
       res.json(updated);
     } catch (error) {
       console.error('Banner ad order approval error:', error);
@@ -7436,8 +7447,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/admin/banner-ads/:id", isAuthenticated, requireBannersAdmin, async (req, res) => {
     try {
-      console.log("[BANNER UPDATE] Request body:", req.body);
-      console.log("[BANNER UPDATE] Banner ID:", req.params.id);
+      logDebug("[BANNER UPDATE] Request body:", req.body);
+      logDebug("[BANNER UPDATE] Banner ID:", req.params.id);
       
       // Admin can update ALL fields
       const updateData: any = {};
@@ -7458,13 +7469,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      console.log("[BANNER UPDATE] Update data:", updateData);
+      logDebug("[BANNER UPDATE] Update data:", updateData);
       
       const ad = await storage.updateBannerAd(req.params.id, updateData);
       if (!ad) {
         return res.status(404).json({ error: "Banner ad not found" });
       }
-      console.log("[BANNER UPDATE] Success! Updated ad:", ad);
+      logDebug("[BANNER UPDATE] Success! Updated ad:", ad);
       res.json(ad);
     } catch (error) {
       console.error("[BANNER UPDATE] Error:", error);
@@ -7927,7 +7938,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 </html>
         `;
         
-        console.log(`Sending job application email to: ${recipientEmail} for listing: ${listing.title}`);
+        logDebug(`Sending job application email to: ${recipientEmail} for listing: ${listing.title}`);
         
         await client.emails.send({
           from: fromEmail,
@@ -7936,7 +7947,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           html: emailHtml,
         });
         
-        console.log(`Job application email sent successfully to: ${recipientEmail}`);
+        logDebug(`Job application email sent successfully to: ${recipientEmail}`);
         
         // Create application AFTER email sends successfully (transactional consistency)
         const application = await storage.createJobApplication(applicationData);
@@ -8079,26 +8090,88 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  const USER_SELF_UPDATE_FIELDS = [
+    "firstName",
+    "lastName",
+    "phone",
+    "totalFlightHours",
+    "certifications",
+    "aircraftTypesFlown",
+    "profileImageUrl",
+    "pilotLicenseUrl",
+    "insuranceUrl",
+  ] as const;
+
+  const sanitizeUser = (user: any) => {
+    const {
+      hashedPassword,
+      passwordCreatedAt,
+      emailVerificationToken,
+      emailVerificationExpires,
+      ...safeUser
+    } = user;
+    return safeUser;
+  };
+
+  const pickUserUpdates = (input: any) => {
+    const updates: Record<string, unknown> = {};
+    for (const key of USER_SELF_UPDATE_FIELDS) {
+      if (input?.[key] !== undefined) {
+        updates[key] = input[key];
+      }
+    }
+    return updates;
+  };
+
   // Users/Profile
-  app.get("/api/users/:id", async (req, res) => {
+  app.get("/api/users/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const requesterId = req.user?.claims?.sub;
+      if (!requesterId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const requester = await storage.getUser(requesterId);
+      if (!requester) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const isSelf = requesterId === req.params.id;
+      if (!isSelf && !requester.isAdmin && !requester.isSuperAdmin) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
       const user = await storage.getUser(req.params.id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      res.json(user);
+      res.json(sanitizeUser(user));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch user" });
     }
   });
 
-  app.patch("/api/users/:id", async (req, res) => {
+  app.patch("/api/users/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const user = await storage.updateUser(req.params.id, req.body);
+      const requesterId = req.user?.claims?.sub;
+      if (!requesterId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      if (requesterId !== req.params.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+
+      const updates = pickUserUpdates(req.body);
+      if (!Object.keys(updates).length) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      const user = await storage.updateUser(req.params.id, updates);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      res.json(user);
+      res.json(sanitizeUser(user));
     } catch (error) {
       res.status(500).json({ error: "Failed to update user" });
     }
@@ -8153,8 +8226,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     try {
       const departure = normalizeIcao(String(req.query.departure || ""));
       const destination = normalizeIcao(String(req.query.destination || ""));
+      const emptyResponse = {
+        departure,
+        destination,
+        waypoints: [],
+        plannedStops: [],
+        meta: null,
+      };
       if (!/^[A-Z0-9]{3,4}$/.test(departure) || !/^[A-Z0-9]{3,4}$/.test(destination)) {
-        return res.status(400).json({ error: "Departure and destination must be valid ICAO codes." });
+        return res.json(emptyResponse);
       }
 
       const cruiseKtas = Math.max(40, toNumber(req.query.cruiseKtas) ?? 110);
@@ -8191,7 +8271,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const departureStation = findStation(departure);
       const destinationStation = findStation(destination);
       if (!departureStation || !destinationStation) {
-        return res.status(404).json({ error: "Unable to resolve departure or destination." });
+        return res.json({
+          ...emptyResponse,
+          departure: departureStation?.icao ?? departure,
+          destination: destinationStation?.icao ?? destination,
+        });
       }
 
       const routeDistanceNm = distanceNmBetween(
@@ -8494,15 +8578,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             return { data: null, error: `${label} unavailable (${response.status})` };
           }
           const body = await response.text();
-          if (!body.trim()) {
+          const trimmed = body.trim();
+          if (!trimmed) {
             return { data: null, error: `${label} empty response` };
           }
+          if (trimmed.startsWith("<")) {
+            return { data: null, error: `${label} unexpected response` };
+          }
           try {
-            const parsed = JSON.parse(body);
+            const parsed = JSON.parse(trimmed);
             const data = Array.isArray(parsed) ? parsed[0] ?? null : parsed ?? null;
             return { data, error: null };
           } catch (e) {
-            console.error(`${label} parse error for ${candidate}:`, e);
+            logDebug(`${label} parse error for ${candidate}:`, e);
             return { data: null, error: `Failed to parse ${label} response` };
           }
         };
@@ -8592,8 +8680,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           { headers: { "User-Agent": "ReadySetFly/1.0" } }
         );
         if (metarRes.ok) {
-          const metarData = await metarRes.json();
-          metar = metarData.length > 0 ? metarData[0] : null;
+          const body = await metarRes.text();
+          const trimmed = body.trim();
+          if (trimmed && !trimmed.startsWith("<")) {
+            try {
+              const metarData = JSON.parse(trimmed);
+              metar = Array.isArray(metarData) && metarData.length > 0 ? metarData[0] : null;
+            } catch (error) {
+              logDebug(`Runway briefing METAR parse error for ${requestedIcao}:`, error);
+            }
+          }
         }
       }
 
@@ -9569,7 +9665,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
   
   wss.on('connection', (ws) => {
-    console.log('WebSocket client connected');
+    logDebug('WebSocket client connected');
     
     ws.on('message', async (data) => {
       try {
@@ -9836,11 +9932,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   });
     
     ws.on('close', () => {
-      console.log('WebSocket client disconnected');
+      logDebug('WebSocket client disconnected');
     });
   });
 
   return httpServer;
 }
+
 
 

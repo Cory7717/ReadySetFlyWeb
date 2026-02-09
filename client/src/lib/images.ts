@@ -25,7 +25,19 @@ const getBucketName = () => {
 
 export function resolveImageUrl(url?: string | null): string {
   if (!url) return "";
-  if (/^https?:\/\//i.test(url)) return url;
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const parsed = new URL(url);
+      const queryKeys = Array.from(parsed.searchParams.keys()).map((key) => key.toLowerCase());
+      const hasSignedParams = queryKeys.some((key) => key.startsWith("x-amz-") || key.startsWith("x-goog-"));
+      if (hasSignedParams) {
+        return `${parsed.origin}${parsed.pathname}`;
+      }
+    } catch {
+      // Fall back to original URL if parsing fails.
+    }
+    return url;
+  }
   if (url.startsWith("data:")) return url;
   if (url.startsWith("/")) return apiUrl(url);
   const bucketName = getBucketName();

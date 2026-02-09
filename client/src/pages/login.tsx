@@ -25,6 +25,7 @@ export default function LoginPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
+  const shouldDebug = import.meta.env.DEV;
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -45,24 +46,29 @@ export default function LoginPage() {
 
       const contentType = response.headers.get('content-type') || '';
 
-      // Log response status and content-type for debugging
-      try {
-        console.debug('[login] response status:', response.status, 'content-type:', contentType);
-      } catch {}
+      if (shouldDebug) {
+        try {
+          console.debug('[login] response status:', response.status, 'content-type:', contentType);
+        } catch {}
+      }
 
       if (!response.ok) {
         let errMsg = 'Failed to login';
         if (contentType.includes('application/json')) {
           try {
             const error = await response.json();
-            console.debug('[login] error json:', error);
+            if (shouldDebug) {
+              console.debug('[login] error json:', error);
+            }
             errMsg = error?.error || JSON.stringify(error) || errMsg;
           } catch (e) {
             // fall through to text
           }
         } else {
           const text = await response.text();
-          console.debug('[login] error text:', text.slice(0, 200));
+          if (shouldDebug) {
+            console.debug('[login] error text:', text.slice(0, 200));
+          }
           if (text) errMsg = text.slice(0, 500);
         }
         throw new Error(errMsg);
@@ -71,17 +77,23 @@ export default function LoginPage() {
       // Successful response: prefer JSON when available
       if (contentType.includes('application/json')) {
         const json = await response.json();
-        try { console.debug('[login] success json:', json); } catch {}
+        if (shouldDebug) {
+          try { console.debug('[login] success json:', json); } catch {}
+        }
         return json;
       }
 
       const text = await response.text();
       try {
         const parsed = JSON.parse(text);
-        try { console.debug('[login] parsed text as json:', parsed); } catch {}
+        if (shouldDebug) {
+          try { console.debug('[login] parsed text as json:', parsed); } catch {}
+        }
         return parsed;
       } catch {
-        try { console.debug('[login] success text:', text.slice(0, 500)); } catch {}
+        if (shouldDebug) {
+          try { console.debug('[login] success text:', text.slice(0, 500)); } catch {}
+        }
         return { message: text };
       }
     },

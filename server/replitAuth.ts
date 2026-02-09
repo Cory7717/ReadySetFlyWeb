@@ -175,7 +175,9 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
   app.use(getSession());
 
   if (AUTH_DISABLED) {
-    console.log("[AUTH] AUTH_DISABLED=true (sessions enabled, passport disabled).");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[AUTH] AUTH_DISABLED=true (sessions enabled, passport disabled).");
+    }
     return;
   }
 
@@ -307,8 +309,12 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
       }
     );
 
-    console.log("[AUTH] Google OAuth 2.0 enabled. Callback:", getGoogleCallbackUrl());
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[AUTH] Google OAuth 2.0 enabled. Callback:", getGoogleCallbackUrl());
+    }
   } else {
-    console.log("[AUTH] Google OAuth 2.0 NOT enabled (missing GOOGLE_CLIENT_ID/SECRET).");
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[AUTH] Google OAuth 2.0 NOT enabled (missing GOOGLE_CLIENT_ID/SECRET).");
+    }
   }
 }

@@ -8,7 +8,9 @@ const __dirname = dirname(__filename);
 
 // Load server/.env before reading process.env
 dotenv.config({ path: join(__dirname, ".env") });
-console.log("db.ts env loaded?", !!process.env.DATABASE_URL);
+if (process.env.NODE_ENV !== "production") {
+  console.log("db.ts env loaded?", !!process.env.DATABASE_URL);
+}
 
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';

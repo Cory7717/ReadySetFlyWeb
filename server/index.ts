@@ -8,8 +8,10 @@ const __dirname = dirname(__filename);
 // Loads ReadySetFly/server/.env no matter where you run from
 dotenv.config({ path: join(__dirname, ".env") });
 
-// TEMP: prove it loaded (remove after you see "true")
-console.log("DATABASE_URL loaded?", !!process.env.DATABASE_URL);
+const isProd = process.env.NODE_ENV === "production";
+if (!isProd) {
+  console.log("DATABASE_URL loaded?", !!process.env.DATABASE_URL);
+}
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { registerRoutes } from "./routes";
@@ -47,7 +49,7 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      if (!isProd && capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 

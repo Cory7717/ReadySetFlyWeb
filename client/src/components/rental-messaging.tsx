@@ -25,6 +25,7 @@ export function RentalMessaging({ rentalId, userId, rentalStatus }: RentalMessag
   const [inputMessage, setInputMessage] = useState("");
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shouldDebug = import.meta.env.DEV;
   const wsRef = useRef<WebSocket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -44,7 +45,9 @@ export function RentalMessaging({ rentalId, userId, rentalStatus }: RentalMessag
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log("WebSocket connected");
+        if (shouldDebug) {
+          console.log("WebSocket connected");
+        }
         setIsConnected(true);
         setError(null);
       };
@@ -76,7 +79,9 @@ export function RentalMessaging({ rentalId, userId, rentalStatus }: RentalMessag
       };
 
       ws.onclose = () => {
-        console.log("WebSocket disconnected");
+        if (shouldDebug) {
+          console.log("WebSocket disconnected");
+        }
         setIsConnected(false);
       };
 

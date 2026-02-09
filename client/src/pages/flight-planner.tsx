@@ -31,6 +31,24 @@ const CONTROLLED_AIRPORTS = new Set([
   "KPHL", "KDTW", "KSTL", "KMDW", "KSAN", "KTPA", "KAUS", "KDAL", "KHOU",
 ]);
 
+const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
+const toRadians = (value: number) => (value * Math.PI) / 180;
+const toDegrees = (value: number) => (value * 180) / Math.PI;
+const smallestAngleDiff = (a: number, b: number) => {
+  const diff = normalizeDegrees(a - b + 180) - 180;
+  return diff;
+};
+const bearingDeg = (from: AirportPoint, to: AirportPoint) => {
+  const lat1 = toRadians(from.lat);
+  const lat2 = toRadians(to.lat);
+  const dLon = toRadians(to.lon - from.lon);
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  return normalizeDegrees(toDegrees(Math.atan2(y, x)));
+};
+
 type AircraftProfile = {
   id: string;
   name: string;
@@ -595,27 +613,48 @@ export default function FlightPlanner() {
     if (!departurePoint || !Number.isFinite(departurePoint.lat) || !Number.isFinite(departurePoint.lon)) {
       return combined;
     }
+    const destinationKey = destinationResolved.trim().toUpperCase();
+    const destinationPoint = airportMap.get(destinationKey);
+    if (!destinationPoint || !Number.isFinite(destinationPoint.lat) || !Number.isFinite(destinationPoint.lon)) {
+      return combined;
+    }
     const basePoint: AirportPoint = {
       icao: departureKey,
       lat: Number(departurePoint.lat),
       lon: Number(departurePoint.lon),
     };
+    const targetPoint: AirportPoint = {
+      icao: destinationKey,
+      lat: Number(destinationPoint.lat),
+      lon: Number(destinationPoint.lon),
+    };
+    const routeBearing = bearingDeg(basePoint, targetPoint);
     return combined
       .map((icao, index) => {
         const data = airportMap.get(icao);
         if (!data || !Number.isFinite(data.lat) || !Number.isFinite(data.lon)) {
-          return { icao, index, distance: Number.POSITIVE_INFINITY };
+          return { icao, index, order: Number.POSITIVE_INFINITY, distance: Number.POSITIVE_INFINITY };
         }
-        const dist = distanceNm(basePoint, {
+        const candidatePoint: AirportPoint = {
           icao,
           lat: Number(data.lat),
           lon: Number(data.lon),
-        });
-        return { icao, index, distance: dist };
+        };
+        const dist = distanceNm(basePoint, candidatePoint);
+        const bearingToCandidate = bearingDeg(basePoint, candidatePoint);
+        const angleDiff = smallestAngleDiff(bearingToCandidate, routeBearing);
+        const alongTrack = dist * Math.cos(toRadians(angleDiff));
+        const order = alongTrack >= 0 ? alongTrack : Number.POSITIVE_INFINITY;
+        return { icao, index, order, distance: dist };
       })
-      .sort((a, b) => (a.distance === b.distance ? a.index - b.index : a.distance - b.distance))
+      .sort((a, b) => {
+        if (a.order === b.order) {
+          return a.distance === b.distance ? a.index - b.index : a.distance - b.distance;
+        }
+        return a.order - b.order;
+      })
       .map((item) => item.icao);
-  }, [plannedStops, waypoints, shouldOrderSuggestions, airportMap, departureResolved]);
+  }, [plannedStops, waypoints, shouldOrderSuggestions, airportMap, departureResolved, destinationResolved]);
 
   const routeSequenceOrdered = useMemo(() => {
     return [

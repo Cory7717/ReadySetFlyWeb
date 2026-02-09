@@ -2064,7 +2064,7 @@ export class DatabaseStorage implements IStorage {
     startDate.setDate(startDate.getDate() - rangeDays);
 
     const totalsResult = await db.execute(sql`
-      WITH returning AS (
+      WITH returning_visitors AS (
         SELECT "visitor_id"
         FROM "analytics_events"
         GROUP BY "visitor_id"
@@ -2073,7 +2073,7 @@ export class DatabaseStorage implements IStorage {
       SELECT
         count(*)::int AS "totalEvents",
         count(distinct "visitor_id")::int AS "uniqueVisitors",
-        count(distinct CASE WHEN "visitor_id" IN (SELECT "visitor_id" FROM returning) THEN "visitor_id" END)::int AS "returningVisitors",
+        count(distinct CASE WHEN "visitor_id" IN (SELECT "visitor_id" FROM returning_visitors) THEN "visitor_id" END)::int AS "returningVisitors",
         count(*) FILTER (WHERE "user_id" IS NULL)::int AS "guestEvents",
         count(distinct CASE WHEN "user_id" IS NULL THEN "visitor_id" END)::int AS "guestVisitors"
       FROM "analytics_events"
@@ -2082,7 +2082,7 @@ export class DatabaseStorage implements IStorage {
     const totalsRow = (totalsResult.rows?.[0] as any) || {};
 
     const pagesResult = await db.execute(sql`
-      WITH returning AS (
+      WITH returning_visitors AS (
         SELECT "visitor_id"
         FROM "analytics_events"
         GROUP BY "visitor_id"
@@ -2092,7 +2092,7 @@ export class DatabaseStorage implements IStorage {
         COALESCE(NULLIF("page", ''), "event") AS "key",
         count(*)::int AS "totalEvents",
         count(distinct "visitor_id")::int AS "uniqueVisitors",
-        count(distinct CASE WHEN "visitor_id" IN (SELECT "visitor_id" FROM returning) THEN "visitor_id" END)::int AS "returningVisitors"
+        count(distinct CASE WHEN "visitor_id" IN (SELECT "visitor_id" FROM returning_visitors) THEN "visitor_id" END)::int AS "returningVisitors"
       FROM "analytics_events"
       WHERE "created_at" >= ${startDate}
       GROUP BY 1

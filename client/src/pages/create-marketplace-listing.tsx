@@ -391,11 +391,15 @@ export default function CreateMarketplaceListing() {
         details,
       });
       const result = await response.json() as { description: string };
-      console.log("AI Response received:", result);
+      if (import.meta.env.DEV) {
+        console.log("AI Response received:", result);
+      }
       return result;
     },
     onSuccess: (data) => {
-      console.log("Setting description to:", data.description);
+      if (import.meta.env.DEV) {
+        console.log("Setting description to:", data.description);
+      }
       form.setValue("description", data.description, { shouldValidate: true, shouldDirty: true });
       toast({
         title: "Description Generated",
@@ -521,9 +525,11 @@ export default function CreateMarketplaceListing() {
   });
 
   const onSubmit = (data: FormData) => {
-    console.log("Form submitted with data:", data);
-    console.log("Form errors:", form.formState.errors);
-    console.log("User data:", user);
+    if (import.meta.env.DEV) {
+      console.log("Form submitted with data:", data);
+      console.log("Form errors:", form.formState.errors);
+      console.log("User data:", user);
+    }
 
     if (isSampleListing) {
       toast({
@@ -587,7 +593,9 @@ export default function CreateMarketplaceListing() {
 
     // If editing an existing listing, update it directly (no payment required for edits)
     if (isEditMode && listingId) {
-      console.log("Updating existing listing...");
+      if (import.meta.env.DEV) {
+        console.log("Updating existing listing...");
+      }
       createListingMutation.mutate({
         ...data,
         price: data.price || undefined,

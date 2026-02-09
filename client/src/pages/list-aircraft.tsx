@@ -381,11 +381,15 @@ export default function ListAircraft() {
         details,
       });
       const result = await response.json() as { description: string };
-      console.log("AI Response received:", result);
+      if (import.meta.env.DEV) {
+        console.log("AI Response received:", result);
+      }
       return result;
     },
     onSuccess: (data) => {
-      console.log("Setting description to:", data.description);
+      if (import.meta.env.DEV) {
+        console.log("Setting description to:", data.description);
+      }
       form.setValue("description", data.description, { shouldValidate: true, shouldDirty: true });
       toast({
         title: "Description Generated",
@@ -427,8 +431,10 @@ export default function ListAircraft() {
   };
 
   const onSubmit = (data: ListingFormData) => {
-    console.log("Form submitted with data:", data);
-    console.log("Form errors:", form.formState.errors);
+    if (import.meta.env.DEV) {
+      console.log("Form submitted with data:", data);
+      console.log("Form errors:", form.formState.errors);
+    }
     
     // Note: Backend middleware enforces verification requirement
     // Frontend check removed to avoid UX issues with cached user data

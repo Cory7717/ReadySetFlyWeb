@@ -91,6 +91,8 @@ export class S3StorageService {
     // Modern S3 buckets use bucket policies for public access
     // Object ACLs are deprecated; this is a no-op
     // Set your bucket policy to allow public GetObject on uploads/* prefix
-    console.log("ACL update requested for:", imageUrl);
+    if (process.env.NODE_ENV !== "production") {
+      console.log("ACL update requested for:", imageUrl);
+    }
   }
 }

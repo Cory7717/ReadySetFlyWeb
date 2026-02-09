@@ -36,6 +36,28 @@ const resolveInvoiceUrl = (invoiceUrl?: string | null) => {
   return apiUrl(`/uploads/documents/${invoiceUrl}`);
 };
 
+const buildBannerTrackingUrl = (
+  link?: string | null,
+  options?: { placement?: string | null; category?: string | null; bannerId?: string | null }
+) => {
+  if (!link) return "";
+  try {
+    const url = new URL(link);
+    const placement = options?.placement || "site";
+    const category = options?.category || "general";
+    const bannerId = options?.bannerId || "unknown";
+
+    url.searchParams.set("utm_source", "readysetfly");
+    url.searchParams.set("utm_medium", "banner");
+    url.searchParams.set("utm_campaign", `rsf-${placement}-banner`);
+    url.searchParams.set("utm_content", `${category}-${bannerId}`);
+
+    return url.toString();
+  } catch {
+    return link;
+  }
+};
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
@@ -4005,6 +4027,58 @@ export default function AdminDashboard() {
                                   <span className="font-medium">Link URL:</span> {banner.link}
                                 </p>
                               )}
+                              {banner.link && (
+                                <div className="flex items-center gap-2 flex-wrap text-xs">
+                                  <span className="font-medium">Tracking:</span>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={() => {
+                                      const trackingUrl = buildBannerTrackingUrl(banner.link, {
+                                        placement: banner.placements?.[0] ?? null,
+                                        category: banner.category ?? null,
+                                        bannerId: banner.id,
+                                      });
+                                      if (trackingUrl) {
+                                        window.open(trackingUrl, "_blank", "noopener,noreferrer");
+                                      }
+                                    }}
+                                    data-testid={`button-open-tracking-${banner.id}`}
+                                  >
+                                    Open tracked link
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={async () => {
+                                      const trackingUrl = buildBannerTrackingUrl(banner.link, {
+                                        placement: banner.placements?.[0] ?? null,
+                                        category: banner.category ?? null,
+                                        bannerId: banner.id,
+                                      });
+                                      if (!trackingUrl) return;
+                                      try {
+                                        await navigator.clipboard.writeText(trackingUrl);
+                                        toast({ title: "Tracking link copied" });
+                                      } catch (error) {
+                                        console.error("Failed to copy tracking link", error);
+                                        toast({
+                                          title: "Copy failed",
+                                          description: "Please copy the link manually.",
+                                          variant: "destructive",
+                                        });
+                                      }
+                                    }}
+                                    data-testid={`button-copy-tracking-${banner.id}`}
+                                  >
+                                    Copy
+                                  </Button>
+                                </div>
+                              )}
                               <div className="flex items-center gap-4">
                                 <span>
                                   <Clock className="h-3 w-3 inline mr-1" />
@@ -5781,7 +5855,7 @@ export default function AdminDashboard() {
               />
                 </div>
                 
-                <DialogFooter className="sticky bottom-0 border-t bg-background px-6 py-4">
+                <DialogFooter className="border-t bg-background px-6 py-4 shrink-0">
                   <Button
                     type="button"
                     variant="outline"

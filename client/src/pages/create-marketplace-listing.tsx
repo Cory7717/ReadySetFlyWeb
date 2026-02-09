@@ -960,9 +960,10 @@ export default function CreateMarketplaceListing() {
                         type="button"
                         variant="destructive"
                         size="icon"
-                        className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-2 right-2 h-7 w-7 bg-background/80 hover:bg-background"
                         onClick={() => removeImage(index)}
                         data-testid={`button-remove-image-${index}`}
+                        aria-label={`Remove photo ${index + 1}`}
                       >
                         <X className="h-3 w-3" />
                       </Button>
@@ -985,6 +986,11 @@ export default function CreateMarketplaceListing() {
                 </div>
                 {uploadError && (
                   <div className="text-xs text-destructive mt-2">{uploadError}</div>
+                )}
+                {imageFiles.length >= maxImages && (
+                  <p className="text-xs text-muted-foreground">
+                    Remove a photo to add another.
+                  </p>
                 )}
                 <p className="text-sm text-muted-foreground">
                   {imageFiles.length} of {maxImages} photos uploaded

@@ -208,7 +208,7 @@ export default function PlannerMap({ points, heightClassName = "h-[380px]", mapS
           <TileLayer
             attribution={openWeatherKey ? "OpenWeather" : "Windy.com"}
             url={windTileUrl}
-            opacity={0.85}
+            opacity={1}
             maxZoom={18}
             maxNativeZoom={12}
             minZoom={2}

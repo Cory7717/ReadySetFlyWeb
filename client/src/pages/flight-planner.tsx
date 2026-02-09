@@ -311,6 +311,7 @@ export default function FlightPlanner() {
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
   const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds">("standard");
+  const hasOpenWeatherKey = Boolean(import.meta.env.VITE_OPENWEATHER_API_KEY);
   const [wakeLockError, setWakeLockError] = useState<string | null>(null);
   const [customProfile, setCustomProfile] = useState({
     name: "",
@@ -1558,6 +1559,11 @@ export default function FlightPlanner() {
               <div className="text-xs text-muted-foreground mt-2">
                 Weather layers are for situational awareness only. Radar shows current precip; blank means no returns.
                 Winds is a surface analysis layer (beta). Always verify with official weather sources.
+              </div>
+            )}
+            {mapStyle === "winds" && !hasOpenWeatherKey && (
+              <div className="text-xs text-amber-700 mt-2">
+                Winds overlay requires an OpenWeather key. Set `VITE_OPENWEATHER_API_KEY` and restart the dev server.
               </div>
             )}
           </CardContent>

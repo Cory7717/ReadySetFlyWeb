@@ -105,7 +105,8 @@ export default function PlannerMap({ points, height = "380px", mapStyle = "stand
             attribution="NOAA nowCOAST (radar)"
             url="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer/tile/{z}/{y}/{x}"
             opacity={0.75}
-            maxZoom={11}
+            maxZoom={18}
+            maxNativeZoom={11}
             minZoom={4}
             zIndex={600}
           />
@@ -115,7 +116,8 @@ export default function PlannerMap({ points, height = "380px", mapStyle = "stand
             attribution="NOAA nowCOAST (winds)"
             url="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/analysis/wind_speed/MapServer/tile/{z}/{y}/{x}"
             opacity={0.7}
-            maxZoom={11}
+            maxZoom={18}
+            maxNativeZoom={11}
             minZoom={4}
             zIndex={600}
           />

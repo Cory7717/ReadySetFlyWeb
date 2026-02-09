@@ -246,6 +246,8 @@ export default function AdminDashboard() {
       approvalStatus: "draft",
       paymentStatus: "pending",
       adminNotes: "",
+      startDate: new Date(),
+      endDate: undefined,
     },
   });
   
@@ -3941,6 +3943,8 @@ export default function AdminDashboard() {
                                     approvalStatus: order.approvalStatus,
                                     paymentStatus: order.paymentStatus ?? undefined,
                                     adminNotes: order.adminNotes ?? "",
+                                    startDate: order.startDate ? new Date(order.startDate) : new Date(),
+                                    endDate: order.endDate ? new Date(order.endDate) : undefined,
                                   });
                                   setOrderDialogOpen(true);
                                 }}
@@ -3981,7 +3985,7 @@ export default function AdminDashboard() {
                   View and manage active banner campaigns created from paid orders. Banner ads are automatically created when you activate a paid Banner Ad Order.
                 </CardDescription>
               </div>
-              {isSuperAdmin && (
+              {canAccess("banners") && (
                 <Button
                   onClick={() => {
                     setEditingBanner(null);
@@ -5238,7 +5242,7 @@ export default function AdminDashboard() {
               <DialogDescription>
                 {editingBanner
                   ? "Admin override: You can edit all banner ad fields including creative content, scheduling, and status."
-                  : "Super Admin only: create a live banner ad without a paid order."}
+                  : "Banner admins can create a live banner ad without a paid order."}
               </DialogDescription>
             </DialogHeader>
             <Form {...bannerForm}>
@@ -5262,10 +5266,10 @@ export default function AdminDashboard() {
                     return;
                   }
 
-                  if (!isSuperAdmin) {
+                  if (!canAccess("banners")) {
                     toast({
                       title: "Error",
-                      description: "Only Super Admins can create live banner ads without a paid order.",
+                      description: "Banner admin access is required to create live banner ads.",
                       variant: "destructive",
                     });
                     return;
@@ -5763,6 +5767,66 @@ export default function AdminDashboard() {
                   )}
                 />
               </div>
+
+                  {/* Scheduling Section */}
+                  <div className="space-y-4 p-4 border rounded-md">
+                    <h3 className="font-semibold text-sm">Campaign Duration</h3>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={orderForm.control}
+                        name="startDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Start Date</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                value={field.value instanceof Date ? field.value.toISOString().split("T")[0] : (typeof field.value === "string" ? field.value.split("T")[0] : "")}
+                                onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                                data-testid="input-order-start-date"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={orderForm.control}
+                        name="endDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>End Date</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                value={field.value instanceof Date ? field.value.toISOString().split("T")[0] : (typeof field.value === "string" ? field.value.split("T")[0] : "")}
+                                onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                                data-testid="input-order-end-date"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    {(() => {
+                      const startDate = orderForm.getValues("startDate");
+                      const endDate = orderForm.getValues("endDate");
+                      const durationDays = getBannerDurationDays(
+                        startDate instanceof Date ? startDate : startDate ? new Date(startDate) : undefined,
+                        endDate instanceof Date ? endDate : endDate ? new Date(endDate) : undefined
+                      );
+                      if (!durationDays) return null;
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Duration: {durationDays} day{durationDays === 1 ? "" : "s"}
+                        </p>
+                      );
+                    })()}
+                  </div>
 
               {/* Pricing Tier Section */}
               <div className="space-y-4 p-4 border rounded-md">

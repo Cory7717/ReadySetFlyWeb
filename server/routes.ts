@@ -7437,7 +7437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/banner-ads", isAuthenticated, requireBannersAdmin, isSuperAdmin, async (req, res) => {
+  app.post("/api/admin/banner-ads", isAuthenticated, requireBannersAdmin, async (req, res) => {
     try {
       const payload = {
         ...req.body,

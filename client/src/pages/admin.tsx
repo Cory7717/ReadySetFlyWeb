@@ -3966,11 +3966,27 @@ export default function AdminDashboard() {
 
           {/* Live Banner Ads Section */}
           <Card>
-            <CardHeader>
-              <CardTitle data-testid="heading-banners">Live Banner Ads</CardTitle>
-              <CardDescription>
-                View and manage active banner campaigns created from paid orders. Banner ads are automatically created when you activate a paid Banner Ad Order.
-              </CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle data-testid="heading-banners">Live Banner Ads</CardTitle>
+                <CardDescription>
+                  View and manage active banner campaigns created from paid orders. Banner ads are automatically created when you activate a paid Banner Ad Order.
+                </CardDescription>
+              </div>
+              {isSuperAdmin && (
+                <Button
+                  onClick={() => {
+                    setEditingBanner(null);
+                    setBannerImageUrl("");
+                    bannerForm.reset();
+                    setBannerDialogOpen(true);
+                  }}
+                  data-testid="button-create-live-banner"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Live Banner
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {bannerAdsLoading ? (
@@ -5210,24 +5226,16 @@ export default function AdminDashboard() {
         <DialogContent className="max-w-3xl p-0" data-testid="dialog-create-banner">
           <div className="flex flex-col max-h-[90vh]">
             <DialogHeader className="px-6 pt-6">
-              <DialogTitle>Edit Live Banner Ad</DialogTitle>
+              <DialogTitle>{editingBanner ? "Edit" : "Create"} Live Banner Ad</DialogTitle>
               <DialogDescription>
-                Admin override: You can edit all banner ad fields including creative content, scheduling, and status.
+                {editingBanner
+                  ? "Admin override: You can edit all banner ad fields including creative content, scheduling, and status."
+                  : "Super Admin only: create a live banner ad without a paid order."}
               </DialogDescription>
             </DialogHeader>
             <Form {...bannerForm}>
               <form 
                 onSubmit={bannerForm.handleSubmit((data) => {
-                  if (!editingBanner) {
-                    toast({
-                      title: "Error",
-                      description: "Can only edit existing banner ads. Banner ads are created by activating paid orders.",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-                  
-                  // Admin can update ALL fields
                   // Use bannerImageUrl state if available (from upload), otherwise use form data
                   const payload = {
                     title: data.title,
@@ -5240,8 +5248,22 @@ export default function AdminDashboard() {
                     endDate: data.endDate,
                     isActive: data.isActive,
                   };
-                  
-                  updateBannerAdMutation.mutate({ id: editingBanner.id, data: payload });
+
+                  if (editingBanner) {
+                    updateBannerAdMutation.mutate({ id: editingBanner.id, data: payload });
+                    return;
+                  }
+
+                  if (!isSuperAdmin) {
+                    toast({
+                      title: "Error",
+                      description: "Only Super Admins can create live banner ads without a paid order.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+
+                  createBannerAdMutation.mutate(payload);
                 })} 
                 className="flex flex-col flex-1 min-h-0"
               >
@@ -5455,10 +5477,16 @@ export default function AdminDashboard() {
                   </Button>
                   <Button 
                     type="submit" 
-                    disabled={updateBannerAdMutation.isPending}
+                    disabled={updateBannerAdMutation.isPending || createBannerAdMutation.isPending}
                     data-testid="button-submit-edit-banner"
                   >
-                    {updateBannerAdMutation.isPending ? "Updating..." : "Update Banner Ad"}
+                    {editingBanner
+                      ? updateBannerAdMutation.isPending
+                        ? "Updating..."
+                        : "Update Banner Ad"
+                      : createBannerAdMutation.isPending
+                      ? "Creating..."
+                      : "Create Live Banner"}
                   </Button>
                 </DialogFooter>
               </form>

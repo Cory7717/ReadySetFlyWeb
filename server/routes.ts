@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, aviationEvents, notams as notamsTable } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, aviationEvents, notams as notamsTable } from "@shared/schema";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
@@ -7437,12 +7437,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/admin/banner-ads", isAuthenticated, requireBannersAdmin, async (req, res) => {
-    // Reject manual creation - banner ads must be created by activating paid orders
-    res.status(403).json({ 
-      error: "Manual banner ad creation is not allowed", 
-      message: "Banner ads can only be created by activating paid banner ad orders. Please use the 'Activate Order' button in the Banner Ad Orders section." 
-    });
+  app.post("/api/admin/banner-ads", isAuthenticated, requireBannersAdmin, isSuperAdmin, async (req, res) => {
+    try {
+      const payload = {
+        ...req.body,
+        startDate: req.body.startDate ? new Date(req.body.startDate) : undefined,
+        endDate: req.body.endDate ? new Date(req.body.endDate) : undefined,
+      };
+
+      const validatedData = insertBannerAdSchema.parse(payload);
+      const ad = await storage.createBannerAd(validatedData);
+      res.status(201).json(ad);
+    } catch (error: any) {
+      console.error("Banner ad creation error:", error);
+      res.status(400).json({ error: error.message || "Failed to create banner ad" });
+    }
   });
 
   app.patch("/api/admin/banner-ads/:id", isAuthenticated, requireBannersAdmin, async (req, res) => {

@@ -13,6 +13,17 @@ ReadySetFly is a dual marketplace for general aviation:
 - Trust layer with identity and document verification.
 - Messaging gate tied to rental status to reduce fraud and privacy risk.
 
+## Pilot tools and training suite
+
+ReadySetFly takes a pilot-tools-first approach alongside the marketplaces, including:
+
+- Digital logbook with endorsements and signatures.
+- Flight planner with weather overlays.
+- Student training hub (roadmaps, written prep, progress tracking).
+- VOR trainer and GPS sims.
+- Radio communications trainer and checklists.
+- TFR map and approach plates.
+
 ## Trust and safety layers
 
 - Email and phone verification.

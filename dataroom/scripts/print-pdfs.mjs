@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import MarkdownIt from "markdown-it";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,11 +25,14 @@ const markdownFiles = fs
   .filter((file) => file.endsWith(".md"))
   .map((file) => path.resolve(dataroomDir, file));
 
+const md = new MarkdownIt({
+  html: false,
+  linkify: true,
+  typographer: true,
+});
+
 const buildHtml = (title, markdown) => {
-  const escaped = markdown
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  const rendered = md.render(markdown);
 
   return `<!doctype html>
 <html>
@@ -36,20 +40,18 @@ const buildHtml = (title, markdown) => {
     <meta charset="utf-8" />
     <title>${title}</title>
     <style>
-      body { font-family: Arial, sans-serif; padding: 32px; line-height: 1.4; }
+      body { font-family: Arial, sans-serif; padding: 32px; line-height: 1.5; }
       h1, h2, h3 { margin-top: 24px; }
       pre { background: #f5f5f5; padding: 12px; overflow-x: auto; }
       code { font-family: Consolas, Monaco, monospace; }
       ul { padding-left: 20px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+      blockquote { color: #555; border-left: 4px solid #ddd; margin: 16px 0; padding-left: 12px; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   </head>
   <body>
-    <div id="content"></div>
-    <script>
-      const markdown = ${JSON.stringify(escaped)};
-      document.getElementById('content').innerHTML = marked.parse(markdown);
-    </script>
+    ${rendered}
   </body>
 </html>`;
 };

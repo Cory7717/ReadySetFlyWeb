@@ -83,6 +83,16 @@ const logDebug = (...args: unknown[]) => {
   }
 };
 
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 
 function getPublicBaseUrl() {
   const base =
@@ -6450,6 +6460,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Analytics events (guest-safe)
+  type AnalyticsEventInput = z.infer<typeof insertAnalyticsEventSchema>;
+  const analyticsQueue: AnalyticsEventInput[] = [];
+  const ANALYTICS_QUEUE_LIMIT = 500;
+  const ANALYTICS_FLUSH_INTERVAL_MS = 1500;
+  let analyticsFlushInProgress = false;
+  let analyticsFlushTimer: NodeJS.Timeout | null = null;
+
+  const flushAnalyticsQueue = async () => {
+    if (analyticsFlushInProgress || analyticsQueue.length === 0) return;
+    analyticsFlushInProgress = true;
+    const batch = analyticsQueue.splice(0, 25);
+    try {
+      for (const item of batch) {
+        await storage.createAnalyticsEvent(item);
+      }
+    } catch (error) {
+      console.warn("Analytics flush failed:", error);
+    } finally {
+      analyticsFlushInProgress = false;
+    }
+  };
+
+  if (!analyticsFlushTimer) {
+    analyticsFlushTimer = setInterval(() => {
+      void flushAnalyticsQueue();
+    }, ANALYTICS_FLUSH_INTERVAL_MS);
+  }
+
   app.post("/api/analytics/event", async (req: any, res) => {
     try {
       const event = typeof req.body?.event === "string" ? req.body.event.trim() : "";
@@ -6474,8 +6512,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Invalid analytics payload" });
       }
 
-      const created = await storage.createAnalyticsEvent(parsed.data);
-      res.json({ success: true, visitorId: created.visitorId });
+      while (analyticsQueue.length >= ANALYTICS_QUEUE_LIMIT) {
+        analyticsQueue.shift();
+      }
+      analyticsQueue.push(parsed.data);
+      res.json({ success: true, visitorId: parsed.data.visitorId });
     } catch (error) {
       console.error("Failed to record analytics event:", error);
       res.status(500).json({ error: "Failed to record analytics event" });
@@ -8418,21 +8459,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         ];
 
         const fetchStation = async (url: string) => {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 8000);
           try {
-            const response = await fetch(url, {
-              signal: controller.signal,
-              headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
-            });
+            const response = await fetchWithTimeout(
+              url,
+              { headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" } },
+              6000
+            );
             if (!response.ok) {
               return null;
             }
             return await response.json();
           } catch {
             return null;
-          } finally {
-            clearTimeout(timeout);
           }
         };
 
@@ -8556,7 +8594,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const requestedIcao = normalizeIcao(req.params.icao || "");
       
       // Validate ICAO format (3-4 letter code)
-      if (!/^[A-Z]{3,4}$/.test(requestedIcao)) {
+      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
 
@@ -8576,8 +8614,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const tafUrl = `https://aviationweather.gov/api/data/taf?ids=${candidate}&format=json`;
 
         const [metarRes, tafRes] = await Promise.all([
-          fetch(metarUrl, { headers: { "User-Agent": "ReadySetFly/1.0" } }),
-          fetch(tafUrl, { headers: { "User-Agent": "ReadySetFly/1.0" } }),
+          fetchWithTimeout(metarUrl, { headers: { "User-Agent": "ReadySetFly/1.0" } }, 6000).catch(
+            () => null
+          ),
+          fetchWithTimeout(tafUrl, { headers: { "User-Agent": "ReadySetFly/1.0" } }, 6000).catch(
+            () => null
+          ),
         ]);
 
         let metar = null;
@@ -8585,7 +8627,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         let metarError = null;
         let tafError = null;
 
-        const parseWeatherPayload = async (response: Response, label: string) => {
+        const parseWeatherPayload = async (response: Response | null, label: string) => {
+          if (!response) {
+            return { data: null, error: `${label} timeout` };
+          }
           if (!response.ok) {
             return { data: null, error: `${label} unavailable (${response.status})` };
           }
@@ -8653,7 +8698,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   app.get("/api/airports/:icao/runways", async (req, res) => {
     try {
       const requestedIcao = normalizeIcao(req.params.icao || "");
-      if (!/^[A-Z]{3,4}$/.test(requestedIcao)) {
+      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
 
@@ -8669,7 +8714,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   app.get("/api/airports/:icao/runway-briefing", async (req, res) => {
     try {
       const requestedIcao = normalizeIcao(req.params.icao || "");
-      if (!/^[A-Z]{3,4}$/.test(requestedIcao)) {
+      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
 
@@ -8687,11 +8732,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       if (!metar) {
-        const metarRes = await fetch(
+        const metarRes = await fetchWithTimeout(
           `https://aviationweather.gov/api/data/metar?ids=${requestedIcao}&format=json`,
-          { headers: { "User-Agent": "ReadySetFly/1.0" } }
-        );
-        if (metarRes.ok) {
+          { headers: { "User-Agent": "ReadySetFly/1.0" } },
+          6000
+        ).catch(() => null);
+        if (metarRes && metarRes.ok) {
           const body = await metarRes.text();
           const trimmed = body.trim();
           if (trimmed && !trimmed.startsWith("<")) {
@@ -8744,7 +8790,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   app.get("/api/notams/:icao", async (req, res) => {
     try {
       const requestedIcao = normalizeIcao(req.params.icao || "");
-      if (!/^[A-Z]{3,4}$/.test(requestedIcao)) {
+      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
 
@@ -8791,6 +8837,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (cached && cached.expiresAt > Date.now()) {
         return res.json({ icao: requestedIcao, source: "swim", ...cached.data });
       }
+      const staleCache = cached && cached.expiresAt + 10 * 60 * 1000 > Date.now() ? cached : null;
 
       const endpointTemplate = process.env.SWIM_NOTAM_ENDPOINT;
       if (!endpointTemplate) {
@@ -8815,15 +8862,29 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         }
       }
 
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: "application/json",
-          ...extraHeaders,
+      const response = await fetchWithTimeout(
+        url,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: "application/json",
+            ...extraHeaders,
+          },
         },
-      });
+        8000
+      ).catch(() => null);
+
+      if (!response) {
+        if (staleCache) {
+          return res.json({ icao: requestedIcao, source: "swim", ...staleCache.data, stale: true });
+        }
+        return res.status(504).json({ error: "NOTAM fetch timeout" });
+      }
 
       if (!response.ok) {
+        if (staleCache) {
+          return res.json({ icao: requestedIcao, source: "swim", ...staleCache.data, stale: true });
+        }
         return res.status(response.status).json({ error: `NOTAM fetch failed (${response.status})` });
       }
 

@@ -14,11 +14,13 @@ export const membershipTierInfo: Record<MembershipTier, { title: string; subtitl
     title: "RSF Pro (Core)",
     subtitle: "Save, alerts, analytics, and pro training workflows.",
     features: [
-      "Save logbook entries, flight plans, and training history with cloud sync.",
-      "Currency tracking + expiration alerts (medical, flight review, IPC).",
-      "Endorsement tracking and instructor sign-offs.",
-      "Radio Comms Trainer with full scenarios and scoring.",
+      "Save flight plans, aircraft profiles, and logbook entries with cloud sync.",
+      "Currency tracking with alerts (medical, flight review, IPC).",
+      "Endorsements + instructor sign-offs inside the logbook.",
+      "Radio Comms Trainer: full scenarios, scoring, and saved practice history.",
+      "GPS sims + guided VOR training tools.",
       "Core analytics and export-ready summaries.",
+      "Create aviation events and run listings with a 10% listing-fee discount.",
     ],
   },
   pro_plus: {
@@ -29,6 +31,7 @@ export const membershipTierInfo: Record<MembershipTier, { title: string; subtitl
       "Advanced analytics, trend analysis, and proficiency trends.",
       "Expanded reporting and long-range proficiency tracking.",
       "Priority access to power-user tooling as it ships.",
+      "20% listing-fee discount on traditional marketplace listings.",
     ],
   },
 };

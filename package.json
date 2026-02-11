@@ -12,6 +12,7 @@
     "start": "NODE_ENV=production node run-migration.js && node dist/index.js",
     "check": "tsc",
     "test:smoke": "node scripts/smoke-test.mjs",
+    "test:unit": "tsx --test scripts/tests/marketplace-fees.test.ts",
     "seed:aircraft-types": "tsx seed_aircraft_types.ts",
     "import:aircraft-types": "tsx scripts/import-aircraft-types.ts",
     "db:push": "drizzle-kit push"

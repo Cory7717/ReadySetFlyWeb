@@ -3,6 +3,8 @@
 
 export const TAX_RATE = 0.0825; // 8.25% sales tax
 
+export type MembershipTier = "free" | "pro" | "pro_plus";
+
 // Category-specific pricing (base price before tax)
 export const CATEGORY_PRICING: Record<string, Record<string, number> | number> = {
   'aircraft-sale': {
@@ -17,6 +19,14 @@ export const CATEGORY_PRICING: Record<string, Record<string, number> | number> =
   'job': 40,      // Backward compatibility - legacy key
   'jobs': 40,     // New key for consistency
 };
+
+export function roundToCents(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+export function isTraditionalMarketplaceCategory(category: string): boolean {
+  return Object.prototype.hasOwnProperty.call(CATEGORY_PRICING, category);
+}
 
 // Tier information for aircraft-sale category
 export const TIER_INFO = {
@@ -68,6 +78,48 @@ export function getUpgradeDelta(category: string, currentTier: string, newTier: 
 // Calculate total with tax
 export function calculateTotalWithTax(baseAmount: number): number {
   return baseAmount + (baseAmount * TAX_RATE);
+}
+
+type ListingFeeBreakdownInput = {
+  category: string;
+  tier?: string;
+  membershipTier?: MembershipTier;
+  isTraditionalMarketplace?: boolean;
+};
+
+type ListingFeeBreakdown = {
+  baseListingFee: number;
+  membershipDiscountPct: number;
+  membershipDiscountAmount: number;
+  finalListingFee: number;
+  membershipTierApplied: MembershipTier;
+};
+
+const resolveMembershipDiscountPct = (membershipTier?: MembershipTier): number => {
+  if (membershipTier === "pro_plus") return 20;
+  if (membershipTier === "pro") return 10;
+  return 0;
+};
+
+export function calculateMarketplaceListingFee({
+  category,
+  tier,
+  membershipTier = "free",
+  isTraditionalMarketplace = true,
+}: ListingFeeBreakdownInput): ListingFeeBreakdown {
+  const baseListingFee = getBasePrice(category, tier);
+  const discountPct = isTraditionalMarketplace ? resolveMembershipDiscountPct(membershipTier) : 0;
+  const discountAmount = roundToCents(baseListingFee * (discountPct / 100));
+  const finalListingFee = roundToCents(baseListingFee - discountAmount);
+  const membershipTierApplied = discountPct > 0 ? membershipTier : "free";
+
+  return {
+    baseListingFee,
+    membershipDiscountPct: discountPct,
+    membershipDiscountAmount: discountAmount,
+    finalListingFee,
+    membershipTierApplied,
+  };
 }
 
 // Get tier index (for comparison)

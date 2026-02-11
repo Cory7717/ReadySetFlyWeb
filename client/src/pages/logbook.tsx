@@ -400,9 +400,9 @@ export default function Logbook() {
         toolName="Logbook"
         toolSummary="Capture flights, totals, and currency in one workspace."
         freeFeatures={[
-          "Create manual logbook entries and basic totals.",
-          "Export logbook data when you need it.",
-          "Upgrade for currency alerts, endorsements, and analytics.",
+          "Create manual logbook entries with basic totals.",
+          "Export logbook data anytime.",
+          "Upgrade for currency alerts, endorsements, analytics, and full history.",
         ]}
       />
       {/* Signing requirement callout */}

@@ -1266,9 +1266,10 @@ export default function FlightPlanner() {
         toolName="Flight Planner"
         toolSummary="Route builder, advisory analysis, and flight-plan tracking."
         freeFeatures={[
-          "Build routes and view advisory summaries.",
-          "Live METAR, TAF, runway, and NOTAM context.",
-          "Free accounts keep one saved plan and basic summaries.",
+          "Build routes with basic advisory summaries.",
+          "Live METAR/TAF, runway, and NOTAM context.",
+          "One saved plan with manual updates.",
+          "Upgrade for unlimited saved plans, alerts, and advanced analytics.",
         ]}
       />
       <div className="flex items-center justify-between flex-wrap gap-3">

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft } from 'lucide-react';
+import { TAX_RATE } from '@shared/config/listingPricing';
 
 declare global {
   interface Window {
@@ -14,32 +15,15 @@ declare global {
   }
 }
 
-// Category-specific pricing (base price before tax)
-const CATEGORY_PRICING: Record<string, Record<string, number> | number> = {
-  'aircraft-sale': {
-    basic: 25,
-    standard: 40,
-    premium: 100,
-  },
-  'charter': 250,
-  'cfi': 30,
-  'flight-school': 250,
-  'mechanic': 40,
-  'job': 40,
-};
-
-const TAX_RATE = 0.0825; // 8.25% sales tax
-
-// Helper to get base price for a listing
-const getBasePrice = (category: string, tier?: string): number => {
-  const categoryPricing = CATEGORY_PRICING[category];
-  
-  if (typeof categoryPricing === 'object' && tier) {
-    return categoryPricing[tier] || categoryPricing.basic || 25;
-  } else if (typeof categoryPricing === 'number') {
-    return categoryPricing;
-  }
-  return 25; // Default fallback
+type FeeQuote = {
+  baseListingFee: number;
+  membershipDiscountPct: number;
+  membershipDiscountAmount: number;
+  finalListingFee: number;
+  membershipTierApplied: string;
+  taxAmount: number;
+  totalDue: number;
+  isTraditionalMarketplace: boolean;
 };
 
 interface CheckoutFormProps {
@@ -384,6 +368,9 @@ export default function MarketplaceListingCheckout() {
   const [completionToken, setCompletionToken] = useState<string | null>(null);
   const [autoAppliedFromListing, setAutoAppliedFromListing] = useState(false);
   const [adminGrant, setAdminGrant] = useState<{ token: string; durationDays?: number } | null>(null);
+  const [feeQuote, setFeeQuote] = useState<FeeQuote | null>(null);
+  const [feeQuoteLoading, setFeeQuoteLoading] = useState(false);
+  const [feeQuoteError, setFeeQuoteError] = useState("");
 
   useEffect(() => {
     // Check if this is upgrade mode
@@ -429,6 +416,43 @@ export default function MarketplaceListingCheckout() {
   }, [navigate, toast]);
 
   useEffect(() => {
+    if (isUpgradeMode || !listingData) return;
+
+    const fetchQuote = async () => {
+      setFeeQuoteLoading(true);
+      setFeeQuoteError("");
+      try {
+        const response = await fetch("/api/marketplace/listing-fee-quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            category: listingData.category,
+            tier: listingData.tier,
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load listing fee quote");
+        }
+        setFeeQuote(data);
+      } catch (error: any) {
+        setFeeQuoteError(error.message || "Failed to load listing fee quote");
+        toast({
+          title: "Pricing Error",
+          description: error.message || "Failed to load listing fee quote",
+          variant: "destructive",
+        });
+      } finally {
+        setFeeQuoteLoading(false);
+      }
+    };
+
+    fetchQuote();
+  }, [isUpgradeMode, listingData, toast]);
+
+  useEffect(() => {
     if (checkoutTracked) return;
     if (isUpgradeMode && upgradeContext) {
       trackEvent("begin_checkout", {
@@ -441,9 +465,7 @@ export default function MarketplaceListingCheckout() {
       return;
     }
     if (!isUpgradeMode && listingData) {
-      const baseAmount = getBasePrice(listingData.category, listingData.tier);
-      const taxAmount = baseAmount * TAX_RATE;
-      const totalAmount = baseAmount + taxAmount;
+      const totalAmount = feeQuote?.totalDue ?? 0;
       const value = Number(finalAmount || totalAmount);
       trackEvent("begin_checkout", {
         item_category: "marketplace_listing",
@@ -453,20 +475,19 @@ export default function MarketplaceListingCheckout() {
       });
       setCheckoutTracked(true);
     }
-  }, [checkoutTracked, isUpgradeMode, upgradeContext, listingData, finalAmount]);
+  }, [checkoutTracked, isUpgradeMode, upgradeContext, listingData, finalAmount, feeQuote]);
 
   // Auto-apply admin free grant token (admin starts flow from dashboard)
   useEffect(() => {
     if (isUpgradeMode || !listingData) return;
+    if (!feeQuote) return;
     const storedGrant = localStorage.getItem('adminFreeListingGrant');
     if (!storedGrant) return;
     try {
       const grant = JSON.parse(storedGrant);
       if (!grant?.token) return;
 
-      const baseAmount = getBasePrice(listingData.category, listingData.tier);
-      const taxAmount = baseAmount * TAX_RATE;
-      const totalAmount = baseAmount + taxAmount;
+      const totalAmount = feeQuote.totalDue;
 
       setAdminGrant(grant);
       setCompletionToken(grant.token);
@@ -483,15 +504,15 @@ export default function MarketplaceListingCheckout() {
     } catch (error) {
       console.error('Failed to apply admin free grant:', error);
     }
-  }, [isUpgradeMode, listingData]);
+  }, [isUpgradeMode, listingData, feeQuote]);
 
   // Auto-apply promo code captured during listing creation so users don't re-enter it
   useEffect(() => {
-    if (listingData?.promoCode && !appliedPromo && !autoAppliedFromListing) {
+    if (listingData?.promoCode && !appliedPromo && !autoAppliedFromListing && feeQuote) {
       handleApplyPromo(listingData.promoCode);
       setAutoAppliedFromListing(true);
     }
-  }, [listingData?.promoCode, appliedPromo, autoAppliedFromListing]);
+  }, [listingData?.promoCode, appliedPromo, autoAppliedFromListing, feeQuote]);
 
   const handlePaymentSuccess = async (transactionId: string) => {
     // UPGRADE MODE: Complete the upgrade
@@ -551,10 +572,7 @@ export default function MarketplaceListingCheckout() {
     }
 
     try {
-      // Calculate amounts for promo data
-      const baseAmount = getBasePrice(listingData.category, listingData.tier);
-      const taxAmount = baseAmount * TAX_RATE;
-      const totalAmount = baseAmount + taxAmount;
+      const totalAmount = feeQuote?.totalDue || 0;
       
       // Complete listing creation with PayPal verification
       const listingPayload = {
@@ -609,6 +627,11 @@ export default function MarketplaceListingCheckout() {
       setIsApplyingPromo(false);
       return;
     }
+    if (!isUpgradeMode && !feeQuote) {
+      setPromoError("Pricing details not loaded yet");
+      setIsApplyingPromo(false);
+      return;
+    }
     const codeToValidate = (codeOverride ?? promoCode).trim();
     if (!codeToValidate) {
       setPromoError("Please enter a promo code");
@@ -621,9 +644,12 @@ export default function MarketplaceListingCheckout() {
     
     try {
       // Calculate amounts first
-      const baseAmount = getBasePrice(listingData.category, listingData.tier);
-      const taxAmount = baseAmount * TAX_RATE;
-      const totalAmount = baseAmount + taxAmount;
+      const totalAmount = isUpgradeMode
+        ? upgradeContext?.totalWithTax
+        : feeQuote?.totalDue;
+      if (!totalAmount) {
+        throw new Error("Pricing details not available");
+      }
       
       const response = await fetch(`/api/promo-codes/validate`, {
         method: "POST",
@@ -683,11 +709,9 @@ export default function MarketplaceListingCheckout() {
   // Generate completion token when promo makes order free
   useEffect(() => {
     if (adminGrant) return;
-    if (appliedPromo && finalAmount === 0 && listingData) {
+    if (appliedPromo && finalAmount === 0 && listingData && feeQuote) {
       // Generate signed token for free order completion
-      const baseAmount = getBasePrice(listingData.category, listingData.tier);
-      const taxAmount = baseAmount * TAX_RATE;
-      const totalAmount = baseAmount + taxAmount;
+      const totalAmount = feeQuote.totalDue;
       
       // Note: In production, this token generation should happen on the backend
       // For security, we're simulating the pattern here but the actual signing
@@ -705,7 +729,7 @@ export default function MarketplaceListingCheckout() {
       const token = btoa(JSON.stringify(tokenData));
       setCompletionToken(token);
     }
-  }, [appliedPromo, finalAmount, discountAmount, listingData]);
+  }, [appliedPromo, finalAmount, discountAmount, listingData, feeQuote]);
 
   // Loading state
   if (!listingData && !upgradeContext) {
@@ -718,22 +742,47 @@ export default function MarketplaceListingCheckout() {
     );
   }
 
+  if (!isUpgradeMode && listingData && feeQuoteLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-2xl">
+        <div className="flex items-center justify-center min-h-[300px] text-sm text-muted-foreground">
+          Loading listing fee details...
+        </div>
+      </div>
+    );
+  }
+
+  if (!isUpgradeMode && listingData && feeQuoteError) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-2xl">
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground">
+            {feeQuoteError}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Calculate amounts based on mode
   let baseAmount, taxAmount, totalAmount;
+  const promoApplied = Boolean(appliedPromo || adminGrant);
   
   if (isUpgradeMode && upgradeContext) {
     // Use upgrade delta from context
     baseAmount = upgradeContext.upgradeDelta;
     taxAmount = baseAmount * TAX_RATE;
     totalAmount = upgradeContext.totalWithTax;
-  } else if (listingData) {
-    // Regular listing calculation
-    baseAmount = getBasePrice(listingData.category, listingData.tier);
-    taxAmount = baseAmount * TAX_RATE;
-    totalAmount = baseAmount + taxAmount;
+  } else if (listingData && feeQuote) {
+    // Regular listing calculation (from server quote)
+    baseAmount = feeQuote.baseListingFee;
+    taxAmount = feeQuote.taxAmount;
+    totalAmount = feeQuote.totalDue;
   } else {
     return null;
   }
+
+  const effectiveTotal = promoApplied ? finalAmount : totalAmount;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
@@ -801,15 +850,27 @@ export default function MarketplaceListingCheckout() {
                   </div>
                 )}
                 <div className="flex justify-between text-sm pt-2 border-t">
-                  <span>Base Price:</span>
+                  <span>Listing Fee:</span>
                   <span>${baseAmount.toFixed(2)}</span>
                 </div>
+                {feeQuote && feeQuote.membershipDiscountPct > 0 && (
+                  <div className="flex justify-between text-sm text-emerald-600">
+                    <span>Membership Discount ({feeQuote.membershipDiscountPct}%):</span>
+                    <span>-${feeQuote.membershipDiscountAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                {feeQuote && feeQuote.membershipDiscountPct > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Discounted Listing Fee:</span>
+                    <span>${feeQuote.finalListingFee.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span>Sales Tax (8.25%):</span>
                   <span>${taxAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm font-semibold pt-2 border-t">
-                  <span>Total (Monthly):</span>
+                  <span>Total Due:</span>
                   <span>${totalAmount.toFixed(2)}</span>
                 </div>
               </>
@@ -861,7 +922,7 @@ export default function MarketplaceListingCheckout() {
           </div>
 
           {/* Updated Total with Discount */}
-          {appliedPromo && (
+          {promoApplied && (
             <div className="bg-muted p-4 rounded-lg space-y-2">
               <div className="flex justify-between text-sm">
                 <span>Original Total:</span>
@@ -873,7 +934,7 @@ export default function MarketplaceListingCheckout() {
               </div>
               <div className="flex justify-between text-lg font-bold pt-2 border-t">
                 <span>Final Total:</span>
-                <span>${finalAmount.toFixed(2)}</span>
+                <span>${effectiveTotal.toFixed(2)}</span>
               </div>
             </div>
           )}
@@ -882,11 +943,11 @@ export default function MarketplaceListingCheckout() {
           <CheckoutForm 
             listingData={listingData || {}} 
             onSuccess={handlePaymentSuccess}
-            isFree={appliedPromo !== null && finalAmount === 0}
+            isFree={promoApplied && effectiveTotal === 0}
             promoCode={appliedPromo?.code || null}
             discountAmount={discountAmount}
             originalAmount={totalAmount}
-            finalAmount={finalAmount || totalAmount}
+            finalAmount={effectiveTotal}
             completionToken={completionToken}
             isUpgradeMode={isUpgradeMode}
             upgradeContext={upgradeContext}

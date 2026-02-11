@@ -14,9 +14,9 @@ import {
 import { membershipTierInfo } from "@shared/membership-plans";
 
 const defaultFreeFeatures = [
-  "Access core tools with basic planning, logging, and summaries.",
-  "Live weather and NOTAM snapshots for situational awareness.",
-  "One saved plan and manual log entries with export-ready data.",
+  "Use core planning and logging with basic summaries.",
+  "Live weather + NOTAM snapshots for situational awareness.",
+  "Limited saves (single plan) and manual log entries.",
 ];
 
 type UpgradePromptDialogProps = {
@@ -38,9 +38,9 @@ export function UpgradePromptDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Unlock more with RSF Pro</DialogTitle>
+          <DialogTitle>Unlock full pilot tooling with RSF Pro</DialogTitle>
           <DialogDescription>
-            {toolName} is ready to go. Choose to continue free or upgrade for deeper tools.
+            {toolName} works free. RSF Pro and Pro+ unlock saved workflows, alerts, and advanced analytics.
           </DialogDescription>
         </DialogHeader>
 
@@ -48,7 +48,7 @@ export function UpgradePromptDialog({
           <Card className="border-muted-foreground/30">
             <CardHeader className="space-y-1">
               <Badge variant="outline" className="w-fit">Free</Badge>
-              <CardTitle className="text-base">Continue with Free Tools</CardTitle>
+              <CardTitle className="text-base">Continue with Free</CardTitle>
               {toolSummary && (
                 <p className="text-xs text-muted-foreground">{toolSummary}</p>
               )}
@@ -101,10 +101,10 @@ export function UpgradePromptDialog({
 
         <DialogFooter className="sm:justify-between">
           <DialogClose asChild>
-            <Button variant="ghost">Continue with Free Tools</Button>
+            <Button variant="ghost">Continue with Free</Button>
           </DialogClose>
           <div className="text-xs text-muted-foreground">
-            You can upgrade anytime. Your free access stays available.
+            Upgrade anytime to unlock full planning, alerts, and analytics.
           </div>
         </DialogFooter>
       </DialogContent>

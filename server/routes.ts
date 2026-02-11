@@ -32,6 +32,7 @@ import { getBasePrice, getUpgradeDelta, calculateTotalWithTax, isValidUpgrade, V
 import { paypalRequest } from "./paypal-client";
 import { getEntitlementsForUser, isSuperAdminEmail, mapPayPalStatusToMembership, resolveMembershipFromPlanId, resolvePayPalPlanId } from "./membership";
 import { maybeSyncLogbookProSubscription } from "./paypal-subscription-sync";
+import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
 
 // Initialize OpenAI client with fallback to standard OpenAI if Replit integration vars are missing
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
@@ -2153,6 +2154,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  app.post("/api/marketplace/listing-fee-quote", isAuthenticated, async (req: any, res) => {
+    try {
+      const { category, tier } = req.body || {};
+      if (!category) {
+        return res.status(400).json({ error: "Listing category is required" });
+      }
+
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      const feeBreakdown = buildMarketplaceListingFeeBreakdown({ category, tier, user });
+
+      if (!feeBreakdown.isTraditionalMarketplace) {
+        return res.status(400).json({ error: "Unsupported listing category" });
+      }
+
+      res.json({
+        ...feeBreakdown,
+      });
+    } catch (error: any) {
+      console.error("Marketplace listing fee quote error:", error);
+      res.status(500).json({ error: error.message || "Failed to calculate listing fee" });
+    }
+  });
+
   const parseBillingInterval = (value?: string | null): "monthly" | "biannual" | "annual" | null => {
     if (!value) return null;
     const normalized = value.toLowerCase();
@@ -2590,10 +2615,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!category) {
         return res.status(400).json({ error: "Missing required fields" });
       }
-      
+
+      const user = await storage.getUser(userId);
+      const feeBreakdown = buildMarketplaceListingFeeBreakdown({ category, tier, user });
+      if (!feeBreakdown.isTraditionalMarketplace) {
+        return res.status(400).json({ error: "Unsupported listing category" });
+      }
+
       // Server-side pricing calculation - NEVER trust client
-      const baseAmount = getBasePrice(category, tier);
-      const fullAmount = calculateTotalWithTax(baseAmount);
+      const fullAmount = feeBreakdown.totalDue;
       
       // If promo code applied, validate and use discounted amount
       let amount = fullAmount;
@@ -2671,6 +2701,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { body, ...httpResponse } = await ordersController.createOrder(collect as any);
       const jsonResponse = JSON.parse(String(body));
+
+      if (feeBreakdown.membershipDiscountPct > 0) {
+        logDebug(
+          `Marketplace listing discount applied: ${category} ${tier || "basic"} ` +
+            `tier=${feeBreakdown.membershipTierApplied} pct=${feeBreakdown.membershipDiscountPct}`
+        );
+      }
+      jsonResponse.feeBreakdown = feeBreakdown;
       
       res.status(httpResponse.statusCode).json(jsonResponse);
     } catch (error: any) {
@@ -3155,8 +3193,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Listing category is required" });
       }
 
-      const baseAmount = getBasePrice(category, tier);
-      const fullAmount = calculateTotalWithTax(baseAmount);
+      const user = await storage.getUser(userId);
+      const feeBreakdown = buildMarketplaceListingFeeBreakdown({ category, tier, user });
+      if (!feeBreakdown.isTraditionalMarketplace) {
+        return res.status(400).json({ error: "Unsupported listing category" });
+      }
+
+      const fullAmount = feeBreakdown.totalDue;
       let expectedAmount = fullAmount;
       let validatedPromo: any = null;
 
@@ -3229,7 +3272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertMarketplaceListingSchema.parse({
         ...safeListingData,
         userId,
-        monthlyFee: baseAmount.toFixed(2),
+        monthlyFee: feeBreakdown.finalListingFee.toFixed(2),
       });
 
       const listing = await storage.createMarketplaceListing({
@@ -3302,7 +3345,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Failed to create threshold notification:", notifError);
       }
 
-      res.status(201).json(listing);
+      if (feeBreakdown.membershipDiscountPct > 0) {
+        logDebug(
+          `Marketplace listing discount applied: ${category} ${tier} ` +
+            `tier=${feeBreakdown.membershipTierApplied} pct=${feeBreakdown.membershipDiscountPct}`
+        );
+      }
+
+      res.status(201).json({
+        listing,
+        feeBreakdown,
+      });
     } catch (error: any) {
       console.error("Marketplace listing completion error:", error);
       res.status(400).json({ error: error.message || "Failed to complete listing creation" });
@@ -3413,10 +3466,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           logDebug(`✅ FREE marketplace listing ${listing.id} completed with promo code ${tokenData.promoCode} by user ${userId}`);
           
+          const feeBreakdown = buildMarketplaceListingFeeBreakdown({
+            category: listing.category,
+            tier: listing.tier || "basic",
+            user: await storage.getUser(userId),
+          });
+
           return res.status(201).json({ 
             status: 'COMPLETED',
             message: 'Free listing created successfully',
-            listing
+            listing,
+            feeBreakdown,
           });
         } else {
           return res.status(400).json({ error: "No promo code provided for free listing" });
@@ -3443,12 +3503,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           adminNotes: `Admin free listing grant (${durationDays}d) by ${tokenData.issuedBy || 'admin'}`,
         });
 
+        const feeBreakdown = buildMarketplaceListingFeeBreakdown({
+          category: listing.category,
+          tier: listing.tier || "basic",
+          user: await storage.getUser(userId),
+        });
+
         logDebug(`✅ Admin free marketplace listing ${listing.id} created for user ${userId} by ${tokenData.issuedBy || 'admin'}`);
 
         return res.status(201).json({
           status: 'COMPLETED',
           message: 'Admin free listing created successfully',
           listing,
+          feeBreakdown,
         });
       }
 

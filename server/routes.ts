@@ -9261,7 +9261,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
     async function requireLogbookPro(req: any, res: any, next: any) {
       try {
-        const userId = req.user?.claims?.sub;
+        const userId = req.user?.claims?.sub || req.session?.userId;
         if (!userId) {
           return res.status(401).json({ error: "Unauthorized" });
         }
@@ -9284,7 +9284,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   // Pilot Logbook Routes (authenticated users only)
   app.get("/api/logbook", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const entries = await storage.getLogbookEntriesByUser(userId);
       res.json(entries);
     } catch (error) {
@@ -9295,7 +9298,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.post("/api/logbook", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const result = insertLogbookEntrySchema.safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
@@ -9310,7 +9316,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/logbook/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const entry = await storage.getLogbookEntryById(req.params.id);
       if (!entry) {
         return res.status(404).json({ error: "Logbook entry not found" });
@@ -9328,7 +9337,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.patch("/api/logbook/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const existing = await storage.getLogbookEntryById(req.params.id);
       if (!existing) {
         return res.status(404).json({ error: "Logbook entry not found" });
@@ -9357,7 +9369,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.post("/api/logbook/:id/lock", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const existing = await storage.getLogbookEntryById(req.params.id);
       if (!existing) {
         return res.status(404).json({ error: "Logbook entry not found" });
@@ -9383,7 +9398,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.post("/api/logbook/:id/countersign", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const existing = await storage.getLogbookEntryById(req.params.id);
       if (!existing) {
         return res.status(404).json({ error: "Logbook entry not found" });
@@ -9409,7 +9427,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.post("/api/logbook/:id/unlock", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const existing = await storage.getLogbookEntryById(req.params.id);
       if (!existing) {
         return res.status(404).json({ error: "Logbook entry not found" });
@@ -9427,7 +9448,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.delete("/api/logbook/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const existing = await storage.getLogbookEntryById(req.params.id);
       if (!existing) {
         return res.status(404).json({ error: "Logbook entry not found" });
@@ -9451,7 +9475,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   // Logbook Pro - Settings & Currency Summary
   app.get("/api/logbook/pro/settings", isAuthenticated, requireLogbookPro, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const settings = await storage.getLogbookProSettings(userId);
       res.json(settings || null);
     } catch (error) {
@@ -9462,7 +9489,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.put("/api/logbook/pro/settings", isAuthenticated, requireLogbookPro, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const payload = { ...req.body };
       const dateFields = ["medicalIssuedAt", "medicalExpiresAt", "flightReviewDate", "ipcDate"];
       dateFields.forEach((field) => {
@@ -9484,7 +9514,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/logbook/pro/summary", isAuthenticated, requireLogbookPro, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const [settings, entries] = await Promise.all([
         storage.getLogbookProSettings(userId),
         storage.getLogbookEntriesByUser(userId),
@@ -9626,7 +9659,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.delete("/api/endorsements/:id", isAuthenticated, requireLogbookPro, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const success = await storage.deleteEndorsement(req.params.id, userId);
       if (!success) {
         return res.status(404).json({ error: "Endorsement not found" });
@@ -9641,7 +9677,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   // Logbook Pro - Radio Comms Sessions
   app.get("/api/radio-comms/sessions", isAuthenticated, requireLogbookPro, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const sessions = await storage.getRadioCommsSessionsByUser(userId);
       res.json(sessions);
     } catch (error) {
@@ -9652,7 +9691,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.post("/api/radio-comms/sessions", isAuthenticated, requireLogbookPro, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const result = insertRadioCommsSessionSchema.safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
@@ -9668,7 +9710,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   // User Notifications + Preferences
   app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const notifications = await storage.getUserNotifications(userId);
       res.json(notifications);
     } catch (error) {
@@ -9679,7 +9724,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/notifications/unread", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const notifications = await storage.getUnreadUserNotifications(userId);
       res.json({ count: notifications.length });
     } catch (error) {
@@ -9690,7 +9738,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.patch("/api/notifications/:id/read", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const updated = await storage.markUserNotificationRead(req.params.id, userId);
       if (!updated) {
         return res.status(404).json({ error: "Notification not found" });
@@ -9704,7 +9755,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/notifications/preferences", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const prefs = await storage.getNotificationPreferences(userId);
       res.json(prefs || { emailEnabled: true, pushEnabled: true, inAppEnabled: true, alertDaysBefore: 30 });
     } catch (error) {
@@ -9715,7 +9769,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.put("/api/notifications/preferences", isAuthenticated, requireLogbookPro, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const result = insertNotificationPreferencesSchema.partial().safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
@@ -9730,7 +9787,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.post("/api/notifications/push-token", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const result = insertPushTokenSchema.safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
@@ -9746,7 +9806,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   // Flight Planner (Logbook Pro)
   app.get("/api/flight-plans", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -9765,7 +9828,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.post("/api/flight-plans", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -9796,7 +9862,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/flight-plans/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const plan = await storage.getFlightPlanById(req.params.id);
       if (!plan) {
         return res.status(404).json({ error: "Flight plan not found" });
@@ -9813,7 +9882,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.patch("/api/flight-plans/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const plan = await storage.getFlightPlanById(req.params.id);
       if (!plan) {
         return res.status(404).json({ error: "Flight plan not found" });
@@ -9838,7 +9910,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.delete("/api/flight-plans/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const plan = await storage.getFlightPlanById(req.params.id);
       if (!plan) {
         return res.status(404).json({ error: "Flight plan not found" });

@@ -50,7 +50,7 @@ export function Header() {
           </Link>
 
           {/* Main Navigation Tabs - Compact on mobile */}
-          <nav className="flex items-center gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 max-w-[58vw] sm:max-w-none overflow-x-auto whitespace-nowrap" role="navigation" aria-label="Main navigation">
+          <nav className="flex flex-1 items-center gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 max-w-[58vw] sm:max-w-none overflow-x-auto whitespace-nowrap" role="navigation" aria-label="Main navigation">
             <Link href="/flight-planner" data-testid="link-plan-flight">
               <Button
                 variant="ghost"
@@ -102,7 +102,7 @@ export function Header() {
           </nav>
 
           {/* Right side actions */}
-          <div className="flex items-center gap-1 sm:gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 relative z-20">
             {user && (
               <Link href="/notifications" className="hidden sm:flex" data-testid="link-notifications">
                 <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications" aria-label="Notifications">
@@ -139,7 +139,12 @@ export function Header() {
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-9 w-9 rounded-full" data-testid="button-profile-menu" aria-label="User menu">
+                    <Button
+                      variant="ghost"
+                      className="relative h-9 w-9 rounded-full touch-manipulation"
+                      data-testid="button-profile-menu"
+                      aria-label="User menu"
+                    >
                       <Avatar className="h-9 w-9">
                         <AvatarImage src={user?.profileImageUrl || undefined} alt={displayName} />
                         <AvatarFallback>{initials}</AvatarFallback>

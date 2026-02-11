@@ -2034,14 +2034,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const userAgent = String(req.headers['user-agent'] || 'unknown');
         logDebug(`[AUTH META] ip=${ip} ua="${userAgent}"`);
       }
-      const sessionUserId = req.user.claims.sub;
+      const sessionUserId = req.user?.claims?.sub || req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
       logDebug("[AUTH /api/auth/user] Looking up user with session ID:", sessionUserId);
       let user = await storage.getUser(sessionUserId);
       
       if (!user) {
         logDebug("[AUTH /api/auth/user] User not found by ID, trying email lookup");
         // Try to find by email as fallback (for testing scenarios where sub may change)
-        const email = req.user.claims.email;
+        const email = req.user?.claims?.email;
         if (email) {
           user = await storage.getUserByEmail(email);
           logDebug("[AUTH /api/auth/user] Email lookup result:", user ? `Found user ${user.id}` : "Not found");
@@ -2085,7 +2088,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete user account
   app.delete('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       logDebug("[DELETE /api/auth/user] Deleting user account:", userId);
       
       const success = await storage.deleteUser(userId);

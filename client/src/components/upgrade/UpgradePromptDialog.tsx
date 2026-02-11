@@ -36,7 +36,7 @@ export function UpgradePromptDialog({
 }: UpgradePromptDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Unlock full pilot tooling with RSF Pro</DialogTitle>
           <DialogDescription>

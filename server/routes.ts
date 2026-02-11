@@ -998,13 +998,15 @@ function normalizeHeading(value: number) {
   return heading < 0 ? heading + 360 : heading;
 }
 
-function computeRunwayAdvisory(runways: RunwayMeta[], windDir: number, windSpeed: number) {
-  let best: {
-    runway: string;
-    heading: number;
-    headwind: number;
-    crosswind: number;
-  } | null = null;
+type RunwayAdvisory = {
+  runway: string;
+  heading: number;
+  headwind: number;
+  crosswind: number;
+};
+
+function computeRunwayAdvisory(runways: RunwayMeta[], windDir: number, windSpeed: number): RunwayAdvisory | null {
+  let best: RunwayAdvisory | null = null;
 
   const evaluate = (ident: string | null, heading: number | null) => {
     if (!ident || heading === null) return;
@@ -1448,7 +1450,7 @@ function setCachedPlates(icao: string, data: PlateMeta[]) {
   if (plateMetaCache.size > PLATE_CACHE_MAX) {
     let oldestKey: string | null = null;
     let oldestAt = Infinity;
-    for (const [entryKey, entry] of plateMetaCache.entries()) {
+    for (const [entryKey, entry] of Array.from(plateMetaCache.entries())) {
       if (entry.createdAt < oldestAt) {
         oldestAt = entry.createdAt;
         oldestKey = entryKey;
@@ -2068,7 +2070,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isAdmin: true,
           isVerified: true,
           adminRole: "operations",
-          adminPermissions: ADMIN_PERMISSIONS,
+          adminPermissions: [...ADMIN_PERMISSIONS],
         });
         user = await storage.getUser(user.id); // Refetch updated user
       }
@@ -2599,6 +2601,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 amount: amountNumber.toFixed(2),
                 status: "completed",
                 description,
+                rentalId: null,
+                marketplaceListingId: null,
+                depositedToBankAt: null,
               });
             }
           }
@@ -3311,6 +3316,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             marketplaceListingId: listing.id,
             status: "completed",
             description: `Marketplace listing fee (${category}, ${tier}) (PayPal ${orderId})`,
+            rentalId: null,
+            depositedToBankAt: null,
           });
         } catch (error) {
           console.error("Failed to record listing fee transaction:", error);
@@ -3666,7 +3673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       cardFields.CVVField().render('#card-cvv-field');
       
       button.disabled = false;
-      button.textContent = 'Pay $${amount}';
+      button.textContent = 'Pay $${amountDisplay}';
       
       button.addEventListener('click', async () => {
         button.disabled = true;
@@ -4237,7 +4244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         cardFields.CVVField().render('#card-cvv-field');
         
         button.disabled = false;
-          button.textContent = 'Pay $${amountDisplay}';
+          button.textContent = 'Pay $' + currentAmount.toFixed(2);
         
         button.addEventListener('click', async () => {
           startProcessing();
@@ -5405,6 +5412,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             marketplaceListingId: listingId,
             status: "completed",
             description: `Marketplace upgrade ${listing.tier || "basic"} → ${newTier} (PayPal ${orderId})`,
+            rentalId: null,
+            depositedToBankAt: null,
           });
         } catch (error) {
           console.error("Failed to record upgrade fee transaction:", error);
@@ -5674,6 +5683,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               rentalId: rental.id,
               status: "completed",
               description: `Platform fee for rental ${rental.id} (PayPal ${paypalOrderId})`,
+              marketplaceListingId: null,
+              depositedToBankAt: null,
             });
           }
         } catch (error) {
@@ -6309,7 +6320,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update user (admin) - for verification toggles and admin status
   app.patch("/api/admin/users/:userId", isAuthenticated, requireUsersAdmin, async (req, res) => {
     try {
-      const requestingUserId = req.user?.claims?.sub || req.session?.userId;
+      const requestingUserId = (req as any).user?.claims?.sub || (req as any).session?.userId;
       const requestingUser = requestingUserId ? await storage.getUser(String(requestingUserId)) : null;
       if (!requestingUser) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -8212,6 +8223,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       const updates = {
+        userId: String(userId),
         wizardJson: req.body?.wizardJson ?? null,
         roadmapJson: req.body?.roadmapJson ?? null,
         progressJson: req.body?.progressJson ?? null,
@@ -9959,13 +9971,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           const entriesLast90 = entries.filter((entry) => entry.flightDate && new Date(entry.flightDate) >= last90);
           const entriesLast6 = entries.filter((entry) => entry.flightDate && new Date(entry.flightDate) >= last6);
 
-          const sum = (vals: Array<number | null | undefined>) => vals.reduce((total, val) => total + (typeof val === "number" ? val : 0), 0);
-          const landingsDay = sum(entriesLast90.map((e) => e.landingsDay ?? 0));
-          const landingsNight = sum(entriesLast90.map((e) => e.landingsNight ?? 0));
-          const totalLandings = landingsDay + landingsNight;
-          const approaches = sum(entriesLast6.map((e) => e.approaches ?? 0));
-          const holds = sum(entriesLast6.map((e) => e.holds ?? 0));
-          const instrumentTotal = approaches + holds;
+          const sum = (vals: Array<number | null | undefined>): number => {
+            let total: number = 0;
+            for (const val of vals) {
+              if (typeof val === "number") total += val;
+            }
+            return total;
+          };
+          const landingsDay: number = sum(entriesLast90.map((e) => e.landingsDay ?? 0));
+          const landingsNight: number = sum(entriesLast90.map((e) => e.landingsNight ?? 0));
+          const totalLandings: number = landingsDay + landingsNight;
+          const approaches: number = sum(entriesLast6.map((e) => e.approaches ?? 0));
+          const holds: number = sum(entriesLast6.map((e) => e.holds ?? 0));
+          const instrumentTotal: number = approaches + holds;
 
           const lastLandingDate = getLatestDate(entriesLast90, (e) => (e.landingsDay ?? 0) + (e.landingsNight ?? 0) > 0);
           const lastNightLandingDate = getLatestDate(entriesLast90, (e) => (e.landingsNight ?? 0) > 0);

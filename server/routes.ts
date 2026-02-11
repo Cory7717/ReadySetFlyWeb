@@ -1848,6 +1848,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ error: "Panel image not found" });
     } catch (error) {
       console.error("Error streaming GPS panel image:", error);
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
       return res.status(500).json({ error: "Failed to load panel image" });
     }
   });
@@ -1926,6 +1930,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Panel image not found" });
       }
       console.error("Error streaming six-pack panel image:", error);
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
       return res.status(500).json({ error: "Failed to load panel image" });
     }
   });
@@ -9030,6 +9038,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       await pipeline(Readable.fromWeb(upstream.body as any), res);
     } catch (error: any) {
       console.error("Plate proxy error:", error);
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
       res.status(500).json({ error: "Failed to proxy plate", details: error.message || String(error) });
     }
   });

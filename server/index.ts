@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { fork } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -95,10 +96,12 @@ app.use((req, res, next) => {
     reusePort: true,
   }, async () => {
     log(`serving on port ${port}`);
-    const shouldStartSwim =
-      String(process.env.SWIM_RUN_IN_API ?? "").toLowerCase() !== "false" &&
-      process.env.SWIM_RUN_MODE !== "worker";
-    if (shouldStartSwim) {
+    const shouldStartSwim = process.env.SWIM_RUN_MODE !== "worker";
+    const swimRunInApi = String(process.env.SWIM_RUN_IN_API ?? "").toLowerCase();
+    if (!shouldStartSwim || swimRunInApi === "false") return;
+
+    const startInProcess = swimRunInApi === "true" || !isProd;
+    if (startInProcess) {
       try {
         const { startSwimNotamWorker } = await import("./notam-worker");
         const started = startSwimNotamWorker();
@@ -109,6 +112,32 @@ app.use((req, res, next) => {
         const message = error instanceof Error ? error.message : String(error);
         log(`SWIM NOTAM worker failed to start: ${message}`);
       }
+      return;
     }
+
+    let swimRestarts = 0;
+    const maxSwimRestarts = 5;
+    const spawnWorker = () => {
+      const workerPath = join(__dirname, "notam-worker.js");
+      const child = fork(workerPath, [], {
+        env: { ...process.env, SWIM_RUN_MODE: "worker" },
+        stdio: "inherit",
+      });
+      log("SWIM NOTAM worker running in child process");
+
+      child.on("exit", (code, signal) => {
+        const reason = signal ? `signal ${signal}` : `exit code ${code}`;
+        log(`SWIM NOTAM worker exited (${reason}).`);
+        if (swimRestarts >= maxSwimRestarts) {
+          log("SWIM NOTAM worker restart limit reached; not restarting.");
+          return;
+        }
+        swimRestarts += 1;
+        const delayMs = 5000 * swimRestarts;
+        setTimeout(spawnWorker, delayMs);
+      });
+    };
+
+    spawnWorker();
   });
 })();

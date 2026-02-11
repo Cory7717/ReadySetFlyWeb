@@ -329,6 +329,75 @@ export default function Landing() {
       </div>
       </div>
 
+      {/* Pilot Tools Spotlight */}
+      <div className="py-8 sm:py-10">
+        <div className="container mx-auto px-4">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] items-center">
+            <div className="space-y-3">
+              <Badge variant="outline" className="w-fit">Pilot Tools</Badge>
+              <h2 className="text-2xl sm:text-3xl font-semibold">Plan, log, and stay current</h2>
+              <p className="text-sm sm:text-base text-muted-foreground">
+                Jump straight into the Flight Planner and Logbook. Free users can start immediately, with upgrades
+                available for saved plans, alerts, and analytics.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button asChild>
+                  <Link
+                    href="/flight-planner"
+                    onClick={() => trackEvent("cta_click", { label: "pilot_tools_planner", target: "/flight-planner" })}
+                  >
+                    Open Flight Planner
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link
+                    href="/logbook"
+                    onClick={() => trackEvent("cta_click", { label: "pilot_tools_logbook", target: "/logbook" })}
+                  >
+                    Open Logbook
+                  </Link>
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Card className="border-muted-foreground/20">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Navigation2 className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">Flight Planner</CardTitle>
+                      <CardDescription>Route, weather, and advisory flow.</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  Build routes, review NOTAMs, and keep one plan saved for free. RSF Pro adds unlimited plans and
+                  advanced analysis.
+                </CardContent>
+              </Card>
+              <Card className="border-muted-foreground/20">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <ClipboardList className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">Logbook</CardTitle>
+                      <CardDescription>Entries, totals, and currency.</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground">
+                  Track flights and export data. Upgrade to unlock alerts, endorsements, and analytics.
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Current Conditions */}
       <div className="py-10 sm:py-12">
         <div className="container mx-auto px-4 space-y-6">

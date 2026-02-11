@@ -16,6 +16,7 @@ import type { LogbookEntry, InsertLogbookEntry, Endorsement } from "@shared/sche
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { Switch } from "@/components/ui/switch";
+import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 
 // Helper function to calculate totals from entries
 function calculateTotals(entries: LogbookEntry[]) {
@@ -128,6 +129,7 @@ export default function Logbook() {
   const [signRole, setSignRole] = useState<"pilot" | "cfi">("pilot");
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canUseLogbook ?? (user?.logbookProStatus === "active");
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [proForm, setProForm] = useState({
     medicalClass: "",
     medicalIssuedAt: "",
@@ -196,6 +198,15 @@ export default function Logbook() {
       alertDaysBefore: preferenceData.alertDaysBefore ?? 30,
     });
   }, [preferenceData]);
+
+  useEffect(() => {
+    if (isPro) return;
+    if (typeof window === "undefined") return;
+    const key = "rsf_upgrade_prompt_logbook";
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+    setShowUpgradePrompt(true);
+  }, [isPro]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertLogbookEntry) => {
@@ -383,6 +394,17 @@ export default function Logbook() {
 
   return (
     <div className="container mx-auto py-8 px-4">
+      <UpgradePromptDialog
+        open={showUpgradePrompt}
+        onOpenChange={setShowUpgradePrompt}
+        toolName="Logbook"
+        toolSummary="Capture flights, totals, and currency in one workspace."
+        freeFeatures={[
+          "Create manual logbook entries and basic totals.",
+          "Export logbook data when you need it.",
+          "Upgrade for currency alerts, endorsements, and analytics.",
+        ]}
+      />
       {/* Signing requirement callout */}
       {entries.some(e => !e.isLocked) && (
         <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">

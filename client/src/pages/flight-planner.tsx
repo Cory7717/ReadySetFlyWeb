@@ -21,6 +21,7 @@ import { trackEvent } from "@/lib/analytics";
 import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/flightPlanner";
 import { cn } from "@/lib/utils";
 import type { FlightPlan } from "@shared/schema";
+import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 
 const PlannerMap = lazy(() => import("@/components/flight-planner/PlannerMap"));
 
@@ -281,10 +282,20 @@ export default function FlightPlanner() {
   const isStudent = Boolean(
     studentProfile?.wizardJson || studentProfile?.roadmapJson || studentProfile?.progressJson
   );
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   useEffect(() => {
     trackEvent("planner_page_view", { page: "flight-planner" });
   }, []);
+
+  useEffect(() => {
+    if (isPro) return;
+    if (typeof window === "undefined") return;
+    const key = "rsf_upgrade_prompt_flight_planner";
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+    setShowUpgradePrompt(true);
+  }, [isPro]);
 
   const [editingPlan, setEditingPlan] = useState<FlightPlan | null>(null);
   const [form, setForm] = useState({
@@ -1249,6 +1260,17 @@ export default function FlightPlanner() {
 
   return (
     <div className="container mx-auto py-10 px-4 max-w-6xl space-y-6">
+      <UpgradePromptDialog
+        open={showUpgradePrompt}
+        onOpenChange={setShowUpgradePrompt}
+        toolName="Flight Planner"
+        toolSummary="Route builder, advisory analysis, and flight-plan tracking."
+        freeFeatures={[
+          "Build routes and view advisory summaries.",
+          "Live METAR, TAF, runway, and NOTAM context.",
+          "Free accounts keep one saved plan and basic summaries.",
+        ]}
+      />
       <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-3xl font-bold">Plan a Flight</h1>

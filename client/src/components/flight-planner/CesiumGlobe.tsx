@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as Cesium from "cesium";
+import type * as CesiumType from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 import type { PlannerPoint } from "@/components/flight-planner/PlannerMap";
@@ -17,7 +17,8 @@ export default function CesiumGlobe({
   heightClassName?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const viewerRef = useRef<Cesium.Viewer | null>(null);
+  const viewerRef = useRef<CesiumType.Viewer | null>(null);
+  const cesiumRef = useRef<typeof CesiumType | null>(null);
   const [tokenWarning, setTokenWarning] = useState<string | null>(null);
 
   const hasIonToken = Boolean(import.meta.env.VITE_CESIUM_ION_TOKEN);
@@ -28,51 +29,65 @@ export default function CesiumGlobe({
     const cesiumBaseUrl = `${import.meta.env.BASE_URL || "/"}cesium/`;
     (window as any).CESIUM_BASE_URL = cesiumBaseUrl;
 
-    if (hasIonToken) {
-      Cesium.Ion.defaultAccessToken = String(import.meta.env.VITE_CESIUM_ION_TOKEN);
-    } else {
-      setTokenWarning("Add VITE_CESIUM_ION_TOKEN for terrain and premium imagery.");
-    }
+    let cancelled = false;
 
-    const viewer = new Cesium.Viewer(containerRef.current, {
-      animation: false,
-      baseLayerPicker: false,
-      fullscreenButton: false,
-      geocoder: false,
-      homeButton: false,
-      infoBox: false,
-      navigationHelpButton: false,
-      sceneModePicker: false,
-      selectionIndicator: false,
-      timeline: false,
-      shouldAnimate: true,
-      terrainProvider: new Cesium.EllipsoidTerrainProvider(),
-    });
+    const initCesium = async () => {
+      const Cesium = await import("cesium");
+      if (cancelled) return;
+      cesiumRef.current = Cesium;
 
-    viewer.imageryLayers.removeAll();
-    viewer.imageryLayers.addImageryProvider(
-      new Cesium.OpenStreetMapImageryProvider({ url: OSM_URL })
-    );
+      if (hasIonToken) {
+        Cesium.Ion.defaultAccessToken = String(import.meta.env.VITE_CESIUM_ION_TOKEN);
+      } else {
+        setTokenWarning("Add VITE_CESIUM_ION_TOKEN for terrain and premium imagery.");
+      }
 
-    if (hasIonToken) {
-      Cesium.createWorldTerrainAsync()
-        .then((terrain: Cesium.TerrainProvider) => {
-          viewer.terrainProvider = terrain;
-        })
-        .catch(() => null);
-    }
+      const viewer = new Cesium.Viewer(containerRef.current as HTMLDivElement, {
+        animation: false,
+        baseLayerPicker: false,
+        fullscreenButton: false,
+        geocoder: false,
+        homeButton: false,
+        infoBox: false,
+        navigationHelpButton: false,
+        sceneModePicker: false,
+        selectionIndicator: false,
+        timeline: false,
+        shouldAnimate: true,
+        terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+      });
 
-    viewerRef.current = viewer;
+      viewer.imageryLayers.removeAll();
+      viewer.imageryLayers.addImageryProvider(
+        new Cesium.OpenStreetMapImageryProvider({ url: OSM_URL })
+      );
+
+      if (hasIonToken) {
+        Cesium.createWorldTerrainAsync()
+          .then((terrain: CesiumType.TerrainProvider) => {
+            viewer.terrainProvider = terrain;
+          })
+          .catch(() => null);
+      }
+
+      viewerRef.current = viewer;
+    };
+
+    initCesium();
 
     return () => {
-      viewer.destroy();
-      viewerRef.current = null;
+      cancelled = true;
+      if (viewerRef.current) {
+        viewerRef.current.destroy();
+        viewerRef.current = null;
+      }
     };
   }, [hasIonToken]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer) return;
+    const Cesium = cesiumRef.current;
+    if (!viewer || !Cesium) return;
 
     viewer.entities.removeAll();
 

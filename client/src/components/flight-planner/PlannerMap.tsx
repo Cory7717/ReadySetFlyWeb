@@ -316,6 +316,7 @@ export default function PlannerMap({
   const showRadar = mapStyle === "radar";
   const showWinds = mapStyle === "winds";
   const showClouds = mapStyle === "clouds";
+  const [mapZoom, setMapZoom] = useState(initialZoom);
   const [mapCenter, setMapCenter] = useState<L.LatLng | null>(null);
   const isConus = isWithinConus(mapCenter);
   const isAlaska = isWithinAlaska(mapCenter);
@@ -338,7 +339,6 @@ export default function PlannerMap({
   const [windsAloftPoints, setWindsAloftPoints] = useState<WindsAloftPoint[]>([]);
   const [windsAloftMeta, setWindsAloftMeta] = useState<WindsAloftMeta | null>(null);
   const [windsAloftError, setWindsAloftError] = useState<string | null>(null);
-  const [mapZoom, setMapZoom] = useState(initialZoom);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
   const gibsDate = useMemo(() => new Date().toISOString().slice(0, 10), []);

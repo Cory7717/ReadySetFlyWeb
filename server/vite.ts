@@ -20,6 +20,18 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  const cesiumStaticPath = path.resolve(
+    import.meta.dirname,
+    "..",
+    "node_modules",
+    "cesium",
+    "Build",
+    "Cesium",
+  );
+  if (fs.existsSync(cesiumStaticPath)) {
+    app.use("/cesium", express.static(cesiumStaticPath));
+  }
+
   const resolvedConfig =
     typeof viteConfig === "function"
       ? await viteConfig({ command: "serve", mode: process.env.NODE_ENV || "development" })

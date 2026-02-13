@@ -214,10 +214,16 @@ export default function AdsbLive() {
                 <MapContainer
                   center={[view.lat, view.lon]}
                   zoom={6}
-                  whenReady={(event: L.LeafletEvent) => {
-                    const map = event.target as L.Map;
-                    mapRef.current = map;
-                    map.on("moveend", handleMapMove);
+                  ref={(map) => {
+                    if (map) {
+                      mapRef.current = map;
+                    }
+                  }}
+                  whenReady={() => {
+                    const map = mapRef.current;
+                    if (map) {
+                      map.on("moveend", handleMapMove);
+                    }
                   }}
                   className="h-full w-full"
                 >

@@ -19,6 +19,9 @@ export default defineConfig(async () => {
       : [];
 
   return {
+    define: {
+      CESIUM_BASE_URL: '"/cesium/"',
+    },
     plugins: [react(), runtimeErrorOverlay(), cesium(), ...replitPlugins],
     resolve: {
       alias: {

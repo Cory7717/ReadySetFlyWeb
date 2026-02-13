@@ -555,10 +555,16 @@ export default function PlannerMap({
       className={
         isFullscreen
           ? "fixed inset-0 z-[1000] bg-black/80 p-3"
-          : heightClassName
+          : "space-y-2"
       }
     >
-      <div className={isFullscreen ? "relative h-full w-full rounded-xl overflow-hidden" : "relative h-full"}>
+      <div
+        className={
+          isFullscreen
+            ? "relative h-full w-full rounded-xl overflow-hidden"
+            : `relative ${heightClassName}`
+        }
+      >
         <button
           type="button"
           onClick={() => setIsFullscreen((prev) => !prev)}
@@ -751,16 +757,16 @@ export default function PlannerMap({
         <MapCenterTracker onCenterChange={setMapCenter} />
         </MapContainer>
       </div>
-      {showWinds && (
-        <div className="mt-2 text-xs text-muted-foreground">
+      {showWinds && !isFullscreen && (
+        <div className="text-xs text-muted-foreground">
           NOAA AWC winds aloft at {windsAloftMeta?.altitudeFt ?? windsAltitude} ft.
           {windsAloftMeta?.validTime ? ` Valid ${windsAloftMeta.validTime}.` : ""}
           {windsAloftMeta?.warnings?.length ? ` ${windsAloftMeta.warnings.join(" ")}` : ""}
           {windsAloftError ? ` ${windsAloftError}` : ""}
         </div>
       )}
-      {showWinds && nearestWinds.length > 0 && (
-        <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+      {showWinds && !isFullscreen && nearestWinds.length > 0 && (
+        <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
           {nearestWinds.map(({ point, distanceNm }) => (
             <div key={`${point.stationId}-${point.lat}`} className="flex items-center justify-between rounded-md border px-2 py-1">
               <span className="font-semibold text-slate-700">

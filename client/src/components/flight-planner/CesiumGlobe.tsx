@@ -25,6 +25,10 @@ export default function CesiumGlobe({
   useEffect(() => {
     if (!containerRef.current || viewerRef.current) return;
 
+    const cesiumBaseUrl = `${import.meta.env.BASE_URL || "/"}cesium/`;
+    (window as any).CESIUM_BASE_URL = cesiumBaseUrl;
+    Cesium.buildModuleUrl.setBaseUrl(cesiumBaseUrl);
+
     if (hasIonToken) {
       Cesium.Ion.defaultAccessToken = String(import.meta.env.VITE_CESIUM_ION_TOKEN);
     } else {

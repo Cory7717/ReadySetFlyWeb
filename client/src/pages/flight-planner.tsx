@@ -387,6 +387,8 @@ export default function FlightPlanner() {
   const [destinationResolved, setDestinationResolved] = useState("");
   const departureLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
   const destinationLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
+  const departureSelectedRef = useRef<string | null>(null);
+  const destinationSelectedRef = useRef<string | null>(null);
   const plannedAltitudeFt = Number(plannedAltitude);
   const plannedAltitudeValue = Number.isFinite(plannedAltitudeFt) ? plannedAltitudeFt : undefined;
   const windsAltitudeFt = windsAltitudeChoice === "planned"
@@ -478,12 +480,20 @@ export default function FlightPlanner() {
   useEffect(() => {
     const value = form.departure.trim().toUpperCase();
     if (!value) {
+      departureSelectedRef.current = null;
       setDepartureResolved("");
       return;
+    }
+    if (departureSelectedRef.current && departureSelectedRef.current !== value) {
+      departureSelectedRef.current = null;
     }
     const exact = departureSuggestions.find((airport) => airport.icao?.toUpperCase() === value);
     if (exact) {
       setDepartureResolved(exact.icao.toUpperCase());
+      return;
+    }
+    if (departureSelectedRef.current && departureSelectedRef.current === value) {
+      setDepartureResolved(value);
       return;
     }
     if (value.length === 3 && ICAO_REGEX.test(value)) {
@@ -556,12 +566,20 @@ export default function FlightPlanner() {
   useEffect(() => {
     const value = form.destination.trim().toUpperCase();
     if (!value) {
+      destinationSelectedRef.current = null;
       setDestinationResolved("");
       return;
+    }
+    if (destinationSelectedRef.current && destinationSelectedRef.current !== value) {
+      destinationSelectedRef.current = null;
     }
     const exact = destinationSuggestions.find((airport) => airport.icao?.toUpperCase() === value);
     if (exact) {
       setDestinationResolved(exact.icao.toUpperCase());
+      return;
+    }
+    if (destinationSelectedRef.current && destinationSelectedRef.current === value) {
+      setDestinationResolved(value);
       return;
     }
     if (value.length === 3 && ICAO_REGEX.test(value)) {
@@ -1599,6 +1617,7 @@ export default function FlightPlanner() {
                     type="button"
                     className="w-full text-left hover:bg-muted rounded px-2 py-1"
                     onClick={() => {
+                      departureSelectedRef.current = airport.icao.toUpperCase();
                       setForm({ ...form, departure: airport.icao.toUpperCase() });
                       setDepartureResolved(airport.icao.toUpperCase());
                       setDepartureSuggestions([]);
@@ -1627,6 +1646,7 @@ export default function FlightPlanner() {
                     type="button"
                     className="w-full text-left hover:bg-muted rounded px-2 py-1"
                     onClick={() => {
+                      destinationSelectedRef.current = airport.icao.toUpperCase();
                       setForm({ ...form, destination: airport.icao.toUpperCase() });
                       setDestinationResolved(airport.icao.toUpperCase());
                       setDestinationSuggestions([]);

@@ -13,7 +13,7 @@ export type PlannerPoint = {
 type PlannerMapProps = {
   points: PlannerPoint[];
   heightClassName?: string;
-  mapStyle?: "standard" | "sectional" | "radar" | "winds";
+  mapStyle?: "standard" | "sectional" | "radar" | "winds" | "clouds";
   plannedAltitudeFt?: number;
   windsAltitudeFt?: number;
 };
@@ -45,7 +45,7 @@ const defaultIcon = L.icon({
   iconAnchor: [12, 41],
 });
 
-function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "standard" | "sectional" | "radar" | "winds" }) {
+function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "standard" | "sectional" | "radar" | "winds" | "clouds" }) {
   const map = useMap();
 
   useEffect(() => {
@@ -70,7 +70,7 @@ function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "st
   return null;
 }
 
-function MapStyleController({ mapStyle }: { mapStyle: "standard" | "sectional" | "radar" | "winds" }) {
+function MapStyleController({ mapStyle }: { mapStyle: "standard" | "sectional" | "radar" | "winds" | "clouds" }) {
   const map = useMap();
 
   useEffect(() => {
@@ -173,10 +173,10 @@ function WindsAloftController({
       if (!enabled) return;
       const bounds = map.getBounds();
       const bbox = [
-        bounds.getWest(),
         bounds.getSouth(),
-        bounds.getEast(),
+        bounds.getWest(),
         bounds.getNorth(),
+        bounds.getEast(),
       ]
         .map((value) => value.toFixed(4))
         .join(",");
@@ -237,6 +237,7 @@ export default function PlannerMap({
     : [39.5, -98.35];
   const showRadar = mapStyle === "radar";
   const showWinds = mapStyle === "winds";
+  const showClouds = mapStyle === "clouds";
   const initialZoom = mapStyle === "sectional" ? 6 : (points.length ? 6 : 4);
   const [radarFrames, setRadarFrames] = useState<string[]>([]);
   const [radarFrameIndex, setRadarFrameIndex] = useState(0);
@@ -375,6 +376,17 @@ export default function PlannerMap({
             crossOrigin="anonymous"
           />
         )}
+        {showClouds && (
+          <WMSTileLayer
+            attribution="IEM GOES Satellite"
+            url="https://mesonet.agron.iastate.edu/cgi-bin/wms/goes/conus_ir.cgi"
+            layers="goes_conus_ir"
+            format="image/png"
+            transparent
+            opacity={0.75}
+            zIndex={600}
+          />
+        )}
         {showRadar && !radarTileUrl && radarError && (
           <WMSTileLayer
             attribution="IEM NEXRAD Base Reflectivity"
@@ -445,7 +457,7 @@ export default function PlannerMap({
       </MapContainer>
       {showWinds && (
         <div className="mt-2 text-xs text-muted-foreground">
-          NOAA AWC winds aloft (legacy wind/temp tables) at {windsAloftMeta?.altitudeFt ?? windsAltitude} ft.
+          NOAA AWC winds aloft at {windsAloftMeta?.altitudeFt ?? windsAltitude} ft.
           {windsAloftMeta?.validTime ? ` Valid ${windsAloftMeta.validTime}.` : ""}
           {windsAloftMeta?.warnings?.length ? ` ${windsAloftMeta.warnings.join(" ")}` : ""}
           {windsAloftError ? ` ${windsAloftError}` : ""}

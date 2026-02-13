@@ -90,6 +90,10 @@ function greatCircleNm(a: AirportMeta, b: AirportMeta) {
 }
 
 function parseFlightCategory(metar: any): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNKNOWN' {
+  const declared = String(metar?.fltCat || metar?.flightCategory || '').toUpperCase();
+  if (declared === 'VFR' || declared === 'MVFR' || declared === 'IFR' || declared === 'LIFR') {
+    return declared as 'VFR' | 'MVFR' | 'IFR' | 'LIFR';
+  }
   if (!metar?.rawOb) return 'UNKNOWN';
   const raw = metar.rawOb || '';
   const visMatch = raw.match(/\s(\d{1,2})SM/);

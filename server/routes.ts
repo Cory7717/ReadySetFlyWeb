@@ -8917,6 +8917,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const hazard = typeof req.query.hazard === "string" ? req.query.hazard.toLowerCase() : undefined;
       const level = toNumber(req.query.levelFt);
 
+      const includeGairmet = hazard !== "conv";
+      const includeAirmet = hazard !== "conv";
+      const includeTcf = !hazard || hazard === "conv";
+
       const airsigmet = await fetchAirSigmets({
         hazard: (hazard as "conv" | "turb" | "ice" | "ifr") || undefined,
         level: level ?? undefined,
@@ -8926,19 +8930,25 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const gairmetProduct = hazard === "ice" ? "zulu" : hazard === "turb" ? "tango" : hazard === "ifr" ? "sierra" : undefined;
       const gairmetHazard = hazard === "ice" ? "ice" : hazard === "turb" ? "turb-lo" : hazard === "ifr" ? "ifr" : undefined;
 
-      const gairmet = await fetchGAirmets({
-        product: gairmetProduct,
-        hazard: gairmetHazard,
-        format: "json",
-      });
+      const gairmet = includeGairmet
+        ? await fetchGAirmets({
+            product: gairmetProduct,
+            hazard: gairmetHazard,
+            format: "json",
+          })
+        : { data: [], decoded: [], fetchedAt: Date.now(), source: "awc", warnings: [] };
 
-      const airmet = await fetchAirmets({
-        hazard: (hazard as "turb" | "ifr" | "conv" | "ice") || undefined,
-        level: level ?? undefined,
-        format: "json",
-      });
+      const airmet = includeAirmet
+        ? await fetchAirmets({
+            hazard: (hazard as "turb" | "ifr" | "conv" | "ice") || undefined,
+            level: level ?? undefined,
+            format: "json",
+          })
+        : { data: [], decoded: [], fetchedAt: Date.now(), source: "awc", warnings: [] };
 
-      const tcf = await fetchTcf();
+      const tcf = includeTcf
+        ? await fetchTcf()
+        : { data: null, decoded: null, fetchedAt: Date.now(), source: "awc", warnings: [] };
 
       const warnings = [
         ...airsigmet.warnings,

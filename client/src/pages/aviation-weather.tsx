@@ -14,6 +14,46 @@ import { trackEvent } from "@/lib/analytics";
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 const WINDS_ALOFT_LEVELS = [3000, 6000, 9000, 12000, 18000, 24000, 30000, 34000, 39000];
 
+type HazardSummaryItem = {
+  source: "airsigmet" | "gairmet" | "airmet";
+  hazard: string;
+  dueTo?: string;
+  validFrom?: string;
+  validTo?: string;
+};
+
+const pickHazardValue = (value: any) => {
+  if (value === null || value === undefined) return "";
+  return String(value);
+};
+
+const buildHazardSummary = (payload: any) => {
+  const items: HazardSummaryItem[] = [];
+  const pushItem = (source: HazardSummaryItem["source"], entry: any, fallback: string) => {
+    if (!entry) return;
+    const hazard = pickHazardValue(entry.hazard || entry.hazard_type || entry.rawAirSigmet || entry.rawAirmet || fallback);
+    const dueTo = pickHazardValue(entry.dueTo || entry.due_to || entry.due_to_desc || "");
+    const validFrom = pickHazardValue(entry.validTimeFrom || entry.valid_time_from || entry.validFrom || "");
+    const validTo = pickHazardValue(entry.validTimeTo || entry.valid_time_to || entry.validTo || "");
+    items.push({ source, hazard, dueTo: dueTo || undefined, validFrom: validFrom || undefined, validTo: validTo || undefined });
+  };
+
+  if (Array.isArray(payload?.airsigmet)) {
+    payload.airsigmet.forEach((entry: any) => pushItem("airsigmet", entry, "SIGMET"));
+  }
+  if (Array.isArray(payload?.gairmet)) {
+    payload.gairmet.forEach((entry: any) => pushItem("gairmet", entry, "G-AIRMET"));
+  }
+  if (Array.isArray(payload?.airmet)) {
+    payload.airmet.forEach((entry: any) => pushItem("airmet", entry, "AIRMET"));
+  }
+
+  const tcfCount = Array.isArray(payload?.tcf?.features) ? payload.tcf.features.length : 0;
+  const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+
+  return { items, warnings, tcfCount };
+};
+
 export default function AviationWeatherHub() {
   const [icaoInput, setIcaoInput] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
@@ -165,6 +205,10 @@ export default function AviationWeatherHub() {
     staleTime: 1000 * 60 * 60,
   });
 
+  const hazardsSummary = useMemo(() => buildHazardSummary(hazardsQuery.data), [hazardsQuery.data]);
+  const icingSummary = useMemo(() => buildHazardSummary(icingQuery.data), [icingQuery.data]);
+  const turbulenceSummary = useMemo(() => buildHazardSummary(turbulenceQuery.data), [turbulenceQuery.data]);
+
   const notamsCount = Array.isArray(notamsQuery.data?.notams) ? notamsQuery.data.notams.length : 0;
   const pirepsCount = Array.isArray(pirepsQuery.data?.reports) ? pirepsQuery.data.reports.length : 0;
   const windsCount = Array.isArray(windsQuery.data?.stations) ? windsQuery.data.stations.length : 0;
@@ -312,10 +356,38 @@ export default function AviationWeatherHub() {
               <CardTitle>Hazards</CardTitle>
               <CardDescription>Domestic SIGMETs, G-AIRMETs, and convective forecasts.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <pre className="rounded-lg border bg-muted p-3 text-xs overflow-x-auto">
-{JSON.stringify(hazardsQuery.data ?? {}, null, 2)}
-              </pre>
+            <CardContent className="space-y-3">
+              {hazardsSummary.warnings.length > 0 && (
+                <Alert>
+                  <AlertDescription>{hazardsSummary.warnings.join(" ")}</AlertDescription>
+                </Alert>
+              )}
+              <div className="text-sm text-muted-foreground">
+                {hazardsSummary.items.length > 0
+                  ? `${hazardsSummary.items.length} hazard items available.`
+                  : "No hazards returned."}
+                {hazardsSummary.tcfCount > 0 && ` TCF features: ${hazardsSummary.tcfCount}.`}
+              </div>
+              <div className="space-y-2">
+                {hazardsSummary.items.length === 0 && hazardsSummary.tcfCount === 0 ? (
+                  <div className="text-sm text-muted-foreground">No hazard details available.</div>
+                ) : (
+                  hazardsSummary.items.slice(0, 16).map((item, index) => (
+                    <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold">{item.hazard}</div>
+                        <Badge variant="outline">{item.source.toUpperCase()}</Badge>
+                      </div>
+                      {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
+                      {(item.validFrom || item.validTo) && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Valid {item.validFrom || "-"} to {item.validTo || "-"}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -363,10 +435,30 @@ export default function AviationWeatherHub() {
             </AlertDescription>
           </Alert>
           <Card className="mt-4">
-            <CardContent>
-              <pre className="rounded-lg border bg-muted p-3 text-xs overflow-x-auto">
-{JSON.stringify(icingQuery.data ?? {}, null, 2)}
-              </pre>
+            <CardContent className="space-y-3">
+              {icingSummary.warnings.length > 0 && (
+                <Alert>
+                  <AlertDescription>{icingSummary.warnings.join(" ")}</AlertDescription>
+                </Alert>
+              )}
+              {icingSummary.items.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No icing guidance returned yet.</div>
+              ) : (
+                icingSummary.items.slice(0, 16).map((item, index) => (
+                  <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold">{item.hazard}</div>
+                      <Badge variant="outline">{item.source.toUpperCase()}</Badge>
+                    </div>
+                    {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
+                    {(item.validFrom || item.validTo) && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Valid {item.validFrom || "-"} to {item.validTo || "-"}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -378,10 +470,30 @@ export default function AviationWeatherHub() {
             </AlertDescription>
           </Alert>
           <Card className="mt-4">
-            <CardContent>
-              <pre className="rounded-lg border bg-muted p-3 text-xs overflow-x-auto">
-{JSON.stringify(turbulenceQuery.data ?? {}, null, 2)}
-              </pre>
+            <CardContent className="space-y-3">
+              {turbulenceSummary.warnings.length > 0 && (
+                <Alert>
+                  <AlertDescription>{turbulenceSummary.warnings.join(" ")}</AlertDescription>
+                </Alert>
+              )}
+              {turbulenceSummary.items.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No turbulence guidance returned yet.</div>
+              ) : (
+                turbulenceSummary.items.slice(0, 16).map((item, index) => (
+                  <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold">{item.hazard}</div>
+                      <Badge variant="outline">{item.source.toUpperCase()}</Badge>
+                    </div>
+                    {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
+                    {(item.validFrom || item.validTo) && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Valid {item.validFrom || "-"} to {item.validTo || "-"}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </TabsContent>

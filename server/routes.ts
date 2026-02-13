@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, aviationEvents, notams as notamsTable } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, aviationEvents, notams as notamsTable, type BannerAdOrder } from "@shared/schema";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
@@ -7360,6 +7360,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/banner-ad-orders", isAuthenticated, requireBannersAdmin, async (req, res) => {
     try {
+      const normalizeOptionalDate = (value: unknown) => {
+        if (value === undefined || value === null || value === "") return undefined;
+        if (value instanceof Date) return value;
+        const parsed = new Date(String(value));
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      };
+
+      const startDate = normalizeOptionalDate(req.body.startDate);
+      const endDate = normalizeOptionalDate(req.body.endDate);
+      if (startDate === null || endDate === null) {
+        return res.status(400).json({ error: "Invalid campaign date" });
+      }
+
       // BACKEND VALIDATION: Recalculate pricing server-side to prevent tampering
       const { calculateBannerAdPricing } = await import("../shared/config/bannerPricing");
       const { validatePromoCode, calculatePromoDiscount } = await import("../shared/config/promoCodes");
@@ -7404,6 +7417,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedOrderData = {
         ...req.body,
         ...finalPricing,
+        startDate,
+        endDate,
       };
       
       const order = await storage.createBannerAdOrder(validatedOrderData);
@@ -7463,6 +7478,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/admin/banner-ad-orders/:id", isAuthenticated, requireBannersAdmin, async (req, res) => {
     try {
+      const normalizeOptionalDate = (value: unknown) => {
+        if (value === undefined || value === null || value === "") return undefined;
+        if (value instanceof Date) return value;
+        const parsed = new Date(String(value));
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      };
+
+      const startDate = normalizeOptionalDate(req.body.startDate);
+      const endDate = normalizeOptionalDate(req.body.endDate);
+      if (startDate === null || endDate === null) {
+        return res.status(400).json({ error: "Invalid campaign date" });
+      }
+
       // CRITICAL: Load existing order to get tier if not provided in request
       const existingOrder = await storage.getBannerAdOrder(req.params.id);
       if (!existingOrder) {
@@ -7515,6 +7543,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...req.body,
         tier, // Ensure tier is set
         ...finalPricing,
+        ...(startDate !== undefined ? { startDate } : {}),
+        ...(endDate !== undefined ? { endDate } : {}),
       };
       
       const order = await storage.updateBannerAdOrder(req.params.id, req.body);
@@ -7539,6 +7569,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/banner-ad-orders/:id/activate", isAuthenticated, requireBannersAdmin, async (req, res) => {
     try {
+      const requesterId = req.user?.claims?.sub || req.session?.userId;
+      const requester = requesterId ? await storage.getUser(String(requesterId)) : undefined;
+
+      if (requester?.isSuperAdmin) {
+        const order = await storage.getBannerAdOrder(req.params.id);
+        if (!order) {
+          return res.status(404).json({ error: "Banner ad order not found" });
+        }
+
+        const updates: Partial<BannerAdOrder> = {};
+        if (order.paymentStatus !== "paid") {
+          updates.paymentStatus = "paid";
+          updates.paypalPaymentDate = new Date();
+        }
+        if (!order.paypalOrderId || order.paypalOrderId.trim() === "") {
+          updates.paypalOrderId = `ADMIN-FREE-${Date.now()}`;
+        }
+        if (order.approvalStatus !== "approved") {
+          updates.approvalStatus = "approved";
+        }
+        if (Object.keys(updates).length > 0) {
+          const adminNotes = order.adminNotes?.trim() || "";
+          updates.adminNotes = adminNotes
+            ? `${adminNotes}\nAdmin free activation by ${requester.email || requester.id}`
+            : `Admin free activation by ${requester.email || requester.id}`;
+          await storage.updateBannerAdOrder(order.id, updates);
+        }
+      }
+
       const ad = await storage.activateBannerAdOrder(req.params.id);
       if (!ad) {
         return res.status(400).json({ error: "Failed to activate order. Order must be paid and have required content." });

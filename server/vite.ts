@@ -20,6 +20,10 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  const resolvedConfig =
+    typeof viteConfig === "function"
+      ? await viteConfig({ command: "serve", mode: process.env.NODE_ENV || "development" })
+      : viteConfig;
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
@@ -27,7 +31,7 @@ export async function setupVite(app: Express, server: Server) {
   };
 
   const vite = await createViteServer({
-    ...viteConfig,
+    ...resolvedConfig,
     configFile: false,
     customLogger: {
       ...viteLogger,

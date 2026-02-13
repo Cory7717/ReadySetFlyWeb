@@ -7569,7 +7569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/banner-ad-orders/:id/activate", isAuthenticated, requireBannersAdmin, async (req, res) => {
     try {
-      const requesterId = req.user?.claims?.sub || req.session?.userId;
+      const requesterId = (req as any).user?.claims?.sub || (req.session as any)?.userId;
       const requester = requesterId ? await storage.getUser(String(requesterId)) : undefined;
 
       if (requester?.isSuperAdmin) {

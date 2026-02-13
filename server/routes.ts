@@ -5987,7 +5987,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Transactions
   app.get("/api/transactions/user/:userId", isAuthenticated, async (req: any, res) => {
     try {
-      const requesterId = req.user?.claims?.sub || req.session?.userId;
+      const requesterId = (req as any).user?.claims?.sub || (req.session as any)?.userId;
       const requestedUserId = req.params.userId;
 
       if (!requesterId) {

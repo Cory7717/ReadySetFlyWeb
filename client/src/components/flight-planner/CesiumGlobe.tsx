@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type * as CesiumType from "cesium";
-import "cesium/Build/Cesium/Widgets/widgets.css";
 
 import type { PlannerPoint } from "@/components/flight-planner/PlannerMap";
 
@@ -27,14 +26,20 @@ export default function CesiumGlobe({
     if (!containerRef.current || viewerRef.current) return;
 
     const cesiumBaseUrl = `${import.meta.env.BASE_URL || "/"}cesium/`;
-    (window as any).CESIUM_BASE_URL = cesiumBaseUrl;
+    (globalThis as any).CESIUM_BASE_URL = cesiumBaseUrl;
 
     let cancelled = false;
 
     const initCesium = async () => {
+      await import("cesium/Build/Cesium/Widgets/widgets.css");
       const Cesium = await import("cesium");
       if (cancelled) return;
       cesiumRef.current = Cesium;
+
+      const setBaseUrl = (Cesium as any).buildModuleUrl?.setBaseUrl;
+      if (typeof setBaseUrl === "function") {
+        setBaseUrl(cesiumBaseUrl);
+      }
 
       if (hasIonToken) {
         Cesium.Ion.defaultAccessToken = String(import.meta.env.VITE_CESIUM_ION_TOKEN);

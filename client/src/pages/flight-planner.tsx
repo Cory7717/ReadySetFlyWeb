@@ -453,8 +453,7 @@ export default function FlightPlanner() {
 
   useEffect(() => {
     const value = form.departure.trim();
-    const normalized = value.toUpperCase();
-    if (!value || ICAO_REGEX.test(normalized)) {
+    if (!value || value.length < 2) {
       setDepartureSuggestions([]);
       return;
     }
@@ -480,22 +479,21 @@ export default function FlightPlanner() {
       setDepartureResolved("");
       return;
     }
+    const exact = departureSuggestions.find((airport) => airport.icao?.toUpperCase() === value);
+    if (exact) {
+      setDepartureResolved(exact.icao.toUpperCase());
+      return;
+    }
     if (value.length === 3 && ICAO_REGEX.test(value)) {
       setDepartureResolved(value);
       return;
     }
-    if (value.length === 4 && ICAO_REGEX.test(value)) {
-      setDepartureResolved(value);
-      return;
-    }
-    const exact = departureSuggestions.find((airport) => airport.icao?.toUpperCase() === value);
-    setDepartureResolved(exact ? exact.icao.toUpperCase() : "");
+    setDepartureResolved("");
   }, [form.departure, departureSuggestions]);
 
   useEffect(() => {
     const value = form.destination.trim();
-    const normalized = value.toUpperCase();
-    if (!value || ICAO_REGEX.test(normalized)) {
+    if (!value || value.length < 2) {
       setDestinationSuggestions([]);
       return;
     }
@@ -521,16 +519,16 @@ export default function FlightPlanner() {
       setDestinationResolved("");
       return;
     }
+    const exact = destinationSuggestions.find((airport) => airport.icao?.toUpperCase() === value);
+    if (exact) {
+      setDestinationResolved(exact.icao.toUpperCase());
+      return;
+    }
     if (value.length === 3 && ICAO_REGEX.test(value)) {
       setDestinationResolved(value);
       return;
     }
-    if (value.length === 4 && ICAO_REGEX.test(value)) {
-      setDestinationResolved(value);
-      return;
-    }
-    const exact = destinationSuggestions.find((airport) => airport.icao?.toUpperCase() === value);
-    setDestinationResolved(exact ? exact.icao.toUpperCase() : "");
+    setDestinationResolved("");
   }, [form.destination, destinationSuggestions]);
 
   const { data: savedPlans = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({

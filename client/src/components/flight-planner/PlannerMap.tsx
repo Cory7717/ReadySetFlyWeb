@@ -146,18 +146,55 @@ function buildWindIcon(directionDeg: number, speedKt: number) {
   });
 }
 
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function distanceNm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const rKm = 6371;
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const km = rKm * c;
+  return km * 0.539957;
+}
+
 function WindsAloftController({
   enabled,
   altitudeFt,
+  routeBounds,
   onUpdate,
   onError,
 }: {
   enabled: boolean;
   altitudeFt: number;
+  routeBounds: L.LatLngBounds | null;
   onUpdate: (points: WindsAloftPoint[], meta: WindsAloftMeta | null) => void;
   onError: (message: string | null) => void;
 }) {
   const map = useMap();
+
+  const buildBbox = (bounds: L.LatLngBounds, minSpanDeg: number, padDeg: number) => {
+    const south = bounds.getSouth() - padDeg;
+    const north = bounds.getNorth() + padDeg;
+    const west = bounds.getWest() - padDeg;
+    const east = bounds.getEast() + padDeg;
+    const latSpan = Math.max(minSpanDeg, north - south);
+    const lonSpan = Math.max(minSpanDeg, east - west);
+    const latCenter = (north + south) / 2;
+    const lonCenter = (east + west) / 2;
+    const southAdj = latCenter - latSpan / 2;
+    const northAdj = latCenter + latSpan / 2;
+    const westAdj = lonCenter - lonSpan / 2;
+    const eastAdj = lonCenter + lonSpan / 2;
+    return [southAdj, westAdj, northAdj, eastAdj]
+      .map((value) => value.toFixed(4))
+      .join(",");
+  };
 
   useEffect(() => {
     if (!enabled) {
@@ -172,19 +209,10 @@ function WindsAloftController({
     const fetchData = async () => {
       if (!enabled) return;
       const bounds = map.getBounds();
-      const bbox = [
-        bounds.getSouth(),
-        bounds.getWest(),
-        bounds.getNorth(),
-        bounds.getEast(),
-      ]
-        .map((value) => value.toFixed(4))
-        .join(",");
 
-      if (abort) abort.abort();
-      abort = new AbortController();
-
-      try {
+      const runFetch = async (bbox: string) => {
+        if (abort) abort.abort();
+        abort = new AbortController();
         const res = await fetch(
           apiUrl(`/api/aviation/winds-temps?altitude=${altitudeFt}&bbox=${bbox}`),
           { credentials: "include", signal: abort.signal }
@@ -192,7 +220,20 @@ function WindsAloftController({
         if (!res.ok) {
           throw new Error(`Winds aloft unavailable (${res.status})`);
         }
-        const payload = await res.json();
+        return res.json();
+      };
+
+      try {
+        const primaryBbox = buildBbox(bounds, 4, 0.6);
+        let payload = await runFetch(primaryBbox);
+        if ((payload?.stations?.length ?? 0) === 0 && routeBounds) {
+          const routeBbox = buildBbox(routeBounds, 6, 1.2);
+          payload = await runFetch(routeBbox);
+        }
+        if ((payload?.stations?.length ?? 0) === 0) {
+          const expandedBbox = buildBbox(bounds, 12, 3.5);
+          payload = await runFetch(expandedBbox);
+        }
         onUpdate(payload?.stations ?? [], {
           altitudeFt: payload?.altitudeFt ?? altitudeFt,
           validTime: payload?.validTime ?? null,
@@ -220,7 +261,7 @@ function WindsAloftController({
       if (timer) window.clearTimeout(timer);
       if (abort) abort.abort();
     };
-  }, [enabled, altitudeFt, map, onUpdate, onError]);
+  }, [enabled, altitudeFt, map, routeBounds, onUpdate, onError]);
 
   return null;
 }
@@ -247,6 +288,10 @@ export default function PlannerMap({
   const [windsAloftMeta, setWindsAloftMeta] = useState<WindsAloftMeta | null>(null);
   const [windsAloftError, setWindsAloftError] = useState<string | null>(null);
   const [mapZoom, setMapZoom] = useState(initialZoom);
+  const routeBounds = useMemo(
+    () => (points.length > 0 ? L.latLngBounds(points.map((p) => [p.lat, p.lon])) : null),
+    [points]
+  );
   const windsAltitude = useMemo(
     () => resolveWindsAltitude(windsAltitudeFt ?? plannedAltitudeFt ?? null),
     [plannedAltitudeFt, windsAltitudeFt]
@@ -347,6 +392,19 @@ export default function PlannerMap({
     return windsAloftPoints;
   }, [mapZoom, showWinds, windsAloftPoints]);
 
+  const nearestWinds = useMemo(() => {
+    if (!showWinds || windsAloftPoints.length === 0) return [];
+    if (!routeBounds) return windsAloftPoints.slice(0, 6);
+    const center = routeBounds.getCenter();
+    return [...windsAloftPoints]
+      .map((point) => ({
+        point,
+        distanceNm: distanceNm(center.lat, center.lng, point.lat, point.lon),
+      }))
+      .sort((a, b) => a.distanceNm - b.distanceNm)
+      .slice(0, 6);
+  }, [routeBounds, showWinds, windsAloftPoints]);
+
   return (
     <div className={heightClassName}>
       <MapContainer center={center} zoom={initialZoom} scrollWheelZoom className="h-full w-full rounded-xl">
@@ -400,6 +458,7 @@ export default function PlannerMap({
           <WindsAloftController
             enabled={showWinds}
             altitudeFt={windsAltitude}
+            routeBounds={routeBounds}
             onUpdate={handleWindsUpdate}
             onError={handleWindsError}
           />
@@ -459,6 +518,20 @@ export default function PlannerMap({
           {windsAloftMeta?.validTime ? ` Valid ${windsAloftMeta.validTime}.` : ""}
           {windsAloftMeta?.warnings?.length ? ` ${windsAloftMeta.warnings.join(" ")}` : ""}
           {windsAloftError ? ` ${windsAloftError}` : ""}
+        </div>
+      )}
+      {showWinds && nearestWinds.length > 0 && (
+        <div className="mt-2 grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+          {nearestWinds.map(({ point, distanceNm }) => (
+            <div key={`${point.stationId}-${point.lat}`} className="flex items-center justify-between rounded-md border px-2 py-1">
+              <span className="font-semibold text-slate-700">
+                {point.icao || point.stationId}
+              </span>
+              <span>
+                {Math.round(point.windDir ?? 0)} deg / {Math.round(point.windSpeed ?? 0)} kt · {distanceNm.toFixed(0)} nm
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>

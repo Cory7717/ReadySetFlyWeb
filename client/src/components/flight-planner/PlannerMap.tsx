@@ -331,6 +331,7 @@ export default function PlannerMap({
   const [cloudFrames, setCloudFrames] = useState<string[]>([]);
   const [cloudFrameIndex, setCloudFrameIndex] = useState(0);
   const [cloudError, setCloudError] = useState(false);
+  const [cloudTileFailed, setCloudTileFailed] = useState(false);
   const cloudTimerRef = useRef<number | null>(null);
   const [cloudPlaying, setCloudPlaying] = useState(true);
   const [cloudSpeedMs, setCloudSpeedMs] = useState(1200);
@@ -354,7 +355,7 @@ export default function PlannerMap({
     if (!showRadar || radarFrames.length === 0) return "";
     const frame = radarFrames[radarFrameIndex];
     const normalizedFrame = frame.replace(/^\/??v2\/radar\//, "");
-    return `https://tilecache.rainviewer.com/v2/radar/${normalizedFrame}/256/{z}/{x}/{y}/2/1_1.png`;
+    return apiUrl(`/api/tiles/rainviewer/v2/radar/${normalizedFrame}/256/{z}/{x}/{y}/2/1_1.png`);
   }, [showRadar, radarFrames, radarFrameIndex]);
 
   const cloudTileUrl = useMemo(() => {
@@ -363,6 +364,14 @@ export default function PlannerMap({
     const layer = cloudSource === "goes-west" ? "GOES-West_ABI_GeoColor" : "GOES-East_ABI_GeoColor";
     return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer}/default/${frame}/GoogleMapsCompatible_Level4/{z}/{y}/{x}.jpg`;
   }, [showCloudsConus, cloudFrames, cloudFrameIndex, cloudSource]);
+
+  useEffect(() => {
+    if (!showCloudsConus) {
+      setCloudTileFailed(false);
+      return;
+    }
+    setCloudTileFailed(false);
+  }, [showCloudsConus, cloudTileUrl, cloudFrameIndex]);
 
   const cloudTimeLabel = useMemo(
     () => formatCloudTimeLabel(cloudFrames[cloudFrameIndex]),
@@ -538,8 +547,10 @@ export default function PlannerMap({
   }, [mapZoom, showWinds, windsAloftPoints]);
 
   const nearestWinds = useMemo(() => {
-    if (!showWinds || windsAloftPoints.length === 0) return [];
-    if (!routeBounds) return windsAloftPoints.slice(0, 6);
+    if (!showWinds || windsAloftPoints.length === 0) return [] as { point: WindsAloftPoint; distanceNm: number }[];
+    if (!routeBounds) {
+      return windsAloftPoints.slice(0, 6).map((point) => ({ point, distanceNm: Number.POSITIVE_INFINITY }));
+    }
     const center = routeBounds.getCenter();
     return [...windsAloftPoints]
       .map((point) => ({
@@ -613,9 +624,7 @@ export default function PlannerMap({
           zoom={initialZoom}
           scrollWheelZoom
           className="h-full w-full rounded-xl"
-          whenReady={(event) => {
-            mapRef.current = event.target;
-          }}
+          ref={mapRef}
         >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -641,7 +650,7 @@ export default function PlannerMap({
           />
         )}
         {showCloudsConus && (
-          cloudTileUrl ? (
+          cloudTileUrl && !cloudTileFailed ? (
             <TileLayer
               key={`clouds-conus-anim-${cloudFrameIndex}`}
               attribution={cloudSource === "goes-west" ? "NASA GIBS (GOES-West GeoColor)" : "NASA GIBS (GOES-East GeoColor)"}
@@ -650,6 +659,10 @@ export default function PlannerMap({
               maxNativeZoom={8}
               zIndex={600}
               noWrap
+              crossOrigin="anonymous"
+              eventHandlers={{
+                tileerror: () => setCloudTileFailed(true),
+              }}
             />
           ) : (
             <TileLayer
@@ -659,6 +672,7 @@ export default function PlannerMap({
               opacity={0.7}
               maxNativeZoom={9}
               zIndex={600}
+              crossOrigin="anonymous"
             />
           )
         )}
@@ -749,7 +763,7 @@ export default function PlannerMap({
                 {point.icao || point.stationId}
               </span>
               <span>
-                {Math.round(point.windDir ?? 0)} deg / {Math.round(point.windSpeed ?? 0)} kt · {distanceNm.toFixed(0)} nm
+                {Math.round(point.windDir ?? 0)} deg / {Math.round(point.windSpeed ?? 0)} kt · {Number.isFinite(distanceNm) ? `${distanceNm.toFixed(0)} nm` : "--"}
               </span>
             </div>
           ))}

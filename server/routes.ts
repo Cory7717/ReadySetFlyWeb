@@ -9239,6 +9239,32 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.get("/api/tiles/rainviewer/*", async (req, res) => {
+    try {
+      const params = req.params as Record<string, string | undefined>;
+      const rawPath = params["0"] || "";
+      const trimmedPath = rawPath.replace(/^\/+/, "");
+      if (!trimmedPath.startsWith("v2/radar/")) {
+        return res.status(400).json({ error: "Unsupported RainViewer path" });
+      }
+      const targetUrl = `https://tilecache.rainviewer.com/${trimmedPath}`;
+      const response = await fetchWithTimeout(
+        targetUrl,
+        { headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" } },
+        8000
+      );
+      const contentType = response.headers.get("content-type") || "image/png";
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.status(response.status);
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.send(buffer);
+    } catch (error) {
+      console.error("RainViewer tile proxy failed:", error);
+      res.status(502).json({ error: "RainViewer tile unavailable" });
+    }
+  });
+
   app.get("/api/winds-aloft", async (req, res) => {
     try {
       const altitudeParam = toNumber(req.query.altitude);

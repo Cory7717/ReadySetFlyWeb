@@ -220,7 +220,7 @@ export default function CesiumGlobe({
       return;
     }
     const normalizedFrame = radarFrame.replace(/^\/??v2\/radar\//, "");
-    const url = `https://tilecache.rainviewer.com/v2/radar/${normalizedFrame}/256/{z}/{x}/{y}/2/1_1.png`;
+    const url = apiUrl(`/api/tiles/rainviewer/v2/radar/${normalizedFrame}/256/{z}/{x}/{y}/2/1_1.png`);
     const provider = new Cesium.UrlTemplateImageryProvider({
       url,
       credit: "RainViewer",
@@ -252,10 +252,14 @@ export default function CesiumGlobe({
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
-    viewer.scene.skyAtmosphere.show = showAtmosphere;
+    if (viewer.scene.skyAtmosphere) {
+      viewer.scene.skyAtmosphere.show = showAtmosphere;
+    }
     viewer.scene.globe.enableLighting = showAtmosphere;
     (viewer.scene.globe as any).dynamicAtmosphereLighting = showAtmosphere;
-    viewer.scene.sun.show = showAtmosphere;
+    if (viewer.scene.sun) {
+      viewer.scene.sun.show = showAtmosphere;
+    }
   }, [showAtmosphere]);
 
   useEffect(() => {

@@ -52,7 +52,7 @@ export default function TfrsScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.title}>TFR Map (List)</Text>
-        <Text style={styles.subtitle}>Temporary Flight Restrictions powered by FAA SWIM.</Text>
+        <Text style={styles.subtitle}>Temporary Flight Restrictions powered by FAA SWIM (US-only).</Text>
       </View>
 
       <View style={styles.searchRow}>

@@ -25,6 +25,7 @@ import type { FlightPlan } from "@shared/schema";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 
 const PlannerMap = lazy(() => import("@/components/flight-planner/PlannerMap"));
+const CesiumGlobe = lazy(() => import("@/components/flight-planner/CesiumGlobe"));
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 const CONTROLLED_AIRPORTS = new Set([
@@ -366,7 +367,7 @@ export default function FlightPlanner() {
   const [plannedAltitude, setPlannedAltitude] = useState("");
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
-  const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds" | "clouds">("standard");
+  const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds" | "clouds" | "globe">("standard");
   const [windsAltitudeChoice, setWindsAltitudeChoice] = useState("planned");
   const [activeWeatherDetail, setActiveWeatherDetail] = useState<
     "metar" | "notams" | "pireps" | "hazards" | "winds" | "icing" | "turbulence" | null
@@ -1720,12 +1721,18 @@ export default function FlightPlanner() {
               </div>
             ) : (
               <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
-                <PlannerMap
-                  points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
-                  mapStyle={mapStyle}
-                  plannedAltitudeFt={plannedAltitudeValue}
-                  windsAltitudeFt={windsAltitudeFt}
-                />
+                {mapStyle === "globe" ? (
+                  <CesiumGlobe
+                    points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                  />
+                ) : (
+                  <PlannerMap
+                    points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                    mapStyle={mapStyle}
+                    plannedAltitudeFt={plannedAltitudeValue}
+                    windsAltitudeFt={windsAltitudeFt}
+                  />
+                )}
               </Suspense>
             )}
             {airportErrors.length > 0 && (
@@ -1774,6 +1781,13 @@ export default function FlightPlanner() {
                 Clouds (Satellite)
               </Button>
               <Button
+                variant={mapStyle === "globe" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setMapStyle("globe")}
+              >
+                3D Globe
+              </Button>
+              <Button
                 variant={mapStyle === "winds" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setMapStyle("winds")}
@@ -1812,6 +1826,11 @@ export default function FlightPlanner() {
               <div className="text-xs text-muted-foreground mt-2">
                 Weather layers are for situational awareness only. Radar shows precip; clouds are satellite IR.
                 Winds aloft uses NOAA AWC data near your planned altitude. Verify with official sources.
+              </div>
+            )}
+            {mapStyle === "globe" && (
+              <div className="text-xs text-muted-foreground mt-2">
+                3D globe view uses CesiumJS. Weather overlays are available in 2D for now.
               </div>
             )}
             {mapStyle === "winds" && (

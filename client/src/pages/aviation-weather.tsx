@@ -283,8 +283,8 @@ export default function AviationWeatherHub() {
                 <CardDescription>Quick hazard + report counts.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
-                <Badge variant="secondary">NOTAMs {notamsCount}</Badge>
-                <Badge variant="secondary">PIREPs {pirepsCount}</Badge>
+                <Badge variant="secondary">NOTAMs {notamsCount} · US-only</Badge>
+                <Badge variant="secondary">PIREPs {pirepsCount} · US-only</Badge>
                 <Badge variant="secondary">Winds {windsCount}</Badge>
               </CardContent>
             </Card>
@@ -387,7 +387,7 @@ export default function AviationWeatherHub() {
           <Card>
             <CardHeader>
               <CardTitle>NOTAMs</CardTitle>
-              <CardDescription>Active notices for {searchIcao}.</CardDescription>
+              <CardDescription>Active notices for {searchIcao}. US-only (FAA).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {notamsCount === 0 && <div className="text-sm text-muted-foreground">No NOTAMs available.</div>}
@@ -405,7 +405,7 @@ export default function AviationWeatherHub() {
           <Card>
             <CardHeader>
               <CardTitle>PIREPs</CardTitle>
-              <CardDescription>Recent reports within 200 NM.</CardDescription>
+              <CardDescription>Recent reports within 200 NM. US-only (FAA).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {pirepsCount === 0 && <div className="text-sm text-muted-foreground">No recent PIREPs in range.</div>}
@@ -423,7 +423,7 @@ export default function AviationWeatherHub() {
           <Card>
             <CardHeader>
               <CardTitle>Hazards</CardTitle>
-              <CardDescription>Domestic SIGMETs, G-AIRMETs, and convective forecasts.</CardDescription>
+              <CardDescription>Domestic SIGMETs, G-AIRMETs, and convective forecasts (US-only).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {hazardsSummary.warnings.length > 0 && (

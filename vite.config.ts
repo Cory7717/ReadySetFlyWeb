@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+import cesium from "vite-plugin-cesium";
 
 // Build target:
 // - Default: Render/server build => dist/public
@@ -18,7 +19,7 @@ export default defineConfig(async () => {
       : [];
 
   return {
-    plugins: [react(), runtimeErrorOverlay(), ...replitPlugins],
+    plugins: [react(), runtimeErrorOverlay(), cesium(), ...replitPlugins],
     resolve: {
       alias: {
         "@": path.resolve(import.meta.dirname, "client", "src"),

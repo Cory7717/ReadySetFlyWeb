@@ -74,6 +74,7 @@
     "cmdk": "^1.1.1",
     "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
+    "cesium": "^1.123.1",
     "date-fns": "^3.6.0",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.39.1",
@@ -147,7 +148,8 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
-    "vite": "^5.4.20"
+    "vite": "^5.4.20",
+    "vite-plugin-cesium": "^1.2.23"
   },
   "optionalDependencies": {
     "@esbuild/linux-x64": "0.25.0",

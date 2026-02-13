@@ -112,6 +112,36 @@ function MapZoomTracker({ onZoomChange }: { onZoomChange: (zoom: number) => void
   return null;
 }
 
+function MapCenterTracker({ onCenterChange }: { onCenterChange: (center: L.LatLng) => void }) {
+  const map = useMap();
+
+  useEffect(() => {
+    onCenterChange(map.getCenter());
+    const handle = () => onCenterChange(map.getCenter());
+    map.on("moveend", handle);
+    return () => {
+      map.off("moveend", handle);
+    };
+  }, [map, onCenterChange]);
+
+  return null;
+}
+
+function isWithinConus(center: L.LatLng | null) {
+  if (!center) return false;
+  return center.lat >= 14.56 && center.lat <= 56.78 && center.lng >= -152.11 && center.lng <= -52.92;
+}
+
+function isWithinAlaska(center: L.LatLng | null) {
+  if (!center) return false;
+  return center.lat >= 51 && center.lat <= 72 && center.lng >= -170 && center.lng <= -129;
+}
+
+function isWithinHawaii(center: L.LatLng | null) {
+  if (!center) return false;
+  return center.lat >= 18 && center.lat <= 23 && center.lng >= -161 && center.lng <= -154;
+}
+
 function resolveWindsAltitude(requested: number | null | undefined) {
   const fallback = WINDS_ALOFT_LEVELS.includes(12000) ? 12000 : WINDS_ALOFT_LEVELS[0];
   if (!requested || !Number.isFinite(requested)) return fallback;
@@ -144,6 +174,13 @@ function buildWindIcon(directionDeg: number, speedKt: number) {
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
+}
+
+function formatCloudTimeLabel(value: string | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toUTCString().replace("GMT", "UTC");
 }
 
 function toRadians(value: number) {
@@ -279,15 +316,32 @@ export default function PlannerMap({
   const showRadar = mapStyle === "radar";
   const showWinds = mapStyle === "winds";
   const showClouds = mapStyle === "clouds";
+  const [mapCenter, setMapCenter] = useState<L.LatLng | null>(null);
+  const isConus = isWithinConus(mapCenter);
+  const isAlaska = isWithinAlaska(mapCenter);
+  const isHawaii = isWithinHawaii(mapCenter);
+  const cloudSource = isAlaska || isHawaii ? "goes-west" : "goes-east";
+  const showCloudsGlobal = showClouds && (mapZoom < 4 || (!isConus && !isAlaska && !isHawaii));
+  const showCloudsConus = showClouds && !showCloudsGlobal;
   const initialZoom = mapStyle === "sectional" ? 6 : (points.length ? 6 : 4);
   const [radarFrames, setRadarFrames] = useState<string[]>([]);
   const [radarFrameIndex, setRadarFrameIndex] = useState(0);
   const [radarError, setRadarError] = useState(false);
   const radarTimerRef = useRef<number | null>(null);
+  const [cloudFrames, setCloudFrames] = useState<string[]>([]);
+  const [cloudFrameIndex, setCloudFrameIndex] = useState(0);
+  const [cloudError, setCloudError] = useState(false);
+  const cloudTimerRef = useRef<number | null>(null);
+  const [cloudPlaying, setCloudPlaying] = useState(true);
+  const [cloudSpeedMs, setCloudSpeedMs] = useState(1200);
+  const [cloudRefreshKey, setCloudRefreshKey] = useState(0);
   const [windsAloftPoints, setWindsAloftPoints] = useState<WindsAloftPoint[]>([]);
   const [windsAloftMeta, setWindsAloftMeta] = useState<WindsAloftMeta | null>(null);
   const [windsAloftError, setWindsAloftError] = useState<string | null>(null);
   const [mapZoom, setMapZoom] = useState(initialZoom);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const mapRef = useRef<L.Map | null>(null);
+  const gibsDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const routeBounds = useMemo(
     () => (points.length > 0 ? L.latLngBounds(points.map((p) => [p.lat, p.lon])) : null),
     [points]
@@ -302,6 +356,72 @@ export default function PlannerMap({
     const frame = radarFrames[radarFrameIndex];
     return `https://tilecache.rainviewer.com/v2/radar/${frame}/256/{z}/{x}/{y}/2/1_1.png`;
   }, [showRadar, radarFrames, radarFrameIndex]);
+
+  const cloudTileUrl = useMemo(() => {
+    if (!showCloudsConus || cloudFrames.length === 0) return "";
+    const frame = encodeURIComponent(cloudFrames[cloudFrameIndex]);
+    const layer = cloudSource === "goes-west" ? "GOES-West_ABI_GeoColor" : "GOES-East_ABI_GeoColor";
+    return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer}/default/${frame}/GoogleMapsCompatible_Level4/{z}/{y}/{x}.jpg`;
+  }, [showCloudsConus, cloudFrames, cloudFrameIndex, cloudSource]);
+
+  const cloudTimeLabel = useMemo(
+    () => formatCloudTimeLabel(cloudFrames[cloudFrameIndex]),
+    [cloudFrames, cloudFrameIndex]
+  );
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const timer = window.setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    if (!showClouds) return;
+    const timer = window.setInterval(() => {
+      setCloudRefreshKey((prev) => prev + 1);
+    }, 1000 * 60 * 5);
+    return () => window.clearInterval(timer);
+  }, [showClouds]);
+
+  useEffect(() => {
+    if (!showCloudsConus) {
+      setCloudFrames([]);
+      setCloudFrameIndex(0);
+      setCloudError(false);
+      return;
+    }
+
+    let isActive = true;
+    const loadCloudFrames = async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/aviation/cloud-frames?source=${cloudSource}&count=12&intervalMin=10`));
+        if (!res.ok) {
+          throw new Error("Failed to load cloud frames");
+        }
+        const data = await res.json();
+        const frames = Array.isArray(data?.frames) ? data.frames.filter(Boolean) : [];
+        if (!isActive) return;
+        setCloudFrames(frames);
+        setCloudFrameIndex(frames.length > 0 ? frames.length - 1 : 0);
+        setCloudError(frames.length === 0);
+      } catch (error) {
+        console.error("Cloud frame fetch failed:", error);
+        if (isActive) {
+          setCloudFrames([]);
+          setCloudFrameIndex(0);
+          setCloudError(true);
+        }
+      }
+    };
+
+    loadCloudFrames();
+
+    return () => {
+      isActive = false;
+    };
+  }, [showCloudsConus, cloudSource]);
 
   useEffect(() => {
     if (!showRadar) {
@@ -372,6 +492,31 @@ export default function PlannerMap({
     };
   }, [showRadar, radarFrames.length]);
 
+  useEffect(() => {
+    if (!showCloudsConus || cloudFrames.length === 0 || !cloudPlaying) {
+      if (cloudTimerRef.current) {
+        window.clearInterval(cloudTimerRef.current);
+        cloudTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (cloudTimerRef.current) {
+      window.clearInterval(cloudTimerRef.current);
+    }
+
+    cloudTimerRef.current = window.setInterval(() => {
+      setCloudFrameIndex((prev) => (prev + 1) % cloudFrames.length);
+    }, cloudSpeedMs);
+
+    return () => {
+      if (cloudTimerRef.current) {
+        window.clearInterval(cloudTimerRef.current);
+        cloudTimerRef.current = null;
+      }
+    };
+  }, [showCloudsConus, cloudFrames.length, cloudPlaying, cloudSpeedMs]);
+
   const handleWindsUpdate = useCallback((points: WindsAloftPoint[], meta: WindsAloftMeta | null) => {
     setWindsAloftPoints(points);
     setWindsAloftMeta(meta);
@@ -406,8 +551,66 @@ export default function PlannerMap({
   }, [routeBounds, showWinds, windsAloftPoints]);
 
   return (
-    <div className={heightClassName}>
-      <MapContainer center={center} zoom={initialZoom} scrollWheelZoom className="h-full w-full rounded-xl">
+    <div
+      className={
+        isFullscreen
+          ? "fixed inset-0 z-[1000] bg-black/80 p-3"
+          : heightClassName
+      }
+    >
+      <div className={isFullscreen ? "relative h-full w-full rounded-xl overflow-hidden" : "relative h-full"}>
+        <button
+          type="button"
+          onClick={() => setIsFullscreen((prev) => !prev)}
+          className="absolute right-3 top-3 z-[1100] rounded-md border bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow hover:bg-white"
+        >
+          {isFullscreen ? "Close full screen" : "Full screen"}
+        </button>
+        {showCloudsConus && cloudFrames.length > 0 && (
+          <div className="absolute left-3 top-3 z-[1100] space-y-2 rounded-md border bg-white/90 px-3 py-2 text-xs text-slate-700 shadow">
+            <div className="font-semibold">Cloud loop</div>
+            <div>{cloudTimeLabel || "Live"}</div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setCloudPlaying((prev) => !prev)}
+                className="rounded-md border bg-white px-2 py-1 text-xs font-semibold text-slate-900"
+              >
+                {cloudPlaying ? "Pause" : "Play"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCloudSpeedMs(1600)}
+                className={`rounded-md border px-2 py-1 text-xs font-semibold ${cloudSpeedMs === 1600 ? "bg-slate-900 text-white" : "bg-white text-slate-900"}`}
+              >
+                Slow
+              </button>
+              <button
+                type="button"
+                onClick={() => setCloudSpeedMs(1200)}
+                className={`rounded-md border px-2 py-1 text-xs font-semibold ${cloudSpeedMs === 1200 ? "bg-slate-900 text-white" : "bg-white text-slate-900"}`}
+              >
+                Med
+              </button>
+              <button
+                type="button"
+                onClick={() => setCloudSpeedMs(800)}
+                className={`rounded-md border px-2 py-1 text-xs font-semibold ${cloudSpeedMs === 800 ? "bg-slate-900 text-white" : "bg-white text-slate-900"}`}
+              >
+                Fast
+              </button>
+            </div>
+          </div>
+        )}
+        <MapContainer
+          center={center}
+          zoom={initialZoom}
+          scrollWheelZoom
+          className="h-full w-full rounded-xl"
+          whenReady={(event) => {
+            mapRef.current = event.target;
+          }}
+        >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -431,17 +634,51 @@ export default function PlannerMap({
             crossOrigin="anonymous"
           />
         )}
-        {showClouds && mapZoom >= 4 && (
-          <WMSTileLayer
-            attribution="IEM GOES Satellite"
-            url="https://mesonet.agron.iastate.edu/cgi-bin/wms/goes/conus_ir.cgi"
-            layers="goes_conus_ir"
-            format="image/png"
-            transparent
+        {showCloudsGlobal && (
+          <TileLayer
+            key={`clouds-global-${cloudRefreshKey}`}
+            attribution="NASA GIBS"
+            url={`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`}
             opacity={0.75}
+            maxNativeZoom={9}
             zIndex={600}
-            noWrap
           />
+        )}
+        {showCloudsConus && (
+          cloudTileUrl ? (
+            <TileLayer
+              key={`clouds-conus-anim-${cloudFrameIndex}`}
+              attribution={cloudSource === "goes-west" ? "NASA GIBS (GOES-West GeoColor)" : "NASA GIBS (GOES-East GeoColor)"}
+              url={cloudTileUrl}
+              opacity={0.75}
+              maxNativeZoom={8}
+              zIndex={600}
+              noWrap
+            />
+          ) : (
+            cloudSource === "goes-east" ? (
+              <WMSTileLayer
+                key={`clouds-conus-${cloudRefreshKey}`}
+                attribution="IEM GOES Satellite"
+                url="https://mesonet.agron.iastate.edu/cgi-bin/wms/goes/conus_ir.cgi"
+                layers="goes_conus_ir"
+                format="image/png"
+                transparent
+                opacity={0.75}
+                zIndex={600}
+                noWrap
+              />
+            ) : (
+              <TileLayer
+                key={`clouds-west-static-${cloudRefreshKey}`}
+                attribution="NASA GIBS"
+                url={`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`}
+                opacity={0.75}
+                maxNativeZoom={9}
+                zIndex={600}
+              />
+            )
+          )
         )}
         {showRadar && !radarTileUrl && radarError && (
           <WMSTileLayer
@@ -511,7 +748,9 @@ export default function PlannerMap({
         ))}
         <FitBounds points={points} mapStyle={mapStyle} />
         <MapZoomTracker onZoomChange={setMapZoom} />
-      </MapContainer>
+        <MapCenterTracker onCenterChange={setMapCenter} />
+        </MapContainer>
+      </div>
       {showWinds && (
         <div className="mt-2 text-xs text-muted-foreground">
           NOAA AWC winds aloft at {windsAloftMeta?.altitudeFt ?? windsAltitude} ft.

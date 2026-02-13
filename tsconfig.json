@@ -18,7 +18,8 @@
     "forceConsistentCasingInFileNames": true,
     "paths": {
       "@/*": ["./client/src/*"],
-      "@shared/*": ["./shared/*"]
+      "@shared/*": ["./shared/*"],
+      "cesium": ["./node_modules/cesium/Source/Cesium.d.ts"]
     }
   }
 }

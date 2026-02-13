@@ -105,6 +105,50 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
   }
 }
 
+type CloudFrameCache = {
+  fetchedAt: number;
+  frames: string[];
+};
+
+const cloudFrameCacheBySource: Record<string, CloudFrameCache> = {};
+
+const CLOUD_FRAME_TTL = 1000 * 60 * 5;
+
+const parseIsoDurationMinutes = (value: string) => {
+  const match = value.match(/^PT(?:(\d+)H)?(?:(\d+)M)?/i);
+  if (!match) return null;
+  const hours = match[1] ? Number(match[1]) : 0;
+  const minutes = match[2] ? Number(match[2]) : 0;
+  const total = hours * 60 + minutes;
+  return Number.isFinite(total) && total > 0 ? total : null;
+};
+
+const buildRecentTimes = (end: Date, intervalMinutes: number, count: number) => {
+  const times: string[] = [];
+  const intervalMs = intervalMinutes * 60 * 1000;
+  const endMs = Math.floor(end.getTime() / intervalMs) * intervalMs;
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const time = new Date(endMs - intervalMs * i);
+    times.push(time.toISOString().replace(".000Z", "Z"));
+  }
+  return times;
+};
+
+const parseGibsTimeDimension = (value: string, count: number) => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes("/")) {
+    const [start, end, period] = trimmed.split("/");
+    const intervalMinutes = period ? parseIsoDurationMinutes(period) : null;
+    const endDate = end ? new Date(end) : null;
+    if (!endDate || Number.isNaN(endDate.getTime()) || !intervalMinutes) return null;
+    return buildRecentTimes(endDate, intervalMinutes, count);
+  }
+  const values = trimmed.split(",").map((item) => item.trim()).filter(Boolean);
+  if (values.length === 0) return null;
+  return values.slice(-count);
+};
+
 
 function getPublicBaseUrl() {
   const base =
@@ -9080,6 +9124,44 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       data: null,
       todo: "TODO: Implement GFA data once NOAA/AWC provides an accessible endpoint.",
     });
+  });
+
+  app.get("/api/aviation/cloud-frames", async (req, res) => {
+    try {
+      const source = typeof req.query.source === "string" ? req.query.source : "goes-east";
+      const countParam = toNumber(req.query.count);
+      const count = countParam && countParam > 0 ? Math.min(countParam, 24) : 12;
+      const intervalParam = toNumber(req.query.intervalMin);
+      const intervalMinutes = intervalParam && intervalParam > 0 ? intervalParam : 10;
+
+      const now = Date.now();
+      const cached = cloudFrameCacheBySource[source];
+      if (cached && now - cached.fetchedAt < CLOUD_FRAME_TTL) {
+        return res.json({ source, frames: cached.frames });
+      }
+
+      const capabilitiesUrl =
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi?SERVICE=WMTS&REQUEST=GetCapabilities";
+      const response = await fetchWithTimeout(capabilitiesUrl, {}, 8000);
+      const text = await response.text();
+      const layerId = source === "goes-west" ? "GOES-West_ABI_GeoColor" : "GOES-East_ABI_GeoColor";
+      const dimensionRegex = new RegExp(
+        `<Layer>[\\s\\S]*?<Identifier>${layerId}<\\/Identifier>[\\s\\S]*?<Dimension[\\s\\S]*?<Identifier>Time<\\/Identifier>[\\s\\S]*?<Default>[^<]*<\\/Default>[\\s\\S]*?<Value>([^<]+)<\\/Value>[\\s\\S]*?<\\/Dimension>`,
+        "i"
+      );
+      const valueMatch = text.match(dimensionRegex);
+      let frames = valueMatch ? parseGibsTimeDimension(valueMatch[1], count) : null;
+      if (!frames) {
+        frames = [];
+      }
+
+      cloudFrameCacheBySource[source] = { fetchedAt: now, frames };
+
+      res.json({ source, frames, warning: frames.length === 0 ? "Cloud animation unavailable" : undefined });
+    } catch (error) {
+      console.error("Cloud frames fetch failed:", error);
+      res.status(500).json({ error: "Failed to fetch cloud frames" });
+    }
   });
 
   app.get("/api/winds-aloft", async (req, res) => {

@@ -230,6 +230,25 @@ function buildBboxFromRegion(region: { latitude: number; longitude: number; lati
   return { south, west, north, east };
 }
 
+function formatCloudTimeLabel(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toUTCString().replace('GMT', 'UTC');
+}
+
+function isWithinConus(lat: number, lon: number) {
+  return lat >= 14.56 && lat <= 56.78 && lon >= -152.11 && lon <= -52.92;
+}
+
+function isWithinAlaska(lat: number, lon: number) {
+  return lat >= 51 && lat <= 72 && lon >= -170 && lon <= -129;
+}
+
+function isWithinHawaii(lat: number, lon: number) {
+  return lat >= 18 && lat <= 23 && lon >= -161 && lon <= -154;
+}
+
 export default function FlightPlannerScreen() {
   const navigation = useNavigation<any>();
   const { isAuthenticated } = useIsAuthenticated();
@@ -249,11 +268,15 @@ export default function FlightPlannerScreen() {
   const [loading, setLoading] = useState(false);
   const [routeSummary, setRouteSummary] = useState<{ totalNm: number; legs: { from: string; to: string; nm: number }[] } | null>(null);
   const [routePoints, setRoutePoints] = useState<AirportMeta[]>([]);
-  const [mapStyle, setMapStyle] = useState<'standard' | 'sectional' | 'terrain' | 'radar' | 'winds'>('standard');
+  const [mapStyle, setMapStyle] = useState<'standard' | 'sectional' | 'terrain' | 'radar' | 'winds' | 'clouds'>('standard');
   const [windsAltitudeChoice, setWindsAltitudeChoice] = useState<'planned' | string>('planned');
   const [windsAloftPoints, setWindsAloftPoints] = useState<WindsAloftPoint[]>([]);
   const [windsAloftMeta, setWindsAloftMeta] = useState<WindsAloftMeta | null>(null);
   const [windsAloftError, setWindsAloftError] = useState<string | null>(null);
+  const [cloudFrames, setCloudFrames] = useState<string[]>([]);
+  const [cloudFrameIndex, setCloudFrameIndex] = useState(0);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+  const cloudTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [mapRegion, setMapRegion] = useState<{ latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | null>(null);
   const [trafficEnabled, setTrafficEnabled] = useState(false);
   const [trafficPort, setTrafficPort] = useState('4000');
@@ -697,6 +720,60 @@ export default function FlightPlannerScreen() {
     };
   }, [mapStyle, mapRegion, routePoints, resolvedWindsAltitude]);
 
+  useEffect(() => {
+    if (!showClouds || showCloudsGlobal) {
+      setCloudFrames([]);
+      setCloudFrameIndex(0);
+      setCloudError(null);
+      return;
+    }
+
+    let isActive = true;
+    api.get('/api/aviation/cloud-frames', { params: { source: cloudSource, count: 12, intervalMin: 10 } })
+      .then((res) => {
+        if (!isActive) return;
+        const frames = Array.isArray(res.data?.frames) ? res.data.frames.filter(Boolean) : [];
+        setCloudFrames(frames);
+        setCloudFrameIndex(frames.length > 0 ? frames.length - 1 : 0);
+        setCloudError(frames.length > 0 ? null : 'Cloud loop unavailable.');
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setCloudFrames([]);
+        setCloudFrameIndex(0);
+        setCloudError('Cloud loop unavailable.');
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [showClouds, showCloudsGlobal, cloudSource]);
+
+  useEffect(() => {
+    if (!showClouds || cloudFrames.length === 0) {
+      if (cloudTimerRef.current) {
+        clearInterval(cloudTimerRef.current);
+        cloudTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (cloudTimerRef.current) {
+      clearInterval(cloudTimerRef.current);
+    }
+
+    cloudTimerRef.current = setInterval(() => {
+      setCloudFrameIndex((prev) => (prev + 1) % cloudFrames.length);
+    }, 1200);
+
+    return () => {
+      if (cloudTimerRef.current) {
+        clearInterval(cloudTimerRef.current);
+        cloudTimerRef.current = null;
+      }
+    };
+  }, [showClouds, cloudFrames.length]);
+
   const visibleWindsPoints = useMemo(() => {
     if (mapStyle !== 'winds') return [] as WindsAloftPoint[];
     const delta = mapRegion?.latitudeDelta ?? 8;
@@ -722,6 +799,23 @@ export default function FlightPlannerScreen() {
     ? plannedAltitudeValue
     : Number(windsAltitudeChoice);
   const resolvedWindsAltitude = resolveWindsAltitude(windsAltitudeFt ?? null);
+  const showClouds = mapStyle === 'clouds';
+  const gibsDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const isConus = Boolean(mapRegion && isWithinConus(mapRegion.latitude, mapRegion.longitude));
+  const isAlaska = Boolean(mapRegion && isWithinAlaska(mapRegion.latitude, mapRegion.longitude));
+  const isHawaii = Boolean(mapRegion && isWithinHawaii(mapRegion.latitude, mapRegion.longitude));
+  const cloudSource = (isAlaska || isHawaii) ? 'goes-west' : 'goes-east';
+  const showCloudsGlobal = Boolean(
+    mapRegion && (
+      mapRegion.longitudeDelta > 60 ||
+      mapRegion.latitudeDelta > 30 ||
+      (!isConus && !isAlaska && !isHawaii)
+    )
+  );
+  const cloudTileUrl = cloudFrames.length > 0
+    ? `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${cloudSource === 'goes-west' ? 'GOES-West_ABI_GeoColor' : 'GOES-East_ABI_GeoColor'}/default/${encodeURIComponent(cloudFrames[cloudFrameIndex])}/GoogleMapsCompatible_Level4/{z}/{y}/{x}.jpg`
+    : '';
+  const cloudTimeLabel = formatCloudTimeLabel(cloudFrames[cloudFrameIndex]);
   const resolvedDepartureTimeZone = normalizeTimeZone(departureTimeZone || deviceTimeZone);
   const resolvedDestinationTimeZone = normalizeTimeZone(destinationTimeZone || deviceTimeZone);
   const plannedDepartureUtc = useMemo(() => {
@@ -1113,6 +1207,12 @@ export default function FlightPlannerScreen() {
               <Text style={styles.mapToggleText}>Radar</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.mapToggleButton, mapStyle === 'clouds' && styles.mapToggleActive]}
+              onPress={() => setMapStyle('clouds')}
+            >
+              <Text style={styles.mapToggleText}>Clouds</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.mapToggleButton, mapStyle === 'winds' && styles.mapToggleActive]}
               onPress={() => setMapStyle('winds')}
             >
@@ -1260,6 +1360,37 @@ export default function FlightPlannerScreen() {
                 zIndex={600}
               />
             )}
+            {mapStyle === 'clouds' && showCloudsGlobal && (
+              <UrlTile
+                urlTemplate={`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`}
+                maximumZ={9}
+                minimumZ={2}
+                tileSize={256}
+                opacity={0.75}
+                zIndex={600}
+              />
+            )}
+            {mapStyle === 'clouds' && !showCloudsGlobal && cloudTileUrl && (
+              <UrlTile
+                key={`clouds-${cloudFrameIndex}`}
+                urlTemplate={cloudTileUrl}
+                maximumZ={8}
+                minimumZ={3}
+                tileSize={256}
+                opacity={0.75}
+                zIndex={600}
+              />
+            )}
+            {mapStyle === 'clouds' && !showCloudsGlobal && !cloudTileUrl && (
+              <UrlTile
+                urlTemplate={`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`}
+                maximumZ={9}
+                minimumZ={2}
+                tileSize={256}
+                opacity={0.75}
+                zIndex={600}
+              />
+            )}
             {mapStyle === 'winds' && (
               <>
                 {visibleWindsPoints.map((point, index) => {
@@ -1320,7 +1451,7 @@ export default function FlightPlannerScreen() {
         )}
         {mapStyle === 'sectional' && (
           <Text style={styles.helperText}>
-            Sectional tiles appear at zoom 6+; zoom in for FAA chart detail.
+            Sectional tiles appear at zoom 6+; zoom in for FAA chart detail (US-only).
           </Text>
         )}
         <Text style={styles.helperText}>Sectional tiles provided by FAA/Aeronautical Information Services.</Text>
@@ -1329,6 +1460,15 @@ export default function FlightPlannerScreen() {
           <Text style={styles.helperText}>
             Weather overlays are for situational awareness only. Radar shows current precip; blank means no returns.
           </Text>
+        )}
+        {mapStyle === 'clouds' && (
+          <Text style={styles.helperText}>
+            Clouds layer shows satellite imagery ({cloudSource === 'goes-west' ? 'GOES-West' : 'GOES-East'}).
+            {cloudTimeLabel ? ` Time ${cloudTimeLabel}.` : ' Live imagery.'}
+          </Text>
+        )}
+        {mapStyle === 'clouds' && cloudError && (
+          <Text style={styles.errorText}>{cloudError}</Text>
         )}
         {mapStyle === 'winds' && (
           <Text style={styles.helperText}>

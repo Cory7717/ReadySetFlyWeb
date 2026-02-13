@@ -30,6 +30,46 @@ type PirepResponse = { reports?: Array<{ rawOb?: string; obsTime?: string }> };
 
 type WindsResponse = { stations?: Array<{ stationId: string; icao?: string; windDir?: number | null; windSpeed?: number | null; tempC?: number | null }> };
 
+type HazardSummaryItem = {
+  source: 'airsigmet' | 'gairmet' | 'airmet';
+  hazard: string;
+  dueTo?: string;
+  validFrom?: string;
+  validTo?: string;
+};
+
+const pickHazardValue = (value: any) => {
+  if (value === null || value === undefined) return '';
+  return String(value);
+};
+
+const buildHazardSummary = (payload: any) => {
+  const items: HazardSummaryItem[] = [];
+  const pushItem = (source: HazardSummaryItem['source'], entry: any, fallback: string) => {
+    if (!entry) return;
+    const hazard = pickHazardValue(entry.hazard || entry.hazard_type || entry.rawAirSigmet || entry.rawAirmet || fallback);
+    const dueTo = pickHazardValue(entry.dueTo || entry.due_to || entry.due_to_desc || '');
+    const validFrom = pickHazardValue(entry.validTimeFrom || entry.valid_time_from || entry.validFrom || '');
+    const validTo = pickHazardValue(entry.validTimeTo || entry.valid_time_to || entry.validTo || '');
+    items.push({ source, hazard, dueTo: dueTo || undefined, validFrom: validFrom || undefined, validTo: validTo || undefined });
+  };
+
+  if (Array.isArray(payload?.airsigmet)) {
+    payload.airsigmet.forEach((entry: any) => pushItem('airsigmet', entry, 'SIGMET'));
+  }
+  if (Array.isArray(payload?.gairmet)) {
+    payload.gairmet.forEach((entry: any) => pushItem('gairmet', entry, 'G-AIRMET'));
+  }
+  if (Array.isArray(payload?.airmet)) {
+    payload.airmet.forEach((entry: any) => pushItem('airmet', entry, 'AIRMET'));
+  }
+
+  const tcfCount = Array.isArray(payload?.tcf?.features) ? payload.tcf.features.length : 0;
+  const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
+
+  return { items, warnings, tcfCount };
+};
+
 export default function AviationWeatherHubScreen() {
   const [icaoInput, setIcaoInput] = useState('KAUS');
   const [searchIcao, setSearchIcao] = useState('KAUS');
@@ -131,6 +171,13 @@ export default function AviationWeatherHubScreen() {
   const notamsCount = notamsQuery.data?.notams?.length || 0;
   const pirepsCount = pirepsQuery.data?.reports?.length || 0;
   const windsCount = windsQuery.data?.stations?.length || 0;
+  const hazardsSummary = buildHazardSummary(hazardsQuery.data);
+  const icingSummary = buildHazardSummary(icingQuery.data);
+  const turbulenceSummary = buildHazardSummary(turbulenceQuery.data);
+  const metarData = metarQuery.data?.data ?? metarQuery.data;
+  const tafData = tafQuery.data?.data ?? tafQuery.data;
+  const metarRaw = metarData?.rawOb || metarData?.raw || metarQuery.data?.raw || '';
+  const tafRaw = tafData?.rawTAF || tafData?.raw || tafQuery.data?.raw || '';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -181,8 +228,8 @@ export default function AviationWeatherHubScreen() {
             <Text style={styles.summaryValue}>{tafQuery.data?.raw || tafQuery.data?.data?.rawTAF || 'No TAF loaded.'}</Text>
           </View>
           <View style={styles.pillRow}>
-            <Text style={styles.pill}>NOTAMs {notamsCount}</Text>
-            <Text style={styles.pill}>PIREPs {pirepsCount}</Text>
+            <Text style={styles.pill}>NOTAMs {notamsCount} · US-only</Text>
+            <Text style={styles.pill}>PIREPs {pirepsCount} · US-only</Text>
             <Text style={styles.pill}>Winds {windsCount}</Text>
           </View>
         </View>
@@ -191,20 +238,69 @@ export default function AviationWeatherHubScreen() {
       {activeTab === 'metar' && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>METAR</Text>
-          <Text style={styles.codeBlock}>{JSON.stringify(metarQuery.data ?? {}, null, 2)}</Text>
+          {metarRaw ? <Text style={styles.codeBlock}>{metarRaw}</Text> : <Text style={styles.helperText}>No METAR loaded.</Text>}
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Station</Text>
+            <Text style={styles.listText}>{metarData?.icaoId || metarData?.station || searchIcao}</Text>
+          </View>
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Observed</Text>
+            <Text style={styles.listText}>{metarData?.obsTime || '-'}</Text>
+          </View>
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Wind</Text>
+            <Text style={styles.listText}>{metarData?.windDir ?? '-'} deg / {metarData?.windSpeed ?? '-'} kt</Text>
+          </View>
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Visibility</Text>
+            <Text style={styles.listText}>{metarData?.visib ?? metarData?.visibility ?? '-'}</Text>
+          </View>
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Temp / Dewpoint</Text>
+            <Text style={styles.listText}>{metarData?.temp ?? '-'}C / {metarData?.dewpt ?? '-'}C</Text>
+          </View>
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Altimeter</Text>
+            <Text style={styles.listText}>{metarData?.altimInHg ?? metarData?.altimeter ?? '-'}</Text>
+          </View>
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Flight Category</Text>
+            <Text style={styles.listText}>{metarData?.fltCat || metarData?.flightCategory || '-'}</Text>
+          </View>
         </View>
       )}
 
       {activeTab === 'taf' && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>TAF</Text>
-          <Text style={styles.codeBlock}>{JSON.stringify(tafQuery.data ?? {}, null, 2)}</Text>
+          {tafRaw ? <Text style={styles.codeBlock}>{tafRaw}</Text> : <Text style={styles.helperText}>No TAF loaded.</Text>}
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Station</Text>
+            <Text style={styles.listText}>{tafData?.icaoId || tafData?.station || searchIcao}</Text>
+          </View>
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Issued</Text>
+            <Text style={styles.listText}>{tafData?.issueTime || '-'}</Text>
+          </View>
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Valid From</Text>
+            <Text style={styles.listText}>{tafData?.validTimeFrom || '-'}</Text>
+          </View>
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Valid To</Text>
+            <Text style={styles.listText}>{tafData?.validTimeTo || '-'}</Text>
+          </View>
+          <View style={styles.listItem}>
+            <Text style={styles.listTitle}>Forecast Periods</Text>
+            <Text style={styles.listText}>{Array.isArray(tafData?.fcsts) ? tafData.fcsts.length : '-'}</Text>
+          </View>
         </View>
       )}
 
       {activeTab === 'notams' && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>NOTAMs</Text>
+          <Text style={styles.helperText}>US-only (FAA).</Text>
           {notamsQuery.isLoading && <ActivityIndicator color={colors.primary} />}
           {!notamsQuery.isLoading && notamsCount === 0 && <Text style={styles.helperText}>No NOTAMs available.</Text>}
           {notamsQuery.data?.notams?.map((notam) => (
@@ -219,6 +315,7 @@ export default function AviationWeatherHubScreen() {
       {activeTab === 'pireps' && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>PIREPs</Text>
+          <Text style={styles.helperText}>US-only (FAA).</Text>
           {pirepsQuery.isLoading && <ActivityIndicator color={colors.primary} />}
           {!pirepsQuery.isLoading && pirepsCount === 0 && <Text style={styles.helperText}>No recent PIREPs in range.</Text>}
           {pirepsQuery.data?.reports?.slice(0, 16).map((report, index) => (
@@ -233,7 +330,24 @@ export default function AviationWeatherHubScreen() {
       {activeTab === 'hazards' && (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Hazards</Text>
-          <Text style={styles.codeBlock}>{JSON.stringify(hazardsQuery.data ?? {}, null, 2)}</Text>
+          <Text style={styles.helperText}>US-only (AWC/AIRMET/SIGMET).</Text>
+          {hazardsSummary.warnings.length > 0 && (
+            <Text style={styles.helperText}>{hazardsSummary.warnings.join(' ')}</Text>
+          )}
+          <Text style={styles.helperText}>
+            {hazardsSummary.items.length > 0 ? `${hazardsSummary.items.length} hazard items.` : 'No hazards returned.'}
+            {hazardsSummary.tcfCount > 0 ? ` TCF: ${hazardsSummary.tcfCount}.` : ''}
+          </Text>
+          {hazardsSummary.items.slice(0, 12).map((item, index) => (
+            <View key={`${item.source}-${item.hazard}-${index}`} style={styles.listItem}>
+              <Text style={styles.listTitle}>{item.hazard}</Text>
+              {item.dueTo && <Text style={styles.listText}>Due to {item.dueTo}</Text>}
+              {(item.validFrom || item.validTo) && (
+                <Text style={styles.listMeta}>Valid {item.validFrom || '-'} to {item.validTo || '-'}</Text>
+              )}
+              <Text style={styles.listMeta}>{item.source.toUpperCase()}</Text>
+            </View>
+          ))}
         </View>
       )}
 
@@ -271,7 +385,23 @@ export default function AviationWeatherHubScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Icing Guidance</Text>
           <Text style={styles.helperText}>Icing guidance is currently stubbed until NOAA/AWC provides a direct API.</Text>
-          <Text style={styles.codeBlock}>{JSON.stringify(icingQuery.data ?? {}, null, 2)}</Text>
+          {icingSummary.warnings.length > 0 && (
+            <Text style={styles.helperText}>{icingSummary.warnings.join(' ')}</Text>
+          )}
+          {icingSummary.items.length === 0 ? (
+            <Text style={styles.helperText}>No icing guidance returned yet.</Text>
+          ) : (
+            icingSummary.items.slice(0, 12).map((item, index) => (
+              <View key={`${item.source}-${item.hazard}-${index}`} style={styles.listItem}>
+                <Text style={styles.listTitle}>{item.hazard}</Text>
+                {item.dueTo && <Text style={styles.listText}>Due to {item.dueTo}</Text>}
+                {(item.validFrom || item.validTo) && (
+                  <Text style={styles.listMeta}>Valid {item.validFrom || '-'} to {item.validTo || '-'}</Text>
+                )}
+                <Text style={styles.listMeta}>{item.source.toUpperCase()}</Text>
+              </View>
+            ))
+          )}
         </View>
       )}
 
@@ -279,7 +409,23 @@ export default function AviationWeatherHubScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Turbulence Guidance</Text>
           <Text style={styles.helperText}>Turbulence guidance is currently stubbed until NOAA/AWC provides a direct API.</Text>
-          <Text style={styles.codeBlock}>{JSON.stringify(turbulenceQuery.data ?? {}, null, 2)}</Text>
+          {turbulenceSummary.warnings.length > 0 && (
+            <Text style={styles.helperText}>{turbulenceSummary.warnings.join(' ')}</Text>
+          )}
+          {turbulenceSummary.items.length === 0 ? (
+            <Text style={styles.helperText}>No turbulence guidance returned yet.</Text>
+          ) : (
+            turbulenceSummary.items.slice(0, 12).map((item, index) => (
+              <View key={`${item.source}-${item.hazard}-${index}`} style={styles.listItem}>
+                <Text style={styles.listTitle}>{item.hazard}</Text>
+                {item.dueTo && <Text style={styles.listText}>Due to {item.dueTo}</Text>}
+                {(item.validFrom || item.validTo) && (
+                  <Text style={styles.listMeta}>Valid {item.validFrom || '-'} to {item.validTo || '-'}</Text>
+                )}
+                <Text style={styles.listMeta}>{item.source.toUpperCase()}</Text>
+              </View>
+            ))
+          )}
         </View>
       )}
     </ScrollView>

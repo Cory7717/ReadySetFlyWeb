@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
 import type { FeatureCollection } from "geojson";
@@ -27,6 +27,8 @@ export default function TfrMap() {
       : "";
   const [query, setQuery] = useState("");
   const [icaoFilter, setIcaoFilter] = useState(initialIcao.toUpperCase());
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const mapRef = useRef<L.Map | null>(null);
 
   const normalizedIcao = icaoFilter.trim().toUpperCase();
   const activeIcao = ICAO_REGEX.test(normalizedIcao) ? normalizedIcao : "";
@@ -73,6 +75,14 @@ export default function TfrMap() {
     return L.latLngBounds(allCoords);
   }, [filtered]);
 
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const timer = window.setTimeout(() => {
+      mapRef.current?.invalidateSize();
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [isFullscreen]);
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 space-y-6">
@@ -82,7 +92,7 @@ export default function TfrMap() {
             TFR Map (RSF)
           </h1>
           <p className="text-muted-foreground max-w-3xl">
-            Live Temporary Flight Restrictions powered by FAA SWIM. Always verify with official sources before flight.
+            Live Temporary Flight Restrictions powered by FAA SWIM (US-only). Always verify with official sources before flight.
           </p>
         </div>
 
@@ -128,7 +138,7 @@ export default function TfrMap() {
         )}
 
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-          <Card className="overflow-hidden">
+          <Card className={isFullscreen ? "overflow-hidden fixed inset-0 z-[1000] bg-background" : "overflow-hidden"}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Navigation className="h-5 w-5" />
@@ -139,13 +149,21 @@ export default function TfrMap() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[520px] rounded-xl overflow-hidden">
+              <div className={isFullscreen ? "relative h-[calc(100vh-120px)] rounded-xl overflow-hidden" : "relative h-[520px] rounded-xl overflow-hidden"}>
+                <button
+                  type="button"
+                  onClick={() => setIsFullscreen((prev) => !prev)}
+                  className="absolute right-3 top-3 z-[1100] rounded-md border bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow hover:bg-white"
+                >
+                  {isFullscreen ? "Close full screen" : "Full screen"}
+                </button>
                 <MapContainer
                   center={[39.5, -98.35]}
                   zoom={4}
                   scrollWheelZoom
                   className="h-full w-full"
                   whenReady={(map) => {
+                    mapRef.current = map.target;
                     if (bounds) {
                       map.target.fitBounds(bounds.pad(0.2));
                     }

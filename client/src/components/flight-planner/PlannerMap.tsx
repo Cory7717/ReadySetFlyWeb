@@ -335,6 +335,7 @@ export default function PlannerMap({
   const [cloudPlaying, setCloudPlaying] = useState(true);
   const [cloudSpeedMs, setCloudSpeedMs] = useState(1200);
   const [cloudRefreshKey, setCloudRefreshKey] = useState(0);
+  const gibsDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [windsAloftPoints, setWindsAloftPoints] = useState<WindsAloftPoint[]>([]);
   const [windsAloftMeta, setWindsAloftMeta] = useState<WindsAloftMeta | null>(null);
   const [windsAloftError, setWindsAloftError] = useState<string | null>(null);
@@ -352,7 +353,8 @@ export default function PlannerMap({
   const radarTileUrl = useMemo(() => {
     if (!showRadar || radarFrames.length === 0) return "";
     const frame = radarFrames[radarFrameIndex];
-    return `https://tilecache.rainviewer.com/v2/radar/${frame}/256/{z}/{x}/{y}/2/1_1.png`;
+    const normalizedFrame = frame.replace(/^\/??v2\/radar\//, "");
+    return `https://tilecache.rainviewer.com/v2/radar/${normalizedFrame}/256/{z}/{x}/{y}/2/1_1.png`;
   }, [showRadar, radarFrames, radarFrameIndex]);
 
   const cloudTileUrl = useMemo(() => {
@@ -639,7 +641,7 @@ export default function PlannerMap({
           />
         )}
         {showCloudsConus && (
-          cloudTileUrl && (
+          cloudTileUrl ? (
             <TileLayer
               key={`clouds-conus-anim-${cloudFrameIndex}`}
               attribution={cloudSource === "goes-west" ? "NASA GIBS (GOES-West GeoColor)" : "NASA GIBS (GOES-East GeoColor)"}
@@ -648,6 +650,15 @@ export default function PlannerMap({
               maxNativeZoom={8}
               zIndex={600}
               noWrap
+            />
+          ) : (
+            <TileLayer
+              key={`clouds-fallback-${cloudRefreshKey}`}
+              attribution="NASA GIBS"
+              url={`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`}
+              opacity={0.7}
+              maxNativeZoom={9}
+              zIndex={600}
             />
           )
         )}

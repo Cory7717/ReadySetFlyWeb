@@ -411,6 +411,22 @@ export default function PilotTools() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <Plane className="h-5 w-5" />
+              Live Traffic (RSF)
+            </CardTitle>
+            <CardDescription>Global ADS-B traffic map powered by ADSBExchange.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button asChild>
+              <Link href="/live-traffic">Open Live Traffic</Link>
+            </Button>
+            <Badge variant="outline">Live aircraft</Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
               Airport Briefing (NOTAMs + Runway)
             </CardTitle>

@@ -53,6 +53,7 @@ import AdminAircraftLibrary from "@/pages/admin-aircraft-library";
 import RadioCommsTrainer from "@/pages/radio-comms-trainer";
 import AdsbReceiverHelp from "@/pages/adsb-receiver-help";
 import NotificationsPage from "@/pages/notifications";
+import AdsbLive from "@/pages/adsb-live";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -120,6 +121,7 @@ function Router() {
       <Route path="/flight-planner" component={FlightPlanner} />
       <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
       <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
+      <Route path="/live-traffic" component={AdsbLive} />
       <Route path="/events" component={() => <StudentPageLoader component={EventsPage} />} />
       <Route path="/admin/invite" component={RequireAuth} />
       <Route path="/student" component={() => <StudentPageLoader component={StudentHub} />} />
@@ -166,6 +168,7 @@ function Router() {
           <Route path="/logbook/pro/success" component={LogbookProSuccess} />
           <Route path="/logbook/pro/cancel" component={LogbookProCancel} />
           <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
+          <Route path="/live-traffic" component={AdsbLive} />
           <Route path="/my-aircraft" component={MyAircraft} />
           <Route path="/notifications" component={NotificationsPage} />
           <Route path="/admin/aircraft-library" component={AdminAircraftLibrary} />

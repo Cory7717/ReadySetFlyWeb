@@ -9593,6 +9593,49 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.get("/api/adsb/aircraft", async (req, res) => {
+    try {
+      const apiKey = process.env.ADSBEXCHANGE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "ADSBExchange API key missing" });
+      }
+
+      const lat = Number(req.query.lat);
+      const lon = Number(req.query.lon);
+      const dist = Number(req.query.dist);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(dist)) {
+        return res.status(400).json({ error: "lat, lon, and dist are required" });
+      }
+
+      const clampedDist = Math.min(Math.max(dist, 10), 500);
+      const baseUrl = (process.env.ADSBEXCHANGE_API_BASE || "https://api.adsbexchange.com/v2").replace(/\/$/, "");
+      const target = `${baseUrl}/lat/${lat}/lon/${lon}/dist/${clampedDist}/`;
+
+      const response = await fetchWithTimeout(
+        target,
+        {
+          headers: {
+            "api-auth": apiKey,
+            "accept": "application/json",
+          },
+        },
+        10000
+      );
+
+      if (!response.ok) {
+        const details = await response.text();
+        return res.status(response.status).json({ error: "ADSBExchange request failed", details });
+      }
+
+      const payload = await response.json();
+      return res.json(payload);
+    } catch (error: any) {
+      console.error("ADSBExchange fetch failed:", error);
+      res.status(500).json({ error: error.message || "Failed to fetch ADS-B data" });
+    }
+  });
+
   // Approach Plates (FAA d-TPP metadata, on-demand)
   const platesRateLimiter = createIpRateLimiter({
     windowMs: 60 * 1000,

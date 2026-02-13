@@ -38,6 +38,11 @@ const tools = [
     href: "/tfr-map",
   },
   {
+    title: "Live Traffic",
+    description: "Global ADS-B traffic map powered by ADSBExchange.",
+    href: "/live-traffic",
+  },
+  {
     title: "NOTAMs & Active Runway",
     description: "Live NOTAMs plus runway advisory for a searched airport.",
     href: "/pilot-tools",

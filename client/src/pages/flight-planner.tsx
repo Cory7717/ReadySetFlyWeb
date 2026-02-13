@@ -1,5 +1,5 @@
 ﻿
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -385,6 +385,8 @@ export default function FlightPlanner() {
   const [destinationSuggestions, setDestinationSuggestions] = useState<AirportSearchResult[]>([]);
   const [departureResolved, setDepartureResolved] = useState("");
   const [destinationResolved, setDestinationResolved] = useState("");
+  const departureLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
+  const destinationLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
   const plannedAltitudeFt = Number(plannedAltitude);
   const plannedAltitudeValue = Number.isFinite(plannedAltitudeFt) ? plannedAltitudeFt : undefined;
   const windsAltitudeFt = windsAltitudeChoice === "planned"
@@ -488,8 +490,46 @@ export default function FlightPlanner() {
       setDepartureResolved(value);
       return;
     }
+    if (value.length === 4 && ICAO_REGEX.test(value)) {
+      setDepartureResolved("");
+      return;
+    }
     setDepartureResolved("");
   }, [form.departure, departureSuggestions]);
+
+  useEffect(() => {
+    const value = form.departure.trim().toUpperCase();
+    if (value.length !== 4 || !ICAO_REGEX.test(value)) return;
+    const cached = departureLookupRef.current;
+    if (cached?.value === value) {
+      if (cached.ok) setDepartureResolved(value);
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    const runLookup = async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/airports/${value}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!active) return;
+        const ok = res.ok;
+        departureLookupRef.current = { value, ok };
+        if (ok) {
+          setDepartureResolved(value);
+        }
+      } catch (error: any) {
+        if (!active || error?.name === "AbortError") return;
+        departureLookupRef.current = { value, ok: false };
+      }
+    };
+    runLookup();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [form.departure]);
 
   useEffect(() => {
     const value = form.destination.trim();
@@ -528,8 +568,46 @@ export default function FlightPlanner() {
       setDestinationResolved(value);
       return;
     }
+    if (value.length === 4 && ICAO_REGEX.test(value)) {
+      setDestinationResolved("");
+      return;
+    }
     setDestinationResolved("");
   }, [form.destination, destinationSuggestions]);
+
+  useEffect(() => {
+    const value = form.destination.trim().toUpperCase();
+    if (value.length !== 4 || !ICAO_REGEX.test(value)) return;
+    const cached = destinationLookupRef.current;
+    if (cached?.value === value) {
+      if (cached.ok) setDestinationResolved(value);
+      return;
+    }
+    let active = true;
+    const controller = new AbortController();
+    const runLookup = async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/airports/${value}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!active) return;
+        const ok = res.ok;
+        destinationLookupRef.current = { value, ok };
+        if (ok) {
+          setDestinationResolved(value);
+        }
+      } catch (error: any) {
+        if (!active || error?.name === "AbortError") return;
+        destinationLookupRef.current = { value, ok: false };
+      }
+    };
+    runLookup();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [form.destination]);
 
   const { data: savedPlans = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
     queryKey: ["/api/flight-plans"],

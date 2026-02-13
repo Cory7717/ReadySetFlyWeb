@@ -30,8 +30,19 @@ export default function CesiumGlobe({
 
     let cancelled = false;
 
+    const ensureWidgetsCss = () => {
+      const href = `${cesiumBaseUrl}Widgets/widgets.css`;
+      if (typeof document === "undefined") return;
+      if (document.querySelector(`link[data-cesium-widgets][href="${href}"]`)) return;
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      link.dataset.cesiumWidgets = "true";
+      document.head.appendChild(link);
+    };
+
     const initCesium = async () => {
-      await import("cesium/Build/Cesium/Widgets/widgets.css");
+      ensureWidgetsCss();
       const Cesium = await import("cesium");
       if (cancelled) return;
       cesiumRef.current = Cesium;

@@ -323,8 +323,7 @@ export default function PlannerMap({
   const isAlaska = isWithinAlaska(mapCenter);
   const isHawaii = isWithinHawaii(mapCenter);
   const cloudSource = isAlaska || isHawaii ? "goes-west" : "goes-east";
-  const showCloudsGlobal = showClouds && (mapZoom < 4 || (!isConus && !isAlaska && !isHawaii));
-  const showCloudsConus = showClouds && !showCloudsGlobal;
+  const showCloudsConus = showClouds;
   const [radarFrames, setRadarFrames] = useState<string[]>([]);
   const [radarFrameIndex, setRadarFrameIndex] = useState(0);
   const [radarError, setRadarError] = useState(false);
@@ -341,7 +340,6 @@ export default function PlannerMap({
   const [windsAloftError, setWindsAloftError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
-  const gibsDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const routeBounds = useMemo(
     () => (points.length > 0 ? L.latLngBounds(points.map((p) => [p.lat, p.lon])) : null),
     [points]
@@ -640,18 +638,8 @@ export default function PlannerMap({
             crossOrigin="anonymous"
           />
         )}
-        {showCloudsGlobal && (
-          <TileLayer
-            key={`clouds-global-${cloudRefreshKey}`}
-            attribution="NASA GIBS"
-            url={`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`}
-            opacity={0.75}
-            maxNativeZoom={9}
-            zIndex={600}
-          />
-        )}
         {showCloudsConus && (
-          cloudTileUrl ? (
+          cloudTileUrl && (
             <TileLayer
               key={`clouds-conus-anim-${cloudFrameIndex}`}
               attribution={cloudSource === "goes-west" ? "NASA GIBS (GOES-West GeoColor)" : "NASA GIBS (GOES-East GeoColor)"}
@@ -661,29 +649,6 @@ export default function PlannerMap({
               zIndex={600}
               noWrap
             />
-          ) : (
-            cloudSource === "goes-east" ? (
-              <WMSTileLayer
-                key={`clouds-conus-${cloudRefreshKey}`}
-                attribution="IEM GOES Satellite"
-                url="https://mesonet.agron.iastate.edu/cgi-bin/wms/goes/conus_ir.cgi"
-                layers="goes_conus_ir"
-                format="image/png"
-                transparent
-                opacity={0.75}
-                zIndex={600}
-                noWrap
-              />
-            ) : (
-              <TileLayer
-                key={`clouds-west-static-${cloudRefreshKey}`}
-                attribution="NASA GIBS"
-                url={`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`}
-                opacity={0.75}
-                maxNativeZoom={9}
-                zIndex={600}
-              />
-            )
           )
         )}
         {showRadar && !radarTileUrl && radarError && (

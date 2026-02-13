@@ -488,10 +488,6 @@ export default function FlightPlanner() {
       setDepartureResolved(value);
       return;
     }
-    if (value.length === 4 && ICAO_REGEX.test(value)) {
-      setDepartureResolved(value);
-      return;
-    }
     setDepartureResolved("");
   }, [form.departure, departureSuggestions]);
 
@@ -529,10 +525,6 @@ export default function FlightPlanner() {
       return;
     }
     if (value.length === 3 && ICAO_REGEX.test(value)) {
-      setDestinationResolved(value);
-      return;
-    }
-    if (value.length === 4 && ICAO_REGEX.test(value)) {
       setDestinationResolved(value);
       return;
     }

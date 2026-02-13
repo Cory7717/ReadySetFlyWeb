@@ -338,13 +338,10 @@ export default function PlannerMap({
 
   const visibleWindsPoints = useMemo(() => {
     if (!showWinds) return [];
-    if (mapZoom < 5) {
-      return windsAloftPoints.filter((_, index) => index % 4 === 0);
-    }
-    if (mapZoom < 6) {
+    if (mapZoom < 4) {
       return windsAloftPoints.filter((_, index) => index % 3 === 0);
     }
-    if (mapZoom < 7) {
+    if (mapZoom < 5) {
       return windsAloftPoints.filter((_, index) => index % 2 === 0);
     }
     return windsAloftPoints;
@@ -376,7 +373,7 @@ export default function PlannerMap({
             crossOrigin="anonymous"
           />
         )}
-        {showClouds && (
+        {showClouds && mapZoom >= 4 && (
           <WMSTileLayer
             attribution="IEM GOES Satellite"
             url="https://mesonet.agron.iastate.edu/cgi-bin/wms/goes/conus_ir.cgi"
@@ -385,6 +382,7 @@ export default function PlannerMap({
             transparent
             opacity={0.75}
             zIndex={600}
+            noWrap
           />
         )}
         {showRadar && !radarTileUrl && radarError && (

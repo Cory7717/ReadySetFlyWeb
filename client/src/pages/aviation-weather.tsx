@@ -213,6 +213,11 @@ export default function AviationWeatherHub() {
   const pirepsCount = Array.isArray(pirepsQuery.data?.reports) ? pirepsQuery.data.reports.length : 0;
   const windsCount = Array.isArray(windsQuery.data?.stations) ? windsQuery.data.stations.length : 0;
 
+  const metarData = metarQuery.data?.data ?? metarQuery.data;
+  const tafData = tafQuery.data?.data ?? tafQuery.data;
+  const metarRaw = metarData?.rawOb || metarData?.raw || metarQuery.data?.raw || "";
+  const tafRaw = tafData?.rawTAF || tafData?.raw || tafQuery.data?.raw || "";
+
   return (
     <div className="container mx-auto max-w-6xl px-4 py-10">
       <div className="space-y-3">
@@ -292,10 +297,48 @@ export default function AviationWeatherHub() {
               <CardTitle>METAR</CardTitle>
               <CardDescription>Decoded + raw observation.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <pre className="rounded-lg border bg-muted p-3 text-xs overflow-x-auto">
-{JSON.stringify(metarQuery.data ?? {}, null, 2)}
-              </pre>
+            <CardContent className="space-y-4">
+              {metarRaw ? (
+                <div className="rounded-lg border bg-muted p-3 text-xs">
+                  {metarRaw}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No METAR loaded.</div>
+              )}
+              <div className="grid gap-3 text-sm md:grid-cols-2">
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Station</div>
+                  <div className="font-semibold">{metarData?.icaoId || metarData?.station || searchIcao}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Observed</div>
+                  <div className="font-semibold">{metarData?.obsTime || "-"}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Wind</div>
+                  <div className="font-semibold">
+                    {metarData?.windDir ?? "-"} deg / {metarData?.windSpeed ?? "-"} kt
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Visibility</div>
+                  <div className="font-semibold">{metarData?.visib ?? metarData?.visibility ?? "-"}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Temp / Dewpoint</div>
+                  <div className="font-semibold">
+                    {metarData?.temp ?? "-"}C / {metarData?.dewpt ?? "-"}C
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Altimeter</div>
+                  <div className="font-semibold">{metarData?.altimInHg ?? metarData?.altimeter ?? "-"}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Flight Category</div>
+                  <div className="font-semibold">{metarData?.fltCat || metarData?.flightCategory || "-"}</div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -306,10 +349,36 @@ export default function AviationWeatherHub() {
               <CardTitle>TAF</CardTitle>
               <CardDescription>Forecast details.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <pre className="rounded-lg border bg-muted p-3 text-xs overflow-x-auto">
-{JSON.stringify(tafQuery.data ?? {}, null, 2)}
-              </pre>
+            <CardContent className="space-y-4">
+              {tafRaw ? (
+                <div className="rounded-lg border bg-muted p-3 text-xs">
+                  {tafRaw}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">No TAF loaded.</div>
+              )}
+              <div className="grid gap-3 text-sm md:grid-cols-2">
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Station</div>
+                  <div className="font-semibold">{tafData?.icaoId || tafData?.station || searchIcao}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Issued</div>
+                  <div className="font-semibold">{tafData?.issueTime || "-"}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Valid From</div>
+                  <div className="font-semibold">{tafData?.validTimeFrom || "-"}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Valid To</div>
+                  <div className="font-semibold">{tafData?.validTimeTo || "-"}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Forecast Periods</div>
+                  <div className="font-semibold">{Array.isArray(tafData?.fcsts) ? tafData.fcsts.length : "-"}</div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

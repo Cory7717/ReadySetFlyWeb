@@ -1787,7 +1787,7 @@ export default function FlightPlanner() {
                     <SelectTrigger className="h-8 w-[170px]">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[1001]">
                       <SelectItem value="planned">Use planned altitude</SelectItem>
                       <SelectItem value="3000">3,000 ft</SelectItem>
                       <SelectItem value="6000">6,000 ft</SelectItem>

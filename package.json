@@ -5,8 +5,8 @@
   "license": "MIT",
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
-    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/notam-worker.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "build:pages": "cross-env GITHUB_PAGES=true vite build",
+    "build": "vite build && node scripts/copy-cesium.mjs && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && esbuild server/notam-worker.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
+    "build:pages": "cross-env GITHUB_PAGES=true vite build && node scripts/copy-cesium.mjs",
     "deploy:pages:manual": "powershell -ExecutionPolicy Bypass -File scripts/deploy-pages.ps1",
     "deploy:pages:manual:sh": "bash scripts/deploy-pages.sh",
     "start": "NODE_ENV=production node run-migration.js && node dist/index.js",

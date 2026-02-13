@@ -27,7 +27,6 @@ export default function CesiumGlobe({
 
     const cesiumBaseUrl = `${import.meta.env.BASE_URL || "/"}cesium/`;
     (window as any).CESIUM_BASE_URL = cesiumBaseUrl;
-    Cesium.buildModuleUrl.setBaseUrl(cesiumBaseUrl);
 
     if (hasIonToken) {
       Cesium.Ion.defaultAccessToken = String(import.meta.env.VITE_CESIUM_ION_TOKEN);

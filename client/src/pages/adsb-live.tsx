@@ -214,7 +214,8 @@ export default function AdsbLive() {
                 <MapContainer
                   center={[view.lat, view.lon]}
                   zoom={6}
-                  whenCreated={(map) => {
+                  whenReady={(event: L.LeafletEvent) => {
+                    const map = event.target as L.Map;
                     mapRef.current = map;
                     map.on("moveend", handleMapMove);
                   }}

@@ -291,6 +291,24 @@ export default function PilotTools() {
           </p>
         </div>
 
+        <Card className="border-slate-200 bg-slate-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Cloud className="h-5 w-5 text-sky-600" />
+              Aviation Weather Hub
+            </CardTitle>
+            <CardDescription>
+              NOAA/AWC METAR, TAF, NOTAMs, PIREPs, hazards, winds aloft, icing, and turbulence in one view.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button asChild onClick={() => trackEvent("cta_click", { label: "aviation_weather_hub", target: "/aviation-weather" })}>
+              <Link href="/aviation-weather">Open Aviation Weather Hub</Link>
+            </Button>
+            <Badge variant="outline">New</Badge>
+          </CardContent>
+        </Card>
+
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

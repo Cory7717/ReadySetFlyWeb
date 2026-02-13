@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import MapView, { Marker, Polyline, UrlTile } from 'react-native-maps';
+import MapView, { Callout, Marker, Polyline, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
 import { createGdl90Listener, TrafficTarget } from '../utils/gdl90';
@@ -49,11 +49,28 @@ type AircraftProfile = {
 };
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+const WINDS_ALOFT_LEVELS = [3000, 6000, 9000, 12000, 18000, 24000, 30000, 34000, 39000];
 
 type WeatherResponse = {
   icao: string;
   metar: any;
   taf: any;
+};
+
+type WindsAloftPoint = {
+  stationId: string;
+  icao?: string;
+  lat: number;
+  lon: number;
+  windDir: number | null;
+  windSpeed: number | null;
+  tempC: number | null;
+};
+
+type WindsAloftMeta = {
+  altitudeFt: number;
+  validTime?: string | null;
+  warnings?: string[];
 };
 
 function toRad(deg: number) {
@@ -174,6 +191,41 @@ function formatDateTimeLocal(date: Date, timeZone: string) {
   }
 }
 
+function resolveWindsAltitude(requested?: number | null) {
+  const fallback = WINDS_ALOFT_LEVELS.includes(12000) ? 12000 : WINDS_ALOFT_LEVELS[0];
+  if (!requested || !Number.isFinite(requested)) return fallback;
+  let best = fallback;
+  let bestDelta = Number.POSITIVE_INFINITY;
+  for (const alt of WINDS_ALOFT_LEVELS) {
+    const delta = Math.abs(alt - requested);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = alt;
+    }
+  }
+  return best;
+}
+
+function buildBboxFromPoints(points: AirportMeta[]) {
+  if (!points.length) return null;
+  const lats = points.map((p) => p.latitude);
+  const lons = points.map((p) => p.longitude);
+  const pad = 1.5;
+  const south = Math.min(...lats) - pad;
+  const north = Math.max(...lats) + pad;
+  const west = Math.min(...lons) - pad;
+  const east = Math.max(...lons) + pad;
+  return { south, west, north, east };
+}
+
+function buildBboxFromRegion(region: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) {
+  const south = region.latitude - region.latitudeDelta / 2;
+  const north = region.latitude + region.latitudeDelta / 2;
+  const west = region.longitude - region.longitudeDelta / 2;
+  const east = region.longitude + region.longitudeDelta / 2;
+  return { south, west, north, east };
+}
+
 export default function FlightPlannerScreen() {
   const navigation = useNavigation<any>();
   const { isAuthenticated } = useIsAuthenticated();
@@ -194,6 +246,11 @@ export default function FlightPlannerScreen() {
   const [routeSummary, setRouteSummary] = useState<{ totalNm: number; legs: { from: string; to: string; nm: number }[] } | null>(null);
   const [routePoints, setRoutePoints] = useState<AirportMeta[]>([]);
   const [mapStyle, setMapStyle] = useState<'standard' | 'sectional' | 'terrain' | 'radar' | 'winds'>('standard');
+  const [windsAltitudeChoice, setWindsAltitudeChoice] = useState<'planned' | string>('planned');
+  const [windsAloftPoints, setWindsAloftPoints] = useState<WindsAloftPoint[]>([]);
+  const [windsAloftMeta, setWindsAloftMeta] = useState<WindsAloftMeta | null>(null);
+  const [windsAloftError, setWindsAloftError] = useState<string | null>(null);
+  const [mapRegion, setMapRegion] = useState<{ latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | null>(null);
   const [trafficEnabled, setTrafficEnabled] = useState(false);
   const [trafficPort, setTrafficPort] = useState('4000');
   const [trafficTargets, setTrafficTargets] = useState<TrafficTarget[]>([]);
@@ -228,6 +285,16 @@ export default function FlightPlannerScreen() {
   const [departureWeather, setDepartureWeather] = useState<WeatherResponse | null>(null);
   const [destinationWeather, setDestinationWeather] = useState<WeatherResponse | null>(null);
   const [enrouteWeather, setEnrouteWeather] = useState<WeatherResponse[]>([]);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryCounts, setSummaryCounts] = useState({
+    winds: 0,
+    notams: 0,
+    pireps: 0,
+    convective: 0,
+    icing: 0,
+    turbulence: 0,
+  });
   const [departureSuggestions, setDepartureSuggestions] = useState<AirportMeta[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<AirportMeta[]>([]);
   const [suggestedWaypoints, setSuggestedWaypoints] = useState<string[]>([]);
@@ -582,6 +649,59 @@ export default function FlightPlannerScreen() {
     return () => clearTimeout(timer);
   }, [departure, destination, waypoints, plannedStops, suggestedMode]);
 
+  useEffect(() => {
+    if (mapStyle !== 'winds') {
+      setWindsAloftPoints([]);
+      setWindsAloftMeta(null);
+      setWindsAloftError(null);
+      return;
+    }
+
+    const bboxSource = mapRegion
+      ? buildBboxFromRegion(mapRegion)
+      : buildBboxFromPoints(routePoints);
+
+    if (!bboxSource) return;
+
+    const bbox = `${bboxSource.south},${bboxSource.west},${bboxSource.north},${bboxSource.east}`;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/aviation/winds-temps', {
+          params: { altitude: resolvedWindsAltitude, bbox },
+        });
+        if (cancelled) return;
+        const payload = res.data || {};
+        setWindsAloftPoints(Array.isArray(payload.stations) ? payload.stations : []);
+        setWindsAloftMeta({
+          altitudeFt: payload.altitudeFt ?? resolvedWindsAltitude,
+          validTime: payload.validTime ?? null,
+          warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+        });
+        setWindsAloftError(null);
+      } catch {
+        if (cancelled) return;
+        setWindsAloftPoints([]);
+        setWindsAloftMeta(null);
+        setWindsAloftError('Winds aloft data unavailable.');
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [mapStyle, mapRegion, routePoints, resolvedWindsAltitude]);
+
+  const visibleWindsPoints = useMemo(() => {
+    if (mapStyle !== 'winds') return [] as WindsAloftPoint[];
+    const delta = mapRegion?.latitudeDelta ?? 8;
+    if (delta > 20) return windsAloftPoints.filter((_, index) => index % 4 === 0);
+    if (delta > 12) return windsAloftPoints.filter((_, index) => index % 3 === 0);
+    if (delta > 8) return windsAloftPoints.filter((_, index) => index % 2 === 0);
+    return windsAloftPoints;
+  }, [mapStyle, mapRegion, windsAloftPoints]);
+
   const cruise = parseFloat(cruiseKtas) || 0;
   const burn = parseFloat(fuelBurnGph) || 0;
   const reserve = parseFloat(reserveMinutes) || 0;
@@ -593,6 +713,11 @@ export default function FlightPlannerScreen() {
   const totalFuel = fuelRequired + (burn * (reserve / 60));
   const eteMinutes = eteHours ? Math.round(eteHours * 60) : 0;
   const plannedAltitudeFt = parseFloat(plannedAltitude);
+  const plannedAltitudeValue = Number.isFinite(plannedAltitudeFt) ? plannedAltitudeFt : undefined;
+  const windsAltitudeFt = windsAltitudeChoice === 'planned'
+    ? plannedAltitudeValue
+    : Number(windsAltitudeChoice);
+  const resolvedWindsAltitude = resolveWindsAltitude(windsAltitudeFt ?? null);
   const resolvedDepartureTimeZone = normalizeTimeZone(departureTimeZone || deviceTimeZone);
   const resolvedDestinationTimeZone = normalizeTimeZone(destinationTimeZone || deviceTimeZone);
   const plannedDepartureUtc = useMemo(() => {
@@ -623,7 +748,7 @@ export default function FlightPlannerScreen() {
     if (plannedAltitudeFt >= 15000) risks.push('Passengers require oxygen above 15,000 ft MSL.');
     if (wind >= 25) risks.push(`Headwind ${wind} kt may increase fuel burn at altitude.`);
     risks.push('Review AIRMET/SIGMETs and turbulence or icing layers.');
-    if (mapStyle !== 'winds') risks.push('Check the Winds overlay for upper-level flow and turbulence hints.');
+    if (mapStyle !== 'winds') risks.push('Check the Winds Aloft overlay for upper-level flow and turbulence hints.');
     return risks;
   }, [plannedAltitudeFt, wind, mapStyle]);
 
@@ -642,6 +767,24 @@ export default function FlightPlannerScreen() {
     ...enrouteWeather,
     ...(destinationWeather ? [destinationWeather] : []),
   ];
+  const primaryIcao = departure.trim().toUpperCase();
+  const hasPrimaryIcao = ICAO_REGEX.test(primaryIcao);
+  const hasIfrWeather = useMemo(
+    () => allWeather.some((item) => {
+      const category = parseFlightCategory(item?.metar);
+      return category === 'IFR' || category === 'LIFR';
+    }),
+    [allWeather]
+  );
+  const hasThunderRisk = useMemo(
+    () => allWeather.some((item) => hasThunder(item?.taf)),
+    [allWeather]
+  );
+  const summaryCategoryLabel = useMemo(() => {
+    if (allWeather.length === 0) return 'No METARs yet';
+    if (hasIfrWeather) return 'IFR/LIFR risk';
+    return 'VFR/MVFR trend';
+  }, [allWeather.length, hasIfrWeather]);
   const enrouteFindings = enrouteWeather.map((item) => ({
     icao: item.icao?.toUpperCase() || '',
     category: parseFlightCategory(item.metar),
@@ -684,6 +827,79 @@ export default function FlightPlannerScreen() {
       animated: true,
     });
   }, [routePoints]);
+
+  useEffect(() => {
+    if (!routePoints.length && !hasPrimaryIcao) return;
+
+    const bboxSource = buildBboxFromPoints(routePoints);
+    const bbox = bboxSource
+      ? `${bboxSource.south},${bboxSource.west},${bboxSource.north},${bboxSource.east}`
+      : null;
+
+    const countHazards = (payload: any) => {
+      if (!payload) return 0;
+      const count = (value: any) => {
+        if (Array.isArray(value)) return value.length;
+        if (Array.isArray(value?.features)) return value.features.length;
+        return 0;
+      };
+      return count(payload.airsigmet) + count(payload.gairmet) + count(payload.airmet) + count(payload.tcf);
+    };
+
+    let cancelled = false;
+    setSummaryLoading(true);
+    setSummaryError(null);
+
+    const requests: Promise<any>[] = [];
+
+    if (bbox) {
+      requests.push(api.get('/api/aviation/winds-temps', { params: { altitude: resolvedWindsAltitude, bbox } }));
+    } else {
+      requests.push(Promise.resolve({ data: { stations: [] } }));
+    }
+
+    if (hasPrimaryIcao) {
+      requests.push(api.get(`/api/aviation/pireps?icao=${primaryIcao}&radiusNm=150&ageHours=4`));
+      requests.push(api.get(`/api/notams/${primaryIcao}`));
+    } else {
+      requests.push(Promise.resolve({ data: { reports: [] } }));
+      requests.push(Promise.resolve({ data: { notams: [] } }));
+    }
+
+    requests.push(api.get('/api/aviation/hazards?hazard=conv'));
+    requests.push(api.get('/api/aviation/hazards?hazard=ice'));
+    requests.push(api.get('/api/aviation/hazards?hazard=turb'));
+
+    Promise.all(requests)
+      .then((responses) => {
+        if (cancelled) return;
+        const windsPayload = responses[0]?.data;
+        const pirepsPayload = responses[1]?.data;
+        const notamsPayload = responses[2]?.data;
+        const convPayload = responses[3]?.data;
+        const icingPayload = responses[4]?.data;
+        const turbPayload = responses[5]?.data;
+
+        setSummaryCounts({
+          winds: Array.isArray(windsPayload?.stations) ? windsPayload.stations.length : 0,
+          notams: Array.isArray(notamsPayload?.notams) ? notamsPayload.notams.length : 0,
+          pireps: Array.isArray(pirepsPayload?.reports) ? pirepsPayload.reports.length : 0,
+          convective: countHazards(convPayload),
+          icing: countHazards(icingPayload),
+          turbulence: countHazards(turbPayload),
+        });
+        setSummaryLoading(false);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setSummaryError(error?.response?.data?.error || 'Unable to load summary data.');
+        setSummaryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routePoints, hasPrimaryIcao, primaryIcao, resolvedWindsAltitude]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -896,10 +1112,31 @@ export default function FlightPlannerScreen() {
               style={[styles.mapToggleButton, mapStyle === 'winds' && styles.mapToggleActive]}
               onPress={() => setMapStyle('winds')}
             >
-              <Text style={styles.mapToggleText}>Winds</Text>
+              <Text style={styles.mapToggleText}>Winds Aloft</Text>
             </TouchableOpacity>
           </View>
         </View>
+        {mapStyle === 'winds' && (
+          <View style={styles.altitudeRow}>
+            <TouchableOpacity
+              style={[styles.altitudeButton, windsAltitudeChoice === 'planned' && styles.altitudeButtonActive]}
+              onPress={() => setWindsAltitudeChoice('planned')}
+            >
+              <Text style={[styles.altitudeText, windsAltitudeChoice === 'planned' && styles.altitudeTextActive]}>Planned</Text>
+            </TouchableOpacity>
+            {WINDS_ALOFT_LEVELS.map((altitude) => (
+              <TouchableOpacity
+                key={`alt-${altitude}`}
+                style={[styles.altitudeButton, windsAltitudeChoice === String(altitude) && styles.altitudeButtonActive]}
+                onPress={() => setWindsAltitudeChoice(String(altitude))}
+              >
+                <Text style={[styles.altitudeText, windsAltitudeChoice === String(altitude) && styles.altitudeTextActive]}>
+                  {altitude.toLocaleString()} ft
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
         <TouchableOpacity style={styles.helpLink} onPress={() => navigation.navigate('ReceiverHelp')}>
           <Ionicons name="help-circle-outline" size={16} color={colors.primary} />
           <Text style={styles.helpLinkText}>How to connect your ADS‑B receiver</Text>
@@ -987,6 +1224,7 @@ export default function FlightPlannerScreen() {
               latitudeDelta: 3,
               longitudeDelta: 3,
             }}
+            onRegionChangeComplete={(region) => setMapRegion(region)}
           >
             {mapStyle === 'sectional' && (
               <UrlTile
@@ -1019,14 +1257,30 @@ export default function FlightPlannerScreen() {
               />
             )}
             {mapStyle === 'winds' && (
-              <UrlTile
-                urlTemplate="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/analysis/wind_speed/MapServer/tile/{z}/{y}/{x}"
-                maximumZ={11}
-                minimumZ={4}
-                tileSize={256}
-                opacity={0.7}
-                zIndex={600}
-              />
+              <>
+                {visibleWindsPoints.map((point, index) => {
+                  if (point.windDir === null || point.windSpeed === null) return null;
+                  const size = Math.min(26, Math.max(14, Math.round(point.windSpeed / 3) + 12));
+                  const rotation = (point.windDir + 180) % 360;
+                  return (
+                    <Marker
+                      key={`${point.stationId}-${point.lat}-${point.lon}-${index}`}
+                      coordinate={{ latitude: point.lat, longitude: point.lon }}
+                      anchor={{ x: 0.5, y: 0.5 }}
+                    >
+                      <View style={[styles.windMarker, { transform: [{ rotate: `${rotation}deg` }] }]}>
+                        <Ionicons name="arrow-up" size={size} color="#0284c7" />
+                      </View>
+                      <Callout>
+                        <Text style={styles.calloutText}>
+                          {point.icao || point.stationId}: {Math.round(point.windDir)} deg / {Math.round(point.windSpeed)} kt
+                          {point.tempC !== null ? `, ${point.tempC}C` : ''}
+                        </Text>
+                      </Callout>
+                    </Marker>
+                  );
+                })}
+              </>
             )}
             <Polyline
               coordinates={routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude }))}
@@ -1067,12 +1321,26 @@ export default function FlightPlannerScreen() {
         )}
         <Text style={styles.helperText}>Sectional tiles provided by FAA/Aeronautical Information Services.</Text>
         {mapStyle === 'terrain' && <Text style={styles.helperText}>Terrain tiles provided by USGS National Map.</Text>}
-        {(mapStyle === 'radar' || mapStyle === 'winds') && (
+        {mapStyle === 'radar' && (
           <Text style={styles.helperText}>
             Weather overlays are for situational awareness only. Radar shows current precip; blank means no returns.
-            Winds is a surface analysis layer (beta). Always brief officially.
           </Text>
         )}
+        {mapStyle === 'winds' && (
+          <Text style={styles.helperText}>
+            NOAA AWC winds aloft at {windsAloftMeta?.altitudeFt ?? resolvedWindsAltitude} ft. Arrows show wind from,
+            size scales with speed. Always brief officially.
+          </Text>
+        )}
+        {mapStyle === 'winds' && windsAloftMeta?.validTime && (
+          <Text style={styles.helperText}>Valid {windsAloftMeta.validTime}.</Text>
+        )}
+        {mapStyle === 'winds' && windsAloftMeta?.warnings?.length ? (
+          <Text style={styles.helperText}>{windsAloftMeta.warnings.join(' ')}</Text>
+        ) : null}
+        {mapStyle === 'winds' && windsAloftError ? (
+          <Text style={styles.errorText}>{windsAloftError}</Text>
+        ) : null}
         <View style={styles.instrumentPanel}>
           <Text style={styles.instrumentTitle}>Live Flight Data</Text>
           <View style={styles.instrumentRow}>
@@ -1293,6 +1561,57 @@ export default function FlightPlannerScreen() {
         </Text>
       </View>
 
+      <View style={styles.section}>
+        <View style={styles.summaryHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sectionTitle}>Route Weather Summary</Text>
+            <Text style={styles.sectionSubtitle}>NOAA/AWC snapshot for your route.</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.summaryLink}
+            onPress={() => navigation?.navigate?.('AviationWeatherHub')}
+          >
+            <Text style={styles.summaryLinkText}>Open Hub</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+        {summaryLoading && <ActivityIndicator color={colors.primary} />}
+        {summaryError && <Text style={styles.errorText}>{summaryError}</Text>}
+        <View style={styles.summaryGrid}>
+          <View style={styles.summaryTile}>
+            <Text style={styles.summaryLabel}>Flight category</Text>
+            <Text style={styles.summaryValue}>{summaryCategoryLabel}</Text>
+            {hasThunderRisk && <Text style={styles.warningText}>Thunderstorm risk in TAFs</Text>}
+          </View>
+          <View style={styles.summaryTile}>
+            <Text style={styles.summaryLabel}>Winds aloft</Text>
+            <Text style={styles.summaryValue}>
+              {summaryCounts.winds > 0 ? `${summaryCounts.winds} stations` : 'No winds data'}
+            </Text>
+          </View>
+          <View style={styles.summaryTile}>
+            <Text style={styles.summaryLabel}>NOTAMs</Text>
+            <Text style={styles.summaryValue}>
+              {summaryCounts.notams > 0 ? `${summaryCounts.notams} active` : 'None loaded'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.pillRow}>
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>PIREPs {summaryCounts.pireps}</Text>
+          </View>
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>Convective {summaryCounts.convective}</Text>
+          </View>
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>Icing {summaryCounts.icing}</Text>
+          </View>
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>Turbulence {summaryCounts.turbulence}</Text>
+          </View>
+        </View>
+      </View>
+
       {(departureWeather || destinationWeather || weatherError) && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Weather Snapshot</Text>
@@ -1416,6 +1735,12 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 14, fontWeight: '600', color: colors.text },
   summaryBlock: { marginBottom: spacing.sm },
   summaryRoute: { fontSize: 14, fontWeight: '600', color: colors.text, marginTop: 4 },
+  summaryHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  summaryLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  summaryLinkText: { fontSize: 12, color: colors.primary, fontWeight: '600' },
+  summaryGrid: { gap: spacing.sm },
+  summaryTile: { padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
+  warningText: { fontSize: 11, color: colors.warning, marginTop: spacing.xs },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
   autoCalcButton: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primarySoft },
   autoCalcButtonDisabled: { opacity: 0.5 },
@@ -1453,6 +1778,10 @@ const styles = StyleSheet.create({
   checkText: { fontSize: 13, color: colors.text },
   mapHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   mapToggleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  altitudeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
+  altitudeButton: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  altitudeButtonActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  altitudeTextActive: { color: colors.primary, fontWeight: '600' },
   mapToggleButton: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   mapToggleActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
   mapToggleText: { fontSize: 12, color: colors.text },
@@ -1484,6 +1813,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fff',
   },
+  windMarker: { alignItems: 'center', justifyContent: 'center' },
+  calloutText: { fontSize: 12, color: colors.text },
   instrumentPanel: { marginTop: spacing.sm, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
   instrumentTitle: { fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
   instrumentRow: { flexDirection: 'row', gap: spacing.sm },

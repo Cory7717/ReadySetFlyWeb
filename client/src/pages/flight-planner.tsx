@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
@@ -322,7 +323,10 @@ export default function FlightPlanner() {
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
   const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds">("standard");
-  const hasOpenWeatherKey = Boolean(import.meta.env.VITE_OPENWEATHER_API_KEY);
+  const [windsAltitudeChoice, setWindsAltitudeChoice] = useState("planned");
+  const [activeWeatherDetail, setActiveWeatherDetail] = useState<
+    "metar" | "notams" | "pireps" | "hazards" | "winds" | "icing" | "turbulence" | null
+  >(null);
   const [wakeLockError, setWakeLockError] = useState<string | null>(null);
   const [customProfile, setCustomProfile] = useState({
     name: "",
@@ -336,6 +340,27 @@ export default function FlightPlanner() {
   const [destinationSuggestions, setDestinationSuggestions] = useState<AirportSearchResult[]>([]);
   const [departureResolved, setDepartureResolved] = useState("");
   const [destinationResolved, setDestinationResolved] = useState("");
+  const plannedAltitudeFt = Number(plannedAltitude);
+  const plannedAltitudeValue = Number.isFinite(plannedAltitudeFt) ? plannedAltitudeFt : undefined;
+  const windsAltitudeFt = windsAltitudeChoice === "planned"
+    ? plannedAltitudeValue
+    : Number(windsAltitudeChoice);
+
+  const openWeatherDetail = (
+    id: "metar" | "notams" | "pireps" | "hazards" | "winds" | "icing" | "turbulence"
+  ) => {
+    setActiveWeatherDetail(id);
+    const eventMap: Record<string, string> = {
+      metar: "view_metar",
+      notams: "view_notams",
+      pireps: "view_pireps",
+      hazards: "view_hazards",
+      winds: "view_winds",
+      icing: "view_icing",
+      turbulence: "view_turb",
+    };
+    trackEvent(eventMap[id] || "view_weather_detail", { source: "flight_planner" });
+  };
 
   useEffect(() => {
     const stored = localStorage.getItem("flightPlannerChecklist");
@@ -768,6 +793,22 @@ export default function FlightPlanner() {
     return [start, suggestedWaypoint, rest[rest.length - 1]];
   }, [airportPoints, suggestedWaypoint]);
 
+  const routeBbox = useMemo(() => {
+    if (routePoints.length === 0) return null;
+    const lats = routePoints.map((point) => point.lat);
+    const lons = routePoints.map((point) => point.lon);
+    const pad = 1.5;
+    const south = Math.min(...lats) - pad;
+    const north = Math.max(...lats) + pad;
+    const west = Math.min(...lons) - pad;
+    const east = Math.max(...lons) + pad;
+    return { south, west, north, east };
+  }, [routePoints]);
+
+  const routeBboxParam = routeBbox
+    ? `${routeBbox.south},${routeBbox.west},${routeBbox.north},${routeBbox.east}`
+    : null;
+
   const legs = useMemo(() => buildLegs(routePoints), [routePoints]);
   const totalDistance = useMemo(() => sumDistance(legs), [legs]);
 
@@ -778,7 +819,6 @@ export default function FlightPlanner() {
   const tripFuel = eteHours * planningBurn;
   const totalFuel = tripFuel + reserveFuel;
   const eteMinutes = eteHours ? Math.round(eteHours * 60) : 0;
-  const plannedAltitudeFt = Number(plannedAltitude);
   const canAutoArrival = Boolean(form.plannedDepartureAt && eteMinutes);
 
   const altitudeRisks = useMemo(() => {
@@ -852,8 +892,110 @@ export default function FlightPlanner() {
     }));
   }, [weatherData]);
 
+  const primaryIcao = departureResolved.trim().toUpperCase();
+  const hasPrimaryIcao = ICAO_REGEX.test(primaryIcao);
+
+  const windsSummaryQuery = useQuery({
+    queryKey: ["/api/aviation/winds-temps", routeBboxParam, windsAltitudeFt],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (windsAltitudeFt) params.set("altitude", String(windsAltitudeFt));
+      if (routeBboxParam) params.set("bbox", routeBboxParam);
+      const res = await fetch(apiUrl(`/api/aviation/winds-temps?${params.toString()}`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch winds aloft");
+      return res.json();
+    },
+    enabled: Boolean(routeBboxParam),
+    staleTime: 1000 * 60 * 15,
+  });
+
+  const pirepsQuery = useQuery({
+    queryKey: ["/api/aviation/pireps", primaryIcao],
+    queryFn: async () => {
+      const res = await fetch(
+        apiUrl(`/api/aviation/pireps?icao=${primaryIcao}&radiusNm=150&ageHours=4`),
+        { credentials: "include" }
+      );
+      if (!res.ok) throw new Error("Failed to fetch PIREPs");
+      return res.json();
+    },
+    enabled: hasPrimaryIcao,
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const notamsSummaryQuery = useQuery({
+    queryKey: ["/api/notams", primaryIcao],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/notams/${primaryIcao}`), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch NOTAMs");
+      return res.json();
+    },
+    enabled: hasPrimaryIcao,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const convectiveHazardsQuery = useQuery({
+    queryKey: ["/api/aviation/hazards", "conv"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/aviation/hazards?hazard=conv"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch convective hazards");
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const icingHazardsQuery = useQuery({
+    queryKey: ["/api/aviation/hazards", "ice"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/aviation/hazards?hazard=ice"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch icing hazards");
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const turbulenceHazardsQuery = useQuery({
+    queryKey: ["/api/aviation/hazards", "turb"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/aviation/hazards?hazard=turb"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch turbulence hazards");
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 10,
+  });
+
+  const countHazards = (payload: any) => {
+    if (!payload) return 0;
+    const count = (value: any) => {
+      if (Array.isArray(value)) return value.length;
+      if (Array.isArray(value?.features)) return value.features.length;
+      return 0;
+    };
+    return count(payload.airsigmet) + count(payload.gairmet) + count(payload.airmet) + count(payload.tcf);
+  };
+
+  const notamsCount = Array.isArray(notamsSummaryQuery.data?.notams) ? notamsSummaryQuery.data.notams.length : 0;
+  const pirepsCount = Array.isArray(pirepsQuery.data?.reports) ? pirepsQuery.data.reports.length : 0;
+  const windsCount = Array.isArray(windsSummaryQuery.data?.stations) ? windsSummaryQuery.data.stations.length : 0;
+  const convectiveCount = countHazards(convectiveHazardsQuery.data);
+  const icingCount = countHazards(icingHazardsQuery.data);
+  const turbulenceCount = countHazards(turbulenceHazardsQuery.data);
+
   const hasIfrWeather = useMemo(
     () => weatherFindings.some((item) => item.category === "IFR" || item.category === "LIFR"),
+    [weatherFindings]
+  );
+
+  const summaryCategoryLabel = useMemo(() => {
+    if (weatherData.length === 0) return "No METARs yet";
+    if (hasIfrWeather) return "IFR/LIFR risk";
+    return "VFR/MVFR trend";
+  }, [weatherData.length, hasIfrWeather]);
+
+  const hasThunderRisk = useMemo(
+    () => weatherFindings.some((item) => item.thunder),
     [weatherFindings]
   );
 
@@ -1524,6 +1666,8 @@ export default function FlightPlanner() {
                 <PlannerMap
                   points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
                   mapStyle={mapStyle}
+                  plannedAltitudeFt={plannedAltitudeValue}
+                  windsAltitudeFt={windsAltitudeFt}
                 />
               </Suspense>
             )}
@@ -1570,8 +1714,30 @@ export default function FlightPlanner() {
                 size="sm"
                 onClick={() => setMapStyle("winds")}
               >
-                Winds (Aloft Beta)
+                Winds Aloft (NOAA)
               </Button>
+              {mapStyle === "winds" && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Winds altitude</span>
+                  <Select value={windsAltitudeChoice} onValueChange={setWindsAltitudeChoice}>
+                    <SelectTrigger className="h-8 w-[170px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="planned">Use planned altitude</SelectItem>
+                      <SelectItem value="3000">3,000 ft</SelectItem>
+                      <SelectItem value="6000">6,000 ft</SelectItem>
+                      <SelectItem value="9000">9,000 ft</SelectItem>
+                      <SelectItem value="12000">12,000 ft</SelectItem>
+                      <SelectItem value="18000">18,000 ft</SelectItem>
+                      <SelectItem value="24000">24,000 ft</SelectItem>
+                      <SelectItem value="30000">30,000 ft</SelectItem>
+                      <SelectItem value="34000">34,000 ft</SelectItem>
+                      <SelectItem value="39000">39,000 ft</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             {mapStyle === "sectional" && (
               <div className="text-xs text-muted-foreground mt-2">
@@ -1581,12 +1747,12 @@ export default function FlightPlanner() {
             {(mapStyle === "radar" || mapStyle === "winds") && (
               <div className="text-xs text-muted-foreground mt-2">
                 Weather layers are for situational awareness only. Radar shows current precip; blank means no returns.
-                Winds is a surface analysis layer (beta). Always verify with official weather sources.
+                Winds aloft uses NOAA AWC data near your planned altitude. Always verify with official weather sources.
               </div>
             )}
-            {mapStyle === "winds" && !hasOpenWeatherKey && (
-              <div className="text-xs text-amber-700 mt-2">
-                Winds overlay requires an OpenWeather key. Set `VITE_OPENWEATHER_API_KEY` and restart the dev server.
+            {mapStyle === "winds" && (
+              <div className="text-xs text-muted-foreground mt-1">
+                Wind arrows point in the direction the wind is blowing from; size scales with speed.
               </div>
             )}
           </CardContent>
@@ -1816,6 +1982,178 @@ export default function FlightPlanner() {
           ) : null}
         </CardContent>
       </Card>
+
+      <Card id="route-weather-summary">
+        <CardHeader>
+          <CardTitle>Route Weather Summary</CardTitle>
+          <CardDescription>One-glance NOAA/AWC snapshot for your route.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">Flight category trend</div>
+              <div className="text-sm font-semibold">{summaryCategoryLabel}</div>
+              {hasThunderRisk && (
+                <div className="text-xs text-amber-600 mt-1">Thunderstorm risk in TAFs</div>
+              )}
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">Winds aloft coverage</div>
+              <div className="text-sm font-semibold">
+                {windsCount > 0 ? `${windsCount} stations` : "No winds data yet"}
+              </div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">NOTAMs</div>
+              <div className="text-sm font-semibold">
+                {notamsCount > 0 ? `${notamsCount} active` : "None loaded"}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => openWeatherDetail("metar")}>
+              METAR/TAF
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => openWeatherDetail("winds")}>
+              Winds Aloft {windsCount > 0 && <Badge className="ml-2" variant="secondary">{windsCount}</Badge>}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => openWeatherDetail("notams")}>
+              NOTAMs {notamsCount > 0 && <Badge className="ml-2" variant="secondary">{notamsCount}</Badge>}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => openWeatherDetail("pireps")}>
+              PIREPs {pirepsCount > 0 && <Badge className="ml-2" variant="secondary">{pirepsCount}</Badge>}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => openWeatherDetail("hazards")}>
+              Convective {convectiveCount > 0 && <Badge className="ml-2" variant="secondary">{convectiveCount}</Badge>}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => openWeatherDetail("icing")}>
+              Icing {icingCount > 0 && <Badge className="ml-2" variant="secondary">{icingCount}</Badge>}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => openWeatherDetail("turbulence")}>
+              Turbulence {turbulenceCount > 0 && <Badge className="ml-2" variant="secondary">{turbulenceCount}</Badge>}
+            </Button>
+            <Button size="sm" variant="ghost" asChild>
+              <Link href="/aviation-weather">Open Aviation Weather Hub</Link>
+            </Button>
+          </div>
+          {(windsSummaryQuery.isLoading || pirepsQuery.isLoading || notamsSummaryQuery.isLoading) && (
+            <div className="text-xs text-muted-foreground">Loading summary data...</div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={Boolean(activeWeatherDetail)} onOpenChange={(open) => !open && setActiveWeatherDetail(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          {activeWeatherDetail === "metar" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>METAR & TAF</DialogTitle>
+                <DialogDescription>Latest conditions along your route.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                {weatherData.length === 0 && <div className="text-muted-foreground">No METAR/TAF data yet.</div>}
+                {weatherData.map(({ icao, data }) => (
+                  <div key={icao} className="rounded-lg border p-3">
+                    <div className="font-semibold">{icao}</div>
+                    <div className="text-xs text-muted-foreground mt-2">{data?.metar?.rawOb || "No METAR"}</div>
+                    <div className="text-xs text-muted-foreground mt-2">{data?.taf?.rawTAF || "No TAF"}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {activeWeatherDetail === "winds" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Winds Aloft</DialogTitle>
+                <DialogDescription>NOAA AWC winds/temps near your route.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 text-sm">
+                {windsCount === 0 && <div className="text-muted-foreground">No winds aloft data in view.</div>}
+                {windsSummaryQuery.data?.stations?.slice(0, 12).map((station: any) => (
+                  <div key={`${station.stationId}-${station.lat}`} className="flex items-center justify-between rounded-lg border p-2">
+                    <div className="font-semibold">{station.icao || station.stationId}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {station.windDir ?? "-"} deg / {station.windSpeed ?? "-"} kt
+                      {station.tempC !== null ? `, ${station.tempC}C` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {activeWeatherDetail === "notams" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>NOTAMs</DialogTitle>
+                <DialogDescription>Latest NOTAMs for {primaryIcao || "your route"}.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 text-sm">
+                {notamsCount === 0 && <div className="text-muted-foreground">No NOTAMs loaded.</div>}
+                {notamsSummaryQuery.data?.notams?.map((notam: any) => (
+                  <div key={notam.id} className="rounded-lg border p-2">
+                    <div className="font-semibold">{notam.id}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{notam.text}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {activeWeatherDetail === "pireps" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>PIREPs</DialogTitle>
+                <DialogDescription>Recent pilot reports near {primaryIcao || "your route"}.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 text-sm">
+                {pirepsCount === 0 && <div className="text-muted-foreground">No recent PIREPs in range.</div>}
+                {pirepsQuery.data?.reports?.slice(0, 12).map((report: any, index: number) => (
+                  <div key={`${report.rawOb || report.id || index}`} className="rounded-lg border p-2">
+                    <div className="font-semibold">{report.rawOb || "PIREP"}</div>
+                    {report.obsTime && <div className="text-xs text-muted-foreground mt-1">{report.obsTime}</div>}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {activeWeatherDetail === "hazards" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Convective Hazards</DialogTitle>
+                <DialogDescription>Domestic SIGMETs, G-AIRMETs, and TCF.</DialogDescription>
+              </DialogHeader>
+              <div className="text-sm text-muted-foreground">
+                {convectiveCount > 0 ? `${convectiveCount} hazard items available.` : "No convective hazards returned."}
+              </div>
+              <pre className="mt-3 rounded-lg border bg-muted p-3 text-xs overflow-x-auto">
+{JSON.stringify(convectiveHazardsQuery.data ?? {}, null, 2)}
+              </pre>
+            </>
+          )}
+          {activeWeatherDetail === "icing" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Icing Guidance</DialogTitle>
+                <DialogDescription>AWC icing signals (stub if not available).</DialogDescription>
+              </DialogHeader>
+              <pre className="rounded-lg border bg-muted p-3 text-xs overflow-x-auto">
+{JSON.stringify(icingHazardsQuery.data ?? {}, null, 2)}
+              </pre>
+            </>
+          )}
+          {activeWeatherDetail === "turbulence" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Turbulence Guidance</DialogTitle>
+                <DialogDescription>AWC turbulence signals (stub if not available).</DialogDescription>
+              </DialogHeader>
+              <pre className="rounded-lg border bg-muted p-3 text-xs overflow-x-auto">
+{JSON.stringify(turbulenceHazardsQuery.data ?? {}, null, 2)}
+              </pre>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
       <Card id="route-analysis" className="relative">
         <CardHeader>
           <CardTitle>Route Analysis</CardTitle>

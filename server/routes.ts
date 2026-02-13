@@ -33,6 +33,17 @@ import { paypalRequest } from "./paypal-client";
 import { getEntitlementsForUser, isSuperAdminEmail, mapPayPalStatusToMembership, resolveMembershipFromPlanId, resolvePayPalPlanId } from "./membership";
 import { maybeSyncLogbookProSubscription } from "./paypal-subscription-sync";
 import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
+import {
+  fetchMetar,
+  fetchTaf,
+  fetchPireps,
+  fetchAirSigmets,
+  fetchGAirmets,
+  fetchAirmets,
+  fetchTcf,
+  fetchWindsAloftReport,
+  buildEmptyStub,
+} from "./services/aviation-weather";
 
 // Initialize OpenAI client with fallback to standard OpenAI if Replit integration vars are missing
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
@@ -8327,6 +8338,43 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const weatherCache = new Map<string, { data: any; timestamp: number }>();
   const WEATHER_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
 
+  function parseBbox(raw: string | null): { west: number; south: number; east: number; north: number } | null {
+    if (!raw) return null;
+    const parts = raw.split(",").map((value) => Number(value));
+    if (parts.length !== 4 || parts.some((value) => !Number.isFinite(value))) return null;
+    const [west, south, east, north] = parts;
+    if (west > east || south > north) return null;
+    return { west, south, east, north };
+  }
+
+  function parseLatLonBbox(raw: string | null): { south: number; west: number; north: number; east: number } | null {
+    if (!raw) return null;
+    const parts = raw.split(",").map((value) => Number(value));
+    if (parts.length !== 4 || parts.some((value) => !Number.isFinite(value))) return null;
+    const [lat0, lon0, lat1, lon1] = parts;
+    const south = Math.min(lat0, lat1);
+    const north = Math.max(lat0, lat1);
+    const west = Math.min(lon0, lon1);
+    const east = Math.max(lon0, lon1);
+    if (west > east || south > north) return null;
+    return { south, west, north, east };
+  }
+
+  function pickWindsAltitude(requested: number | null, available: number[]): number {
+    const fallback = available.includes(12000) ? 12000 : available[0] ?? 12000;
+    if (!requested || !Number.isFinite(requested)) return fallback;
+    let best = fallback;
+    let bestDelta = Number.POSITIVE_INFINITY;
+    for (const alt of available) {
+      const delta = Math.abs(alt - requested);
+      if (delta < bestDelta) {
+        best = alt;
+        bestDelta = delta;
+      }
+    }
+    return best;
+  }
+
   app.get("/api/airports/search", airportLookupRateLimiter, async (req, res) => {
     try {
       const rawQuery = String(req.query.q || "");
@@ -8785,6 +8833,304 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Aviation weather fetch error:", error);
       res.status(500).json({ error: "Failed to fetch aviation weather data" });
+    }
+  });
+
+  app.get("/api/aviation/metar/:icao", async (req, res) => {
+    try {
+      const requestedIcao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const result = await fetchMetar(requestedIcao);
+      res.json({
+        icao: requestedIcao,
+        ...result,
+      });
+    } catch (error) {
+      console.error("METAR fetch failed:", error);
+      res.status(500).json({ error: "Failed to fetch METAR" });
+    }
+  });
+
+  app.get("/api/aviation/taf/:icao", async (req, res) => {
+    try {
+      const requestedIcao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const result = await fetchTaf(requestedIcao);
+      res.json({
+        icao: requestedIcao,
+        ...result,
+      });
+    } catch (error) {
+      console.error("TAF fetch failed:", error);
+      res.status(500).json({ error: "Failed to fetch TAF" });
+    }
+  });
+
+  app.get("/api/aviation/notams/:icao", async (req, res) => {
+    const requestedIcao = normalizeIcao(req.params.icao || "");
+    if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
+      return res.status(400).json({ error: "Invalid ICAO code format" });
+    }
+    res.redirect(307, `/api/notams/${requestedIcao}`);
+  });
+
+  app.get("/api/aviation/pireps", async (req, res) => {
+    try {
+      const bbox = typeof req.query.bbox === "string" ? req.query.bbox : null;
+      const parsedBbox = parseLatLonBbox(bbox);
+      const idParam = typeof req.query.icao === "string" ? normalizeIcao(req.query.icao) : null;
+      const radiusNm = toNumber(req.query.radiusNm);
+      const distanceSm = radiusNm ? Number((radiusNm * 1.15078).toFixed(1)) : undefined;
+      const age = toNumber(req.query.ageHours);
+      const level = toNumber(req.query.levelFt);
+      const inten = typeof req.query.inten === "string" ? (req.query.inten as "lgt" | "mod" | "sev") : undefined;
+
+      const params = {
+        bbox: parsedBbox ? `${parsedBbox.south},${parsedBbox.west},${parsedBbox.north},${parsedBbox.east}` : undefined,
+        id: idParam ?? undefined,
+        distance: distanceSm,
+        age: age ?? undefined,
+        level: level ?? undefined,
+        inten,
+      };
+
+      const result = await fetchPireps(params);
+      res.json({
+        query: { bbox: params.bbox, icao: idParam, radiusNm: radiusNm ?? null },
+        ...result,
+        reports: result.data ?? [],
+      });
+    } catch (error) {
+      console.error("PIREPs fetch failed:", error);
+      res.status(500).json({ error: "Failed to fetch PIREPs" });
+    }
+  });
+
+  app.get("/api/aviation/hazards", async (req, res) => {
+    try {
+      const hazard = typeof req.query.hazard === "string" ? req.query.hazard.toLowerCase() : undefined;
+      const level = toNumber(req.query.levelFt);
+
+      const airsigmet = await fetchAirSigmets({
+        hazard: (hazard as "conv" | "turb" | "ice" | "ifr") || undefined,
+        level: level ?? undefined,
+        format: "json",
+      });
+
+      const gairmetProduct = hazard === "ice" ? "zulu" : hazard === "turb" ? "tango" : hazard === "ifr" ? "sierra" : undefined;
+      const gairmetHazard = hazard === "ice" ? "ice" : hazard === "turb" ? "turb-lo" : hazard === "ifr" ? "ifr" : undefined;
+
+      const gairmet = await fetchGAirmets({
+        product: gairmetProduct,
+        hazard: gairmetHazard,
+        format: "json",
+      });
+
+      const airmet = await fetchAirmets({
+        hazard: (hazard as "turb" | "ifr" | "conv" | "ice") || undefined,
+        level: level ?? undefined,
+        format: "json",
+      });
+
+      const tcf = await fetchTcf();
+
+      const warnings = [
+        ...airsigmet.warnings,
+        ...gairmet.warnings,
+        ...airmet.warnings,
+        ...tcf.warnings,
+      ];
+
+      res.json({
+        source: "awc",
+        fetchedAt: Math.max(airsigmet.fetchedAt, gairmet.fetchedAt, airmet.fetchedAt, tcf.fetchedAt),
+        warnings,
+        airsigmet: airsigmet.data ?? [],
+        gairmet: gairmet.data ?? [],
+        airmet: airmet.data ?? [],
+        tcf: tcf.data ?? null,
+      });
+    } catch (error) {
+      console.error("Hazards fetch failed:", error);
+      res.status(500).json({ error: "Failed to fetch hazards" });
+    }
+  });
+
+  app.get("/api/aviation/winds-temps", async (req, res) => {
+    try {
+      const altitudeParam = toNumber(req.query.altitude);
+      const reportResult = await fetchWindsAloftReport();
+      const report = reportResult.data;
+      if (!report) {
+        return res.status(200).json({
+          altitudeFt: null,
+          validTime: null,
+          dataBasedOn: null,
+          stations: [],
+          warnings: reportResult.warnings,
+        });
+      }
+
+      const altitudeFt = pickWindsAltitude(altitudeParam, report.altitudes);
+      const bbox = parseLatLonBbox(typeof req.query.bbox === "string" ? req.query.bbox : null);
+
+      const stations = await loadStationCache();
+      const stationMap = new Map<string, AirportSearchResult>();
+      stations.forEach((station) => {
+        stationMap.set(station.icao, station);
+        if (station.icao.startsWith("K") && station.icao.length === 4) {
+          stationMap.set(station.icao.slice(1), station);
+        }
+      });
+
+      const results = report.stations
+        .map((station) => {
+          const sample = station.values[altitudeFt];
+          if (!sample || sample.speedKt === null || sample.speedKt <= 0) return null;
+          const ref = stationMap.get(station.stationId);
+          if (!ref) return null;
+          if (bbox) {
+            if (ref.lon < bbox.west || ref.lon > bbox.east || ref.lat < bbox.south || ref.lat > bbox.north) {
+              return null;
+            }
+          }
+          return {
+            stationId: station.stationId,
+            icao: ref.icao,
+            lat: ref.lat,
+            lon: ref.lon,
+            windDir: sample.directionDeg,
+            windSpeed: sample.speedKt,
+            tempC: sample.tempC,
+          };
+        })
+        .filter((item) => Boolean(item));
+
+      res.json({
+        altitudeFt,
+        validTime: report.validTime,
+        dataBasedOn: report.dataBasedOn,
+        stations: results,
+        warnings: reportResult.warnings,
+      });
+    } catch (error) {
+      console.error("Winds temps fetch failed:", error);
+      res.status(500).json({ error: "Failed to fetch winds aloft" });
+    }
+  });
+
+  app.get("/api/aviation/icing", async (_req, res) => {
+    const stub = buildEmptyStub("Icing guidance");
+    res.json({
+      ...stub,
+      data: null,
+      layers: [],
+      todo: "TODO: Add CIP/FIP icing layers if AWC provides an API endpoint.",
+    });
+  });
+
+  app.get("/api/aviation/turbulence", async (_req, res) => {
+    const stub = buildEmptyStub("Turbulence guidance");
+    res.json({
+      ...stub,
+      data: null,
+      layers: [],
+      todo: "TODO: Add GTG/AWC turbulence layers if AWC provides an API endpoint.",
+    });
+  });
+
+  app.get("/api/aviation/gfa/layers", async (_req, res) => {
+    const stub = buildEmptyStub("GFA layers");
+    res.json({
+      ...stub,
+      layers: [
+        { id: "ceil-vis", label: "Ceiling/Visibility", status: "unavailable" },
+        { id: "clouds", label: "Clouds", status: "unavailable" },
+        { id: "precip", label: "Precipitation", status: "unavailable" },
+        { id: "thunder", label: "Thunderstorms", status: "unavailable" },
+        { id: "temp", label: "Temperature", status: "unavailable" },
+        { id: "winds", label: "Winds", status: "unavailable" },
+        { id: "turbulence", label: "Turbulence", status: "unavailable" },
+        { id: "icing", label: "Icing", status: "unavailable" },
+      ],
+      todo: "TODO: Wire GFA layers when NOAA/AWC offers a public API or tiles.",
+    });
+  });
+
+  app.get("/api/aviation/gfa/data", async (_req, res) => {
+    const stub = buildEmptyStub("GFA data");
+    res.json({
+      ...stub,
+      data: null,
+      todo: "TODO: Implement GFA data once NOAA/AWC provides an accessible endpoint.",
+    });
+  });
+
+  app.get("/api/winds-aloft", async (req, res) => {
+    try {
+      const altitudeParam = toNumber(req.query.altitude);
+      const reportResult = await fetchWindsAloftReport();
+      const report = reportResult.data;
+      if (!report) {
+        return res.status(200).json({
+          altitudeFt: null,
+          validTime: null,
+          dataBasedOn: null,
+          stations: [],
+          warnings: reportResult.warnings,
+        });
+      }
+      const altitudeFt = pickWindsAltitude(altitudeParam, report.altitudes);
+      const bbox = parseBbox(typeof req.query.bbox === "string" ? req.query.bbox : null);
+
+      const stations = await loadStationCache();
+      const stationMap = new Map<string, AirportSearchResult>();
+      stations.forEach((station) => {
+        stationMap.set(station.icao, station);
+        if (station.icao.startsWith("K") && station.icao.length === 4) {
+          stationMap.set(station.icao.slice(1), station);
+        }
+      });
+
+      const results = report.stations
+        .map((station) => {
+          const sample = station.values[altitudeFt];
+          if (!sample || sample.speedKt === null || sample.speedKt <= 0) return null;
+          const ref = stationMap.get(station.stationId);
+          if (!ref) return null;
+          if (bbox) {
+            if (ref.lon < bbox.west || ref.lon > bbox.east || ref.lat < bbox.south || ref.lat > bbox.north) {
+              return null;
+            }
+          }
+          return {
+            stationId: station.stationId,
+            icao: ref.icao,
+            lat: ref.lat,
+            lon: ref.lon,
+            windDir: sample.directionDeg,
+            windSpeed: sample.speedKt,
+            tempC: sample.tempC,
+          };
+        })
+        .filter((item) => Boolean(item));
+
+      res.json({
+        altitudeFt,
+        validTime: report.validTime,
+        dataBasedOn: report.dataBasedOn,
+        stations: results,
+        warnings: reportResult.warnings,
+      });
+    } catch (error) {
+      console.error("Winds aloft fetch failed:", error);
+      res.status(500).json({ error: "Failed to fetch winds aloft data" });
     }
   });
 

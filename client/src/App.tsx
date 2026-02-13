@@ -38,6 +38,7 @@ import Register from "@/pages/register";
 import VerifyEmail from "@/pages/verify-email";
 import Logbook from "@/pages/logbook";
 import PilotTools from "@/pages/pilot-tools";
+import AviationWeatherHub from "@/pages/aviation-weather";
 import TfrMap from "@/pages/tfr-map";
 import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
 import WeightBalance from "@/pages/weight-balance";
@@ -110,6 +111,7 @@ function Router() {
       <Route path="/faq" component={FaqPage} />
       <Route path="/aircraft/:id" component={AircraftDetail} />
       <Route path="/pilot-tools" component={PilotTools} />
+      <Route path="/aviation-weather" component={AviationWeatherHub} />
       <Route path="/tfr-map" component={TfrMap} />
       <Route path="/approach-plates" component={ApproachPlates} />
       <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />

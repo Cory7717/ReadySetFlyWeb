@@ -316,6 +316,7 @@ export default function PlannerMap({
   const showRadar = mapStyle === "radar";
   const showWinds = mapStyle === "winds";
   const showClouds = mapStyle === "clouds";
+  const initialZoom = mapStyle === "sectional" ? 6 : (points.length ? 6 : 4);
   const [mapZoom, setMapZoom] = useState(initialZoom);
   const [mapCenter, setMapCenter] = useState<L.LatLng | null>(null);
   const isConus = isWithinConus(mapCenter);
@@ -324,7 +325,6 @@ export default function PlannerMap({
   const cloudSource = isAlaska || isHawaii ? "goes-west" : "goes-east";
   const showCloudsGlobal = showClouds && (mapZoom < 4 || (!isConus && !isAlaska && !isHawaii));
   const showCloudsConus = showClouds && !showCloudsGlobal;
-  const initialZoom = mapStyle === "sectional" ? 6 : (points.length ? 6 : 4);
   const [radarFrames, setRadarFrames] = useState<string[]>([]);
   const [radarFrameIndex, setRadarFrameIndex] = useState(0);
   const [radarError, setRadarError] = useState(false);

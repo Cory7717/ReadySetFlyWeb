@@ -9186,22 +9186,35 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   });
 
   app.get("/api/aviation/cloud-frames", async (req, res) => {
+    const source = typeof req.query.source === "string" ? req.query.source : "goes-east";
+    const countParam = toNumber(req.query.count);
+    const count = countParam && countParam > 0 ? Math.min(countParam, 24) : 12;
+    const intervalParam = toNumber(req.query.intervalMin);
+    const intervalMinutes = intervalParam && intervalParam > 0 ? intervalParam : 10;
+
+    const now = Date.now();
+    const cached = cloudFrameCacheBySource[source];
+    if (cached && now - cached.fetchedAt < CLOUD_FRAME_TTL) {
+      return res.json({ source, frames: cached.frames });
+    }
+
+    const fallbackFrames = buildRecentTimes(new Date(Date.now() - 1000 * 60 * 20), intervalMinutes, count);
     try {
-      const source = typeof req.query.source === "string" ? req.query.source : "goes-east";
-      const countParam = toNumber(req.query.count);
-      const count = countParam && countParam > 0 ? Math.min(countParam, 24) : 12;
-      const intervalParam = toNumber(req.query.intervalMin);
-      const intervalMinutes = intervalParam && intervalParam > 0 ? intervalParam : 10;
-
-      const now = Date.now();
-      const cached = cloudFrameCacheBySource[source];
-      if (cached && now - cached.fetchedAt < CLOUD_FRAME_TTL) {
-        return res.json({ source, frames: cached.frames });
-      }
-
       const capabilitiesUrl =
         "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi?SERVICE=WMTS&REQUEST=GetCapabilities";
-      const response = await fetchWithTimeout(capabilitiesUrl, {}, 8000);
+      const response = await fetchWithTimeout(
+        capabilitiesUrl,
+        { headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" } },
+        8000
+      );
+      if (!response.ok) {
+        cloudFrameCacheBySource[source] = { fetchedAt: now, frames: fallbackFrames };
+        return res.json({
+          source,
+          frames: fallbackFrames,
+          warning: `Cloud animation fallback (${response.status})`,
+        });
+      }
       const text = await response.text();
       const layerId = source === "goes-west" ? "GOES-West_ABI_GeoColor" : "GOES-East_ABI_GeoColor";
       const dimensionRegex = new RegExp(
@@ -9209,17 +9222,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         "i"
       );
       const valueMatch = text.match(dimensionRegex);
-      let frames = valueMatch ? parseGibsTimeDimension(valueMatch[1], count) : null;
-      if (!frames) {
-        frames = [];
-      }
+      const parsedFrames = valueMatch ? parseGibsTimeDimension(valueMatch[1], count) : null;
+      const frames = parsedFrames && parsedFrames.length > 0 ? parsedFrames : fallbackFrames;
 
       cloudFrameCacheBySource[source] = { fetchedAt: now, frames };
 
-      res.json({ source, frames, warning: frames.length === 0 ? "Cloud animation unavailable" : undefined });
+      res.json({
+        source,
+        frames,
+        warning: parsedFrames && parsedFrames.length > 0 ? undefined : "Cloud animation fallback",
+      });
     } catch (error) {
       console.error("Cloud frames fetch failed:", error);
-      res.status(500).json({ error: "Failed to fetch cloud frames" });
+      cloudFrameCacheBySource[source] = { fetchedAt: now, frames: fallbackFrames };
+      res.json({ source, frames: fallbackFrames, warning: "Cloud animation fallback" });
     }
   });
 

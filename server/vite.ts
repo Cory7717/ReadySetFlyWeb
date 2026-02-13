@@ -85,11 +85,26 @@ export async function setupVite(app: Express, server: Server) {
 
 export function serveStatic(app: Express) {
   const distPath = path.resolve(import.meta.dirname, "public");
+  const cesiumDistPath = path.resolve(distPath, "cesium");
+  const cesiumNodePath = path.resolve(
+    import.meta.dirname,
+    "..",
+    "node_modules",
+    "cesium",
+    "Build",
+    "Cesium",
+  );
 
   if (!fs.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`,
     );
+  }
+
+  if (fs.existsSync(cesiumDistPath)) {
+    app.use("/cesium", express.static(cesiumDistPath));
+  } else if (fs.existsSync(cesiumNodePath)) {
+    app.use("/cesium", express.static(cesiumNodePath));
   }
 
   app.use(express.static(distPath));

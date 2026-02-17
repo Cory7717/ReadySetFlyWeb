@@ -8,7 +8,7 @@ import { ThemeProvider } from "./components/theme-provider";
 import { Header } from "./components/header";
 import { Footer } from "./components/footer";
 import { useAuth } from "@/hooks/useAuth";
-import { trackEvent } from "@/lib/analytics";
+import { trackEvent, trackSessionPing } from "@/lib/analytics";
 import Home from "@/pages/home";
 import Landing from "@/pages/landing";
 import Marketplace from "@/pages/marketplace";
@@ -83,6 +83,7 @@ function AnalyticsTracker() {
   const [path] = useLocation();
   useEffect(() => {
     trackEvent("page_view", { page: path });
+    trackSessionPing(path);
   }, [path]);
   return null;
 }

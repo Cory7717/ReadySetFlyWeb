@@ -6670,6 +6670,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/analytics/session", async (req: any, res) => {
+    try {
+      const page = normalizeAnalyticsPage(req.body?.page) || "/";
+      let visitorId = typeof req.body?.visitorId === "string" ? req.body.visitorId.trim() : "";
+      if (!visitorId) visitorId = crypto.randomUUID();
+      const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId.trim() : "";
+      const meta = {
+        sessionId: sessionId || undefined,
+        userAgent: req.headers["user-agent"],
+        ip: req.headers["x-forwarded-for"] || req.ip,
+        referrer: req.headers["referer"] || req.headers["referrer"],
+      };
+
+      const parsed = insertAnalyticsEventSchema.safeParse({
+        event: "session_ping",
+        page,
+        visitorId,
+        userId: req.user?.claims?.sub,
+        meta,
+      });
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid session payload" });
+      }
+
+      while (analyticsQueue.length >= ANALYTICS_QUEUE_LIMIT) {
+        analyticsQueue.shift();
+      }
+      analyticsQueue.push(parsed.data);
+      res.json({ success: true, visitorId: parsed.data.visitorId });
+    } catch (error) {
+      console.error("Failed to record session ping:", error);
+      res.status(500).json({ error: "Failed to record session ping" });
+    }
+  });
+
   // Admin Analytics
   app.get("/api/admin/analytics", isAuthenticated, requireAnalyticsAdmin, async (req, res) => {
     try {

@@ -1,6 +1,9 @@
 import { apiUrl } from "@/lib/api";
 
 const VISITOR_ID_KEY = "rsf_visitor_id";
+const SESSION_ID_KEY = "rsf_session_id";
+const SESSION_PING_PREFIX = "rsf_session_ping:";
+const SESSION_PING_TTL_MS = 1000 * 60 * 30;
 
 const getStoredVisitorId = (): string | undefined => {
   if (typeof window === "undefined") return undefined;
@@ -26,6 +29,47 @@ const ensureVisitorId = (): string => {
     window.localStorage.setItem(VISITOR_ID_KEY, next);
   } catch {}
   return next;
+};
+
+const getSessionId = (): string | undefined => {
+  if (typeof window === "undefined") return undefined;
+  try {
+    return window.sessionStorage.getItem(SESSION_ID_KEY) || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const ensureSessionId = (): string => {
+  const existing = getSessionId();
+  if (existing) return existing;
+  const next = createVisitorId();
+  try {
+    window.sessionStorage.setItem(SESSION_ID_KEY, next);
+  } catch {}
+  return next;
+};
+
+const shouldPingSession = (page: string): boolean => {
+  if (typeof window === "undefined") return false;
+  const key = `${SESSION_PING_PREFIX}${page || "/"}`;
+  try {
+    const last = window.sessionStorage.getItem(key);
+    if (!last) return true;
+    const lastTime = Number(last);
+    if (!Number.isFinite(lastTime)) return true;
+    return Date.now() - lastTime > SESSION_PING_TTL_MS;
+  } catch {
+    return true;
+  }
+};
+
+const markSessionPing = (page: string) => {
+  if (typeof window === "undefined") return;
+  const key = `${SESSION_PING_PREFIX}${page || "/"}`;
+  try {
+    window.sessionStorage.setItem(key, String(Date.now()));
+  } catch {}
 };
 
 export function trackEvent(event: string, params?: Record<string, any>) {
@@ -62,5 +106,35 @@ export function trackEvent(event: string, params?: Record<string, any>) {
     } catch {}
   };
 
+  void send();
+}
+
+export function trackSessionPing(page: string) {
+  if (typeof window === "undefined") return;
+  const normalizedPage = page.startsWith("/") ? page : `/${page}`;
+  if (!shouldPingSession(normalizedPage)) return;
+
+  const visitorId = ensureVisitorId();
+  const sessionId = ensureSessionId();
+
+  const send = async () => {
+    try {
+      const response = await fetch(apiUrl("/api/analytics/session"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        keepalive: true,
+        body: JSON.stringify({ page: normalizedPage, visitorId, sessionId }),
+      });
+      if (response.ok) {
+        const data = await response.json().catch(() => null);
+        if (data?.visitorId && data.visitorId !== visitorId) {
+          window.localStorage.setItem(VISITOR_ID_KEY, data.visitorId);
+        }
+      }
+    } catch {}
+  };
+
+  markSessionPing(normalizedPage);
   void send();
 }

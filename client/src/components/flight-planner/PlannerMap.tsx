@@ -303,7 +303,10 @@ export default function PlannerMap({
   const [radarFrameIndex, setRadarFrameIndex] = useState(0);
   const [radarError, setRadarError] = useState(false);
   const radarTimerRef = useRef<number | null>(null);
-  const gibsDate = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const gibsDate = useMemo(
+    () => new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString().slice(0, 10),
+    []
+  );
   const [windsAloftPoints, setWindsAloftPoints] = useState<WindsAloftPoint[]>([]);
   const [windsAloftMeta, setWindsAloftMeta] = useState<WindsAloftMeta | null>(null);
   const [windsAloftError, setWindsAloftError] = useState<string | null>(null);
@@ -327,7 +330,7 @@ export default function PlannerMap({
 
   const cloudTileUrl = useMemo(() => {
     if (!showCloudsConus) return "";
-    return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+    return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg`;
   }, [showCloudsConus, gibsDate]);
 
   useEffect(() => {

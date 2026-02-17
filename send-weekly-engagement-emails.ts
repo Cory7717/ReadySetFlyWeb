@@ -8,12 +8,15 @@
  * - Schedule: Weekly (e.g., Mondays at 9 AM)
  */
 
+export {};
+
 async function sendWeeklyEngagementEmails() {
   console.log("Starting weekly engagement emails...");
   console.log(`Timestamp: ${new Date().toISOString()}`);
 
   try {
-    const baseUrl = process.env.REPLIT_DEV_DOMAIN || "http://localhost:5000";
+    const rawBaseUrl = process.env.APP_BASE_URL || process.env.RENDER_EXTERNAL_URL || "http://localhost:5000";
+    const baseUrl = rawBaseUrl.startsWith("http") ? rawBaseUrl : `https://${rawBaseUrl}`;
     const cronSecret = process.env.CRON_SECRET || process.env.SESSION_SECRET || "";
 
     const response = await fetch(`${baseUrl}/api/cron/send-weekly-engagement`, {

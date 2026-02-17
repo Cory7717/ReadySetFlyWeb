@@ -330,7 +330,7 @@ export default function PlannerMap({
 
   const cloudTileUrl = useMemo(() => {
     if (!showCloudsConus) return "";
-    return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg`;
+    return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
   }, [showCloudsConus, gibsDate]);
 
   useEffect(() => {

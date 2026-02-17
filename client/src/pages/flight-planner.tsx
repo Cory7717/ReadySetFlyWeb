@@ -1934,6 +1934,19 @@ export default function FlightPlanner() {
                 Wind arrows point in the direction the wind is blowing from; size scales with speed.
               </div>
             )}
+            {!isAuthenticated && routePoints.length > 0 && (
+              <Alert className="mt-3">
+                <AlertDescription className="flex flex-wrap items-center gap-3">
+                  <span>Save this route and get planning reminders with a free account.</span>
+                  <Button asChild size="sm">
+                    <Link href="/register">Create free account</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/login">Sign in</Link>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
 

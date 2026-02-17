@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ import { Search, SlidersHorizontal, Gift, X } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { useAuth } from "@/hooks/useAuth";
 
 const categories = [
   { id: "aircraft-sale", label: "Aircraft For Sale", fee: "$25-100/mo" },
@@ -28,6 +29,7 @@ const categories = [
 ];
 
 export default function Marketplace() {
+  const { isAuthenticated } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState("aircraft-sale");
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -167,6 +169,21 @@ export default function Marketplace() {
           <p className="text-base sm:text-lg text-muted-foreground max-w-3xl">
             Connect with the aviation community. Buy, sell, and find professional services.
           </p>
+          {!isAuthenticated && (
+            <div className="mt-4">
+              <Alert>
+                <AlertDescription className="flex flex-wrap items-center gap-3">
+                  <span>Create a free account to save listings and contact sellers faster.</span>
+                  <Button asChild size="sm">
+                    <Link href="/register">Create free account</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/login">Sign in</Link>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
           <div className="flex flex-wrap gap-3 mt-4">
             <Button
               variant="default"
@@ -181,6 +198,11 @@ export default function Marketplace() {
               variant="outline"
               onClick={() => {
                 trackEvent("cta_click", { label: "marketplace_post_listing", target: "/create-marketplace-listing" });
+                if (!isAuthenticated) {
+                  trackEvent("marketplace_register_prompt", { action: "post_listing" });
+                  navigate("/register");
+                  return;
+                }
                 navigate("/create-marketplace-listing");
               }}
             >

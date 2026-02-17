@@ -960,4 +960,72 @@ You’re receiving this email because RSF Pro alerts are enabled on your account
   `.trim();
 }
 
+export function getWeeklyEngagementEmailHtml(data: {
+  firstName: string;
+  unsubscribeUrl: string;
+}): string {
+  const appUrl = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+    .card { background: white; border-radius: 12px; padding: 28px; border: 1px solid #e5e7eb; }
+    .header { background: #1e40af; color: #fff; padding: 18px 24px; border-radius: 10px; }
+    .cta { display: inline-block; background: #1e40af; color: #fff !important; padding: 12px 18px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+    .muted { color: #6b7280; font-size: 12px; }
+    .list { margin: 16px 0; padding-left: 18px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <h2 style="margin:0;">Your Weekly Pilot Tools Rundown</h2>
+      </div>
+      <p style="margin-top: 20px;">Hi ${data.firstName},</p>
+      <p>We saved a few quick wins to help you plan safer, faster flights this week:</p>
+      <ul class="list">
+        <li>Build a new route and get a risk summary in the Flight Planner.</li>
+        <li>Check live weather layers before your next departure.</li>
+        <li>Keep your logbook and currency alerts up to date.</li>
+      </ul>
+      <div style="margin-top: 18px;">
+        <a class="cta" href="${appUrl}/flight-planner">Open the Flight Planner</a>
+      </div>
+      <p class="muted" style="margin-top: 20px;">
+        You are receiving this weekly email because you have an account with Ready Set Fly.
+        <a href="${data.unsubscribeUrl}">Unsubscribe</a>.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+export function getWeeklyEngagementEmailText(data: {
+  firstName: string;
+  unsubscribeUrl: string;
+}): string {
+  const appUrl = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+  return `
+Weekly Pilot Tools Rundown
+
+Hi ${data.firstName},
+
+Plan safer flights this week:
+- Build a new route and get a risk summary in the Flight Planner.
+- Check live weather layers before your next departure.
+- Keep your logbook and currency alerts up to date.
+
+Open the Flight Planner: ${appUrl}/flight-planner
+
+Unsubscribe: ${data.unsubscribeUrl}
+  `.trim();
+}
+
 

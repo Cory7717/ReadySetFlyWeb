@@ -506,7 +506,11 @@ export default function RadioCommsTrainer() {
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-xs text-muted-foreground">Voice</div>
+            <label htmlFor="voice-select" className="sr-only">
+              Voice selection
+            </label>
             <select
+              id="voice-select"
               className="rounded-md border bg-background px-2 py-1 text-sm"
               value={selectedVoiceUri}
               onChange={(e) => {

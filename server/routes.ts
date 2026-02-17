@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, aviationEvents, notams as notamsTable, type BannerAdOrder } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, aviationEvents, notams as notamsTable, users, type BannerAdOrder } from "@shared/schema";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
@@ -157,6 +157,20 @@ function getPublicBaseUrl() {
     process.env.RENDER_EXTERNAL_URL ||
     "http://localhost:5000";
   return base.startsWith("http") ? base : `https://${base}`;
+}
+
+const marketingSecret = process.env.JWT_SECRET || process.env.SESSION_SECRET || "default-jwt-secret-change-in-production";
+
+function signMarketingToken(payload: Record<string, any>) {
+  return jwt.sign(payload, marketingSecret, { expiresIn: "180d" });
+}
+
+function verifyMarketingToken(token: string): Record<string, any> | null {
+  try {
+    return jwt.verify(token, marketingSecret) as Record<string, any>;
+  } catch {
+    return null;
+  }
 }
 
 function parsePayPalCustomId(customId: string) {
@@ -4509,6 +4523,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
         error: "Failed to send expiration reminders",
         details: error.message 
       });
+    }
+  });
+
+  app.get("/api/marketing/unsubscribe", async (req, res) => {
+    try {
+      const token = typeof req.query?.token === "string" ? req.query.token : "";
+      if (!token) {
+        return res.status(400).send("Missing unsubscribe token.");
+      }
+
+      const payload = verifyMarketingToken(token);
+      if (!payload || payload.action !== "weekly_opt_out" || !payload.userId) {
+        return res.status(400).send("Invalid or expired unsubscribe token.");
+      }
+
+      const updated = await storage.updateUser(String(payload.userId), {
+        weeklyEmailOptIn: false,
+        weeklyEmailOptOutAt: new Date(),
+      });
+
+      if (!updated) {
+        return res.status(404).send("User not found.");
+      }
+
+      res.status(200).send(`
+        <!DOCTYPE html>
+        <html>
+          <head><meta charset="utf-8"><title>Unsubscribed</title></head>
+          <body style="font-family: Arial, sans-serif; padding: 24px;">
+            <h2>You are unsubscribed.</h2>
+            <p>You will no longer receive weekly Ready Set Fly emails.</p>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      console.error("Unsubscribe error:", error);
+      res.status(500).send("Unable to process unsubscribe request.");
+    }
+  });
+
+  app.post("/api/cron/send-weekly-engagement", async (req, res) => {
+    try {
+      const cronSecret = req.headers['x-cron-secret'];
+      const expectedSecret = process.env.CRON_SECRET || process.env.SESSION_SECRET;
+      if (!cronSecret || cronSecret !== expectedSecret) {
+        console.warn('Unauthorized cron attempt from IP:', req.ip);
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { getWeeklyEngagementEmailHtml, getWeeklyEngagementEmailText } = await import('./email-templates');
+      const { client, fromEmail } = await getUncachableResendClient();
+
+      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const candidates = await db
+        .select()
+        .from(users)
+        .where(and(eq(users.weeklyEmailOptIn, true), eq(users.isSuspended, false)));
+
+      let emailsSent = 0;
+      const errors: string[] = [];
+
+      for (const user of candidates) {
+        if (!user.email) continue;
+        if (user.weeklyEmailLastSentAt && user.weeklyEmailLastSentAt > cutoff) continue;
+
+        const firstName = user.firstName || user.email.split("@")[0];
+        const token = signMarketingToken({ userId: user.id, action: "weekly_opt_out" });
+        const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+
+        try {
+          await client.emails.send({
+            from: fromEmail,
+            to: user.email,
+            subject: "Your weekly Ready Set Fly pilot tools rundown",
+            html: getWeeklyEngagementEmailHtml({ firstName, unsubscribeUrl }),
+            text: getWeeklyEngagementEmailText({ firstName, unsubscribeUrl }),
+          });
+
+          await storage.updateUser(user.id, {
+            weeklyEmailLastSentAt: new Date(),
+          });
+
+          emailsSent += 1;
+        } catch (error: any) {
+          console.error(`Failed to send weekly email to ${user.email}:`, error);
+          errors.push(`${user.email}: ${error.message || "send failed"}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        totalCandidates: candidates.length,
+        emailsSent,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error: any) {
+      console.error("Weekly engagement cron error:", error);
+      res.status(500).json({ error: "Failed to send weekly engagement emails" });
     }
   });
 

@@ -266,7 +266,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
               <Text style={styles.summaryValue}>{formatValue(summary.overall.totalDailyHours)}</Text>
             </View>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>MPOR</Text>
+              <Text style={styles.summaryLabel}>MPOR (Min)</Text>
               <Text style={styles.summaryValue}>{formatValue(summary.overall.mporPaid)}</Text>
             </View>
             <View style={styles.summaryItem}>
@@ -279,7 +279,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Daily Metrics</Text>
           {renderTable(
-            ["Date", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR"],
+            ["Date", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR (Min)"],
             dailyRows
           )}
         </View>
@@ -287,7 +287,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Weekly Rollups</Text>
           {renderTable(
-            ["Week", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR"],
+            ["Week", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR (Min)"],
             weeklyRows
           )}
         </View>
@@ -295,7 +295,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Monthly Rollups</Text>
           {renderTable(
-            ["Month", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR"],
+            ["Month", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR (Min)"],
             monthlyRows
           )}
         </View>

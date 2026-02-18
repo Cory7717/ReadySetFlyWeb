@@ -1774,7 +1774,7 @@ export default function AdminDashboard() {
         };
         const roomsSoldNumber = toNumber(meta.roomsSold);
         const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
-        const mpor = totals.totalPaidHours > 0 ? totals.totalRooms / totals.totalPaidHours : null;
+        const mpor = totals.totalPaidHours > 0 && totals.totalRooms > 0 ? (totals.totalPaidHours * 60) / totals.totalRooms : null;
         const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
 
         acc.sumRoomsSold += roomsSoldNumber;
@@ -2978,7 +2978,7 @@ export default function AdminDashboard() {
                           <th className="p-2 text-center">Total Rooms</th>
                           <th className="p-2 text-center">Std Hours</th>
                           <th className="p-2 text-center">Variance</th>
-                          <th className="p-2 text-center">MPOR</th>
+                          <th className="p-2 text-center">MPOR (Min)</th>
                           <th className="p-2 text-center">Notes</th>
                           <th className="p-2 text-center">Details</th>
                         </tr>
@@ -2994,7 +2994,7 @@ export default function AdminDashboard() {
                           };
                           const roomsSoldNumber = toNumber(meta.roomsSold);
                           const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
-                          const mpor = totals.totalPaidHours > 0 ? totals.totalRooms / totals.totalPaidHours : 0;
+                          const mpor = totals.totalPaidHours > 0 && totals.totalRooms > 0 ? (totals.totalPaidHours * 60) / totals.totalRooms : 0;
                           const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
                           const roomsSoldMissing = roomsSoldNumber <= 0;
                           const isExpanded = hkExpandedDays[dateKey];
@@ -3255,7 +3255,7 @@ export default function AdminDashboard() {
                           <th className="p-2 text-right">Rooms</th>
                           <th className="p-2 text-right">Std Hrs</th>
                           <th className="p-2 text-right">Variance</th>
-                          <th className="p-2 text-right">MPOR</th>
+                          <th className="p-2 text-right">MPOR (Min)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3310,7 +3310,7 @@ export default function AdminDashboard() {
                           <th className="p-2 text-right">Rooms</th>
                           <th className="p-2 text-right">Std Hrs</th>
                           <th className="p-2 text-right">Variance</th>
-                          <th className="p-2 text-right">MPOR</th>
+                          <th className="p-2 text-right">MPOR (Min)</th>
                         </tr>
                       </thead>
                       <tbody>

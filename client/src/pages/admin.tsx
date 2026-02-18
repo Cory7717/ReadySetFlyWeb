@@ -63,6 +63,7 @@ type HkSettings = {
   checkoutMinutes: number;
   stayoverMinutes: number;
   lunchMinutes: number;
+  mporStandard: number;
   clockInTime: string;
 };
 
@@ -131,11 +132,12 @@ export default function AdminDashboard() {
           checkoutMinutes: Number(parsed.checkoutMinutes || 30),
           stayoverMinutes: Number(parsed.stayoverMinutes || 15),
           lunchMinutes: Number(parsed.lunchMinutes || 30),
+          mporStandard: Number(parsed.mporStandard || 24),
           clockInTime: parsed.clockInTime || "08:00",
         };
       } catch {}
     }
-    return { checkoutMinutes: 30, stayoverMinutes: 15, lunchMinutes: 30, clockInTime: "08:00" };
+    return { checkoutMinutes: 30, stayoverMinutes: 15, lunchMinutes: 30, mporStandard: 24, clockInTime: "08:00" };
   });
   const [hkExpandedDays, setHkExpandedDays] = useState<Record<string, boolean>>({});
   const [hkDayMeta, setHkDayMeta] = useState<Record<string, HkDayMeta>>({});
@@ -1685,6 +1687,45 @@ export default function AdminDashboard() {
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
+  const toMporMinutes = (paidHours: number, rooms: number) => {
+    if (paidHours <= 0 || rooms <= 0) return null;
+    return (paidHours * 60) / rooms;
+  };
+
+  const Sparkline = ({ values }: { values: Array<number | null> }) => {
+    const width = 120;
+    const height = 24;
+    const points = values
+      .map((value, index) => ({ value, index }))
+      .filter((point) => typeof point.value === "number") as Array<{ value: number; index: number }>;
+    if (points.length < 2) {
+      return <span className="text-muted-foreground">—</span>;
+    }
+    const min = Math.min(...points.map((point) => point.value));
+    const max = Math.max(...points.map((point) => point.value));
+    const range = max - min || 1;
+    const polyline = points
+      .map((point) => {
+        const x = (point.index / (values.length - 1)) * width;
+        const y = height - ((point.value - min) / range) * height;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
+
+    return (
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="text-primary">
+        <polyline
+          points={polyline}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  };
+
   const computeEntryStats = (entry: HkAttendantEntry) => {
     const co = toNumber(entry.checkoutsCleaned);
     const so = toNumber(entry.stayoversCleaned);
@@ -1782,6 +1823,7 @@ export default function AdminDashboard() {
         const mpor = totals.totalPaidHours > 0 && totals.totalRoomsForMpor > 0
           ? (totals.totalPaidHours * 60) / totals.totalRoomsForMpor
           : null;
+        const mporVariance = mpor === null ? null : mpor - hkSettings.mporStandard;
         const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
 
         acc.sumRoomsSold += roomsSoldNumber;
@@ -1790,7 +1832,10 @@ export default function AdminDashboard() {
         acc.sumTotalSO += totals.totalSO;
         acc.sumTotalRooms += totals.totalRooms;
         acc.sumStandardHours += totals.totalStandardHours;
-        acc.sumVariance += totals.totalVariance;
+        if (mporVariance !== null) {
+          acc.sumVariance += mporVariance;
+          acc.varianceCount += 1;
+        }
 
         if (meta.roomRevenueDaily) {
           acc.sumRoomRevenueDaily += toNumber(meta.roomRevenueDaily);
@@ -1800,9 +1845,9 @@ export default function AdminDashboard() {
           acc.mporPaidSum += mpor;
           acc.mporPaidCount += 1;
         }
-        if (hpor !== null) {
-          acc.hporSum += hpor;
-          acc.hporCount += 1;
+        if (roomsSoldNumber > 0 && totalDailyHoursNumber > 0) {
+          acc.hporRoomsSold += roomsSoldNumber;
+          acc.hporDailyHours += totalDailyHoursNumber;
         }
 
         return acc;
@@ -1815,14 +1860,93 @@ export default function AdminDashboard() {
         sumTotalRooms: 0,
         sumStandardHours: 0,
         sumVariance: 0,
+        varianceCount: 0,
         sumRoomRevenueDaily: 0,
         mporPaidSum: 0,
         mporPaidCount: 0,
-        hporSum: 0,
-        hporCount: 0,
+        hporRoomsSold: 0,
+        hporDailyHours: 0,
       }
     );
-  }, [hkMonthDays, hkDayMeta, hkAttendantsByDay]);
+  }, [hkMonthDays, hkDayMeta, hkAttendantsByDay, hkSettings.mporStandard]);
+
+  const hkLatestDayWithEntries = useMemo(() => {
+    return (
+      [...hkMonthDays]
+        .reverse()
+        .find((dateKey) => (hkAttendantsByDay[dateKey] || []).some((entry) => entry.attendantName)) || ""
+    );
+  }, [hkMonthDays, hkAttendantsByDay]);
+
+  const hkMtdEndDate = useMemo(() => {
+    const monthStart = parse(hkMonth, "yyyy-MM", new Date());
+    const today = new Date();
+    if (isSameMonth(monthStart, today)) {
+      return format(today, "yyyy-MM-dd");
+    }
+    return hkMonthRange.endDate;
+  }, [hkMonth, hkMonthRange.endDate]);
+
+  const hkAttendantStats = useMemo(() => {
+    const stats: Record<string, { byDate: Record<string, { rooms: number; hours: number; mpor: number | null }>; trend: Array<number | null> }> = {};
+    hkMonthDays.forEach((dateKey, dayIndex) => {
+      const entries = hkAttendantsByDay[dateKey] || [];
+      entries.forEach((entry) => {
+        const attendantName = entry.attendantName?.trim();
+        if (!attendantName) return;
+        const rooms = toNumber(entry.checkoutsCleaned) + toNumber(entry.stayoversCleaned);
+        const hours = toHours(entry.paidHours);
+        if (!stats[attendantName]) {
+          stats[attendantName] = { byDate: {}, trend: Array(hkMonthDays.length).fill(null) };
+        }
+        const current = stats[attendantName].byDate[dateKey] || { rooms: 0, hours: 0, mpor: null };
+        const roomsTotal = current.rooms + rooms;
+        const hoursTotal = current.hours + hours;
+        const mpor = toMporMinutes(hoursTotal, roomsTotal);
+        stats[attendantName].byDate[dateKey] = { rooms: roomsTotal, hours: hoursTotal, mpor };
+        stats[attendantName].trend[dayIndex] = mpor;
+      });
+    });
+    return stats;
+  }, [hkMonthDays, hkAttendantsByDay]);
+
+  const buildAttendantRanking = (dateKeys: string[]) => {
+    return Object.entries(hkAttendantStats)
+      .map(([attendantName, data]) => {
+        let roomsTotal = 0;
+        let hoursTotal = 0;
+        dateKeys.forEach((dateKey) => {
+          const day = data.byDate[dateKey];
+          if (!day) return;
+          roomsTotal += day.rooms;
+          hoursTotal += day.hours;
+        });
+        const mpor = toMporMinutes(hoursTotal, roomsTotal);
+        return {
+          attendantName,
+          roomsTotal,
+          hoursTotal,
+          mpor,
+          trend: data.trend,
+        };
+      })
+      .filter((entry) => entry.mpor !== null)
+      .sort((a, b) => (a.mpor ?? 0) - (b.mpor ?? 0));
+  };
+
+  const hkRankingDaily = useMemo(() => {
+    if (!hkLatestDayWithEntries) return [];
+    return buildAttendantRanking([hkLatestDayWithEntries]);
+  }, [hkLatestDayWithEntries, hkAttendantStats]);
+
+  const hkRankingMonthly = useMemo(() => {
+    return buildAttendantRanking(hkMonthDays);
+  }, [hkMonthDays, hkAttendantStats]);
+
+  const hkRankingMtd = useMemo(() => {
+    const mtdDates = hkMonthDays.filter((dateKey) => dateKey <= hkMtdEndDate);
+    return buildAttendantRanking(mtdDates);
+  }, [hkMonthDays, hkMtdEndDate, hkAttendantStats]);
 
   const toggleHkDay = (dateKey: string) => {
     setHkExpandedDays((prev) => ({ ...prev, [dateKey]: !prev[dateKey] }));
@@ -2071,7 +2195,9 @@ export default function AdminDashboard() {
   const hkWeeklyRollups = hkSummary?.weeklyRollups ?? [];
   const hkMonthlyRollups = hkSummary?.monthlyRollups ?? [];
   const hkPropertyParam = hkProperty ? `&property=${encodeURIComponent(hkProperty)}` : "";
-  const hkPdfUrl = apiUrl(`/api/admin/hk-metrics/pdf?start=${hkMonthRange.startDate}&end=${hkMonthRange.endDate}${hkPropertyParam}`);
+  const hkPdfUrl = apiUrl(
+    `/api/admin/hk-metrics/pdf?start=${hkMonthRange.startDate}&end=${hkMonthRange.endDate}${hkPropertyParam}&mporStandard=${hkSettings.mporStandard}`
+  );
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -2960,6 +3086,16 @@ export default function AdminDashboard() {
                     onChange={(event) => setHkSettings((prev) => ({ ...prev, lunchMinutes: toNumber(event.target.value) }))}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Industry Standard MPOR (Min)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={hkSettings.mporStandard}
+                    onChange={(event) => setHkSettings((prev) => ({ ...prev, mporStandard: toNumber(event.target.value) }))}
+                  />
+                </div>
               </div>
 
               {hkSummaryLoading && (
@@ -3004,6 +3140,7 @@ export default function AdminDashboard() {
                           const mpor = totals.totalPaidHours > 0 && totals.totalRoomsForMpor > 0
                             ? (totals.totalPaidHours * 60) / totals.totalRoomsForMpor
                             : 0;
+                          const mporVariance = mpor > 0 ? mpor - hkSettings.mporStandard : null;
                           const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
                           const roomsSoldMissing = roomsSoldNumber <= 0;
                           const isExpanded = hkExpandedDays[dateKey];
@@ -3056,7 +3193,7 @@ export default function AdminDashboard() {
                                 <td className="p-2 text-right">{formatHkValue(totals.totalSO)}</td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalRooms)}</td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalStandardHours)}</td>
-                                <td className="p-2 text-right">{formatHkValue(totals.totalVariance)}</td>
+                                <td className="p-2 text-right">{formatHkValue(mporVariance)}</td>
                                 <td className="p-2 text-right">{formatHkValue(mpor)}</td>
                                 <td className="p-2">
                                   <Input
@@ -3211,14 +3348,20 @@ export default function AdminDashboard() {
                           <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumTotalDailyHours)}</td>
                           <td className="p-2 text-center">
                             {formatHkValue(
-                              hkDailySummary.hporCount ? hkDailySummary.hporSum / hkDailySummary.hporCount : null
+                              hkDailySummary.hporRoomsSold
+                                ? hkDailySummary.hporDailyHours / hkDailySummary.hporRoomsSold
+                                : null
                             )}
                           </td>
                           <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumTotalCO)}</td>
                           <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumTotalSO)}</td>
                           <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumTotalRooms)}</td>
                           <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumStandardHours)}</td>
-                          <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumVariance)}</td>
+                          <td className="p-2 text-center">
+                            {formatHkValue(
+                              hkDailySummary.varianceCount ? hkDailySummary.sumVariance / hkDailySummary.varianceCount : null
+                            )}
+                          </td>
                           <td className="p-2 text-center">
                             {formatHkValue(
                               hkDailySummary.mporPaidCount ? hkDailySummary.mporPaidSum / hkDailySummary.mporPaidCount : null
@@ -3268,7 +3411,9 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {hkWeeklyRollups.map((entry: any) => (
+                        {hkWeeklyRollups.map((entry: any) => {
+                          const variance = typeof entry.mporPaid === "number" ? entry.mporPaid - hkSettings.mporStandard : null;
+                          return (
                           <tr key={entry.key} className="border-b">
                             <td className="p-2">{entry.key}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.roomsSold)}</td>
@@ -3280,10 +3425,11 @@ export default function AdminDashboard() {
                             <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.standardHours)}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.varianceHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(variance)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                     {hkWeeklyRollups.some((entry: any) => (entry.hporMissingDays || 0) > 0) && (
@@ -3323,22 +3469,31 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {hkMonthlyRollups.map((entry: any) => (
+                        {hkMonthlyRollups.map((entry: any) => {
+                          const variance = typeof entry.mporPaid === "number" ? entry.mporPaid - hkSettings.mporStandard : null;
+                          const isSelectedMonth = entry.key === hkMonth;
+                          const mtdHpor = hkDailySummary.hporRoomsSold
+                            ? hkDailySummary.hporDailyHours / hkDailySummary.hporRoomsSold
+                            : null;
+                          const roomRevenue = isSelectedMonth ? hkDailySummary.sumRoomRevenueDaily : entry.roomRevenueDaily;
+                          const hporValue = isSelectedMonth ? mtdHpor : entry.hpor;
+                          return (
                           <tr key={entry.key} className="border-b">
                             <td className="p-2">{entry.key}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.roomsSold)}</td>
-                            <td className="p-2 text-right">{formatCurrencyValue(entry.roomRevenueDaily)}</td>
+                            <td className="p-2 text-right">{formatCurrencyValue(roomRevenue)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.totalDailyHours)}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
+                            <td className="p-2 text-right">{formatHkValue(hporValue)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.hporMissingDays)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.standardHours)}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.varianceHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(variance)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                     {hkMonthlyRollups.some((entry: any) => (entry.hporMissingDays || 0) > 0) && (
@@ -3351,6 +3506,123 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Attendant Rankings</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <div className="text-sm font-medium">
+                  Daily Ranking {hkLatestDayWithEntries ? `(${format(parseISO(hkLatestDayWithEntries), "EEE MMM d")})` : ""}
+                </div>
+                {hkRankingDaily.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No attendant entries for the selected day.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="p-2 text-left">Rank</th>
+                          <th className="p-2 text-left">Attendant</th>
+                          <th className="p-2 text-right">MPOR (Min)</th>
+                          <th className="p-2 text-right">Rooms</th>
+                          <th className="p-2 text-right">Hours</th>
+                          <th className="p-2 text-left">Trend</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hkRankingDaily.map((entry, index) => (
+                          <tr key={`daily-${entry.attendantName}`} className="border-b">
+                            <td className="p-2">{index + 1}</td>
+                            <td className="p-2">{entry.attendantName}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.mpor)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.roomsTotal)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.hoursTotal)}</td>
+                            <td className="p-2">
+                              <Sparkline values={entry.trend} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium">Monthly Ranking</div>
+                {hkRankingMonthly.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No attendant entries yet.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="p-2 text-left">Rank</th>
+                          <th className="p-2 text-left">Attendant</th>
+                          <th className="p-2 text-right">MPOR (Min)</th>
+                          <th className="p-2 text-right">Rooms</th>
+                          <th className="p-2 text-right">Hours</th>
+                          <th className="p-2 text-left">Trend</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hkRankingMonthly.map((entry, index) => (
+                          <tr key={`monthly-${entry.attendantName}`} className="border-b">
+                            <td className="p-2">{index + 1}</td>
+                            <td className="p-2">{entry.attendantName}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.mpor)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.roomsTotal)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.hoursTotal)}</td>
+                            <td className="p-2">
+                              <Sparkline values={entry.trend} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-sm font-medium">MTD Ranking</div>
+                {hkRankingMtd.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No attendant entries yet.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="p-2 text-left">Rank</th>
+                          <th className="p-2 text-left">Attendant</th>
+                          <th className="p-2 text-right">MPOR (Min)</th>
+                          <th className="p-2 text-right">Rooms</th>
+                          <th className="p-2 text-right">Hours</th>
+                          <th className="p-2 text-left">Trend</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hkRankingMtd.map((entry, index) => (
+                          <tr key={`mtd-${entry.attendantName}`} className="border-b">
+                            <td className="p-2">{index + 1}</td>
+                            <td className="p-2">{entry.attendantName}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.mpor)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.roomsTotal)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.hoursTotal)}</td>
+                            <td className="p-2">
+                              <Sparkline values={entry.trend} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           <Dialog open={hkImportDialogOpen} onOpenChange={setHkImportDialogOpen}>
             <DialogContent className="max-w-2xl">

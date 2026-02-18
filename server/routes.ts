@@ -8258,11 +8258,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { startDate, endDate } = resolveHkDateRange(req.query);
       const property = typeof req.query.property === "string" ? req.query.property.trim() : "";
+      const mporStandardRaw = Number(req.query.mporStandard ?? 24);
+      const mporStandard = Number.isFinite(mporStandardRaw) ? mporStandardRaw : 24;
       const summary = await buildHkSummary(startDate, endDate, property || null);
       const pdfBuffer = await renderHkMetricsPdf({
         property: property || "All",
         startDate,
         endDate,
+        mporStandard,
         summary: summary as any,
       });
       const safeProperty = (property || "all").replace(/[^a-z0-9-_]+/gi, "-").toLowerCase();

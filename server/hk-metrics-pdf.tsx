@@ -57,6 +57,7 @@ type HkPdfOptions = {
   property: string;
   startDate: string;
   endDate: string;
+  mporStandard: number;
   summary: HkSummary;
 };
 
@@ -176,7 +177,7 @@ const renderTable = (headers: string[], rows: Array<(string | number | null | un
 );
 
 export async function renderHkMetricsPdf(options: HkPdfOptions) {
-  const { property, startDate, endDate, summary } = options;
+  const { property, startDate, endDate, summary, mporStandard } = options;
 
   const dailyRows = summary.dailyEntries.map((entry) => [
     entry.metricDate,
@@ -188,7 +189,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
     entry.stayovers,
     entry.roomsCleaned,
     entry.standardHours,
-    entry.varianceHours,
+    typeof entry.mporPaid === "number" ? entry.mporPaid - mporStandard : null,
     entry.mporPaid,
   ]);
 
@@ -202,7 +203,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
     entry.stayovers,
     entry.roomsCleaned,
     entry.standardHours,
-    entry.varianceHours,
+    typeof entry.mporPaid === "number" ? entry.mporPaid - mporStandard : null,
     entry.mporPaid,
   ]);
 
@@ -216,7 +217,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
     entry.stayovers,
     entry.roomsCleaned,
     entry.standardHours,
-    entry.varianceHours,
+    typeof entry.mporPaid === "number" ? entry.mporPaid - mporStandard : null,
     entry.mporPaid,
   ]);
 

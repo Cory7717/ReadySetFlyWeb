@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, X, Rocket, Tag, ChevronDown, ChevronRight } from "lucide-react";
-import { endOfMonth, format, parse, parseISO, startOfMonth, eachDayOfInterval, isSameMonth } from "date-fns";
+import { endOfMonth, format, parse, parseISO, startOfMonth, eachDayOfInterval, isSameMonth, startOfISOWeek, endOfISOWeek, getISOWeek, getISOWeekYear } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -1878,6 +1878,43 @@ export default function AdminDashboard() {
     );
   }, [hkMonthDays, hkAttendantsByDay]);
 
+  const hkWeekOptions = useMemo(() => {
+    const map = new Map<string, { key: string; weekStart: string; weekEnd: string; dateKeys: string[] }>();
+    hkMonthDays.forEach((dateKey) => {
+      const date = parseISO(dateKey);
+      const weekStart = format(startOfISOWeek(date), "yyyy-MM-dd");
+      const weekEnd = format(endOfISOWeek(date), "yyyy-MM-dd");
+      const key = `${getISOWeekYear(date)}-W${String(getISOWeek(date)).padStart(2, "0")}`;
+      if (!map.has(key)) {
+        map.set(key, { key, weekStart, weekEnd, dateKeys: [] });
+      }
+      map.get(key)?.dateKeys.push(dateKey);
+    });
+
+    return Array.from(map.values())
+      .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+      .map((week) => ({
+        ...week,
+        label: `${week.key} (${format(parseISO(week.weekStart), "MMM d")} - ${format(parseISO(week.weekEnd), "MMM d")})`,
+      }));
+  }, [hkMonthDays]);
+
+  const [hkSelectedWeekKey, setHkSelectedWeekKey] = useState("");
+
+  useEffect(() => {
+    if (!hkWeekOptions.length) {
+      setHkSelectedWeekKey("");
+      return;
+    }
+    const latestDate = hkLatestDayWithEntries || hkMonthRange.endDate;
+    const date = parseISO(latestDate);
+    const preferredKey = `${getISOWeekYear(date)}-W${String(getISOWeek(date)).padStart(2, "0")}`;
+    const resolvedKey = hkWeekOptions.some((week) => week.key === preferredKey)
+      ? preferredKey
+      : hkWeekOptions[hkWeekOptions.length - 1].key;
+    setHkSelectedWeekKey((prev) => (prev && hkWeekOptions.some((week) => week.key === prev) ? prev : resolvedKey));
+  }, [hkWeekOptions, hkLatestDayWithEntries, hkMonthRange.endDate]);
+
   const hkMtdEndDate = useMemo(() => {
     const monthStart = parse(hkMonth, "yyyy-MM", new Date());
     const today = new Date();
@@ -1934,14 +1971,14 @@ export default function AdminDashboard() {
       .sort((a, b) => (a.mpor ?? 0) - (b.mpor ?? 0));
   };
 
-  const hkRankingDaily = useMemo(() => {
-    if (!hkLatestDayWithEntries) return [];
-    return buildAttendantRanking([hkLatestDayWithEntries]);
-  }, [hkLatestDayWithEntries, hkAttendantStats]);
+  const hkSelectedWeek = useMemo(() => {
+    return hkWeekOptions.find((week) => week.key === hkSelectedWeekKey) || null;
+  }, [hkWeekOptions, hkSelectedWeekKey]);
 
-  const hkRankingMonthly = useMemo(() => {
-    return buildAttendantRanking(hkMonthDays);
-  }, [hkMonthDays, hkAttendantStats]);
+  const hkRankingWeekly = useMemo(() => {
+    if (!hkSelectedWeek) return [];
+    return buildAttendantRanking(hkSelectedWeek.dateKeys);
+  }, [hkSelectedWeek, hkAttendantStats]);
 
   const hkRankingMtd = useMemo(() => {
     const mtdDates = hkMonthDays.filter((dateKey) => dateKey <= hkMtdEndDate);
@@ -3509,15 +3546,31 @@ export default function AdminDashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Attendant Rankings</CardTitle>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle>Attendant Rankings</CardTitle>
+                <div className="w-full max-w-xs">
+                  <Select value={hkSelectedWeekKey} onValueChange={setHkSelectedWeekKey}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Select week" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hkWeekOptions.map((week) => (
+                        <SelectItem key={week.key} value={week.key}>
+                          {week.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <div className="text-sm font-medium">
-                  Daily Ranking {hkLatestDayWithEntries ? `(${format(parseISO(hkLatestDayWithEntries), "EEE MMM d")})` : ""}
+                  Weekly Ranking {hkSelectedWeek ? `(${hkSelectedWeek.label})` : ""}
                 </div>
-                {hkRankingDaily.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No attendant entries for the selected day.</div>
+                {hkRankingWeekly.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No attendant entries for the selected week.</div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
@@ -3532,44 +3585,8 @@ export default function AdminDashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {hkRankingDaily.map((entry, index) => (
-                          <tr key={`daily-${entry.attendantName}`} className="border-b">
-                            <td className="p-2">{index + 1}</td>
-                            <td className="p-2">{entry.attendantName}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.mpor)}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.roomsTotal)}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.hoursTotal)}</td>
-                            <td className="p-2">
-                              <Sparkline values={entry.trend} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Monthly Ranking</div>
-                {hkRankingMonthly.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No attendant entries yet.</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead className="bg-muted/50">
-                        <tr>
-                          <th className="p-2 text-left">Rank</th>
-                          <th className="p-2 text-left">Attendant</th>
-                          <th className="p-2 text-right">MPOR (Min)</th>
-                          <th className="p-2 text-right">Rooms</th>
-                          <th className="p-2 text-right">Hours</th>
-                          <th className="p-2 text-left">Trend</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {hkRankingMonthly.map((entry, index) => (
-                          <tr key={`monthly-${entry.attendantName}`} className="border-b">
+                        {hkRankingWeekly.map((entry, index) => (
+                          <tr key={`weekly-${entry.attendantName}`} className="border-b">
                             <td className="p-2">{index + 1}</td>
                             <td className="p-2">{entry.attendantName}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.mpor)}</td>

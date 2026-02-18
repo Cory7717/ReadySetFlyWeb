@@ -3205,21 +3205,21 @@ export default function AdminDashboard() {
                           );
                         })}
                         <tr className="bg-muted/40 border-t">
-                          <td className="p-2 font-semibold">Totals</td>
-                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumRoomsSold)}</td>
-                          <td className="p-2 text-right">{formatCurrencyValue(hkDailySummary.sumRoomRevenueDaily)}</td>
-                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalDailyHours)}</td>
-                          <td className="p-2 text-right">
+                          <td className="p-2 font-semibold text-center">Totals</td>
+                          <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumRoomsSold)}</td>
+                          <td className="p-2 text-center">{formatCurrencyValue(hkDailySummary.sumRoomRevenueDaily)}</td>
+                          <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumTotalDailyHours)}</td>
+                          <td className="p-2 text-center">
                             {formatHkValue(
                               hkDailySummary.hporCount ? hkDailySummary.hporSum / hkDailySummary.hporCount : null
                             )}
                           </td>
-                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalCO)}</td>
-                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalSO)}</td>
-                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalRooms)}</td>
-                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumStandardHours)}</td>
-                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumVariance)}</td>
-                          <td className="p-2 text-right">
+                          <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumTotalCO)}</td>
+                          <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumTotalSO)}</td>
+                          <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumTotalRooms)}</td>
+                          <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumStandardHours)}</td>
+                          <td className="p-2 text-center">{formatHkValue(hkDailySummary.sumVariance)}</td>
+                          <td className="p-2 text-center">
                             {formatHkValue(
                               hkDailySummary.mporPaidCount ? hkDailySummary.mporPaidSum / hkDailySummary.mporPaidCount : null
                             )}

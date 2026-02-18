@@ -1688,38 +1688,39 @@ export default function AdminDashboard() {
   const computeEntryStats = (entry: HkAttendantEntry) => {
     const co = toNumber(entry.checkoutsCleaned);
     const so = toNumber(entry.stayoversCleaned);
-    const totalRooms = co + so;
+    const dndRooms = toNumber(entry.recleans);
+    const totalRooms = Math.max(co + so - dndRooms, 0);
     const paidHours = toHours(entry.paidHours);
-    const lunchMinutes = toNumber(entry.lunchMinutes);
-    const productiveHours = Math.max(paidHours - lunchMinutes / 60, 0);
+    const productiveHours = paidHours;
     const standardHours = (co * hkSettings.checkoutMinutes + so * hkSettings.stayoverMinutes) / 60;
     const variance = paidHours - standardHours;
-    const mporPaid = paidHours > 0 ? totalRooms / paidHours : 0;
-    const mporProductive = productiveHours > 0 ? totalRooms / productiveHours : 0;
+    const mporMinutes = paidHours > 0 && totalRooms > 0 ? (paidHours * 60) / totalRooms : 0;
     return {
       totalRooms,
       paidHours,
       productiveHours,
       standardHours,
       variance,
-      mporPaid,
-      mporProductive,
+      mporMinutes,
     };
   };
 
   const computeDayTotals = (dateKey: string) => {
     const entries = hkAttendantsByDay[dateKey] || [];
-    return entries.reduce(
+    const totals = entries.reduce(
       (acc, entry) => {
         const stats = computeEntryStats(entry);
+        const co = toNumber(entry.checkoutsCleaned);
+        const so = toNumber(entry.stayoversCleaned);
+        const dndRooms = toNumber(entry.recleans);
         acc.totalCO += toNumber(entry.checkoutsCleaned);
         acc.totalSO += toNumber(entry.stayoversCleaned);
-        acc.totalRooms += stats.totalRooms;
+        acc.totalRoomsRaw += co + so;
+        acc.totalDndRooms += dndRooms;
         acc.totalPaidHours += stats.paidHours;
         acc.totalProductiveHours += stats.productiveHours;
         acc.totalStandardHours += stats.standardHours;
         acc.totalVariance += stats.variance;
-        acc.totalLunchMinutes += toNumber(entry.lunchMinutes);
         acc.totalLateCheckouts += toNumber(entry.lateCheckouts);
         acc.totalRecleans += toNumber(entry.recleans);
         return acc;
@@ -1727,16 +1728,21 @@ export default function AdminDashboard() {
       {
         totalCO: 0,
         totalSO: 0,
-        totalRooms: 0,
+        totalRoomsRaw: 0,
+        totalDndRooms: 0,
         totalPaidHours: 0,
         totalProductiveHours: 0,
         totalStandardHours: 0,
         totalVariance: 0,
-        totalLunchMinutes: 0,
         totalLateCheckouts: 0,
         totalRecleans: 0,
       }
     );
+
+    return {
+      ...totals,
+      totalRooms: Math.max(totals.totalRoomsRaw - totals.totalDndRooms, 0),
+    };
   };
 
   const hkMonthDays = useMemo(() => {
@@ -1928,7 +1934,7 @@ export default function AdminDashboard() {
         checkoutsCleaned: "",
         stayoversCleaned: "",
         paidHours: "",
-        lunchMinutes: hkSettings.lunchMinutes.toString(),
+        lunchMinutes: "",
         lateCheckouts: "",
         deepCleans: "",
         recleans: "",
@@ -1989,7 +1995,7 @@ export default function AdminDashboard() {
         stayovers: totals.totalSO,
         roomsCleaned: totals.totalRooms,
         paidHours: totals.totalPaidHours.toFixed(2),
-        lunchMinutes: totals.totalLunchMinutes,
+        lunchMinutes: 0,
         productiveHours: totals.totalProductiveHours.toFixed(2),
         attendantsWorking: entries.length,
         lateCheckouts: totals.totalLateCheckouts,
@@ -2013,7 +2019,7 @@ export default function AdminDashboard() {
           stayoversCleaned: toNumber(entry.stayoversCleaned),
           roomsCleaned: stats.totalRooms,
           paidHours: String(entry.paidHours || "0"),
-          lunchMinutes: toNumber(entry.lunchMinutes),
+          lunchMinutes: 0,
           productiveHours: stats.productiveHours.toFixed(2),
           deepCleans: toNumber(entry.deepCleans),
           recleans: toNumber(entry.recleans),
@@ -3082,16 +3088,14 @@ export default function AdminDashboard() {
                                                 <th className="p-2 text-right">C/O</th>
                                                 <th className="p-2 text-right">S/O</th>
                                                 <th className="p-2 text-right">HK Paid</th>
-                                                <th className="p-2 text-right">Lunch</th>
                                                 <th className="p-2 text-center">4pm C/O</th>
                                                 <th className="p-2 text-right">Deep Clean</th>
-                                                <th className="p-2 text-right">Re-clean</th>
+                                                <th className="p-2 text-right">DND</th>
                                                 <th className="p-2 text-left">Notes</th>
                                                 <th className="p-2 text-right">Total Rooms</th>
                                                 <th className="p-2 text-right">Std Hours</th>
                                                 <th className="p-2 text-right">Variance</th>
-                                                <th className="p-2 text-right">MPOR Paid</th>
-                                                <th className="p-2 text-right">MPOR HK Prod</th>
+                                                <th className="p-2 text-right">MPOR (Min)</th>
                                                 <th className="p-2 text-center">Delete</th>
                                               </tr>
                                             </thead>
@@ -3137,15 +3141,6 @@ export default function AdminDashboard() {
                                                         className="h-8 text-xs text-right"
                                                       />
                                                     </td>
-                                                    <td className="p-2 text-right">
-                                                      <Input
-                                                        type="number"
-                                                        min="0"
-                                                        value={entry.lunchMinutes}
-                                                        onChange={(event) => updateAttendant(dateKey, index, { lunchMinutes: event.target.value })}
-                                                        className="h-8 text-xs text-right"
-                                                      />
-                                                    </td>
                                                     <td className="p-2 text-center">
                                                       <Checkbox
                                                         checked={toNumber(entry.lateCheckouts) > 0}
@@ -3180,8 +3175,7 @@ export default function AdminDashboard() {
                                                     <td className="p-2 text-right">{formatHkValue(stats.totalRooms)}</td>
                                                     <td className="p-2 text-right">{formatHkValue(stats.standardHours)}</td>
                                                     <td className="p-2 text-right">{formatHkValue(stats.variance)}</td>
-                                                    <td className="p-2 text-right">{formatHkValue(stats.mporPaid)}</td>
-                                                    <td className="p-2 text-right">{formatHkValue(stats.mporProductive)}</td>
+                                                    <td className="p-2 text-right">{formatHkValue(stats.mporMinutes)}</td>
                                                     <td className="p-2 text-center">
                                                       <Button size="icon" variant="ghost" onClick={() => removeAttendant(dateKey, index)}>
                                                         <Trash2 className="h-4 w-4 text-destructive" />

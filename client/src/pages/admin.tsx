@@ -2878,7 +2878,7 @@ export default function AdminDashboard() {
                         <tr>
                           <th className="p-2 text-left">Date</th>
                           <th className="p-2 text-right">Rooms Sold</th>
-                          <th className="p-2 text-right">Daily Hours</th>
+                          <th className="p-2 text-right">Paid Hours (Net)</th>
                           <th className="p-2 text-right">HPOR</th>
                           <th className="p-2 text-right">Occupied</th>
                           <th className="p-2 text-right">Total C/O</th>
@@ -2934,6 +2934,7 @@ export default function AdminDashboard() {
                                     value={meta.totalDailyHours}
                                     onChange={(event) => updateDayMeta(dateKey, { totalDailyHours: event.target.value })}
                                     className="h-8 text-xs text-right"
+                                    placeholder="Net of lunch"
                                   />
                                 </td>
                                 <td className="p-2 text-right">{hpor ? formatHkValue(hpor) : "—"}</td>
@@ -3141,7 +3142,7 @@ export default function AdminDashboard() {
                           <th className="p-2 text-left">Week</th>
                           <th className="p-2 text-right">Occ</th>
                           <th className="p-2 text-right">Sold</th>
-                          <th className="p-2 text-right">Daily Hrs</th>
+                          <th className="p-2 text-right">Paid Hrs</th>
                           <th className="p-2 text-right">HPOR</th>
                           <th className="p-2 text-right">Missing</th>
                           <th className="p-2 text-right">CO</th>
@@ -3196,7 +3197,7 @@ export default function AdminDashboard() {
                           <th className="p-2 text-left">Month</th>
                           <th className="p-2 text-right">Occ</th>
                           <th className="p-2 text-right">Sold</th>
-                          <th className="p-2 text-right">Daily Hrs</th>
+                          <th className="p-2 text-right">Paid Hrs</th>
                           <th className="p-2 text-right">HPOR</th>
                           <th className="p-2 text-right">Missing</th>
                           <th className="p-2 text-right">CO</th>

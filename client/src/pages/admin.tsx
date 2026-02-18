@@ -68,13 +68,13 @@ type HkSettings = {
 
 type HkAttendantEntry = {
   attendantName: string;
-  checkoutsCleaned: number;
-  stayoversCleaned: number;
+  checkoutsCleaned: string;
+  stayoversCleaned: string;
   paidHours: string;
-  lunchMinutes: number;
-  lateCheckouts: number;
-  deepCleans: number;
-  recleans: number;
+  lunchMinutes: string;
+  lateCheckouts: string;
+  deepCleans: string;
+  recleans: string;
   notes: string;
 };
 
@@ -588,13 +588,13 @@ export default function AdminDashboard() {
       if (!nextAttendants[metricDate]) nextAttendants[metricDate] = [];
       nextAttendants[metricDate].push({
         attendantName: entry.attendantName || "",
-        checkoutsCleaned: Number(entry.checkoutsCleaned || 0),
-        stayoversCleaned: Number(entry.stayoversCleaned || 0),
+        checkoutsCleaned: entry.checkoutsCleaned?.toString() ?? "",
+        stayoversCleaned: entry.stayoversCleaned?.toString() ?? "",
         paidHours: entry.paidHours?.toString() ?? "",
-        lunchMinutes: Number(entry.lunchMinutes ?? hkSettings.lunchMinutes),
-        lateCheckouts: Number(entry.lateCheckouts || 0),
-        deepCleans: Number(entry.deepCleans || 0),
-        recleans: Number(entry.recleans || 0),
+        lunchMinutes: entry.lunchMinutes?.toString() ?? hkSettings.lunchMinutes.toString(),
+        lateCheckouts: entry.lateCheckouts?.toString() ?? "",
+        deepCleans: entry.deepCleans?.toString() ?? "",
+        recleans: entry.recleans?.toString() ?? "",
         notes: entry.notes ?? "",
       });
     });
@@ -1840,13 +1840,13 @@ export default function AdminDashboard() {
       const dayEntries = prev[dateKey] ? [...prev[dateKey]] : [];
       dayEntries.push({
         attendantName: "",
-        checkoutsCleaned: 0,
-        stayoversCleaned: 0,
+        checkoutsCleaned: "",
+        stayoversCleaned: "",
         paidHours: "",
-        lunchMinutes: hkSettings.lunchMinutes,
-        lateCheckouts: 0,
-        deepCleans: 0,
-        recleans: 0,
+        lunchMinutes: hkSettings.lunchMinutes.toString(),
+        lateCheckouts: "",
+        deepCleans: "",
+        recleans: "",
         notes: "",
       });
       return { ...prev, [dateKey]: dayEntries };
@@ -3025,7 +3025,7 @@ export default function AdminDashboard() {
                                                         type="number"
                                                         min="0"
                                                         value={entry.checkoutsCleaned}
-                                                        onChange={(event) => updateAttendant(dateKey, index, { checkoutsCleaned: toNumber(event.target.value) })}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { checkoutsCleaned: event.target.value })}
                                                         className="h-8 text-xs text-right"
                                                       />
                                                     </td>
@@ -3034,7 +3034,7 @@ export default function AdminDashboard() {
                                                         type="number"
                                                         min="0"
                                                         value={entry.stayoversCleaned}
-                                                        onChange={(event) => updateAttendant(dateKey, index, { stayoversCleaned: toNumber(event.target.value) })}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { stayoversCleaned: event.target.value })}
                                                         className="h-8 text-xs text-right"
                                                       />
                                                     </td>
@@ -3053,14 +3053,14 @@ export default function AdminDashboard() {
                                                         type="number"
                                                         min="0"
                                                         value={entry.lunchMinutes}
-                                                        onChange={(event) => updateAttendant(dateKey, index, { lunchMinutes: toNumber(event.target.value) })}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { lunchMinutes: event.target.value })}
                                                         className="h-8 text-xs text-right"
                                                       />
                                                     </td>
                                                     <td className="p-2 text-center">
                                                       <Checkbox
-                                                        checked={entry.lateCheckouts > 0}
-                                                        onCheckedChange={(checked) => updateAttendant(dateKey, index, { lateCheckouts: checked ? 1 : 0 })}
+                                                        checked={toNumber(entry.lateCheckouts) > 0}
+                                                        onCheckedChange={(checked) => updateAttendant(dateKey, index, { lateCheckouts: checked ? "1" : "" })}
                                                       />
                                                     </td>
                                                     <td className="p-2 text-right">
@@ -3068,7 +3068,7 @@ export default function AdminDashboard() {
                                                         type="number"
                                                         min="0"
                                                         value={entry.deepCleans}
-                                                        onChange={(event) => updateAttendant(dateKey, index, { deepCleans: toNumber(event.target.value) })}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { deepCleans: event.target.value })}
                                                         className="h-8 text-xs text-right"
                                                       />
                                                     </td>
@@ -3077,7 +3077,7 @@ export default function AdminDashboard() {
                                                         type="number"
                                                         min="0"
                                                         value={entry.recleans}
-                                                        onChange={(event) => updateAttendant(dateKey, index, { recleans: toNumber(event.target.value) })}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { recleans: event.target.value })}
                                                         className="h-8 text-xs text-right"
                                                       />
                                                     </td>

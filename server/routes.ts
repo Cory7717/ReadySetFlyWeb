@@ -389,10 +389,30 @@ const extractRoomsSoldFromLine = (line: string) => {
   return null;
 };
 
+const extractTotalRoomSalesFromLine = (line: string) => {
+  if (!/total\s+room\s+sales/i.test(line)) return null;
+  const tokens = (line.match(/\d[\d,]*\.?\d*-?/g) || []) as string[];
+  if (tokens.length < 3) return null;
+  const dailyToken = tokens[0];
+  const mtdToken = tokens[2];
+  if (!dailyToken || !mtdToken) return null;
+  const toSignedNumber = (token: string) => {
+    const trimmed = token.trim();
+    const isNegative = trimmed.endsWith("-");
+    const numeric = Number(trimmed.replace(/,/g, "").replace(/-$/, ""));
+    return isNegative ? -numeric : numeric;
+  };
+  const daily = toSignedNumber(dailyToken);
+  const mtd = toSignedNumber(mtdToken);
+  if (!Number.isFinite(daily) || !Number.isFinite(mtd)) return null;
+  return { roomRevenueDaily: daily, roomRevenueMtd: mtd };
+};
+
 const parseRoomsSoldFile = (content: string) => {
   const lines = content.split(/\r?\n/);
   const skipped: Array<{ line: number; reason: string; raw: string }> = [];
   const parsed: Array<{ line: number; date: string; roomsSold: number; raw: string }> = [];
+  const parsedRevenue: Array<{ line: number; date: string; roomRevenueDaily: number; roomRevenueMtd: number; raw: string }> = [];
   const headerLineIndex = lines.findIndex((line) => detectRoomsSoldHeader(line));
   const headerInfo = headerLineIndex >= 0 ? detectRoomsSoldHeader(lines[headerLineIndex]) : null;
   let defaultDate: string | null = null;
@@ -429,6 +449,22 @@ const parseRoomsSoldFile = (content: string) => {
       roomsSold = extractRoomsSoldFromLine(rawLine);
     }
 
+    const revenue = extractTotalRoomSalesFromLine(rawLine);
+    if (revenue) {
+      const revenueDate = dateToken || defaultDate;
+      if (!revenueDate) {
+        skipped.push({ line: index + 1, reason: "No date found for revenue", raw: rawLine });
+      } else {
+        parsedRevenue.push({
+          line: index + 1,
+          date: revenueDate,
+          roomRevenueDaily: revenue.roomRevenueDaily,
+          roomRevenueMtd: revenue.roomRevenueMtd,
+          raw: rawLine,
+        });
+      }
+    }
+
     if (!dateToken && roomsSold !== null && defaultDate) {
       dateToken = defaultDate;
     }
@@ -444,7 +480,7 @@ const parseRoomsSoldFile = (content: string) => {
     parsed.push({ line: index + 1, date: dateToken, roomsSold, raw: rawLine });
   });
 
-  return { parsed, skipped };
+  return { parsed, parsedRevenue, skipped };
 };
 
 const aggregateDailyTotals = (entries: HkDailyMetric[]) => {
@@ -452,6 +488,11 @@ const aggregateDailyTotals = (entries: HkDailyMetric[]) => {
     (acc, entry) => {
       acc.occupiedRooms += normalizeHkNumber(entry.occupiedRooms);
       acc.roomsSold += normalizeHkNumber(entry.roomsSold);
+      acc.roomRevenueDaily += normalizeHkNumber(entry.roomRevenueDaily);
+      const roomRevenueMtd = normalizeHkNumber(entry.roomRevenueMtd);
+      if (roomRevenueMtd > acc.roomRevenueMtd) {
+        acc.roomRevenueMtd = roomRevenueMtd;
+      }
       acc.checkouts += normalizeHkNumber(entry.checkouts);
       acc.stayovers += normalizeHkNumber(entry.stayovers);
       acc.roomsCleaned += normalizeHkNumber(entry.roomsCleaned);
@@ -478,6 +519,8 @@ const aggregateDailyTotals = (entries: HkDailyMetric[]) => {
     {
       occupiedRooms: 0,
       roomsSold: 0,
+      roomRevenueDaily: 0,
+      roomRevenueMtd: 0,
       checkouts: 0,
       stayovers: 0,
       roomsCleaned: 0,
@@ -506,6 +549,8 @@ const buildDailyRollup = (totals: ReturnType<typeof aggregateDailyTotals>) => {
     paidHours: roundTo(totals.paidHours),
     productiveHours: roundTo(totals.productiveHours),
     totalDailyHours: roundTo(totals.totalDailyHours),
+    roomRevenueDaily: roundTo(totals.roomRevenueDaily),
+    roomRevenueMtd: roundTo(totals.roomRevenueMtd),
     standardHours,
     varianceHours,
     mporPaid: computeRate(totals.paidHours, totals.occupiedRooms, 60),
@@ -7924,6 +7969,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         productiveHours: String(result.data.productiveHours),
         roomsSold: result.data.roomsSold ?? null,
         totalDailyHours: result.data.totalDailyHours ?? null,
+        roomRevenueDaily: result.data.roomRevenueDaily ?? null,
+        roomRevenueMtd: result.data.roomRevenueMtd ?? null,
         notes: notes?.trim() || undefined,
         createdBy: userId ? String(userId) : null,
       };
@@ -7943,6 +7990,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalDailyHours: z.union([z.string().regex(/^\d+(\.\d{1,2})?$/), z.number().min(0)])
           .optional()
           .nullable(),
+        roomRevenueDaily: z.union([z.string().regex(/^\d+(\.\d{1,2})?$/), z.number().min(0)])
+          .optional()
+          .nullable(),
+        roomRevenueMtd: z.union([z.string().regex(/^\d+(\.\d{1,2})?$/), z.number().min(0)])
+          .optional()
+          .nullable(),
         occupiedRooms: z.coerce.number().int().min(0).optional().nullable(),
         notes: z.string().optional().nullable(),
       });
@@ -7960,6 +8013,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         result.data.totalDailyHours === null || result.data.totalDailyHours === undefined
           ? null
           : String(result.data.totalDailyHours);
+      const roomRevenueDaily =
+        result.data.roomRevenueDaily === null || result.data.roomRevenueDaily === undefined
+          ? null
+          : String(result.data.roomRevenueDaily);
+      const roomRevenueMtd =
+        result.data.roomRevenueMtd === null || result.data.roomRevenueMtd === undefined
+          ? null
+          : String(result.data.roomRevenueMtd);
       const roomsSoldOverride = result.data.roomsSold !== undefined;
 
       const saved = await storage.upsertHkDailyMetricFields({
@@ -7967,6 +8028,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         property,
         roomsSold: result.data.roomsSold ?? undefined,
         totalDailyHours,
+        roomRevenueDaily,
+        roomRevenueMtd,
         occupiedRooms: result.data.occupiedRooms ?? undefined,
         notes: result.data.notes === null || result.data.notes === undefined ? undefined : result.data.notes,
         roomsSoldImported: roomsSoldOverride ? false : undefined,
@@ -8026,29 +8089,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const parsedEntries: Array<{ date: string; roomsSold: number; fileName: string; line: number }> = [];
+        const revenueEntries: Array<{
+          date: string;
+          roomRevenueDaily: number;
+          roomRevenueMtd: number;
+          fileName: string;
+          line: number;
+        }> = [];
         const skippedEntries: Array<{ fileName: string; line: number; reason: string; raw: string }> = [];
 
         files.forEach((file) => {
           const content = file.buffer.toString("utf-8");
-          const { parsed, skipped } = parseRoomsSoldFile(content);
+          const { parsed, parsedRevenue, skipped } = parseRoomsSoldFile(content);
           parsed.forEach((entry) => {
             parsedEntries.push({ date: entry.date, roomsSold: entry.roomsSold, fileName: file.originalname, line: entry.line });
+          });
+          parsedRevenue.forEach((entry) => {
+            revenueEntries.push({
+              date: entry.date,
+              roomRevenueDaily: entry.roomRevenueDaily,
+              roomRevenueMtd: entry.roomRevenueMtd,
+              fileName: file.originalname,
+              line: entry.line,
+            });
           });
           skipped.forEach((entry) => {
             skippedEntries.push({ fileName: file.originalname, line: entry.line, reason: entry.reason, raw: entry.raw });
           });
         });
 
-        const perDate = new Map<string, { roomsSold: number; source: string; line: number }>();
+        const perDate = new Map<
+          string,
+          {
+            roomsSold?: number;
+            roomRevenueDaily?: number;
+            roomRevenueMtd?: number;
+            source: string;
+            line: number;
+          }
+        >();
         const overwriteLog: Array<{ date: string; previous: number; next: number }> = [];
         parsedEntries.forEach((entry) => {
           if (perDate.has(entry.date)) {
             const previous = perDate.get(entry.date);
-            if (previous && previous.roomsSold !== entry.roomsSold) {
+            if (previous?.roomsSold !== undefined && previous.roomsSold !== entry.roomsSold) {
               overwriteLog.push({ date: entry.date, previous: previous.roomsSold, next: entry.roomsSold });
             }
           }
-          perDate.set(entry.date, { roomsSold: entry.roomsSold, source: entry.fileName, line: entry.line });
+          perDate.set(entry.date, {
+            ...perDate.get(entry.date),
+            roomsSold: entry.roomsSold,
+            source: entry.fileName,
+            line: entry.line,
+          });
+        });
+
+        revenueEntries.forEach((entry) => {
+          const existing = perDate.get(entry.date);
+          perDate.set(entry.date, {
+            ...existing,
+            roomRevenueDaily: entry.roomRevenueDaily,
+            roomRevenueMtd: entry.roomRevenueMtd,
+            source: entry.fileName,
+            line: entry.line,
+          });
         });
 
         const dates = Array.from(perDate.keys());
@@ -8064,7 +8168,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const conflicts: Array<{ date: string; previous: number | null; next: number }> = [];
         const importedAt = new Date();
 
-        const perDateEntries: Array<[string, { roomsSold: number; source: string; line: number }]> = [];
+        const perDateEntries: Array<[
+          string,
+          {
+            roomsSold?: number;
+            roomRevenueDaily?: number;
+            roomRevenueMtd?: number;
+            source: string;
+            line: number;
+          }
+        ]> = [];
         perDate.forEach((value, key) => {
           perDateEntries.push([key, value]);
         });
@@ -8072,9 +8185,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await Promise.all(
           perDateEntries.map(async ([date, payload]) => {
             const existing = existingMap.get(date);
-            if (existing && existing.roomsSold !== null && Number(existing.roomsSold) !== payload.roomsSold) {
+            if (payload.roomsSold !== undefined && existing && existing.roomsSold !== null && Number(existing.roomsSold) !== payload.roomsSold) {
               conflictCount += 1;
               conflicts.push({ date, previous: Number(existing.roomsSold), next: payload.roomsSold });
+            }
+            if (
+              payload.roomRevenueDaily !== undefined &&
+              existing &&
+              existing.roomRevenueDaily !== null &&
+              Number(existing.roomRevenueDaily) !== payload.roomRevenueDaily
+            ) {
+              conflictCount += 1;
+              conflicts.push({ date, previous: Number(existing.roomRevenueDaily), next: payload.roomRevenueDaily });
+            }
+            if (
+              payload.roomRevenueMtd !== undefined &&
+              existing &&
+              existing.roomRevenueMtd !== null &&
+              Number(existing.roomRevenueMtd) !== payload.roomRevenueMtd
+            ) {
+              conflictCount += 1;
+              conflicts.push({ date, previous: Number(existing.roomRevenueMtd), next: payload.roomRevenueMtd });
             }
             await storage.upsertHkDailyMetricFields({
               metricDate: date,
@@ -8082,13 +8213,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               roomsSold: payload.roomsSold,
               roomsSoldImported: true,
               roomsSoldImportedAt: importedAt,
+              roomRevenueDaily: payload.roomRevenueDaily !== undefined ? payload.roomRevenueDaily.toFixed(2) : undefined,
+              roomRevenueMtd: payload.roomRevenueMtd !== undefined ? payload.roomRevenueMtd.toFixed(2) : undefined,
             });
             updatedCount += 1;
           })
         );
 
         const userId = req.user?.claims?.sub || req.session?.userId;
-        const parsedCount = parsedEntries.length;
+        const parsedCount = parsedEntries.length + revenueEntries.length;
         const skippedCount = skippedEntries.length;
         await storage.createHkRoomsSoldImport({
           uploadedBy: userId ? String(userId) : null,

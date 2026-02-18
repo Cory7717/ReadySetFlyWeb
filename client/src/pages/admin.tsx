@@ -82,6 +82,8 @@ type HkDayMeta = {
   occupiedRooms: string;
   roomsSold: string;
   totalDailyHours: string;
+  roomRevenueDaily: string;
+  roomRevenueMtd: string;
   roomsSoldImported?: boolean;
   notes: string;
 };
@@ -106,7 +108,10 @@ export default function AdminDashboard() {
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AdminRole>("operations");
-  const [hkProperty, setHkProperty] = useState("");
+  const [hkProperty, setHkProperty] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("hk-property") || "";
+  });
   const [hkMonth, setHkMonth] = useState(() => format(new Date(), "yyyy-MM"));
   const [hkImportDialogOpen, setHkImportDialogOpen] = useState(false);
   const [hkImporting, setHkImporting] = useState(false);
@@ -319,6 +324,12 @@ export default function AdminDashboard() {
       window.localStorage.setItem("hk-settings", JSON.stringify(hkSettings));
     }
   }, [hkSettings]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("hk-property", hkProperty);
+    }
+  }, [hkProperty]);
   
   const { toast } = useToast();
 
@@ -576,6 +587,8 @@ export default function AdminDashboard() {
         occupiedRooms: entry.occupiedRooms?.toString() ?? "",
         roomsSold: entry.roomsSold?.toString() ?? "",
         totalDailyHours: entry.totalDailyHours?.toString() ?? "",
+        roomRevenueDaily: entry.roomRevenueDaily?.toString() ?? "",
+        roomRevenueMtd: entry.roomRevenueMtd?.toString() ?? "",
         roomsSoldImported: Boolean(entry.roomsSoldImported),
         notes: entry.notes ?? "",
       };
@@ -1733,6 +1746,77 @@ export default function AdminDashboard() {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [hkAttendantsByDay]);
 
+  const hkDailySummary = useMemo(() => {
+    return hkMonthDays.reduce(
+      (acc, dateKey) => {
+        const totals = computeDayTotals(dateKey);
+        const meta = hkDayMeta[dateKey] || {
+          occupiedRooms: "",
+          roomsSold: "",
+          totalDailyHours: "",
+          roomRevenueDaily: "",
+          roomRevenueMtd: "",
+          notes: "",
+        };
+        const roomsSoldNumber = toNumber(meta.roomsSold);
+        const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
+        const occupiedRooms = toNumber(meta.occupiedRooms);
+        const mporPaid = totals.totalPaidHours > 0 ? totals.totalRooms / totals.totalPaidHours : null;
+        const mporProd = totals.totalProductiveHours > 0 ? totals.totalRooms / totals.totalProductiveHours : null;
+        const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
+
+        acc.sumRoomsSold += roomsSoldNumber;
+        acc.sumTotalDailyHours += totalDailyHoursNumber;
+        acc.sumOccupiedRooms += occupiedRooms;
+        acc.sumTotalCO += totals.totalCO;
+        acc.sumTotalSO += totals.totalSO;
+        acc.sumTotalRooms += totals.totalRooms;
+        acc.sumStandardHours += totals.totalStandardHours;
+        acc.sumVariance += totals.totalVariance;
+
+        if (meta.roomRevenueDaily) {
+          acc.sumRoomRevenueDaily += toNumber(meta.roomRevenueDaily);
+        }
+        if (meta.roomRevenueMtd) {
+          acc.maxRoomRevenueMtd = Math.max(acc.maxRoomRevenueMtd, toNumber(meta.roomRevenueMtd));
+        }
+
+        if (mporPaid !== null) {
+          acc.mporPaidSum += mporPaid;
+          acc.mporPaidCount += 1;
+        }
+        if (mporProd !== null) {
+          acc.mporProdSum += mporProd;
+          acc.mporProdCount += 1;
+        }
+        if (hpor !== null) {
+          acc.hporSum += hpor;
+          acc.hporCount += 1;
+        }
+
+        return acc;
+      },
+      {
+        sumRoomsSold: 0,
+        sumTotalDailyHours: 0,
+        sumOccupiedRooms: 0,
+        sumTotalCO: 0,
+        sumTotalSO: 0,
+        sumTotalRooms: 0,
+        sumStandardHours: 0,
+        sumVariance: 0,
+        sumRoomRevenueDaily: 0,
+        maxRoomRevenueMtd: 0,
+        mporPaidSum: 0,
+        mporPaidCount: 0,
+        mporProdSum: 0,
+        mporProdCount: 0,
+        hporSum: 0,
+        hporCount: 0,
+      }
+    );
+  }, [hkMonthDays, hkDayMeta, hkAttendantsByDay]);
+
   const toggleHkDay = (dateKey: string) => {
     setHkExpandedDays((prev) => ({ ...prev, [dateKey]: !prev[dateKey] }));
   };
@@ -1744,19 +1828,37 @@ export default function AdminDashboard() {
     }
     setHkDayMeta((prev) => ({
       ...prev,
-      [dateKey]: { occupiedRooms: "", roomsSold: "", totalDailyHours: "", notes: "", ...prev[dateKey], ...nextPatch },
+      [dateKey]: {
+        occupiedRooms: "",
+        roomsSold: "",
+        totalDailyHours: "",
+        roomRevenueDaily: "",
+        roomRevenueMtd: "",
+        notes: "",
+        ...prev[dateKey],
+        ...nextPatch,
+      },
     }));
   };
 
   const saveDayMeta = async (dateKey: string, patch?: Partial<HkDayMeta>) => {
     if (!hkProperty) return;
-    const baseMeta = hkDayMeta[dateKey] || { occupiedRooms: "", roomsSold: "", totalDailyHours: "", notes: "" };
+    const baseMeta = hkDayMeta[dateKey] || {
+      occupiedRooms: "",
+      roomsSold: "",
+      totalDailyHours: "",
+      roomRevenueDaily: "",
+      roomRevenueMtd: "",
+      notes: "",
+    };
     const meta = { ...baseMeta, ...patch };
     const payload = {
       metricDate: dateKey,
       property: hkProperty,
       roomsSold: meta.roomsSold === "" ? null : toNumber(meta.roomsSold),
       totalDailyHours: meta.totalDailyHours === "" ? null : meta.totalDailyHours,
+      roomRevenueDaily: meta.roomRevenueDaily === "" ? null : meta.roomRevenueDaily,
+      roomRevenueMtd: meta.roomRevenueMtd === "" ? null : meta.roomRevenueMtd,
       occupiedRooms: meta.occupiedRooms === "" ? null : toNumber(meta.occupiedRooms),
       notes: meta.notes || "",
     };
@@ -1875,7 +1977,14 @@ export default function AdminDashboard() {
     setHkSavingDays((prev) => ({ ...prev, [dateKey]: true }));
     const entries = hkAttendantsByDay[dateKey] || [];
     const totals = computeDayTotals(dateKey);
-    const meta = hkDayMeta[dateKey] || { occupiedRooms: "", roomsSold: "", totalDailyHours: "", notes: "" };
+    const meta = hkDayMeta[dateKey] || {
+      occupiedRooms: "",
+      roomsSold: "",
+      totalDailyHours: "",
+      roomRevenueDaily: "",
+      roomRevenueMtd: "",
+      notes: "",
+    };
 
     try {
       const dailyPayload: InsertHkDailyMetric = {
@@ -1884,6 +1993,8 @@ export default function AdminDashboard() {
         occupiedRooms: toNumber(meta.occupiedRooms),
         roomsSold: meta.roomsSold === "" ? null : toNumber(meta.roomsSold),
         totalDailyHours: meta.totalDailyHours === "" ? null : meta.totalDailyHours,
+        roomRevenueDaily: meta.roomRevenueDaily === "" ? null : meta.roomRevenueDaily,
+        roomRevenueMtd: meta.roomRevenueMtd === "" ? null : meta.roomRevenueMtd,
         checkouts: totals.totalCO,
         stayovers: totals.totalSO,
         roomsCleaned: totals.totalRooms,
@@ -2868,6 +2979,8 @@ export default function AdminDashboard() {
                         <tr>
                           <th className="p-2 text-left">Date</th>
                           <th className="p-2 text-right">Rooms Sold</th>
+                          <th className="p-2 text-right">Room Rev</th>
+                          <th className="p-2 text-right">Room Rev MTD</th>
                           <th className="p-2 text-right">Paid Hours (Net)</th>
                           <th className="p-2 text-right">HPOR</th>
                           <th className="p-2 text-right">Occupied</th>
@@ -2885,7 +2998,14 @@ export default function AdminDashboard() {
                       <tbody>
                         {hkMonthDays.map((dateKey) => {
                           const totals = computeDayTotals(dateKey);
-                          const meta = hkDayMeta[dateKey] || { occupiedRooms: "", roomsSold: "", totalDailyHours: "", notes: "" };
+                          const meta = hkDayMeta[dateKey] || {
+                            occupiedRooms: "",
+                            roomsSold: "",
+                            totalDailyHours: "",
+                            roomRevenueDaily: "",
+                            roomRevenueMtd: "",
+                            notes: "",
+                          };
                           const roomsSoldNumber = toNumber(meta.roomsSold);
                           const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
                           const occupiedRooms = toNumber(meta.occupiedRooms);
@@ -2900,19 +3020,36 @@ export default function AdminDashboard() {
                               <tr className="border-b">
                                 <td className="p-2 font-medium">{dateKey}</td>
                                 <td className="p-2 text-right">
-                                  <div className="flex items-center justify-end gap-2">
-                                    {meta.roomsSoldImported && (
-                                      <Badge variant="secondary" className="text-[10px]">Imported</Badge>
-                                    )}
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      value={meta.roomsSold}
-                                      onChange={(event) => updateDayMeta(dateKey, { roomsSold: event.target.value })}
-                                      onBlur={(event) => saveDayMeta(dateKey, { roomsSold: event.target.value })}
-                                      className={`h-8 w-16 text-xs text-right ${roomsSoldMissing ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                                    />
-                                  </div>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={meta.roomsSold}
+                                    onChange={(event) => updateDayMeta(dateKey, { roomsSold: event.target.value })}
+                                    onBlur={(event) => saveDayMeta(dateKey, { roomsSold: event.target.value })}
+                                    className={`h-8 w-16 text-xs text-right ${roomsSoldMissing ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                                  />
+                                </td>
+                                <td className="p-2 text-right">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={meta.roomRevenueDaily}
+                                    onChange={(event) => updateDayMeta(dateKey, { roomRevenueDaily: event.target.value })}
+                                    onBlur={(event) => saveDayMeta(dateKey, { roomRevenueDaily: event.target.value })}
+                                    className="h-8 w-24 text-xs text-right"
+                                  />
+                                </td>
+                                <td className="p-2 text-right">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={meta.roomRevenueMtd}
+                                    onChange={(event) => updateDayMeta(dateKey, { roomRevenueMtd: event.target.value })}
+                                    onBlur={(event) => saveDayMeta(dateKey, { roomRevenueMtd: event.target.value })}
+                                    className="h-8 w-24 text-xs text-right"
+                                  />
                                 </td>
                                 <td className="p-2 text-right">
                                   <Input
@@ -2922,7 +3059,7 @@ export default function AdminDashboard() {
                                     value={meta.totalDailyHours}
                                     onChange={(event) => updateDayMeta(dateKey, { totalDailyHours: event.target.value })}
                                       onBlur={(event) => saveDayMeta(dateKey, { totalDailyHours: event.target.value })}
-                                      className="h-8 w-24 text-xs text-right"
+                                    className="h-8 w-24 text-xs text-right"
                                     placeholder="Net of lunch"
                                   />
                                 </td>
@@ -2960,7 +3097,7 @@ export default function AdminDashboard() {
                               </tr>
                               {isExpanded && (
                                 <tr className="bg-muted/20">
-                                  <td colSpan={14} className="p-4">
+                                  <td colSpan={16} className="p-4">
                                     <div className="space-y-4">
                                       <div className="flex flex-wrap items-center justify-between gap-3">
                                         <div className="text-sm font-medium">Attendant Entries</div>
@@ -3102,6 +3239,36 @@ export default function AdminDashboard() {
                             </Fragment>
                           );
                         })}
+                        <tr className="bg-muted/40 border-t">
+                          <td className="p-2 font-semibold">Totals</td>
+                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumRoomsSold)}</td>
+                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumRoomRevenueDaily)}</td>
+                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.maxRoomRevenueMtd || null)}</td>
+                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalDailyHours)}</td>
+                          <td className="p-2 text-right">
+                            {formatHkValue(
+                              hkDailySummary.hporCount ? hkDailySummary.hporSum / hkDailySummary.hporCount : null
+                            )}
+                          </td>
+                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumOccupiedRooms)}</td>
+                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalCO)}</td>
+                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalSO)}</td>
+                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalRooms)}</td>
+                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumStandardHours)}</td>
+                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumVariance)}</td>
+                          <td className="p-2 text-right">
+                            {formatHkValue(
+                              hkDailySummary.mporPaidCount ? hkDailySummary.mporPaidSum / hkDailySummary.mporPaidCount : null
+                            )}
+                          </td>
+                          <td className="p-2 text-right">
+                            {formatHkValue(
+                              hkDailySummary.mporProdCount ? hkDailySummary.mporProdSum / hkDailySummary.mporProdCount : null
+                            )}
+                          </td>
+                          <td className="p-2" />
+                          <td className="p-2" />
+                        </tr>
                       </tbody>
                     </table>
                   </div>

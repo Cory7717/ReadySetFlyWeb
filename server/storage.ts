@@ -356,6 +356,8 @@ export interface IStorage {
     property: string;
     roomsSold?: number | null;
     totalDailyHours?: string | null;
+    roomRevenueDaily?: string | null;
+    roomRevenueMtd?: string | null;
     occupiedRooms?: number | null;
     notes?: string | null;
     roomsSoldImported?: boolean | null;
@@ -2315,6 +2317,8 @@ export class DatabaseStorage implements IStorage {
     property: string;
     roomsSold?: number | null;
     totalDailyHours?: string | null;
+    roomRevenueDaily?: string | null;
+    roomRevenueMtd?: string | null;
     occupiedRooms?: number | null;
     notes?: string | null;
     roomsSoldImported?: boolean | null;

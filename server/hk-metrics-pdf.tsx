@@ -4,6 +4,8 @@ import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-p
 type HkDailyRollup = {
   occupiedRooms: number;
   roomsSold: number;
+  roomRevenueDaily: number | null;
+  roomRevenueMtd: number | null;
   checkouts: number;
   stayovers: number;
   roomsCleaned: number;
@@ -182,6 +184,8 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
     entry.metricDate,
     entry.occupiedRooms,
     entry.roomsSold,
+    entry.roomRevenueDaily,
+    entry.roomRevenueMtd,
     entry.checkouts,
     entry.stayovers,
     entry.roomsCleaned,
@@ -197,6 +201,8 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
     `${entry.key} (${entry.weekStart})`,
     entry.occupiedRooms,
     entry.roomsSold,
+    entry.roomRevenueDaily,
+    entry.roomRevenueMtd,
     entry.checkouts,
     entry.stayovers,
     entry.roomsCleaned,
@@ -212,6 +218,8 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
     `${entry.key} (${entry.monthStart})`,
     entry.occupiedRooms,
     entry.roomsSold,
+    entry.roomRevenueDaily,
+    entry.roomRevenueMtd,
     entry.checkouts,
     entry.stayovers,
     entry.roomsCleaned,
@@ -288,7 +296,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Daily Metrics</Text>
           {renderTable(
-            ["Date", "Occ", "Sold", "CO", "SO", "Rooms", "Paid", "Paid Hrs", "Prod", "MPOR", "HPOR", "Avg Min"],
+            ["Date", "Occ", "Sold", "Rev", "Rev MTD", "CO", "SO", "Rooms", "Paid", "Paid Hrs", "Prod", "MPOR", "HPOR", "Avg Min"],
             dailyRows
           )}
         </View>
@@ -296,7 +304,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Weekly Rollups</Text>
           {renderTable(
-            ["Week", "Occ", "Sold", "CO", "SO", "Rooms", "Paid", "Paid Hrs", "Prod", "MPOR", "HPOR", "Avg Min"],
+            ["Week", "Occ", "Sold", "Rev", "Rev MTD", "CO", "SO", "Rooms", "Paid", "Paid Hrs", "Prod", "MPOR", "HPOR", "Avg Min"],
             weeklyRows
           )}
         </View>
@@ -304,7 +312,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Monthly Rollups</Text>
           {renderTable(
-            ["Month", "Occ", "Sold", "CO", "SO", "Rooms", "Paid", "Paid Hrs", "Prod", "MPOR", "HPOR", "Avg Min"],
+            ["Month", "Occ", "Sold", "Rev", "Rev MTD", "CO", "SO", "Rooms", "Paid", "Paid Hrs", "Prod", "MPOR", "HPOR", "Avg Min"],
             monthlyRows
           )}
         </View>

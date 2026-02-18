@@ -79,7 +79,6 @@ type HkAttendantEntry = {
 };
 
 type HkDayMeta = {
-  occupiedRooms: string;
   roomsSold: string;
   totalDailyHours: string;
   roomRevenueDaily: string;
@@ -577,7 +576,6 @@ export default function AdminDashboard() {
       const metricDate = String(entry.metricDate || "");
       if (!metricDate) return;
       nextDayMeta[metricDate] = {
-        occupiedRooms: entry.occupiedRooms?.toString() ?? "",
         roomsSold: entry.roomsSold?.toString() ?? "",
         totalDailyHours: entry.totalDailyHours?.toString() ?? "",
         roomRevenueDaily: entry.roomRevenueDaily?.toString() ?? "",
@@ -1771,14 +1769,12 @@ export default function AdminDashboard() {
         };
         const roomsSoldNumber = toNumber(meta.roomsSold);
         const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
-        const occupiedRooms = toNumber(meta.occupiedRooms);
         const mporPaid = totals.totalPaidHours > 0 ? totals.totalRooms / totals.totalPaidHours : null;
         const mporProd = totals.totalProductiveHours > 0 ? totals.totalRooms / totals.totalProductiveHours : null;
         const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
 
         acc.sumRoomsSold += roomsSoldNumber;
         acc.sumTotalDailyHours += totalDailyHoursNumber;
-        acc.sumOccupiedRooms += occupiedRooms;
         acc.sumTotalCO += totals.totalCO;
         acc.sumTotalSO += totals.totalSO;
         acc.sumTotalRooms += totals.totalRooms;
@@ -1807,7 +1803,6 @@ export default function AdminDashboard() {
       {
         sumRoomsSold: 0,
         sumTotalDailyHours: 0,
-        sumOccupiedRooms: 0,
         sumTotalCO: 0,
         sumTotalSO: 0,
         sumTotalRooms: 0,
@@ -1835,7 +1830,6 @@ export default function AdminDashboard() {
     }
     setHkDayMeta((prev) => {
       const base = prev[dateKey] || {
-        occupiedRooms: "",
         roomsSold: "",
         totalDailyHours: "",
         roomRevenueDaily: "",
@@ -1855,7 +1849,6 @@ export default function AdminDashboard() {
   const saveDayMeta = async (dateKey: string, patch?: Partial<HkDayMeta>) => {
     if (!hkProperty) return;
     const baseMeta = hkDayMeta[dateKey] || {
-      occupiedRooms: "",
       roomsSold: "",
       totalDailyHours: "",
       roomRevenueDaily: "",
@@ -1868,7 +1861,6 @@ export default function AdminDashboard() {
       roomsSold: meta.roomsSold === "" ? null : toNumber(meta.roomsSold),
       totalDailyHours: meta.totalDailyHours === "" ? null : meta.totalDailyHours,
       roomRevenueDaily: meta.roomRevenueDaily === "" ? null : meta.roomRevenueDaily,
-      occupiedRooms: meta.occupiedRooms === "" ? null : toNumber(meta.occupiedRooms),
       notes: meta.notes || "",
     };
 
@@ -1987,7 +1979,6 @@ export default function AdminDashboard() {
     const entries = hkAttendantsByDay[dateKey] || [];
     const totals = computeDayTotals(dateKey);
     const meta = hkDayMeta[dateKey] || {
-      occupiedRooms: "",
       roomsSold: "",
       totalDailyHours: "",
       roomRevenueDaily: "",
@@ -1998,7 +1989,7 @@ export default function AdminDashboard() {
       const dailyPayload: InsertHkDailyMetric = {
         metricDate: new Date(dateKey),
         property: hkProperty,
-        occupiedRooms: toNumber(meta.occupiedRooms),
+        occupiedRooms: meta.roomsSold === "" ? 0 : toNumber(meta.roomsSold),
         roomsSold: meta.roomsSold === "" ? null : toNumber(meta.roomsSold),
         totalDailyHours: meta.totalDailyHours === "" ? null : meta.totalDailyHours,
         roomRevenueDaily: meta.roomRevenueDaily === "" ? null : meta.roomRevenueDaily,
@@ -2984,7 +2975,6 @@ export default function AdminDashboard() {
                           <th className="p-2 text-center">Room Rev</th>
                           <th className="p-2 text-center">Paid Hours (Net)</th>
                           <th className="p-2 text-center">HPOR</th>
-                          <th className="p-2 text-center">Occupied</th>
                           <th className="p-2 text-center">Total C/O</th>
                           <th className="p-2 text-center">Total S/O</th>
                           <th className="p-2 text-center">Total Rooms</th>
@@ -3008,7 +2998,6 @@ export default function AdminDashboard() {
                           };
                           const roomsSoldNumber = toNumber(meta.roomsSold);
                           const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
-                          const occupiedRooms = toNumber(meta.occupiedRooms);
                           const mporPaid = totals.totalPaidHours > 0 ? totals.totalRooms / totals.totalPaidHours : 0;
                           const mporProd = totals.totalProductiveHours > 0 ? totals.totalRooms / totals.totalProductiveHours : 0;
                           const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
@@ -3059,16 +3048,6 @@ export default function AdminDashboard() {
                                   />
                                 </td>
                                 <td className="p-2 text-right">{hpor ? formatHkValue(hpor) : "—"}</td>
-                                <td className="p-2 text-right">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    value={meta.occupiedRooms}
-                                    onChange={(event) => updateDayMeta(dateKey, { occupiedRooms: event.target.value })}
-                                    onBlur={(event) => saveDayMeta(dateKey, { occupiedRooms: event.target.value })}
-                                    className="h-8 text-xs text-right"
-                                  />
-                                </td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalCO)}</td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalSO)}</td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalRooms)}</td>
@@ -3092,7 +3071,7 @@ export default function AdminDashboard() {
                               </tr>
                               {isExpanded && (
                                 <tr className="bg-muted/20">
-                                  <td colSpan={15} className="p-4">
+                                  <td colSpan={14} className="p-4">
                                     <div className="space-y-4">
                                       <div className="flex flex-wrap items-center justify-between gap-3">
                                         <div className="text-sm font-medium">Attendant Entries</div>
@@ -3244,7 +3223,6 @@ export default function AdminDashboard() {
                               hkDailySummary.hporCount ? hkDailySummary.hporSum / hkDailySummary.hporCount : null
                             )}
                           </td>
-                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumOccupiedRooms)}</td>
                           <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalCO)}</td>
                           <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalSO)}</td>
                           <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalRooms)}</td>

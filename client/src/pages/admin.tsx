@@ -83,7 +83,6 @@ type HkDayMeta = {
   roomsSold: string;
   totalDailyHours: string;
   roomRevenueDaily: string;
-  roomRevenueMtd: string;
   roomsSoldImported?: boolean;
   notes: string;
 };
@@ -108,10 +107,8 @@ export default function AdminDashboard() {
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AdminRole>("operations");
-  const [hkProperty, setHkProperty] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return window.localStorage.getItem("hk-property") || "";
-  });
+  const hkDefaultProperty = "Fairfield Austin Domain";
+  const [hkProperty, setHkProperty] = useState(hkDefaultProperty);
   const [hkMonth, setHkMonth] = useState(() => format(new Date(), "yyyy-MM"));
   const [hkImportDialogOpen, setHkImportDialogOpen] = useState(false);
   const [hkImporting, setHkImporting] = useState(false);
@@ -325,11 +322,6 @@ export default function AdminDashboard() {
     }
   }, [hkSettings]);
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("hk-property", hkProperty);
-    }
-  }, [hkProperty]);
   
   const { toast } = useToast();
 
@@ -588,7 +580,6 @@ export default function AdminDashboard() {
         roomsSold: entry.roomsSold?.toString() ?? "",
         totalDailyHours: entry.totalDailyHours?.toString() ?? "",
         roomRevenueDaily: entry.roomRevenueDaily?.toString() ?? "",
-        roomRevenueMtd: entry.roomRevenueMtd?.toString() ?? "",
         roomsSoldImported: Boolean(entry.roomsSoldImported),
         notes: entry.notes ?? "",
       };
@@ -1656,6 +1647,18 @@ export default function AdminDashboard() {
     return String(value);
   };
 
+  const formatCurrencyValue = (value: unknown) => {
+    if (value === null || value === undefined || value === "") return "-";
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "-";
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(numeric);
+  };
+
   const handleNumberInput = (onChange: (value: any) => void) => (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     onChange(value === "" ? "" : Number(value));
@@ -1755,7 +1758,6 @@ export default function AdminDashboard() {
           roomsSold: "",
           totalDailyHours: "",
           roomRevenueDaily: "",
-          roomRevenueMtd: "",
           notes: "",
         };
         const roomsSoldNumber = toNumber(meta.roomsSold);
@@ -1776,9 +1778,6 @@ export default function AdminDashboard() {
 
         if (meta.roomRevenueDaily) {
           acc.sumRoomRevenueDaily += toNumber(meta.roomRevenueDaily);
-        }
-        if (meta.roomRevenueMtd) {
-          acc.maxRoomRevenueMtd = Math.max(acc.maxRoomRevenueMtd, toNumber(meta.roomRevenueMtd));
         }
 
         if (mporPaid !== null) {
@@ -1806,7 +1805,6 @@ export default function AdminDashboard() {
         sumStandardHours: 0,
         sumVariance: 0,
         sumRoomRevenueDaily: 0,
-        maxRoomRevenueMtd: 0,
         mporPaidSum: 0,
         mporPaidCount: 0,
         mporProdSum: 0,
@@ -1848,7 +1846,6 @@ export default function AdminDashboard() {
       roomsSold: "",
       totalDailyHours: "",
       roomRevenueDaily: "",
-      roomRevenueMtd: "",
       notes: "",
     };
     const meta = { ...baseMeta, ...patch };
@@ -1858,7 +1855,6 @@ export default function AdminDashboard() {
       roomsSold: meta.roomsSold === "" ? null : toNumber(meta.roomsSold),
       totalDailyHours: meta.totalDailyHours === "" ? null : meta.totalDailyHours,
       roomRevenueDaily: meta.roomRevenueDaily === "" ? null : meta.roomRevenueDaily,
-      roomRevenueMtd: meta.roomRevenueMtd === "" ? null : meta.roomRevenueMtd,
       occupiedRooms: meta.occupiedRooms === "" ? null : toNumber(meta.occupiedRooms),
       notes: meta.notes || "",
     };
@@ -1982,7 +1978,6 @@ export default function AdminDashboard() {
       roomsSold: "",
       totalDailyHours: "",
       roomRevenueDaily: "",
-      roomRevenueMtd: "",
       notes: "",
     };
 
@@ -1994,7 +1989,6 @@ export default function AdminDashboard() {
         roomsSold: meta.roomsSold === "" ? null : toNumber(meta.roomsSold),
         totalDailyHours: meta.totalDailyHours === "" ? null : meta.totalDailyHours,
         roomRevenueDaily: meta.roomRevenueDaily === "" ? null : meta.roomRevenueDaily,
-        roomRevenueMtd: meta.roomRevenueMtd === "" ? null : meta.roomRevenueMtd,
         checkouts: totals.totalCO,
         stayovers: totals.totalSO,
         roomsCleaned: totals.totalRooms,
@@ -2894,16 +2888,11 @@ export default function AdminDashboard() {
                 <div className="space-y-2">
                   <Label>Property</Label>
                   <Input
-                    list="hk-property-options"
                     value={hkProperty}
                     onChange={(event) => setHkProperty(event.target.value)}
                     placeholder="Property name"
+                    disabled
                   />
-                  <datalist id="hk-property-options">
-                    {hkProperties.map((property) => (
-                      <option key={property} value={property} />
-                    ))}
-                  </datalist>
                 </div>
                 <div className="space-y-2">
                   <Label>Clock In Time</Label>
@@ -2980,7 +2969,6 @@ export default function AdminDashboard() {
                           <th className="p-2 text-left">Date</th>
                           <th className="p-2 text-right">Rooms Sold</th>
                           <th className="p-2 text-right">Room Rev</th>
-                          <th className="p-2 text-right">Room Rev MTD</th>
                           <th className="p-2 text-right">Paid Hours (Net)</th>
                           <th className="p-2 text-right">HPOR</th>
                           <th className="p-2 text-right">Occupied</th>
@@ -3003,7 +2991,6 @@ export default function AdminDashboard() {
                             roomsSold: "",
                             totalDailyHours: "",
                             roomRevenueDaily: "",
-                            roomRevenueMtd: "",
                             notes: "",
                           };
                           const roomsSoldNumber = toNumber(meta.roomsSold);
@@ -3037,17 +3024,6 @@ export default function AdminDashboard() {
                                     value={meta.roomRevenueDaily}
                                     onChange={(event) => updateDayMeta(dateKey, { roomRevenueDaily: event.target.value })}
                                     onBlur={(event) => saveDayMeta(dateKey, { roomRevenueDaily: event.target.value })}
-                                    className="h-8 w-24 text-xs text-right"
-                                  />
-                                </td>
-                                <td className="p-2 text-right">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={meta.roomRevenueMtd}
-                                    onChange={(event) => updateDayMeta(dateKey, { roomRevenueMtd: event.target.value })}
-                                    onBlur={(event) => saveDayMeta(dateKey, { roomRevenueMtd: event.target.value })}
                                     className="h-8 w-24 text-xs text-right"
                                   />
                                 </td>
@@ -3097,7 +3073,7 @@ export default function AdminDashboard() {
                               </tr>
                               {isExpanded && (
                                 <tr className="bg-muted/20">
-                                  <td colSpan={16} className="p-4">
+                                  <td colSpan={15} className="p-4">
                                     <div className="space-y-4">
                                       <div className="flex flex-wrap items-center justify-between gap-3">
                                         <div className="text-sm font-medium">Attendant Entries</div>
@@ -3242,8 +3218,7 @@ export default function AdminDashboard() {
                         <tr className="bg-muted/40 border-t">
                           <td className="p-2 font-semibold">Totals</td>
                           <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumRoomsSold)}</td>
-                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumRoomRevenueDaily)}</td>
-                          <td className="p-2 text-right">{formatHkValue(hkDailySummary.maxRoomRevenueMtd || null)}</td>
+                          <td className="p-2 text-right">{formatCurrencyValue(hkDailySummary.sumRoomRevenueDaily)}</td>
                           <td className="p-2 text-right">{formatHkValue(hkDailySummary.sumTotalDailyHours)}</td>
                           <td className="p-2 text-right">
                             {formatHkValue(

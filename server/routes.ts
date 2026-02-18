@@ -376,36 +376,16 @@ const parseRoomsSoldDateToken = (token: string) => {
   return null;
 };
 
-const extractRoomsSoldFromLine = (line: string, dateToken?: string | null) => {
-  const lower = line.toLowerCase();
-  const keywords = [
-    "rooms sold",
-    "roomsold",
-    "rms sold",
-    "roomsoccupied",
-    "rooms occupied",
-    "occupied",
-    "occ",
-    "rooms",
-  ];
-  let keywordIndex = -1;
-  let keyword = "";
-  for (const key of keywords) {
-    const index = lower.indexOf(key);
-    if (index !== -1 && (keywordIndex === -1 || index < keywordIndex)) {
-      keywordIndex = index;
-      keyword = key;
-    }
-  }
-  if (keywordIndex !== -1) {
-    const after = line.slice(keywordIndex + keyword.length);
-    const match = after.match(/\b\d[\d,]*\b/);
-    if (match) return Number(match[0].replace(/,/g, ""));
-  }
+const extractRoomsSoldFromLine = (line: string) => {
+  const roomsSoldMatch = line.match(/#\s*rooms\s*sold\b/i);
+  const roomsOccupiedMatch = line.match(/#\s*rooms\s*occupied\b/i);
+  const roomNightsSoldMatch = line.match(/#\s*room\s*nights\s*sold\b/i);
+  const targetMatch = roomsSoldMatch || roomNightsSoldMatch || roomsOccupiedMatch;
+  if (!targetMatch) return null;
 
-  const cleaned = dateToken ? line.replace(dateToken, " ") : line;
-  const numbers = cleaned.match(/\b\d{1,4}\b/g) || [];
-  if (numbers.length === 1) return Number(numbers[0]);
+  const after = line.slice(targetMatch.index ? targetMatch.index + targetMatch[0].length : 0);
+  const match = after.match(/\b\d[\d,]*\b/);
+  if (match) return Number(match[0].replace(/,/g, ""));
   return null;
 };
 
@@ -446,7 +426,7 @@ const parseRoomsSoldFile = (content: string) => {
     } else {
       const dateMatch = rawLine.match(/\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}\/\d{4}\b|\b\d{1,2}-[A-Za-z]{3}-\d{4}\b|\b\d{1,2}[A-Za-z]{3}\d{2}\b/);
       dateToken = dateMatch ? parseRoomsSoldDateToken(dateMatch[0]) : null;
-      roomsSold = extractRoomsSoldFromLine(rawLine, dateMatch?.[0]);
+      roomsSold = extractRoomsSoldFromLine(rawLine);
     }
 
     if (!dateToken && roomsSold !== null && defaultDate) {

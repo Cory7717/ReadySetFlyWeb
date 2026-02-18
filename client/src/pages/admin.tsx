@@ -1660,6 +1660,8 @@ export default function AdminDashboard() {
     }).format(numeric);
   };
 
+  const normalizeCurrencyInput = (value: string) => value.replace(/[^0-9.]/g, "");
+
   const formatDateInputValue = (value: unknown) => {
     if (value instanceof Date) return value.toISOString().split("T")[0];
     if (typeof value === "string") return value.split("T")[0];
@@ -2977,20 +2979,20 @@ export default function AdminDashboard() {
                     <table className="w-full text-xs">
                       <thead className="bg-muted/70 sticky top-0 z-10">
                         <tr>
-                          <th className="p-2 text-left">Date</th>
-                          <th className="p-2 text-right">Rooms Sold</th>
-                          <th className="p-2 text-right">Room Rev</th>
-                          <th className="p-2 text-right">Paid Hours (Net)</th>
-                          <th className="p-2 text-right">HPOR</th>
-                          <th className="p-2 text-right">Occupied</th>
-                          <th className="p-2 text-right">Total C/O</th>
-                          <th className="p-2 text-right">Total S/O</th>
-                          <th className="p-2 text-right">Total Rooms</th>
-                          <th className="p-2 text-right">Std Hours</th>
-                          <th className="p-2 text-right">Variance</th>
-                          <th className="p-2 text-right">MPOR Paid</th>
-                          <th className="p-2 text-right">MPOR Prod</th>
-                          <th className="p-2 text-left">Notes</th>
+                          <th className="p-2 text-center">Date</th>
+                          <th className="p-2 text-center">Rooms Sold</th>
+                          <th className="p-2 text-center">Room Rev</th>
+                          <th className="p-2 text-center">Paid Hours (Net)</th>
+                          <th className="p-2 text-center">HPOR</th>
+                          <th className="p-2 text-center">Occupied</th>
+                          <th className="p-2 text-center">Total C/O</th>
+                          <th className="p-2 text-center">Total S/O</th>
+                          <th className="p-2 text-center">Total Rooms</th>
+                          <th className="p-2 text-center">Std Hours</th>
+                          <th className="p-2 text-center">Variance</th>
+                          <th className="p-2 text-center">MPOR Paid</th>
+                          <th className="p-2 text-center">MPOR Prod</th>
+                          <th className="p-2 text-center">Notes</th>
                           <th className="p-2 text-center">Details</th>
                         </tr>
                       </thead>
@@ -3028,15 +3030,21 @@ export default function AdminDashboard() {
                                   />
                                 </td>
                                 <td className="p-2 text-right">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={meta.roomRevenueDaily}
-                                    onChange={(event) => updateDayMeta(dateKey, { roomRevenueDaily: event.target.value })}
-                                    onBlur={(event) => saveDayMeta(dateKey, { roomRevenueDaily: event.target.value })}
-                                    className="h-8 w-24 text-xs text-right"
-                                  />
+                                  <div className="relative">
+                                    <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                                    <Input
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={meta.roomRevenueDaily ? formatCurrencyValue(meta.roomRevenueDaily).replace("$", "") : ""}
+                                      onChange={(event) =>
+                                        updateDayMeta(dateKey, { roomRevenueDaily: normalizeCurrencyInput(event.target.value) })
+                                      }
+                                      onBlur={(event) =>
+                                        saveDayMeta(dateKey, { roomRevenueDaily: normalizeCurrencyInput(event.target.value) })
+                                      }
+                                      className="h-8 w-24 pl-5 text-xs text-right"
+                                    />
+                                  </div>
                                 </td>
                                 <td className="p-2 text-right">
                                   <Input

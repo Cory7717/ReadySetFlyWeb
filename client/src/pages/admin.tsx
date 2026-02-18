@@ -1689,14 +1689,17 @@ export default function AdminDashboard() {
     const co = toNumber(entry.checkoutsCleaned);
     const so = toNumber(entry.stayoversCleaned);
     const dndRooms = toNumber(entry.recleans);
-    const totalRooms = Math.max(co + so - dndRooms, 0);
+    const dndEffective = Math.min(dndRooms, so);
+    const totalRooms = Math.max(co + so - dndEffective, 0);
+    const totalRoomsForMpor = Math.max(co + so, 0);
     const paidHours = toHours(entry.paidHours);
     const productiveHours = paidHours;
-    const standardHours = (co * hkSettings.checkoutMinutes + so * hkSettings.stayoverMinutes) / 60;
+    const standardHours = (co * hkSettings.checkoutMinutes + (so - dndEffective) * hkSettings.stayoverMinutes) / 60;
     const variance = paidHours - standardHours;
-    const mporMinutes = paidHours > 0 && totalRooms > 0 ? (paidHours * 60) / totalRooms : 0;
+    const mporMinutes = paidHours > 0 && totalRoomsForMpor > 0 ? (paidHours * 60) / totalRoomsForMpor : 0;
     return {
       totalRooms,
+      totalRoomsForMpor,
       paidHours,
       productiveHours,
       standardHours,
@@ -1723,6 +1726,7 @@ export default function AdminDashboard() {
         acc.totalVariance += stats.variance;
         acc.totalLateCheckouts += toNumber(entry.lateCheckouts);
         acc.totalRecleans += toNumber(entry.recleans);
+        acc.totalRoomsForMpor += stats.totalRoomsForMpor;
         return acc;
       },
       {
@@ -1736,6 +1740,7 @@ export default function AdminDashboard() {
         totalVariance: 0,
         totalLateCheckouts: 0,
         totalRecleans: 0,
+        totalRoomsForMpor: 0,
       }
     );
 
@@ -1774,7 +1779,9 @@ export default function AdminDashboard() {
         };
         const roomsSoldNumber = toNumber(meta.roomsSold);
         const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
-        const mpor = totals.totalPaidHours > 0 && totals.totalRooms > 0 ? (totals.totalPaidHours * 60) / totals.totalRooms : null;
+        const mpor = totals.totalPaidHours > 0 && totals.totalRoomsForMpor > 0
+          ? (totals.totalPaidHours * 60) / totals.totalRoomsForMpor
+          : null;
         const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
 
         acc.sumRoomsSold += roomsSoldNumber;
@@ -2994,7 +3001,9 @@ export default function AdminDashboard() {
                           };
                           const roomsSoldNumber = toNumber(meta.roomsSold);
                           const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
-                          const mpor = totals.totalPaidHours > 0 && totals.totalRooms > 0 ? (totals.totalPaidHours * 60) / totals.totalRooms : 0;
+                          const mpor = totals.totalPaidHours > 0 && totals.totalRoomsForMpor > 0
+                            ? (totals.totalPaidHours * 60) / totals.totalRoomsForMpor
+                            : 0;
                           const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
                           const roomsSoldMissing = roomsSoldNumber <= 0;
                           const isExpanded = hkExpandedDays[dateKey];

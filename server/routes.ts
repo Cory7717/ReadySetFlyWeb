@@ -267,8 +267,9 @@ const computeDailyDerived = (entry: HkDailyMetric) => {
   const productiveHours = normalizeHkNumber(entry.productiveHours);
   const standardHours = computeStandardHours(checkouts, stayovers);
   const varianceHours = standardHours === null ? null : roundTo(paidHours - standardHours);
-  const mporPaid = computeRate(paidHours, roomsCleaned, 60);
-  const mporProductive = computeRate(productiveHours, roomsCleaned, 60);
+  const roomsForMpor = normalizeHkNumber(entry.checkouts) + normalizeHkNumber(entry.stayovers);
+  const mporPaid = computeRate(paidHours, roomsForMpor, 60);
+  const mporProductive = computeRate(productiveHours, roomsForMpor, 60);
   const hpor = computeRate(totalDailyHours, roomsSold, 1);
   const avgMinutesPerRoom = computeRate(productiveHours, roomsCleaned, 60);
 
@@ -552,8 +553,8 @@ const buildDailyRollup = (totals: ReturnType<typeof aggregateDailyTotals>) => {
     roomRevenueMtd: roundTo(totals.roomRevenueMtd),
     standardHours,
     varianceHours,
-    mporPaid: computeRate(totals.paidHours, totals.roomsCleaned, 60),
-    mporProductive: computeRate(totals.productiveHours, totals.roomsCleaned, 60),
+    mporPaid: computeRate(totals.paidHours, totals.checkouts + totals.stayovers, 60),
+    mporProductive: computeRate(totals.productiveHours, totals.checkouts + totals.stayovers, 60),
     hpor: computeRate(totals.totalDailyHours, totals.totalRoomsSoldForHpor, 1),
     avgMinutesPerRoom: computeRate(totals.productiveHours, totals.roomsCleaned, 60),
   };

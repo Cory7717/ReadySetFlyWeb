@@ -554,6 +554,7 @@ export default function AdminDashboard() {
     property: string | null;
     overall: Record<string, number | null>;
     dailyEntries: Array<Record<string, any>>;
+    attendantEntries: Array<Record<string, any>>;
     weeklyRollups: Array<Record<string, any>>;
     monthlyRollups: Array<Record<string, any>>;
     attendantRollups: Array<Record<string, any>>;
@@ -1659,6 +1660,12 @@ export default function AdminDashboard() {
     }).format(numeric);
   };
 
+  const formatDateInputValue = (value: unknown) => {
+    if (value instanceof Date) return value.toISOString().split("T")[0];
+    if (typeof value === "string") return value.split("T")[0];
+    return "";
+  };
+
   const handleNumberInput = (onChange: (value: any) => void) => (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
     onChange(value === "" ? "" : Number(value));
@@ -1824,19 +1831,23 @@ export default function AdminDashboard() {
     if (Object.prototype.hasOwnProperty.call(patch, "roomsSold")) {
       nextPatch.roomsSoldImported = false;
     }
-    setHkDayMeta((prev) => ({
-      ...prev,
-      [dateKey]: {
+    setHkDayMeta((prev) => {
+      const base = prev[dateKey] || {
         occupiedRooms: "",
         roomsSold: "",
         totalDailyHours: "",
         roomRevenueDaily: "",
-        roomRevenueMtd: "",
         notes: "",
-        ...prev[dateKey],
-        ...nextPatch,
-      },
-    }));
+        roomsSoldImported: undefined,
+      };
+      return {
+        ...prev,
+        [dateKey]: {
+          ...base,
+          ...nextPatch,
+        },
+      };
+    });
   };
 
   const saveDayMeta = async (dateKey: string, patch?: Partial<HkDayMeta>) => {
@@ -5378,7 +5389,7 @@ export default function AdminDashboard() {
                           <Select
                             value={(admin.adminRole as AdminRole) || "operations"}
                             onValueChange={(value) => updateAdminRoleMutation.mutate({ userId: admin.id, role: value as AdminRole })}
-                            disabled={admin.isSuperAdmin}
+                            disabled={Boolean(admin.isSuperAdmin)}
                           >
                             <SelectTrigger className="w-40">
                               <SelectValue />
@@ -5394,7 +5405,7 @@ export default function AdminDashboard() {
                           <Button
                             variant="outline"
                             onClick={() => updateAdminRoleMutation.mutate({ userId: admin.id, role: (admin.adminRole as AdminRole) || "operations" })}
-                            disabled={admin.isSuperAdmin}
+                            disabled={Boolean(admin.isSuperAdmin)}
                           >
                             Update
                           </Button>
@@ -6899,7 +6910,7 @@ export default function AdminDashboard() {
                             <FormControl>
                               <Input
                                 type="date"
-                                value={field.value instanceof Date ? field.value.toISOString().split("T")[0] : (typeof field.value === "string" ? field.value.split("T")[0] : "")}
+                                value={formatDateInputValue(field.value)}
                                 onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
                                 data-testid="input-order-start-date"
                               />
@@ -6918,7 +6929,7 @@ export default function AdminDashboard() {
                             <FormControl>
                               <Input
                                 type="date"
-                                value={field.value instanceof Date ? field.value.toISOString().split("T")[0] : (typeof field.value === "string" ? field.value.split("T")[0] : "")}
+                                value={formatDateInputValue(field.value)}
                                 onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
                                 data-testid="input-order-end-date"
                               />

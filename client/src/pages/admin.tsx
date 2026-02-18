@@ -2874,13 +2874,10 @@ export default function AdminDashboard() {
                           <th className="p-2 text-right">Total C/O</th>
                           <th className="p-2 text-right">Total S/O</th>
                           <th className="p-2 text-right">Total Rooms</th>
-                          <th className="p-2 text-right">Paid Hours</th>
-                          <th className="p-2 text-right">Prod Hours</th>
                           <th className="p-2 text-right">Std Hours</th>
                           <th className="p-2 text-right">Variance</th>
                           <th className="p-2 text-right">MPOR Paid</th>
                           <th className="p-2 text-right">MPOR Prod</th>
-                          <th className="p-2 text-right">HPOR</th>
                           <th className="p-2 text-left">Notes</th>
                           <th className="p-2 text-center">Details</th>
                         </tr>
@@ -2943,8 +2940,6 @@ export default function AdminDashboard() {
                                 <td className="p-2 text-right">{formatHkValue(totals.totalCO)}</td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalSO)}</td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalRooms)}</td>
-                                <td className="p-2 text-right">{formatHkValue(totals.totalPaidHours)}</td>
-                                <td className="p-2 text-right">{formatHkValue(totals.totalProductiveHours)}</td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalStandardHours)}</td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalVariance)}</td>
                                 <td className="p-2 text-right">{formatHkValue(mporPaid)}</td>
@@ -2965,7 +2960,7 @@ export default function AdminDashboard() {
                               </tr>
                               {isExpanded && (
                                 <tr className="bg-muted/20">
-                                  <td colSpan={16} className="p-4">
+                                  <td colSpan={14} className="p-4">
                                     <div className="space-y-4">
                                       <div className="flex flex-wrap items-center justify-between gap-3">
                                         <div className="text-sm font-medium">Attendant Entries</div>
@@ -2987,7 +2982,7 @@ export default function AdminDashboard() {
                                                 <th className="p-2 text-left">Attendant</th>
                                                 <th className="p-2 text-right">C/O</th>
                                                 <th className="p-2 text-right">S/O</th>
-                                                <th className="p-2 text-right">Paid Hours</th>
+                                                <th className="p-2 text-right">HK Paid</th>
                                                 <th className="p-2 text-right">Lunch</th>
                                                 <th className="p-2 text-center">4pm C/O</th>
                                                 <th className="p-2 text-right">Deep Clean</th>
@@ -2997,7 +2992,7 @@ export default function AdminDashboard() {
                                                 <th className="p-2 text-right">Std Hours</th>
                                                 <th className="p-2 text-right">Variance</th>
                                                 <th className="p-2 text-right">MPOR Paid</th>
-                                                <th className="p-2 text-right">MPOR Prod</th>
+                                                <th className="p-2 text-right">MPOR HK Prod</th>
                                                 <th className="p-2 text-center">Delete</th>
                                               </tr>
                                             </thead>

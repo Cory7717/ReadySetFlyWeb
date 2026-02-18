@@ -3251,16 +3251,16 @@ export default function AdminDashboard() {
                       <thead className="bg-muted/50">
                         <tr>
                           <th className="p-2 text-left">Week</th>
-                          <th className="p-2 text-right">Occ</th>
                           <th className="p-2 text-right">Sold</th>
+                          <th className="p-2 text-right">Room Rev</th>
                           <th className="p-2 text-right">Paid Hrs</th>
                           <th className="p-2 text-right">HPOR</th>
                           <th className="p-2 text-right">Missing</th>
                           <th className="p-2 text-right">CO</th>
                           <th className="p-2 text-right">SO</th>
                           <th className="p-2 text-right">Rooms</th>
-                          <th className="p-2 text-right">Paid</th>
-                          <th className="p-2 text-right">Prod</th>
+                          <th className="p-2 text-right">Std Hrs</th>
+                          <th className="p-2 text-right">Variance</th>
                           <th className="p-2 text-right">MPOR</th>
                         </tr>
                       </thead>
@@ -3268,16 +3268,16 @@ export default function AdminDashboard() {
                         {hkWeeklyRollups.map((entry: any) => (
                           <tr key={entry.key} className="border-b">
                             <td className="p-2">{entry.key}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.occupiedRooms)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.roomsSold)}</td>
+                            <td className="p-2 text-right">{formatCurrencyValue(entry.roomRevenueDaily)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.totalDailyHours)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.hporMissingDays)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.standardHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.varianceHours)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
                           </tr>
                         ))}
@@ -3306,16 +3306,16 @@ export default function AdminDashboard() {
                       <thead className="bg-muted/50">
                         <tr>
                           <th className="p-2 text-left">Month</th>
-                          <th className="p-2 text-right">Occ</th>
                           <th className="p-2 text-right">Sold</th>
+                          <th className="p-2 text-right">Room Rev</th>
                           <th className="p-2 text-right">Paid Hrs</th>
                           <th className="p-2 text-right">HPOR</th>
                           <th className="p-2 text-right">Missing</th>
                           <th className="p-2 text-right">CO</th>
                           <th className="p-2 text-right">SO</th>
                           <th className="p-2 text-right">Rooms</th>
-                          <th className="p-2 text-right">Paid</th>
-                          <th className="p-2 text-right">Prod</th>
+                          <th className="p-2 text-right">Std Hrs</th>
+                          <th className="p-2 text-right">Variance</th>
                           <th className="p-2 text-right">MPOR</th>
                         </tr>
                       </thead>
@@ -3323,16 +3323,16 @@ export default function AdminDashboard() {
                         {hkMonthlyRollups.map((entry: any) => (
                           <tr key={entry.key} className="border-b">
                             <td className="p-2">{entry.key}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.occupiedRooms)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.roomsSold)}</td>
+                            <td className="p-2 text-right">{formatCurrencyValue(entry.roomRevenueDaily)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.totalDailyHours)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.hporMissingDays)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
-                            <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.standardHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.varianceHours)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
                           </tr>
                         ))}

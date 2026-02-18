@@ -9,11 +9,10 @@ type HkDailyRollup = {
   roomsCleaned: number;
   paidHours: number | null;
   totalDailyHours: number | null;
-  productiveHours: number | null;
+  standardHours: number | null;
+  varianceHours: number | null;
   mporPaid: number | null;
-  mporProductive: number | null;
   hpor: number | null;
-  avgMinutesPerRoom: number | null;
   hporMissingDays?: number | null;
 };
 
@@ -47,7 +46,7 @@ type HkAttendantRow = {
 };
 
 type HkSummary = {
-  overall: HkDailyRollup & { standardHours?: number | null; varianceHours?: number | null };
+  overall: HkDailyRollup;
   dailyEntries: HkDailyRow[];
   weeklyRollups: HkWeeklyRow[];
   monthlyRollups: HkMonthlyRow[];
@@ -188,11 +187,9 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
     entry.checkouts,
     entry.stayovers,
     entry.roomsCleaned,
-    entry.paidHours,
-    entry.productiveHours,
-    entry.avgMinutesPerRoom,
+    entry.standardHours,
+    entry.varianceHours,
     entry.mporPaid,
-    entry.mporProductive,
   ]);
 
   const weeklyRows = summary.weeklyRollups.map((entry) => [
@@ -204,11 +201,9 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
     entry.checkouts,
     entry.stayovers,
     entry.roomsCleaned,
-    entry.paidHours,
-    entry.productiveHours,
-    entry.avgMinutesPerRoom,
+    entry.standardHours,
+    entry.varianceHours,
     entry.mporPaid,
-    entry.mporProductive,
   ]);
 
   const monthlyRows = summary.monthlyRollups.map((entry) => [
@@ -220,11 +215,9 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
     entry.checkouts,
     entry.stayovers,
     entry.roomsCleaned,
-    entry.paidHours,
-    entry.productiveHours,
-    entry.avgMinutesPerRoom,
+    entry.standardHours,
+    entry.varianceHours,
     entry.mporPaid,
-    entry.mporProductive,
   ]);
 
   const attendantRows = summary.attendantRollups.map((entry) => [
@@ -273,13 +266,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
               <Text style={styles.summaryValue}>{formatValue(summary.overall.totalDailyHours)}</Text>
             </View>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Paid / Productive Hours</Text>
-              <Text style={styles.summaryValue}>
-                {formatValue(summary.overall.paidHours)} / {formatValue(summary.overall.productiveHours)}
-              </Text>
-            </View>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>MPOR Paid</Text>
+              <Text style={styles.summaryLabel}>MPOR</Text>
               <Text style={styles.summaryValue}>{formatValue(summary.overall.mporPaid)}</Text>
             </View>
             <View style={styles.summaryItem}>
@@ -292,7 +279,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Daily Metrics</Text>
           {renderTable(
-            ["Date", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Paid", "Prod", "Avg Min", "MPOR Paid", "MPOR Prod"],
+            ["Date", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR"],
             dailyRows
           )}
         </View>
@@ -300,7 +287,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Weekly Rollups</Text>
           {renderTable(
-            ["Week", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Paid", "Prod", "Avg Min", "MPOR Paid", "MPOR Prod"],
+            ["Week", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR"],
             weeklyRows
           )}
         </View>
@@ -308,7 +295,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Monthly Rollups</Text>
           {renderTable(
-            ["Month", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Paid", "Prod", "Avg Min", "MPOR Paid", "MPOR Prod"],
+            ["Month", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR"],
             monthlyRows
           )}
         </View>

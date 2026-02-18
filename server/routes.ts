@@ -18,7 +18,9 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, aviationEvents, notams as notamsTable, users, type BannerAdOrder } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { renderHkMetricsPdf } from "./hk-metrics-pdf";
+import { format, getISOWeek, getISOWeekYear, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
@@ -228,6 +230,341 @@ function deriveAnalyticsPage(event: string, page: unknown, params: Record<string
   return normalizeAnalyticsPage(fallback);
 }
 
+const formatMetricDate = (value: string | Date | null | undefined) => {
+  if (!value) return "";
+  if (typeof value === "string") return value.split("T")[0];
+  if (value instanceof Date) return format(value, "yyyy-MM-dd");
+  return "";
+};
+
+const normalizeHkNumber = (value: unknown) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const roundTo = (value: number | null, digits = 2) => {
+  if (value === null || !Number.isFinite(value)) return null;
+  const factor = Math.pow(10, digits);
+  return Math.round(value * factor) / factor;
+};
+
+const computeStandardHours = (checkouts: number, stayovers: number) => roundTo(checkouts * 0.5 + stayovers * 0.25);
+
+const computeRate = (hours: number, rooms: number, multiplier = 1) => {
+  if (!rooms) return null;
+  return roundTo((hours * multiplier) / rooms);
+};
+
+const computeDailyDerived = (entry: HkDailyMetric) => {
+  const occupiedRooms = normalizeHkNumber(entry.occupiedRooms);
+  const checkouts = normalizeHkNumber(entry.checkouts);
+  const stayovers = normalizeHkNumber(entry.stayovers);
+  const roomsCleaned = normalizeHkNumber(entry.roomsCleaned);
+  const paidHours = normalizeHkNumber(entry.paidHours);
+  const productiveHours = normalizeHkNumber(entry.productiveHours);
+  const standardHours = computeStandardHours(checkouts, stayovers);
+  const varianceHours = standardHours === null ? null : roundTo(paidHours - standardHours);
+  const mporPaid = computeRate(paidHours, occupiedRooms, 60);
+  const mporProductive = computeRate(productiveHours, occupiedRooms, 60);
+  const hpor = computeRate(paidHours, occupiedRooms, 1);
+  const avgMinutesPerRoom = computeRate(productiveHours, roomsCleaned, 60);
+
+  return {
+    ...entry,
+    metricDate: formatMetricDate(entry.metricDate as any),
+    standardHours,
+    varianceHours,
+    mporPaid,
+    mporProductive,
+    hpor,
+    avgMinutesPerRoom,
+  };
+};
+
+const computeAttendantDerived = (entry: HkAttendantMetric) => {
+  const checkouts = normalizeHkNumber(entry.checkoutsCleaned);
+  const stayovers = normalizeHkNumber(entry.stayoversCleaned);
+  const roomsCleaned = normalizeHkNumber(entry.roomsCleaned);
+  const paidHours = normalizeHkNumber(entry.paidHours);
+  const productiveHours = normalizeHkNumber(entry.productiveHours);
+  const standardHours = computeStandardHours(checkouts, stayovers);
+  const varianceHours = standardHours === null ? null : roundTo(paidHours - standardHours);
+  const mporPaid = computeRate(paidHours, roomsCleaned, 60);
+  const mporProductive = computeRate(productiveHours, roomsCleaned, 60);
+  const hpor = computeRate(paidHours, roomsCleaned, 1);
+  const avgMinutesPerRoom = computeRate(productiveHours, roomsCleaned, 60);
+
+  return {
+    ...entry,
+    metricDate: formatMetricDate(entry.metricDate as any),
+    standardHours,
+    varianceHours,
+    mporPaid,
+    mporProductive,
+    hpor,
+    avgMinutesPerRoom,
+  };
+};
+
+const aggregateDailyTotals = (entries: HkDailyMetric[]) => {
+  return entries.reduce(
+    (acc, entry) => {
+      acc.occupiedRooms += normalizeHkNumber(entry.occupiedRooms);
+      acc.checkouts += normalizeHkNumber(entry.checkouts);
+      acc.stayovers += normalizeHkNumber(entry.stayovers);
+      acc.roomsCleaned += normalizeHkNumber(entry.roomsCleaned);
+      acc.paidHours += normalizeHkNumber(entry.paidHours);
+      acc.lunchMinutes += normalizeHkNumber(entry.lunchMinutes);
+      acc.productiveHours += normalizeHkNumber(entry.productiveHours);
+      acc.attendantsWorking += normalizeHkNumber(entry.attendantsWorking);
+      acc.lateCheckouts += normalizeHkNumber(entry.lateCheckouts);
+      acc.inspections += normalizeHkNumber(entry.inspections);
+      acc.recleans += normalizeHkNumber(entry.recleans);
+      acc.dndRooms += normalizeHkNumber(entry.dndRooms);
+      acc.oooRooms += normalizeHkNumber(entry.oooRooms);
+      return acc;
+    },
+    {
+      occupiedRooms: 0,
+      checkouts: 0,
+      stayovers: 0,
+      roomsCleaned: 0,
+      paidHours: 0,
+      lunchMinutes: 0,
+      productiveHours: 0,
+      attendantsWorking: 0,
+      lateCheckouts: 0,
+      inspections: 0,
+      recleans: 0,
+      dndRooms: 0,
+      oooRooms: 0,
+    }
+  );
+};
+
+const buildDailyRollup = (totals: ReturnType<typeof aggregateDailyTotals>) => {
+  const standardHours = computeStandardHours(totals.checkouts, totals.stayovers);
+  const varianceHours = standardHours === null ? null : roundTo(totals.paidHours - standardHours);
+  return {
+    ...totals,
+    paidHours: roundTo(totals.paidHours),
+    productiveHours: roundTo(totals.productiveHours),
+    standardHours,
+    varianceHours,
+    mporPaid: computeRate(totals.paidHours, totals.occupiedRooms, 60),
+    mporProductive: computeRate(totals.productiveHours, totals.occupiedRooms, 60),
+    hpor: computeRate(totals.paidHours, totals.occupiedRooms, 1),
+    avgMinutesPerRoom: computeRate(totals.productiveHours, totals.roomsCleaned, 60),
+  };
+};
+
+const groupDailyByIsoWeek = (entries: HkDailyMetric[]) => {
+  const map = new Map<string, { key: string; weekStart: string; weekEnd: string; totals: ReturnType<typeof aggregateDailyTotals> }>();
+  entries.forEach((entry) => {
+    const metricDate = formatMetricDate(entry.metricDate as any);
+    if (!metricDate) return;
+    const date = parseISO(metricDate);
+    const key = `${getISOWeekYear(date)}-W${String(getISOWeek(date)).padStart(2, "0")}`;
+    const weekStart = format(startOfISOWeek(date), "yyyy-MM-dd");
+    const weekEnd = format(endOfISOWeek(date), "yyyy-MM-dd");
+    if (!map.has(key)) {
+      map.set(key, { key, weekStart, weekEnd, totals: aggregateDailyTotals([]) });
+    }
+    const bucket = map.get(key);
+    if (bucket) {
+      const totals = bucket.totals;
+      totals.occupiedRooms += normalizeHkNumber(entry.occupiedRooms);
+      totals.checkouts += normalizeHkNumber(entry.checkouts);
+      totals.stayovers += normalizeHkNumber(entry.stayovers);
+      totals.roomsCleaned += normalizeHkNumber(entry.roomsCleaned);
+      totals.paidHours += normalizeHkNumber(entry.paidHours);
+      totals.lunchMinutes += normalizeHkNumber(entry.lunchMinutes);
+      totals.productiveHours += normalizeHkNumber(entry.productiveHours);
+      totals.attendantsWorking += normalizeHkNumber(entry.attendantsWorking);
+      totals.lateCheckouts += normalizeHkNumber(entry.lateCheckouts);
+      totals.inspections += normalizeHkNumber(entry.inspections);
+      totals.recleans += normalizeHkNumber(entry.recleans);
+      totals.dndRooms += normalizeHkNumber(entry.dndRooms);
+      totals.oooRooms += normalizeHkNumber(entry.oooRooms);
+    }
+  });
+
+  return Array.from(map.values())
+    .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+    .map((bucket) => ({
+      key: bucket.key,
+      weekStart: bucket.weekStart,
+      weekEnd: bucket.weekEnd,
+      ...buildDailyRollup(bucket.totals),
+    }));
+};
+
+const groupDailyByMonth = (entries: HkDailyMetric[]) => {
+  const map = new Map<string, { key: string; monthStart: string; monthEnd: string; totals: ReturnType<typeof aggregateDailyTotals> }>();
+  entries.forEach((entry) => {
+    const metricDate = formatMetricDate(entry.metricDate as any);
+    if (!metricDate) return;
+    const date = parseISO(metricDate);
+    const key = format(date, "yyyy-MM");
+    const monthStart = format(startOfMonth(date), "yyyy-MM-dd");
+    const monthEnd = format(endOfMonth(date), "yyyy-MM-dd");
+    if (!map.has(key)) {
+      map.set(key, { key, monthStart, monthEnd, totals: aggregateDailyTotals([]) });
+    }
+    const bucket = map.get(key);
+    if (bucket) {
+      const totals = bucket.totals;
+      totals.occupiedRooms += normalizeHkNumber(entry.occupiedRooms);
+      totals.checkouts += normalizeHkNumber(entry.checkouts);
+      totals.stayovers += normalizeHkNumber(entry.stayovers);
+      totals.roomsCleaned += normalizeHkNumber(entry.roomsCleaned);
+      totals.paidHours += normalizeHkNumber(entry.paidHours);
+      totals.lunchMinutes += normalizeHkNumber(entry.lunchMinutes);
+      totals.productiveHours += normalizeHkNumber(entry.productiveHours);
+      totals.attendantsWorking += normalizeHkNumber(entry.attendantsWorking);
+      totals.lateCheckouts += normalizeHkNumber(entry.lateCheckouts);
+      totals.inspections += normalizeHkNumber(entry.inspections);
+      totals.recleans += normalizeHkNumber(entry.recleans);
+      totals.dndRooms += normalizeHkNumber(entry.dndRooms);
+      totals.oooRooms += normalizeHkNumber(entry.oooRooms);
+    }
+  });
+
+  return Array.from(map.values())
+    .sort((a, b) => a.monthStart.localeCompare(b.monthStart))
+    .map((bucket) => ({
+      key: bucket.key,
+      monthStart: bucket.monthStart,
+      monthEnd: bucket.monthEnd,
+      ...buildDailyRollup(bucket.totals),
+    }));
+};
+
+const aggregateAttendantTotals = (entries: HkAttendantMetric[]) => {
+  return entries.reduce(
+    (acc, entry) => {
+      acc.checkoutsCleaned += normalizeHkNumber(entry.checkoutsCleaned);
+      acc.stayoversCleaned += normalizeHkNumber(entry.stayoversCleaned);
+      acc.roomsCleaned += normalizeHkNumber(entry.roomsCleaned);
+      acc.paidHours += normalizeHkNumber(entry.paidHours);
+      acc.lunchMinutes += normalizeHkNumber(entry.lunchMinutes);
+      acc.productiveHours += normalizeHkNumber(entry.productiveHours);
+      acc.deepCleans += normalizeHkNumber(entry.deepCleans);
+      acc.recleans += normalizeHkNumber(entry.recleans);
+      acc.inspections += normalizeHkNumber(entry.inspections);
+      acc.lateCheckouts += normalizeHkNumber(entry.lateCheckouts);
+      return acc;
+    },
+    {
+      checkoutsCleaned: 0,
+      stayoversCleaned: 0,
+      roomsCleaned: 0,
+      paidHours: 0,
+      lunchMinutes: 0,
+      productiveHours: 0,
+      deepCleans: 0,
+      recleans: 0,
+      inspections: 0,
+      lateCheckouts: 0,
+    }
+  );
+};
+
+const buildAttendantRollup = (totals: ReturnType<typeof aggregateAttendantTotals>) => {
+  const standardHours = computeStandardHours(totals.checkoutsCleaned, totals.stayoversCleaned);
+  const varianceHours = standardHours === null ? null : roundTo(totals.paidHours - standardHours);
+  return {
+    ...totals,
+    paidHours: roundTo(totals.paidHours),
+    productiveHours: roundTo(totals.productiveHours),
+    standardHours,
+    varianceHours,
+    mporPaid: computeRate(totals.paidHours, totals.roomsCleaned, 60),
+    mporProductive: computeRate(totals.productiveHours, totals.roomsCleaned, 60),
+    hpor: computeRate(totals.paidHours, totals.roomsCleaned, 1),
+    avgMinutesPerRoom: computeRate(totals.productiveHours, totals.roomsCleaned, 60),
+  };
+};
+
+const groupAttendants = (entries: HkAttendantMetric[]) => {
+  const map = new Map<
+    string,
+    { attendantName: string; property: string; totals: ReturnType<typeof aggregateAttendantTotals>; daysWorked: Set<string> }
+  >();
+
+  entries.forEach((entry) => {
+    const attendantName = (entry.attendantName || "").trim();
+    const property = (entry.property || "").trim();
+    if (!attendantName) return;
+    const key = `${property}::${attendantName}`;
+    if (!map.has(key)) {
+      map.set(key, { attendantName, property, totals: aggregateAttendantTotals([]), daysWorked: new Set() });
+    }
+    const bucket = map.get(key);
+    if (bucket) {
+      const totals = bucket.totals;
+      totals.checkoutsCleaned += normalizeHkNumber(entry.checkoutsCleaned);
+      totals.stayoversCleaned += normalizeHkNumber(entry.stayoversCleaned);
+      totals.roomsCleaned += normalizeHkNumber(entry.roomsCleaned);
+      totals.paidHours += normalizeHkNumber(entry.paidHours);
+      totals.lunchMinutes += normalizeHkNumber(entry.lunchMinutes);
+      totals.productiveHours += normalizeHkNumber(entry.productiveHours);
+      totals.deepCleans += normalizeHkNumber(entry.deepCleans);
+      totals.recleans += normalizeHkNumber(entry.recleans);
+      totals.inspections += normalizeHkNumber(entry.inspections);
+      totals.lateCheckouts += normalizeHkNumber(entry.lateCheckouts);
+      const metricDate = formatMetricDate(entry.metricDate as any);
+      if (metricDate) bucket.daysWorked.add(metricDate);
+    }
+  });
+
+  return Array.from(map.values())
+    .map((bucket) => ({
+      attendantName: bucket.attendantName,
+      property: bucket.property,
+      daysWorked: bucket.daysWorked.size,
+      ...buildAttendantRollup(bucket.totals),
+    }))
+    .sort((a, b) => a.attendantName.localeCompare(b.attendantName));
+};
+
+const buildHkSummary = async (startDate: string, endDate: string, property?: string | null) => {
+  const dailyEntries = await storage.getHkDailyMetrics(startDate, endDate, property);
+  const attendantEntries = await storage.getHkAttendantMetrics(startDate, endDate, property);
+
+  const dailyDerived = dailyEntries.map((entry) => computeDailyDerived(entry));
+  const attendantDerived = attendantEntries.map((entry) => computeAttendantDerived(entry));
+
+  const overall = buildDailyRollup(aggregateDailyTotals(dailyEntries));
+  const weeklyRollups = groupDailyByIsoWeek(dailyEntries);
+  const monthlyRollups = groupDailyByMonth(dailyEntries);
+  const attendantRollups = groupAttendants(attendantEntries);
+
+  return {
+    dailyEntries: dailyDerived,
+    attendantEntries: attendantDerived,
+    weeklyRollups,
+    monthlyRollups,
+    attendantRollups,
+    overall,
+  };
+};
+
+const resolveHkDateRange = (query: any) => {
+  const today = new Date();
+  const defaultEnd = format(today, "yyyy-MM-dd");
+  const startFallback = new Date(today);
+  startFallback.setDate(startFallback.getDate() - 6);
+  const defaultStart = format(startFallback, "yyyy-MM-dd");
+
+  const startRaw = typeof query?.start === "string" ? query.start : defaultStart;
+  const endRaw = typeof query?.end === "string" ? query.end : defaultEnd;
+  const startDate = formatMetricDate(startRaw) || defaultStart;
+  const endDate = formatMetricDate(endRaw) || defaultEnd;
+
+  return { startDate, endDate };
+};
+
 function extractPayPalOrderAmount(orderData: any): { value: string; currency: string } | null {
   const unit = orderData?.purchase_units?.[0];
   const amountValue =
@@ -289,6 +626,7 @@ const requirePromoAdmin = requireAdminPermission("promo");
 const requirePromoCodesAdmin = requireAdminPermission("promo-codes");
 const requireNotificationsAdmin = requireAdminPermission("notifications");
 const requireBannersAdmin = requireAdminPermission("banners");
+const requireHkMetricsAdmin = requireAdminPermission("hk-metrics");
 
 const SAMPLE_MARKETPLACE_LISTINGS = [
   {
@@ -6516,7 +6854,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const adminInviteSchema = z.object({
     email: z.string().email(),
-    role: z.enum(["operations", "finance", "sales", "support", "content"]),
+    role: z.enum(["operations", "finance", "sales", "support", "content", "housekeeping"]),
     permissions: z.array(z.string()).optional(),
   });
 
@@ -7352,6 +7690,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete expense" });
+    }
+  });
+
+  // HK Metrics (Admin only)
+  app.get("/api/admin/hk-metrics/properties", isAuthenticated, requireHkMetricsAdmin, async (_req, res) => {
+    try {
+      const properties = await storage.listHkProperties();
+      res.json(properties);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch properties" });
+    }
+  });
+
+  app.get("/api/admin/hk-metrics/summary", isAuthenticated, requireHkMetricsAdmin, async (req, res) => {
+    try {
+      const { startDate, endDate } = resolveHkDateRange(req.query);
+      const property = typeof req.query.property === "string" ? req.query.property.trim() : "";
+      const summary = await buildHkSummary(startDate, endDate, property || null);
+      res.json({ startDate, endDate, property: property || null, ...summary });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch HK metrics" });
+    }
+  });
+
+  app.post("/api/admin/hk-metrics/daily", isAuthenticated, requireHkMetricsAdmin, async (req: any, res) => {
+    try {
+      const result = insertHkDailyMetricSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      const property = result.data.property.trim();
+      if (!property) {
+        return res.status(400).json({ error: "Property is required" });
+      }
+      const { notes, ...rest } = result.data;
+      const payload = {
+        ...rest,
+        metricDate: result.data.metricDate,
+        property,
+        paidHours: String(result.data.paidHours),
+        productiveHours: String(result.data.productiveHours),
+        notes: notes?.trim() || undefined,
+        createdBy: userId ? String(userId) : null,
+      };
+      const saved = await storage.upsertHkDailyMetric(payload);
+      res.status(201).json(saved);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save HK daily metrics" });
+    }
+  });
+
+  app.post("/api/admin/hk-metrics/attendant", isAuthenticated, requireHkMetricsAdmin, async (req: any, res) => {
+    try {
+      const result = insertHkAttendantMetricSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      const property = result.data.property.trim();
+      const attendantName = result.data.attendantName.trim();
+      if (!property || !attendantName) {
+        return res.status(400).json({ error: "Property and attendant name are required" });
+      }
+      const { notes, ...rest } = result.data;
+      const payload = {
+        ...rest,
+        metricDate: result.data.metricDate,
+        property,
+        attendantName,
+        paidHours: String(result.data.paidHours),
+        productiveHours: String(result.data.productiveHours),
+        notes: notes?.trim() || undefined,
+        createdBy: userId ? String(userId) : null,
+      };
+      const saved = await storage.upsertHkAttendantMetric(payload);
+      res.status(201).json(saved);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to save attendant metrics" });
+    }
+  });
+
+  app.get("/api/admin/hk-metrics/pdf", isAuthenticated, requireHkMetricsAdmin, async (req, res) => {
+    try {
+      const { startDate, endDate } = resolveHkDateRange(req.query);
+      const property = typeof req.query.property === "string" ? req.query.property.trim() : "";
+      const summary = await buildHkSummary(startDate, endDate, property || null);
+      const pdfBuffer = await renderHkMetricsPdf({
+        property: property || "All",
+        startDate,
+        endDate,
+        summary: summary as any,
+      });
+      const safeProperty = (property || "all").replace(/[^a-z0-9-_]+/gi, "-").toLowerCase();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="hk-metrics-${safeProperty}-${startDate}-to-${endDate}.pdf"`
+      );
+      res.send(pdfBuffer);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate HK metrics PDF" });
     }
   });
 

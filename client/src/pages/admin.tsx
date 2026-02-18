@@ -19,7 +19,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder } from "@shared/schema";
+import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric } from "@shared/schema";
 import { ADMIN_ROLE_LABELS, ADMIN_ROLE_PERMISSIONS, type AdminRole, type AdminPermission } from "@shared/config/adminAccess";
 import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
 import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
@@ -78,10 +78,18 @@ export default function AdminDashboard() {
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AdminRole>("operations");
+  const [hkProperty, setHkProperty] = useState("");
+  const [hkStartDate, setHkStartDate] = useState(() => {
+    const start = new Date();
+    start.setDate(start.getDate() - 6);
+    return start.toISOString().split("T")[0];
+  });
+  const [hkEndDate, setHkEndDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   useEffect(() => {
     const allowed = [
       canAccess("analytics") && "analytics",
+      canAccess("hk-metrics") && "hk-metrics",
       canAccess("crm") && "crm",
       canAccess("users") && "users",
       canAccess("verifications") && "verifications",
@@ -250,6 +258,55 @@ export default function AdminDashboard() {
       endDate: undefined,
     },
   });
+
+  const hkDailyForm = useForm<InsertHkDailyMetric>({
+    resolver: zodResolver(insertHkDailyMetricSchema),
+    defaultValues: {
+      metricDate: new Date(),
+      property: "",
+      occupiedRooms: 0,
+      checkouts: 0,
+      stayovers: 0,
+      roomsCleaned: 0,
+      paidHours: "0",
+      lunchMinutes: 0,
+      productiveHours: "0",
+      attendantsWorking: 0,
+      lateCheckouts: 0,
+      inspections: 0,
+      recleans: 0,
+      dndRooms: 0,
+      oooRooms: 0,
+      notes: "",
+    },
+  });
+
+  const hkAttendantForm = useForm<InsertHkAttendantMetric>({
+    resolver: zodResolver(insertHkAttendantMetricSchema),
+    defaultValues: {
+      metricDate: new Date(),
+      property: "",
+      attendantName: "",
+      checkoutsCleaned: 0,
+      stayoversCleaned: 0,
+      roomsCleaned: 0,
+      paidHours: "0",
+      lunchMinutes: 0,
+      productiveHours: "0",
+      deepCleans: 0,
+      recleans: 0,
+      inspections: 0,
+      lateCheckouts: 0,
+      notes: "",
+    },
+  });
+
+  useEffect(() => {
+    if (hkProperty) {
+      hkDailyForm.setValue("property", hkProperty);
+      hkAttendantForm.setValue("property", hkProperty);
+    }
+  }, [hkProperty, hkDailyForm, hkAttendantForm]);
   
   const { toast } = useToast();
 
@@ -462,6 +519,50 @@ export default function AdminDashboard() {
   const { data: adminUsers = [], isLoading: adminUsersLoading } = useQuery<User[]>({
     queryKey: ["/api/admin/admins"],
     enabled: activeTab === "admins" && isSuperAdmin,
+  });
+
+  const hkSummaryUrl = useMemo(() => {
+    const propertyParam = hkProperty ? `&property=${encodeURIComponent(hkProperty)}` : "";
+    return `/api/admin/hk-metrics/summary?start=${hkStartDate}&end=${hkEndDate}${propertyParam}`;
+  }, [hkStartDate, hkEndDate, hkProperty]);
+
+  const { data: hkSummary, isLoading: hkSummaryLoading } = useQuery<{
+    startDate: string;
+    endDate: string;
+    property: string | null;
+    overall: Record<string, number | null>;
+    dailyEntries: Array<Record<string, any>>;
+    weeklyRollups: Array<Record<string, any>>;
+    monthlyRollups: Array<Record<string, any>>;
+    attendantRollups: Array<Record<string, any>>;
+  }>({
+    queryKey: [hkSummaryUrl],
+    enabled: activeTab === "hk-metrics",
+  });
+
+  const { data: hkProperties = [] } = useQuery<string[]>({
+    queryKey: ["/api/admin/hk-metrics/properties"],
+    enabled: activeTab === "hk-metrics",
+  });
+
+  const saveHkDailyMutation = useMutation({
+    mutationFn: async (payload: InsertHkDailyMetric) => {
+      return await apiRequest("POST", "/api/admin/hk-metrics/daily", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [hkSummaryUrl] });
+      toast({ title: "Daily metrics saved" });
+    },
+  });
+
+  const saveHkAttendantMutation = useMutation({
+    mutationFn: async (payload: InsertHkAttendantMetric) => {
+      return await apiRequest("POST", "/api/admin/hk-metrics/attendant", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [hkSummaryUrl] });
+      toast({ title: "Attendant metrics saved" });
+    },
   });
 
   // Create orderId→bannerAd lookup to check activation status
@@ -1499,6 +1600,60 @@ export default function AdminDashboard() {
     }
   };
 
+  const formatHkValue = (value: unknown) => {
+    if (value === null || value === undefined || value === "") return "-";
+    if (typeof value === "number") return Number.isFinite(value) ? value.toFixed(2).replace(/\.00$/, "") : "-";
+    return String(value);
+  };
+
+  const handleHkDailySubmit = (data: InsertHkDailyMetric) => {
+    saveHkDailyMutation.mutate(data);
+  };
+
+  const handleHkAttendantSubmit = (data: InsertHkAttendantMetric) => {
+    saveHkAttendantMutation.mutate(data);
+  };
+
+  const handleHkDailyEdit = (entry: Record<string, any>) => {
+    hkDailyForm.reset({
+      metricDate: entry.metricDate ? new Date(entry.metricDate) : new Date(),
+      property: entry.property || hkProperty,
+      occupiedRooms: entry.occupiedRooms ?? 0,
+      checkouts: entry.checkouts ?? 0,
+      stayovers: entry.stayovers ?? 0,
+      roomsCleaned: entry.roomsCleaned ?? 0,
+      paidHours: entry.paidHours?.toString() ?? "0",
+      lunchMinutes: entry.lunchMinutes ?? 0,
+      productiveHours: entry.productiveHours?.toString() ?? "0",
+      attendantsWorking: entry.attendantsWorking ?? 0,
+      lateCheckouts: entry.lateCheckouts ?? 0,
+      inspections: entry.inspections ?? 0,
+      recleans: entry.recleans ?? 0,
+      dndRooms: entry.dndRooms ?? 0,
+      oooRooms: entry.oooRooms ?? 0,
+      notes: entry.notes ?? "",
+    });
+  };
+
+  const handleHkAttendantEdit = (entry: Record<string, any>) => {
+    hkAttendantForm.reset({
+      metricDate: entry.metricDate ? new Date(entry.metricDate) : new Date(),
+      property: entry.property || hkProperty,
+      attendantName: entry.attendantName || "",
+      checkoutsCleaned: entry.checkoutsCleaned ?? 0,
+      stayoversCleaned: entry.stayoversCleaned ?? 0,
+      roomsCleaned: entry.roomsCleaned ?? 0,
+      paidHours: entry.paidHours?.toString() ?? "0",
+      lunchMinutes: entry.lunchMinutes ?? 0,
+      productiveHours: entry.productiveHours?.toString() ?? "0",
+      deepCleans: entry.deepCleans ?? 0,
+      recleans: entry.recleans ?? 0,
+      inspections: entry.inspections ?? 0,
+      lateCheckouts: entry.lateCheckouts ?? 0,
+      notes: entry.notes ?? "",
+    });
+  };
+
   // Filter withdrawals based on search and status
   const filteredWithdrawals = withdrawals.filter((withdrawal: any) => {
     // Status filter
@@ -1521,6 +1676,14 @@ export default function AdminDashboard() {
     return true;
   });
 
+  const hkDailyEntries = hkSummary?.dailyEntries ?? [];
+  const hkWeeklyRollups = hkSummary?.weeklyRollups ?? [];
+  const hkMonthlyRollups = hkSummary?.monthlyRollups ?? [];
+  const hkAttendantRollups = hkSummary?.attendantRollups ?? [];
+  const hkOverall = hkSummary?.overall || {};
+  const hkPropertyParam = hkProperty ? `&property=${encodeURIComponent(hkProperty)}` : "";
+  const hkPdfUrl = apiUrl(`/api/admin/hk-metrics/pdf?start=${hkStartDate}&end=${hkEndDate}${hkPropertyParam}`);
+
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-8">
@@ -1538,6 +1701,12 @@ export default function AdminDashboard() {
             <TabsTrigger value="analytics" data-testid="tab-analytics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
               <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
               <span>Analytics</span>
+            </TabsTrigger>
+          )}
+          {canAccess("hk-metrics") && (
+            <TabsTrigger value="hk-metrics" data-testid="tab-hk-metrics" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <FileText className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>HK Metrics</span>
             </TabsTrigger>
           )}
           {canAccess("crm") && (
@@ -2321,6 +2490,742 @@ export default function AdminDashboard() {
               <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
             </div>
           )}
+        </TabsContent>
+
+        {/* HK Metrics Tab */}
+        <TabsContent value="hk-metrics" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Housekeeping Metrics</CardTitle>
+              <CardDescription>Track daily, weekly, and monthly housekeeping performance</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-4">
+                <div className="space-y-2">
+                  <Label>Property</Label>
+                  <Input
+                    list="hk-property-options"
+                    value={hkProperty}
+                    onChange={(event) => setHkProperty(event.target.value)}
+                    placeholder="Property name"
+                  />
+                  <datalist id="hk-property-options">
+                    {hkProperties.map((property) => (
+                      <option key={property} value={property} />
+                    ))}
+                  </datalist>
+                </div>
+                <div className="space-y-2">
+                  <Label>Start Date</Label>
+                  <Input
+                    type="date"
+                    value={hkStartDate}
+                    onChange={(event) => setHkStartDate(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>End Date</Label>
+                  <Input
+                    type="date"
+                    value={hkEndDate}
+                    onChange={(event) => setHkEndDate(event.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button asChild className="w-full">
+                    <a href={hkPdfUrl} target="_blank" rel="noreferrer">Export PDF</a>
+                  </Button>
+                </div>
+              </div>
+
+              {hkSummaryLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  Loading HK metrics...
+                </div>
+              )}
+
+              {!hkSummaryLoading && (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Occupied Rooms</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.occupiedRooms)}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Rooms Cleaned</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.roomsCleaned)}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Paid Hours</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.paidHours)}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Productive Hours</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.productiveHours)}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">MPOR Paid</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.mporPaid)}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">HPOR</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.hpor)}</div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Daily Entry</CardTitle>
+                <CardDescription>Enter daily housekeeping totals</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...hkDailyForm}>
+                  <form onSubmit={hkDailyForm.handleSubmit(handleHkDailySubmit)} className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="property"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Property</FormLabel>
+                            <FormControl>
+                              <Input {...field} value={field.value ?? ""} placeholder="Property" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="metricDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Date</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                value={field.value instanceof Date ? field.value.toISOString().split("T")[0] : (typeof field.value === "string" ? field.value.split("T")[0] : "")}
+                                onChange={(event) => field.onChange(event.target.value ? new Date(event.target.value) : undefined)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-4">
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="occupiedRooms"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Occupied</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="checkouts"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Checkouts</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="stayovers"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Stayovers</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="roomsCleaned"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Rooms Cleaned</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-4">
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="paidHours"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Paid Hours</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" step="0.25" {...field} value={field.value ?? "0"} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="lunchMinutes"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Lunch Minutes</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="productiveHours"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Productive Hours</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" step="0.25" {...field} value={field.value ?? "0"} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="attendantsWorking"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Attendants</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-5">
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="lateCheckouts"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Late Checkouts</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="inspections"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Inspections</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="recleans"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Recleans</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="dndRooms"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>DND</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkDailyForm.control}
+                        name="oooRooms"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>OOO/OOS</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={hkDailyForm.control}
+                      name="notes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Notes</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} value={field.value ?? ""} placeholder="Daily notes or exceptions" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <Button type="submit" disabled={saveHkDailyMutation.isPending}>
+                      {saveHkDailyMutation.isPending ? "Saving..." : "Save Daily"}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Attendant Entry</CardTitle>
+                <CardDescription>Track individual attendant output</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...hkAttendantForm}>
+                  <form onSubmit={hkAttendantForm.handleSubmit(handleHkAttendantSubmit)} className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="property"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Property</FormLabel>
+                            <FormControl>
+                              <Input {...field} value={field.value ?? ""} placeholder="Property" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="metricDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Date</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="date"
+                                value={field.value instanceof Date ? field.value.toISOString().split("T")[0] : (typeof field.value === "string" ? field.value.split("T")[0] : "")}
+                                onChange={(event) => field.onChange(event.target.value ? new Date(event.target.value) : undefined)}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="attendantName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Attendant</FormLabel>
+                            <FormControl>
+                              <Input {...field} value={field.value ?? ""} placeholder="Name" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="checkoutsCleaned"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Checkouts</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="stayoversCleaned"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Stayovers</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="roomsCleaned"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Rooms Cleaned</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="paidHours"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Paid Hours</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" step="0.25" {...field} value={field.value ?? "0"} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="lunchMinutes"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Lunch Minutes</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="productiveHours"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Productive Hours</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" step="0.25" {...field} value={field.value ?? "0"} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-4">
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="deepCleans"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Deep Cleans</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="recleans"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Recleans</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="inspections"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Inspections</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={hkAttendantForm.control}
+                        name="lateCheckouts"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Late Checkouts</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={hkAttendantForm.control}
+                      name="notes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Notes</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} value={field.value ?? ""} placeholder="Notes or exceptions" />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <Button type="submit" disabled={saveHkAttendantMutation.isPending}>
+                      {saveHkAttendantMutation.isPending ? "Saving..." : "Save Attendant"}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Daily Metrics Log</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {hkDailyEntries.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No daily entries yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="p-2 text-left">Date</th>
+                        <th className="p-2 text-left">Property</th>
+                        <th className="p-2 text-right">Occ</th>
+                        <th className="p-2 text-right">CO</th>
+                        <th className="p-2 text-right">SO</th>
+                        <th className="p-2 text-right">Rooms</th>
+                        <th className="p-2 text-right">Paid</th>
+                        <th className="p-2 text-right">Prod</th>
+                        <th className="p-2 text-right">MPOR</th>
+                        <th className="p-2 text-right">HPOR</th>
+                        <th className="p-2 text-right">Avg Min</th>
+                        <th className="p-2 text-right">Edit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {hkDailyEntries.map((entry: any) => (
+                        <tr key={`${entry.metricDate}-${entry.property}`} className="border-b">
+                          <td className="p-2">{entry.metricDate}</td>
+                          <td className="p-2">{entry.property}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.occupiedRooms)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.avgMinutesPerRoom)}</td>
+                          <td className="p-2 text-right">
+                            <Button size="icon" variant="ghost" onClick={() => handleHkDailyEdit(entry)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Weekly Rollups</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {hkWeeklyRollups.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No weekly rollups yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="p-2 text-left">Week</th>
+                        <th className="p-2 text-right">Occ</th>
+                        <th className="p-2 text-right">CO</th>
+                        <th className="p-2 text-right">SO</th>
+                        <th className="p-2 text-right">Rooms</th>
+                        <th className="p-2 text-right">Paid</th>
+                        <th className="p-2 text-right">Prod</th>
+                        <th className="p-2 text-right">MPOR</th>
+                        <th className="p-2 text-right">HPOR</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {hkWeeklyRollups.map((entry: any) => (
+                        <tr key={entry.key} className="border-b">
+                          <td className="p-2">{entry.key}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.occupiedRooms)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Monthly Rollups</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {hkMonthlyRollups.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No monthly rollups yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="p-2 text-left">Month</th>
+                        <th className="p-2 text-right">Occ</th>
+                        <th className="p-2 text-right">CO</th>
+                        <th className="p-2 text-right">SO</th>
+                        <th className="p-2 text-right">Rooms</th>
+                        <th className="p-2 text-right">Paid</th>
+                        <th className="p-2 text-right">Prod</th>
+                        <th className="p-2 text-right">MPOR</th>
+                        <th className="p-2 text-right">HPOR</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {hkMonthlyRollups.map((entry: any) => (
+                        <tr key={entry.key} className="border-b">
+                          <td className="p-2">{entry.key}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.occupiedRooms)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Attendant Rollups</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {hkAttendantRollups.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No attendant rollups yet.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="p-2 text-left">Attendant</th>
+                        <th className="p-2 text-left">Property</th>
+                        <th className="p-2 text-right">Days</th>
+                        <th className="p-2 text-right">Rooms</th>
+                        <th className="p-2 text-right">Paid</th>
+                        <th className="p-2 text-right">Prod</th>
+                        <th className="p-2 text-right">MPOR</th>
+                        <th className="p-2 text-right">HPOR</th>
+                        <th className="p-2 text-right">Avg Min</th>
+                        <th className="p-2 text-right">Variance</th>
+                        <th className="p-2 text-right">Edit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {hkAttendantRollups.map((entry: any) => (
+                        <tr key={`${entry.property}-${entry.attendantName}`} className="border-b">
+                          <td className="p-2">{entry.attendantName}</td>
+                          <td className="p-2">{entry.property}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.daysWorked)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.avgMinutesPerRoom)}</td>
+                          <td className="p-2 text-right">{formatHkValue(entry.varianceHours)}</td>
+                          <td className="p-2 text-right">
+                            <Button size="icon" variant="ghost" onClick={() => handleHkAttendantEdit(entry)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* CRM Tab - Sales & Marketing */}

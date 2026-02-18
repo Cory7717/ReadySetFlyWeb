@@ -17,7 +17,7 @@ export const leadSources = ["website", "referral", "social_media", "advertising"
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
 export const withdrawalStatuses = ["pending", "processing", "completed", "failed", "cancelled"] as const;
 export const approachPlateTypes = ["IAP", "SID", "STAR", "AIRPORT", "OTHER"] as const;
-export const adminRoles = ["operations", "finance", "sales", "support", "content"] as const;
+export const adminRoles = ["operations", "finance", "sales", "support", "content", "housekeeping"] as const;
 
 // Session storage table (REQUIRED for Replit Auth - from blueprint:javascript_log_in_with_replit)
 export const sessions = pgTable(
@@ -702,6 +702,60 @@ export const expenses = pgTable("expenses", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Housekeeping metrics (daily and attendant rollups)
+export const hkDailyMetrics = pgTable("hk_daily_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metricDate: date("metric_date").notNull(),
+  property: text("property").notNull(),
+  occupiedRooms: integer("occupied_rooms").default(0),
+  checkouts: integer("checkouts").default(0),
+  stayovers: integer("stayovers").default(0),
+  roomsCleaned: integer("rooms_cleaned").default(0),
+  paidHours: decimal("paid_hours", { precision: 6, scale: 2 }).default("0.00"),
+  lunchMinutes: integer("lunch_minutes").default(0),
+  productiveHours: decimal("productive_hours", { precision: 6, scale: 2 }).default("0.00"),
+  attendantsWorking: integer("attendants_working").default(0),
+  lateCheckouts: integer("late_checkouts").default(0),
+  inspections: integer("inspections").default(0),
+  recleans: integer("recleans").default(0),
+  dndRooms: integer("dnd_rooms").default(0),
+  oooRooms: integer("ooo_rooms").default(0),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_hk_daily_unique").on(table.metricDate, table.property),
+  index("idx_hk_daily_date").on(table.metricDate),
+  index("idx_hk_daily_property").on(table.property),
+]);
+
+export const hkAttendantMetrics = pgTable("hk_attendant_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metricDate: date("metric_date").notNull(),
+  property: text("property").notNull(),
+  attendantName: text("attendant_name").notNull(),
+  checkoutsCleaned: integer("checkouts_cleaned").default(0),
+  stayoversCleaned: integer("stayovers_cleaned").default(0),
+  roomsCleaned: integer("rooms_cleaned").default(0),
+  paidHours: decimal("paid_hours", { precision: 6, scale: 2 }).default("0.00"),
+  lunchMinutes: integer("lunch_minutes").default(0),
+  productiveHours: decimal("productive_hours", { precision: 6, scale: 2 }).default("0.00"),
+  deepCleans: integer("deep_cleans").default(0),
+  recleans: integer("recleans").default(0),
+  inspections: integer("inspections").default(0),
+  lateCheckouts: integer("late_checkouts").default(0),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_hk_attendant_unique").on(table.metricDate, table.property, table.attendantName),
+  index("idx_hk_attendant_date").on(table.metricDate),
+  index("idx_hk_attendant_property").on(table.property),
+  index("idx_hk_attendant_name").on(table.attendantName),
+]);
 
 // Admin Notifications (for threshold alerts)
 export const adminNotifications = pgTable("admin_notifications", {
@@ -1558,6 +1612,58 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
   invoiceUrl: z.string().optional(),
 });
 
+const hkCountSchema = z.coerce.number().int().min(0).default(0);
+const hkDecimalSchema = z.preprocess(
+  (value) => (value === "" || value === null || value === undefined ? "0" : value),
+  z.string().regex(/^\d+(\.\d{1,2})?$/)
+);
+
+export const insertHkDailyMetricSchema = createInsertSchema(hkDailyMetrics).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: true,
+}).extend({
+  metricDate: z.coerce.date(),
+  property: z.string().min(1, "Property is required"),
+  occupiedRooms: hkCountSchema,
+  checkouts: hkCountSchema,
+  stayovers: hkCountSchema,
+  roomsCleaned: hkCountSchema,
+  paidHours: hkDecimalSchema,
+  lunchMinutes: hkCountSchema,
+  productiveHours: hkDecimalSchema,
+  attendantsWorking: hkCountSchema,
+  lateCheckouts: hkCountSchema,
+  inspections: hkCountSchema,
+  recleans: hkCountSchema,
+  dndRooms: hkCountSchema,
+  oooRooms: hkCountSchema,
+  notes: z.string().optional(),
+});
+
+export const insertHkAttendantMetricSchema = createInsertSchema(hkAttendantMetrics).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: true,
+}).extend({
+  metricDate: z.coerce.date(),
+  property: z.string().min(1, "Property is required"),
+  attendantName: z.string().min(1, "Attendant name is required"),
+  checkoutsCleaned: hkCountSchema,
+  stayoversCleaned: hkCountSchema,
+  roomsCleaned: hkCountSchema,
+  paidHours: hkDecimalSchema,
+  lunchMinutes: hkCountSchema,
+  productiveHours: hkDecimalSchema,
+  deepCleans: hkCountSchema,
+  recleans: hkCountSchema,
+  inspections: hkCountSchema,
+  lateCheckouts: hkCountSchema,
+  notes: z.string().optional(),
+});
+
 export const insertAdminNotificationSchema = createInsertSchema(adminNotifications).omit({
   id: true,
   createdAt: true,
@@ -1727,6 +1833,12 @@ export type InsertPromoCodeUsage = typeof promoCodeUsages.$inferInsert;
 
 export type Expense = typeof expenses.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+
+export type HkDailyMetric = typeof hkDailyMetrics.$inferSelect;
+export type InsertHkDailyMetric = z.infer<typeof insertHkDailyMetricSchema>;
+
+export type HkAttendantMetric = typeof hkAttendantMetrics.$inferSelect;
+export type InsertHkAttendantMetric = z.infer<typeof insertHkAttendantMetricSchema>;
 
 export type AdminNotification = typeof adminNotifications.$inferSelect;
 export type InsertAdminNotification = z.infer<typeof insertAdminNotificationSchema>;

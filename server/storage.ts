@@ -41,6 +41,10 @@ import {
   type InsertJobApplication,
   type PromoAlert,
   type InsertPromoAlert,
+  type HkDailyMetric,
+  type InsertHkDailyMetric,
+  type HkAttendantMetric,
+  type InsertHkAttendantMetric,
   type WithdrawalRequest,
   type InsertWithdrawalRequest,
   type RefreshToken,
@@ -102,6 +106,8 @@ import {
   bannerAdOrders,
   jobApplications,
   promoAlerts,
+  hkDailyMetrics,
+  hkAttendantMetrics,
   promoCodes,
   promoCodeUsages,
   refreshTokens,
@@ -339,6 +345,13 @@ export interface IStorage {
   getExpense(id: string): Promise<Expense | undefined>;
   createExpense(expense: InsertExpense): Promise<Expense>;
   updateExpense(id: string, updates: Partial<Expense>): Promise<Expense | undefined>;
+
+  // Housekeeping metrics
+  getHkDailyMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkDailyMetric[]>;
+  upsertHkDailyMetric(metric: InsertHkDailyMetric & { createdBy?: string | null }): Promise<HkDailyMetric>;
+  getHkAttendantMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkAttendantMetric[]>;
+  upsertHkAttendantMetric(metric: InsertHkAttendantMetric & { createdBy?: string | null }): Promise<HkAttendantMetric>;
+  listHkProperties(): Promise<string[]>;
   
   // Promo Codes
   getAllPromoCodes(): Promise<PromoCode[]>;
@@ -2239,6 +2252,72 @@ export class DatabaseStorage implements IStorage {
   async deleteExpense(id: string): Promise<boolean> {
     const result = await db.delete(expenses).where(eq(expenses.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Housekeeping metrics
+  async getHkDailyMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkDailyMetric[]> {
+    const filters = [gte(hkDailyMetrics.metricDate, startDate), lte(hkDailyMetrics.metricDate, endDate)];
+    if (property) {
+      filters.push(eq(hkDailyMetrics.property, property));
+    }
+    return await db
+      .select()
+      .from(hkDailyMetrics)
+      .where(and(...filters))
+      .orderBy(asc(hkDailyMetrics.metricDate));
+  }
+
+  async upsertHkDailyMetric(metric: InsertHkDailyMetric & { createdBy?: string | null }): Promise<HkDailyMetric> {
+    const payload = { ...metric, updatedAt: new Date() };
+    const [saved] = await db
+      .insert(hkDailyMetrics)
+      .values(payload)
+      .onConflictDoUpdate({
+        target: [hkDailyMetrics.metricDate, hkDailyMetrics.property],
+        set: payload,
+      })
+      .returning();
+    return saved;
+  }
+
+  async getHkAttendantMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkAttendantMetric[]> {
+    const filters = [gte(hkAttendantMetrics.metricDate, startDate), lte(hkAttendantMetrics.metricDate, endDate)];
+    if (property) {
+      filters.push(eq(hkAttendantMetrics.property, property));
+    }
+    return await db
+      .select()
+      .from(hkAttendantMetrics)
+      .where(and(...filters))
+      .orderBy(asc(hkAttendantMetrics.metricDate), asc(hkAttendantMetrics.attendantName));
+  }
+
+  async upsertHkAttendantMetric(metric: InsertHkAttendantMetric & { createdBy?: string | null }): Promise<HkAttendantMetric> {
+    const payload = { ...metric, updatedAt: new Date() };
+    const [saved] = await db
+      .insert(hkAttendantMetrics)
+      .values(payload)
+      .onConflictDoUpdate({
+        target: [hkAttendantMetrics.metricDate, hkAttendantMetrics.property, hkAttendantMetrics.attendantName],
+        set: payload,
+      })
+      .returning();
+    return saved;
+  }
+
+  async listHkProperties(): Promise<string[]> {
+    const daily = await db
+      .select({ property: hkDailyMetrics.property })
+      .from(hkDailyMetrics)
+      .groupBy(hkDailyMetrics.property);
+    const attendants = await db
+      .select({ property: hkAttendantMetrics.property })
+      .from(hkAttendantMetrics)
+      .groupBy(hkAttendantMetrics.property);
+    const combined = [...daily, ...attendants]
+      .map((row) => row.property)
+      .filter((property): property is string => Boolean(property));
+    return Array.from(new Set(combined)).sort((a, b) => a.localeCompare(b));
   }
 
   // Promo Codes

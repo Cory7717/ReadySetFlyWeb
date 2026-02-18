@@ -343,6 +343,13 @@ const parseRoomsSoldDateToken = (token: string) => {
     if (!Number.isNaN(date.getTime())) return format(date, "yyyy-MM-dd");
   }
 
+  const compactMatch = trimmed.match(/\b(\d{1,2})([A-Za-z]{3})(\d{2})\b/);
+  if (compactMatch) {
+    const [, day, monthToken, year] = compactMatch;
+    const date = parse(`${day}${monthToken}${year}`, "dMMMyy", new Date());
+    if (!Number.isNaN(date.getTime())) return format(date, "yyyy-MM-dd");
+  }
+
   const monthMap: Record<string, number> = {
     jan: 0,
     feb: 1,
@@ -408,6 +415,18 @@ const parseRoomsSoldFile = (content: string) => {
   const parsed: Array<{ line: number; date: string; roomsSold: number; raw: string }> = [];
   const headerLineIndex = lines.findIndex((line) => detectRoomsSoldHeader(line));
   const headerInfo = headerLineIndex >= 0 ? detectRoomsSoldHeader(lines[headerLineIndex]) : null;
+  let defaultDate: string | null = null;
+
+  for (const line of lines) {
+    const dateMatch = line.match(/\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}\/\d{4}\b|\b\d{1,2}-[A-Za-z]{3}-\d{4}\b|\b\d{1,2}[A-Za-z]{3}\d{2}\b/);
+    if (dateMatch) {
+      const parsedDate = parseRoomsSoldDateToken(dateMatch[0]);
+      if (parsedDate) {
+        defaultDate = parsedDate;
+        break;
+      }
+    }
+  }
 
   lines.forEach((rawLine, index) => {
     const line = rawLine.trim();
@@ -425,9 +444,13 @@ const parseRoomsSoldFile = (content: string) => {
       const roomsMatch = roomsCell.match(/\b\d[\d,]*\b/);
       roomsSold = roomsMatch ? Number(roomsMatch[0].replace(/,/g, "")) : null;
     } else {
-      const dateMatch = rawLine.match(/\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}\/\d{4}\b|\b\d{1,2}-[A-Za-z]{3}-\d{4}\b/);
+      const dateMatch = rawLine.match(/\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}\/\d{4}\b|\b\d{1,2}-[A-Za-z]{3}-\d{4}\b|\b\d{1,2}[A-Za-z]{3}\d{2}\b/);
       dateToken = dateMatch ? parseRoomsSoldDateToken(dateMatch[0]) : null;
       roomsSold = extractRoomsSoldFromLine(rawLine, dateMatch?.[0]);
+    }
+
+    if (!dateToken && roomsSold !== null && defaultDate) {
+      dateToken = defaultDate;
     }
 
     if (!dateToken) {

@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, X, Rocket, Tag, ChevronDown, ChevronRight } from "lucide-react";
-import { endOfMonth, format, parse, startOfMonth, eachDayOfInterval, isSameMonth } from "date-fns";
+import { endOfMonth, format, parse, parseISO, startOfMonth, eachDayOfInterval, isSameMonth } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -3007,7 +3007,7 @@ export default function AdminDashboard() {
                           return (
                             <Fragment key={dateKey}>
                               <tr className="border-b">
-                                <td className="p-2 font-medium">{dateKey}</td>
+                                <td className="p-2 font-medium">{format(parseISO(dateKey), "EEE MMM d")}</td>
                                 <td className="p-2 text-right">
                                   <Input
                                     type="number"

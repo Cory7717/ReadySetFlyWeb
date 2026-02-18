@@ -2,10 +2,8 @@ import React from "react";
 import { Document, Page, Text, View, StyleSheet, renderToBuffer } from "@react-pdf/renderer";
 
 type HkDailyRollup = {
-  occupiedRooms: number;
   roomsSold: number;
   roomRevenueDaily: number | null;
-  roomRevenueMtd: number | null;
   checkouts: number;
   stayovers: number;
   roomsCleaned: number;
@@ -13,6 +11,7 @@ type HkDailyRollup = {
   totalDailyHours: number | null;
   productiveHours: number | null;
   mporPaid: number | null;
+  mporProductive: number | null;
   hpor: number | null;
   avgMinutesPerRoom: number | null;
   hporMissingDays?: number | null;
@@ -182,53 +181,50 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
 
   const dailyRows = summary.dailyEntries.map((entry) => [
     entry.metricDate,
-    entry.occupiedRooms,
     entry.roomsSold,
     entry.roomRevenueDaily,
-    entry.roomRevenueMtd,
+    entry.totalDailyHours,
+    entry.hpor,
     entry.checkouts,
     entry.stayovers,
     entry.roomsCleaned,
     entry.paidHours,
-    entry.totalDailyHours,
     entry.productiveHours,
-    entry.mporPaid,
-    entry.hpor,
     entry.avgMinutesPerRoom,
+    entry.mporPaid,
+    entry.mporProductive,
   ]);
 
   const weeklyRows = summary.weeklyRollups.map((entry) => [
     `${entry.key} (${entry.weekStart})`,
-    entry.occupiedRooms,
     entry.roomsSold,
     entry.roomRevenueDaily,
-    entry.roomRevenueMtd,
+    entry.totalDailyHours,
+    entry.hpor,
     entry.checkouts,
     entry.stayovers,
     entry.roomsCleaned,
     entry.paidHours,
-    entry.totalDailyHours,
     entry.productiveHours,
-    entry.mporPaid,
-    entry.hpor,
     entry.avgMinutesPerRoom,
+    entry.mporPaid,
+    entry.mporProductive,
   ]);
 
   const monthlyRows = summary.monthlyRollups.map((entry) => [
     `${entry.key} (${entry.monthStart})`,
-    entry.occupiedRooms,
     entry.roomsSold,
     entry.roomRevenueDaily,
-    entry.roomRevenueMtd,
+    entry.totalDailyHours,
+    entry.hpor,
     entry.checkouts,
     entry.stayovers,
     entry.roomsCleaned,
     entry.paidHours,
-    entry.totalDailyHours,
     entry.productiveHours,
-    entry.mporPaid,
-    entry.hpor,
     entry.avgMinutesPerRoom,
+    entry.mporPaid,
+    entry.mporProductive,
   ]);
 
   const attendantRows = summary.attendantRollups.map((entry) => [
@@ -255,12 +251,12 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
           <Text style={styles.sectionTitle}>Overall Summary</Text>
           <View style={styles.summaryGrid}>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Occupied Rooms</Text>
-              <Text style={styles.summaryValue}>{formatValue(summary.overall.occupiedRooms)}</Text>
-            </View>
-            <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>Rooms Sold</Text>
               <Text style={styles.summaryValue}>{formatValue(summary.overall.roomsSold)}</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Room Revenue (Daily Sum)</Text>
+              <Text style={styles.summaryValue}>{formatValue(summary.overall.roomRevenueDaily)}</Text>
             </View>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>Checkouts / Stayovers</Text>
@@ -273,7 +269,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
               <Text style={styles.summaryValue}>{formatValue(summary.overall.roomsCleaned)}</Text>
             </View>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Total Paid Hours (Net)</Text>
+              <Text style={styles.summaryLabel}>Paid Hours (Net)</Text>
               <Text style={styles.summaryValue}>{formatValue(summary.overall.totalDailyHours)}</Text>
             </View>
             <View style={styles.summaryItem}>
@@ -296,7 +292,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Daily Metrics</Text>
           {renderTable(
-            ["Date", "Occ", "Sold", "Rev", "Rev MTD", "CO", "SO", "Rooms", "Paid", "Paid Hrs", "Prod", "MPOR", "HPOR", "Avg Min"],
+            ["Date", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Paid", "Prod", "Avg Min", "MPOR Paid", "MPOR Prod"],
             dailyRows
           )}
         </View>
@@ -304,7 +300,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Weekly Rollups</Text>
           {renderTable(
-            ["Week", "Occ", "Sold", "Rev", "Rev MTD", "CO", "SO", "Rooms", "Paid", "Paid Hrs", "Prod", "MPOR", "HPOR", "Avg Min"],
+            ["Week", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Paid", "Prod", "Avg Min", "MPOR Paid", "MPOR Prod"],
             weeklyRows
           )}
         </View>
@@ -312,7 +308,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Monthly Rollups</Text>
           {renderTable(
-            ["Month", "Occ", "Sold", "Rev", "Rev MTD", "CO", "SO", "Rooms", "Paid", "Paid Hrs", "Prod", "MPOR", "HPOR", "Avg Min"],
+            ["Month", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Paid", "Prod", "Avg Min", "MPOR Paid", "MPOR Prod"],
             monthlyRows
           )}
         </View>

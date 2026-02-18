@@ -1761,7 +1761,6 @@ export default function AdminDashboard() {
       (acc, dateKey) => {
         const totals = computeDayTotals(dateKey);
         const meta = hkDayMeta[dateKey] || {
-          occupiedRooms: "",
           roomsSold: "",
           totalDailyHours: "",
           roomRevenueDaily: "",
@@ -1769,8 +1768,7 @@ export default function AdminDashboard() {
         };
         const roomsSoldNumber = toNumber(meta.roomsSold);
         const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
-        const mporPaid = totals.totalPaidHours > 0 ? totals.totalRooms / totals.totalPaidHours : null;
-        const mporProd = totals.totalProductiveHours > 0 ? totals.totalRooms / totals.totalProductiveHours : null;
+        const mpor = totals.totalPaidHours > 0 ? totals.totalRooms / totals.totalPaidHours : null;
         const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
 
         acc.sumRoomsSold += roomsSoldNumber;
@@ -1785,13 +1783,9 @@ export default function AdminDashboard() {
           acc.sumRoomRevenueDaily += toNumber(meta.roomRevenueDaily);
         }
 
-        if (mporPaid !== null) {
-          acc.mporPaidSum += mporPaid;
+        if (mpor !== null) {
+          acc.mporPaidSum += mpor;
           acc.mporPaidCount += 1;
-        }
-        if (mporProd !== null) {
-          acc.mporProdSum += mporProd;
-          acc.mporProdCount += 1;
         }
         if (hpor !== null) {
           acc.hporSum += hpor;
@@ -1811,8 +1805,6 @@ export default function AdminDashboard() {
         sumRoomRevenueDaily: 0,
         mporPaidSum: 0,
         mporPaidCount: 0,
-        mporProdSum: 0,
-        mporProdCount: 0,
         hporSum: 0,
         hporCount: 0,
       }
@@ -2968,9 +2960,9 @@ export default function AdminDashboard() {
                 <div className="border rounded-lg overflow-hidden">
                   <div className="max-h-[70vh] overflow-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-muted/70 sticky top-0 z-10">
+                      <thead className="bg-muted sticky top-0 z-10">
                         <tr>
-                          <th className="p-2 text-center">Date</th>
+                          <th className="p-2 text-center w-32">Date</th>
                           <th className="p-2 text-center">Rooms Sold</th>
                           <th className="p-2 text-center">Room Rev</th>
                           <th className="p-2 text-center">Paid Hours (Net)</th>
@@ -2980,8 +2972,7 @@ export default function AdminDashboard() {
                           <th className="p-2 text-center">Total Rooms</th>
                           <th className="p-2 text-center">Std Hours</th>
                           <th className="p-2 text-center">Variance</th>
-                          <th className="p-2 text-center">MPOR Paid</th>
-                          <th className="p-2 text-center">MPOR Prod</th>
+                          <th className="p-2 text-center">MPOR</th>
                           <th className="p-2 text-center">Notes</th>
                           <th className="p-2 text-center">Details</th>
                         </tr>
@@ -2990,7 +2981,6 @@ export default function AdminDashboard() {
                         {hkMonthDays.map((dateKey) => {
                           const totals = computeDayTotals(dateKey);
                           const meta = hkDayMeta[dateKey] || {
-                            occupiedRooms: "",
                             roomsSold: "",
                             totalDailyHours: "",
                             roomRevenueDaily: "",
@@ -2998,8 +2988,7 @@ export default function AdminDashboard() {
                           };
                           const roomsSoldNumber = toNumber(meta.roomsSold);
                           const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
-                          const mporPaid = totals.totalPaidHours > 0 ? totals.totalRooms / totals.totalPaidHours : 0;
-                          const mporProd = totals.totalProductiveHours > 0 ? totals.totalRooms / totals.totalProductiveHours : 0;
+                          const mpor = totals.totalPaidHours > 0 ? totals.totalRooms / totals.totalPaidHours : 0;
                           const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
                           const roomsSoldMissing = roomsSoldNumber <= 0;
                           const isExpanded = hkExpandedDays[dateKey];
@@ -3053,8 +3042,7 @@ export default function AdminDashboard() {
                                 <td className="p-2 text-right">{formatHkValue(totals.totalRooms)}</td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalStandardHours)}</td>
                                 <td className="p-2 text-right">{formatHkValue(totals.totalVariance)}</td>
-                                <td className="p-2 text-right">{formatHkValue(mporPaid)}</td>
-                                <td className="p-2 text-right">{formatHkValue(mporProd)}</td>
+                                <td className="p-2 text-right">{formatHkValue(mpor)}</td>
                                 <td className="p-2">
                                   <Input
                                     value={meta.notes}
@@ -3071,7 +3059,7 @@ export default function AdminDashboard() {
                               </tr>
                               {isExpanded && (
                                 <tr className="bg-muted/20">
-                                  <td colSpan={14} className="p-4">
+                                  <td colSpan={13} className="p-4">
                                     <div className="space-y-4">
                                       <div className="flex flex-wrap items-center justify-between gap-3">
                                         <div className="text-sm font-medium">Attendant Entries</div>
@@ -3231,11 +3219,6 @@ export default function AdminDashboard() {
                           <td className="p-2 text-right">
                             {formatHkValue(
                               hkDailySummary.mporPaidCount ? hkDailySummary.mporPaidSum / hkDailySummary.mporPaidCount : null
-                            )}
-                          </td>
-                          <td className="p-2 text-right">
-                            {formatHkValue(
-                              hkDailySummary.mporProdCount ? hkDailySummary.mporProdSum / hkDailySummary.mporProdCount : null
                             )}
                           </td>
                           <td className="p-2" />

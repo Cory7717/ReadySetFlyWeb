@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, Fragment } from "react";
+import { useEffect, useState, useMemo, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -140,7 +140,6 @@ export default function AdminDashboard() {
   const [hkDayMeta, setHkDayMeta] = useState<Record<string, HkDayMeta>>({});
   const [hkAttendantsByDay, setHkAttendantsByDay] = useState<Record<string, HkAttendantEntry[]>>({});
   const [hkSavingDays, setHkSavingDays] = useState<Record<string, boolean>>({});
-  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
 
   useEffect(() => {
     const allowed = [
@@ -1747,7 +1746,6 @@ export default function AdminDashboard() {
       ...prev,
       [dateKey]: { occupiedRooms: "", roomsSold: "", totalDailyHours: "", notes: "", ...prev[dateKey], ...nextPatch },
     }));
-    scheduleDayMetaSave(dateKey);
   };
 
   const saveDayMeta = async (dateKey: string) => {
@@ -1771,14 +1769,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const scheduleDayMetaSave = (dateKey: string) => {
-    if (!hkProperty) return;
-    const existingTimer = saveTimersRef.current[dateKey];
-    if (existingTimer) clearTimeout(existingTimer);
-    saveTimersRef.current[dateKey] = setTimeout(() => {
-      saveDayMeta(dateKey);
-    }, 800);
-  };
 
   const handleRoomsSoldUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? Array.from(event.target.files) : [];
@@ -2922,7 +2912,8 @@ export default function AdminDashboard() {
                                       min="0"
                                       value={meta.roomsSold}
                                       onChange={(event) => updateDayMeta(dateKey, { roomsSold: event.target.value })}
-                                      className={`h-8 text-xs text-right ${roomsSoldMissing ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                                      onBlur={() => saveDayMeta(dateKey)}
+                                      className={`h-8 w-16 text-xs text-right ${roomsSoldMissing ? "border-destructive focus-visible:ring-destructive" : ""}`}
                                     />
                                   </div>
                                 </td>
@@ -2933,6 +2924,7 @@ export default function AdminDashboard() {
                                     step="0.01"
                                     value={meta.totalDailyHours}
                                     onChange={(event) => updateDayMeta(dateKey, { totalDailyHours: event.target.value })}
+                                      onBlur={() => saveDayMeta(dateKey)}
                                     className="h-8 text-xs text-right"
                                     placeholder="Net of lunch"
                                   />
@@ -2944,6 +2936,7 @@ export default function AdminDashboard() {
                                     min="0"
                                     value={meta.occupiedRooms}
                                     onChange={(event) => updateDayMeta(dateKey, { occupiedRooms: event.target.value })}
+                                    onBlur={() => saveDayMeta(dateKey)}
                                     className="h-8 text-xs text-right"
                                   />
                                 </td>
@@ -2960,6 +2953,7 @@ export default function AdminDashboard() {
                                   <Input
                                     value={meta.notes}
                                     onChange={(event) => updateDayMeta(dateKey, { notes: event.target.value })}
+                                    onBlur={() => saveDayMeta(dateKey)}
                                     className="h-8 text-xs"
                                   />
                                 </td>

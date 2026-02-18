@@ -1748,10 +1748,10 @@ export default function AdminDashboard() {
     }));
   };
 
-  const saveDayMeta = async (dateKey: string) => {
+  const saveDayMeta = async (dateKey: string, patch?: Partial<HkDayMeta>) => {
     if (!hkProperty) return;
-    const meta = hkDayMeta[dateKey];
-    if (!meta) return;
+    const baseMeta = hkDayMeta[dateKey] || { occupiedRooms: "", roomsSold: "", totalDailyHours: "", notes: "" };
+    const meta = { ...baseMeta, ...patch };
     const payload = {
       metricDate: dateKey,
       property: hkProperty,
@@ -2912,7 +2912,7 @@ export default function AdminDashboard() {
                                       min="0"
                                       value={meta.roomsSold}
                                       onChange={(event) => updateDayMeta(dateKey, { roomsSold: event.target.value })}
-                                      onBlur={() => saveDayMeta(dateKey)}
+                                      onBlur={(event) => saveDayMeta(dateKey, { roomsSold: event.target.value })}
                                       className={`h-8 w-16 text-xs text-right ${roomsSoldMissing ? "border-destructive focus-visible:ring-destructive" : ""}`}
                                     />
                                   </div>
@@ -2924,8 +2924,8 @@ export default function AdminDashboard() {
                                     step="0.01"
                                     value={meta.totalDailyHours}
                                     onChange={(event) => updateDayMeta(dateKey, { totalDailyHours: event.target.value })}
-                                      onBlur={() => saveDayMeta(dateKey)}
-                                    className="h-8 text-xs text-right"
+                                      onBlur={(event) => saveDayMeta(dateKey, { totalDailyHours: event.target.value })}
+                                      className="h-8 w-24 text-xs text-right"
                                     placeholder="Net of lunch"
                                   />
                                 </td>
@@ -2936,7 +2936,7 @@ export default function AdminDashboard() {
                                     min="0"
                                     value={meta.occupiedRooms}
                                     onChange={(event) => updateDayMeta(dateKey, { occupiedRooms: event.target.value })}
-                                    onBlur={() => saveDayMeta(dateKey)}
+                                    onBlur={(event) => saveDayMeta(dateKey, { occupiedRooms: event.target.value })}
                                     className="h-8 text-xs text-right"
                                   />
                                 </td>
@@ -2953,7 +2953,7 @@ export default function AdminDashboard() {
                                   <Input
                                     value={meta.notes}
                                     onChange={(event) => updateDayMeta(dateKey, { notes: event.target.value })}
-                                    onBlur={() => saveDayMeta(dateKey)}
+                                    onBlur={(event) => saveDayMeta(dateKey, { notes: event.target.value })}
                                     className="h-8 text-xs"
                                   />
                                 </td>

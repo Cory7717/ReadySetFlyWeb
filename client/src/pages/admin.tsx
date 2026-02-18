@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, X, Rocket, Tag } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, X, Rocket, Tag, ChevronDown, ChevronRight } from "lucide-react";
+import { endOfMonth, format, parse, startOfMonth, eachDayOfInterval, isSameMonth } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,33 @@ const buildBannerTrackingUrl = (
   }
 };
 
+type HkSettings = {
+  checkoutMinutes: number;
+  stayoverMinutes: number;
+  lunchMinutes: number;
+  clockInTime: string;
+};
+
+type HkAttendantEntry = {
+  attendantName: string;
+  checkoutsCleaned: number;
+  stayoversCleaned: number;
+  paidHours: string;
+  lunchMinutes: number;
+  lateCheckouts: number;
+  deepCleans: number;
+  recleans: number;
+  notes: string;
+};
+
+type HkDayMeta = {
+  occupiedRooms: string;
+  roomsSold: string;
+  totalDailyHours: string;
+  roomsSoldImported?: boolean;
+  notes: string;
+};
+
 export default function AdminDashboard() {
   const { user } = useAuth();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
@@ -79,12 +107,40 @@ export default function AdminDashboard() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<AdminRole>("operations");
   const [hkProperty, setHkProperty] = useState("");
-  const [hkStartDate, setHkStartDate] = useState(() => {
-    const start = new Date();
-    start.setDate(start.getDate() - 6);
-    return start.toISOString().split("T")[0];
+  const [hkMonth, setHkMonth] = useState(() => format(new Date(), "yyyy-MM"));
+  const [hkImportDialogOpen, setHkImportDialogOpen] = useState(false);
+  const [hkImporting, setHkImporting] = useState(false);
+  const [hkImportSummary, setHkImportSummary] = useState<null | {
+    filesProcessed: number;
+    parsedCount: number;
+    updatedCount: number;
+    skippedCount: number;
+    conflictCount: number;
+    overwrittenCount: number;
+    overwrittenDates: string[];
+    skipped: Array<{ fileName: string; line: number; reason: string; raw: string }>;
+    conflicts: Array<{ date: string; previous: number | null; next: number }>;
+  }>(null);
+  const [hkSettings, setHkSettings] = useState<HkSettings>(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("hk-settings") : null;
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as HkSettings;
+        return {
+          checkoutMinutes: Number(parsed.checkoutMinutes || 30),
+          stayoverMinutes: Number(parsed.stayoverMinutes || 15),
+          lunchMinutes: Number(parsed.lunchMinutes || 30),
+          clockInTime: parsed.clockInTime || "08:00",
+        };
+      } catch {}
+    }
+    return { checkoutMinutes: 30, stayoverMinutes: 15, lunchMinutes: 30, clockInTime: "08:00" };
   });
-  const [hkEndDate, setHkEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [hkExpandedDays, setHkExpandedDays] = useState<Record<string, boolean>>({});
+  const [hkDayMeta, setHkDayMeta] = useState<Record<string, HkDayMeta>>({});
+  const [hkAttendantsByDay, setHkAttendantsByDay] = useState<Record<string, HkAttendantEntry[]>>({});
+  const [hkSavingDays, setHkSavingDays] = useState<Record<string, boolean>>({});
+  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
 
   useEffect(() => {
     const allowed = [
@@ -259,54 +315,11 @@ export default function AdminDashboard() {
     },
   });
 
-  const hkDailyForm = useForm<InsertHkDailyMetric>({
-    resolver: zodResolver(insertHkDailyMetricSchema),
-    defaultValues: {
-      metricDate: new Date(),
-      property: "",
-      occupiedRooms: 0,
-      checkouts: 0,
-      stayovers: 0,
-      roomsCleaned: 0,
-      paidHours: "0",
-      lunchMinutes: 0,
-      productiveHours: "0",
-      attendantsWorking: 0,
-      lateCheckouts: 0,
-      inspections: 0,
-      recleans: 0,
-      dndRooms: 0,
-      oooRooms: 0,
-      notes: "",
-    },
-  });
-
-  const hkAttendantForm = useForm<InsertHkAttendantMetric>({
-    resolver: zodResolver(insertHkAttendantMetricSchema),
-    defaultValues: {
-      metricDate: new Date(),
-      property: "",
-      attendantName: "",
-      checkoutsCleaned: 0,
-      stayoversCleaned: 0,
-      roomsCleaned: 0,
-      paidHours: "0",
-      lunchMinutes: 0,
-      productiveHours: "0",
-      deepCleans: 0,
-      recleans: 0,
-      inspections: 0,
-      lateCheckouts: 0,
-      notes: "",
-    },
-  });
-
   useEffect(() => {
-    if (hkProperty) {
-      hkDailyForm.setValue("property", hkProperty);
-      hkAttendantForm.setValue("property", hkProperty);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("hk-settings", JSON.stringify(hkSettings));
     }
-  }, [hkProperty, hkDailyForm, hkAttendantForm]);
+  }, [hkSettings]);
   
   const { toast } = useToast();
 
@@ -521,10 +534,17 @@ export default function AdminDashboard() {
     enabled: activeTab === "admins" && isSuperAdmin,
   });
 
+  const hkMonthRange = useMemo(() => {
+    const parsed = parse(hkMonth, "yyyy-MM", new Date());
+    const startDate = format(startOfMonth(parsed), "yyyy-MM-dd");
+    const endDate = format(endOfMonth(parsed), "yyyy-MM-dd");
+    return { startDate, endDate };
+  }, [hkMonth]);
+
   const hkSummaryUrl = useMemo(() => {
     const propertyParam = hkProperty ? `&property=${encodeURIComponent(hkProperty)}` : "";
-    return `/api/admin/hk-metrics/summary?start=${hkStartDate}&end=${hkEndDate}${propertyParam}`;
-  }, [hkStartDate, hkEndDate, hkProperty]);
+    return `/api/admin/hk-metrics/summary?start=${hkMonthRange.startDate}&end=${hkMonthRange.endDate}${propertyParam}`;
+  }, [hkMonthRange.startDate, hkMonthRange.endDate, hkProperty]);
 
   const { data: hkSummary, isLoading: hkSummaryLoading } = useQuery<{
     startDate: string;
@@ -545,25 +565,43 @@ export default function AdminDashboard() {
     enabled: activeTab === "hk-metrics",
   });
 
-  const saveHkDailyMutation = useMutation({
-    mutationFn: async (payload: InsertHkDailyMetric) => {
-      return await apiRequest("POST", "/api/admin/hk-metrics/daily", payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [hkSummaryUrl] });
-      toast({ title: "Daily metrics saved" });
-    },
-  });
+  useEffect(() => {
+    if (!hkSummary) return;
+    const nextDayMeta: Record<string, HkDayMeta> = {};
+    const nextAttendants: Record<string, HkAttendantEntry[]> = {};
 
-  const saveHkAttendantMutation = useMutation({
-    mutationFn: async (payload: InsertHkAttendantMetric) => {
-      return await apiRequest("POST", "/api/admin/hk-metrics/attendant", payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [hkSummaryUrl] });
-      toast({ title: "Attendant metrics saved" });
-    },
-  });
+    hkSummary.dailyEntries.forEach((entry: any) => {
+      const metricDate = String(entry.metricDate || "");
+      if (!metricDate) return;
+      nextDayMeta[metricDate] = {
+        occupiedRooms: entry.occupiedRooms?.toString() ?? "",
+        roomsSold: entry.roomsSold?.toString() ?? "",
+        totalDailyHours: entry.totalDailyHours?.toString() ?? "",
+        roomsSoldImported: Boolean(entry.roomsSoldImported),
+        notes: entry.notes ?? "",
+      };
+    });
+
+    hkSummary.attendantEntries.forEach((entry: any) => {
+      const metricDate = String(entry.metricDate || "");
+      if (!metricDate) return;
+      if (!nextAttendants[metricDate]) nextAttendants[metricDate] = [];
+      nextAttendants[metricDate].push({
+        attendantName: entry.attendantName || "",
+        checkoutsCleaned: Number(entry.checkoutsCleaned || 0),
+        stayoversCleaned: Number(entry.stayoversCleaned || 0),
+        paidHours: entry.paidHours?.toString() ?? "",
+        lunchMinutes: Number(entry.lunchMinutes ?? hkSettings.lunchMinutes),
+        lateCheckouts: Number(entry.lateCheckouts || 0),
+        deepCleans: Number(entry.deepCleans || 0),
+        recleans: Number(entry.recleans || 0),
+        notes: entry.notes ?? "",
+      });
+    });
+
+    setHkDayMeta((prev) => ({ ...prev, ...nextDayMeta }));
+    setHkAttendantsByDay((prev) => ({ ...prev, ...nextAttendants }));
+  }, [hkSummary, hkSettings.lunchMinutes]);
 
   // Create orderId→bannerAd lookup to check activation status
   const bannerAdsByOrderId = useMemo(() => {
@@ -1606,52 +1644,302 @@ export default function AdminDashboard() {
     return String(value);
   };
 
-  const handleHkDailySubmit = (data: InsertHkDailyMetric) => {
-    saveHkDailyMutation.mutate(data);
+  const handleNumberInput = (onChange: (value: any) => void) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    onChange(value === "" ? "" : Number(value));
   };
 
-  const handleHkAttendantSubmit = (data: InsertHkAttendantMetric) => {
-    saveHkAttendantMutation.mutate(data);
+  const handleDecimalInput = (onChange: (value: any) => void) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(event.target.value);
   };
 
-  const handleHkDailyEdit = (entry: Record<string, any>) => {
-    hkDailyForm.reset({
-      metricDate: entry.metricDate ? new Date(entry.metricDate) : new Date(),
-      property: entry.property || hkProperty,
-      occupiedRooms: entry.occupiedRooms ?? 0,
-      checkouts: entry.checkouts ?? 0,
-      stayovers: entry.stayovers ?? 0,
-      roomsCleaned: entry.roomsCleaned ?? 0,
-      paidHours: entry.paidHours?.toString() ?? "0",
-      lunchMinutes: entry.lunchMinutes ?? 0,
-      productiveHours: entry.productiveHours?.toString() ?? "0",
-      attendantsWorking: entry.attendantsWorking ?? 0,
-      lateCheckouts: entry.lateCheckouts ?? 0,
-      inspections: entry.inspections ?? 0,
-      recleans: entry.recleans ?? 0,
-      dndRooms: entry.dndRooms ?? 0,
-      oooRooms: entry.oooRooms ?? 0,
-      notes: entry.notes ?? "",
+  const toNumber = (value: unknown) => {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const toHours = (value: unknown) => {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const computeEntryStats = (entry: HkAttendantEntry) => {
+    const co = toNumber(entry.checkoutsCleaned);
+    const so = toNumber(entry.stayoversCleaned);
+    const totalRooms = co + so;
+    const paidHours = toHours(entry.paidHours);
+    const lunchMinutes = toNumber(entry.lunchMinutes);
+    const productiveHours = Math.max(paidHours - lunchMinutes / 60, 0);
+    const standardHours = (co * hkSettings.checkoutMinutes + so * hkSettings.stayoverMinutes) / 60;
+    const variance = paidHours - standardHours;
+    const mporPaid = paidHours > 0 ? totalRooms / paidHours : 0;
+    const mporProductive = productiveHours > 0 ? totalRooms / productiveHours : 0;
+    return {
+      totalRooms,
+      paidHours,
+      productiveHours,
+      standardHours,
+      variance,
+      mporPaid,
+      mporProductive,
+    };
+  };
+
+  const computeDayTotals = (dateKey: string) => {
+    const entries = hkAttendantsByDay[dateKey] || [];
+    return entries.reduce(
+      (acc, entry) => {
+        const stats = computeEntryStats(entry);
+        acc.totalCO += toNumber(entry.checkoutsCleaned);
+        acc.totalSO += toNumber(entry.stayoversCleaned);
+        acc.totalRooms += stats.totalRooms;
+        acc.totalPaidHours += stats.paidHours;
+        acc.totalProductiveHours += stats.productiveHours;
+        acc.totalStandardHours += stats.standardHours;
+        acc.totalVariance += stats.variance;
+        acc.totalLunchMinutes += toNumber(entry.lunchMinutes);
+        acc.totalLateCheckouts += toNumber(entry.lateCheckouts);
+        acc.totalRecleans += toNumber(entry.recleans);
+        return acc;
+      },
+      {
+        totalCO: 0,
+        totalSO: 0,
+        totalRooms: 0,
+        totalPaidHours: 0,
+        totalProductiveHours: 0,
+        totalStandardHours: 0,
+        totalVariance: 0,
+        totalLunchMinutes: 0,
+        totalLateCheckouts: 0,
+        totalRecleans: 0,
+      }
+    );
+  };
+
+  const hkMonthDays = useMemo(() => {
+    const parsed = parse(hkMonth, "yyyy-MM", new Date());
+    return eachDayOfInterval({ start: startOfMonth(parsed), end: endOfMonth(parsed) })
+      .filter((day) => isSameMonth(day, parsed))
+      .map((day) => format(day, "yyyy-MM-dd"));
+  }, [hkMonth]);
+
+  const hkRoster = useMemo(() => {
+    const names = new Set<string>();
+    Object.values(hkAttendantsByDay).forEach((entries) => {
+      entries.forEach((entry) => {
+        if (entry.attendantName) names.add(entry.attendantName);
+      });
+    });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [hkAttendantsByDay]);
+
+  const toggleHkDay = (dateKey: string) => {
+    setHkExpandedDays((prev) => ({ ...prev, [dateKey]: !prev[dateKey] }));
+  };
+
+  const updateDayMeta = (dateKey: string, patch: Partial<HkDayMeta>) => {
+    const nextPatch = { ...patch };
+    if (Object.prototype.hasOwnProperty.call(patch, "roomsSold")) {
+      nextPatch.roomsSoldImported = false;
+    }
+    setHkDayMeta((prev) => ({
+      ...prev,
+      [dateKey]: { occupiedRooms: "", roomsSold: "", totalDailyHours: "", notes: "", ...prev[dateKey], ...nextPatch },
+    }));
+    scheduleDayMetaSave(dateKey);
+  };
+
+  const saveDayMeta = async (dateKey: string) => {
+    if (!hkProperty) return;
+    const meta = hkDayMeta[dateKey];
+    if (!meta) return;
+    const payload = {
+      metricDate: dateKey,
+      property: hkProperty,
+      roomsSold: meta.roomsSold === "" ? null : toNumber(meta.roomsSold),
+      totalDailyHours: meta.totalDailyHours === "" ? null : meta.totalDailyHours,
+      occupiedRooms: meta.occupiedRooms === "" ? null : toNumber(meta.occupiedRooms),
+      notes: meta.notes || "",
+    };
+
+    try {
+      await apiRequest("PATCH", "/api/admin/hk-metrics/day", payload);
+      queryClient.invalidateQueries({ queryKey: [hkSummaryUrl] });
+    } catch (error: any) {
+      toast({ title: "Day update failed", description: error.message, variant: "destructive" });
+    }
+  };
+
+  const scheduleDayMetaSave = (dateKey: string) => {
+    if (!hkProperty) return;
+    const existingTimer = saveTimersRef.current[dateKey];
+    if (existingTimer) clearTimeout(existingTimer);
+    saveTimersRef.current[dateKey] = setTimeout(() => {
+      saveDayMeta(dateKey);
+    }, 800);
+  };
+
+  const handleRoomsSoldUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (!files.length) return;
+    if (!hkProperty) {
+      toast({ title: "Property required", description: "Select a property before importing rooms sold." });
+      event.target.value = "";
+      return;
+    }
+
+    setHkImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("property", hkProperty);
+      files.forEach((file) => formData.append("files", file));
+      const response = await fetch(apiUrl("/api/admin/hk-metrics/import-rooms-sold"), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Upload failed");
+      }
+      setHkImportSummary(data);
+      setHkImportDialogOpen(true);
+      if (data.overwrittenCount) {
+        toast({ title: "Rooms sold overwritten", description: `Overwrote ${data.overwrittenCount} date(s).` });
+      }
+      queryClient.invalidateQueries({ queryKey: [hkSummaryUrl] });
+    } catch (error: any) {
+      toast({ title: "Import failed", description: error.message, variant: "destructive" });
+    } finally {
+      setHkImporting(false);
+      event.target.value = "";
+    }
+  };
+
+  const updateAttendant = (dateKey: string, index: number, patch: Partial<HkAttendantEntry>) => {
+    setHkAttendantsByDay((prev) => {
+      const dayEntries = [...(prev[dateKey] || [])];
+      const nextEntry = { ...dayEntries[index], ...patch };
+      if (patch.attendantName) {
+        const duplicate = dayEntries.some(
+          (entry, entryIndex) => entryIndex !== index && entry.attendantName === patch.attendantName
+        );
+        if (duplicate) {
+          toast({ title: "Duplicate attendant", description: "This attendant already exists for the day." });
+          return prev;
+        }
+      }
+      dayEntries[index] = nextEntry;
+      return { ...prev, [dateKey]: dayEntries };
     });
   };
 
-  const handleHkAttendantEdit = (entry: Record<string, any>) => {
-    hkAttendantForm.reset({
-      metricDate: entry.metricDate ? new Date(entry.metricDate) : new Date(),
-      property: entry.property || hkProperty,
-      attendantName: entry.attendantName || "",
-      checkoutsCleaned: entry.checkoutsCleaned ?? 0,
-      stayoversCleaned: entry.stayoversCleaned ?? 0,
-      roomsCleaned: entry.roomsCleaned ?? 0,
-      paidHours: entry.paidHours?.toString() ?? "0",
-      lunchMinutes: entry.lunchMinutes ?? 0,
-      productiveHours: entry.productiveHours?.toString() ?? "0",
-      deepCleans: entry.deepCleans ?? 0,
-      recleans: entry.recleans ?? 0,
-      inspections: entry.inspections ?? 0,
-      lateCheckouts: entry.lateCheckouts ?? 0,
-      notes: entry.notes ?? "",
+  const addAttendant = (dateKey: string) => {
+    setHkAttendantsByDay((prev) => {
+      const dayEntries = prev[dateKey] ? [...prev[dateKey]] : [];
+      dayEntries.push({
+        attendantName: "",
+        checkoutsCleaned: 0,
+        stayoversCleaned: 0,
+        paidHours: "",
+        lunchMinutes: hkSettings.lunchMinutes,
+        lateCheckouts: 0,
+        deepCleans: 0,
+        recleans: 0,
+        notes: "",
+      });
+      return { ...prev, [dateKey]: dayEntries };
     });
+    setHkExpandedDays((prev) => ({ ...prev, [dateKey]: true }));
+  };
+
+  const removeAttendant = async (dateKey: string, index: number) => {
+    const entry = hkAttendantsByDay[dateKey]?.[index];
+    if (!entry) return;
+    if (entry.attendantName && hkProperty) {
+      try {
+        await apiRequest("DELETE", "/api/admin/hk-metrics/attendant", {
+          metricDate: dateKey,
+          property: hkProperty,
+          attendantName: entry.attendantName,
+        });
+      } catch (error: any) {
+        toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+        return;
+      }
+    }
+    setHkAttendantsByDay((prev) => {
+      const dayEntries = [...(prev[dateKey] || [])];
+      dayEntries.splice(index, 1);
+      return { ...prev, [dateKey]: dayEntries };
+    });
+  };
+
+  const saveDay = async (dateKey: string) => {
+    if (!hkProperty) {
+      toast({ title: "Property required", description: "Select a property before saving." });
+      return;
+    }
+    if (hkSavingDays[dateKey]) return;
+    setHkSavingDays((prev) => ({ ...prev, [dateKey]: true }));
+    const entries = hkAttendantsByDay[dateKey] || [];
+    const totals = computeDayTotals(dateKey);
+    const meta = hkDayMeta[dateKey] || { occupiedRooms: "", roomsSold: "", totalDailyHours: "", notes: "" };
+
+    try {
+      const dailyPayload: InsertHkDailyMetric = {
+        metricDate: new Date(dateKey),
+        property: hkProperty,
+        occupiedRooms: toNumber(meta.occupiedRooms),
+        roomsSold: meta.roomsSold === "" ? null : toNumber(meta.roomsSold),
+        totalDailyHours: meta.totalDailyHours === "" ? null : meta.totalDailyHours,
+        checkouts: totals.totalCO,
+        stayovers: totals.totalSO,
+        roomsCleaned: totals.totalRooms,
+        paidHours: totals.totalPaidHours.toFixed(2),
+        lunchMinutes: totals.totalLunchMinutes,
+        productiveHours: totals.totalProductiveHours.toFixed(2),
+        attendantsWorking: entries.length,
+        lateCheckouts: totals.totalLateCheckouts,
+        inspections: 0,
+        recleans: totals.totalRecleans,
+        dndRooms: 0,
+        oooRooms: 0,
+        notes: meta.notes || undefined,
+      };
+
+      await apiRequest("POST", "/api/admin/hk-metrics/daily", dailyPayload);
+
+      await Promise.all(entries.map(async (entry) => {
+        if (!entry.attendantName) return;
+        const stats = computeEntryStats(entry);
+        const attendantPayload: InsertHkAttendantMetric = {
+          metricDate: new Date(dateKey),
+          property: hkProperty,
+          attendantName: entry.attendantName,
+          checkoutsCleaned: toNumber(entry.checkoutsCleaned),
+          stayoversCleaned: toNumber(entry.stayoversCleaned),
+          roomsCleaned: stats.totalRooms,
+          paidHours: String(entry.paidHours || "0"),
+          lunchMinutes: toNumber(entry.lunchMinutes),
+          productiveHours: stats.productiveHours.toFixed(2),
+          deepCleans: toNumber(entry.deepCleans),
+          recleans: toNumber(entry.recleans),
+          inspections: 0,
+          lateCheckouts: toNumber(entry.lateCheckouts),
+          notes: entry.notes || undefined,
+        };
+        await apiRequest("POST", "/api/admin/hk-metrics/attendant", attendantPayload);
+      }));
+
+      queryClient.invalidateQueries({ queryKey: [hkSummaryUrl] });
+      toast({ title: "Day saved", description: `Saved ${dateKey}` });
+    } catch (error: any) {
+      toast({ title: "Save failed", description: error.message, variant: "destructive" });
+    } finally {
+      setHkSavingDays((prev) => ({ ...prev, [dateKey]: false }));
+    }
   };
 
   // Filter withdrawals based on search and status
@@ -1676,13 +1964,10 @@ export default function AdminDashboard() {
     return true;
   });
 
-  const hkDailyEntries = hkSummary?.dailyEntries ?? [];
   const hkWeeklyRollups = hkSummary?.weeklyRollups ?? [];
   const hkMonthlyRollups = hkSummary?.monthlyRollups ?? [];
-  const hkAttendantRollups = hkSummary?.attendantRollups ?? [];
-  const hkOverall = hkSummary?.overall || {};
   const hkPropertyParam = hkProperty ? `&property=${encodeURIComponent(hkProperty)}` : "";
-  const hkPdfUrl = apiUrl(`/api/admin/hk-metrics/pdf?start=${hkStartDate}&end=${hkEndDate}${hkPropertyParam}`);
+  const hkPdfUrl = apiUrl(`/api/admin/hk-metrics/pdf?start=${hkMonthRange.startDate}&end=${hkMonthRange.endDate}${hkPropertyParam}`);
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -2496,11 +2781,15 @@ export default function AdminDashboard() {
         <TabsContent value="hk-metrics" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Housekeeping Metrics</CardTitle>
-              <CardDescription>Track daily, weekly, and monthly housekeeping performance</CardDescription>
+              <CardTitle>Housekeeping Metrics (Table View)</CardTitle>
+              <CardDescription>One row per day with expandable attendant production</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-4">
+                <div className="space-y-2">
+                  <Label>Month</Label>
+                  <Input type="month" value={hkMonth} onChange={(event) => setHkMonth(event.target.value)} />
+                </div>
                 <div className="space-y-2">
                   <Label>Property</Label>
                   <Input
@@ -2516,25 +2805,61 @@ export default function AdminDashboard() {
                   </datalist>
                 </div>
                 <div className="space-y-2">
-                  <Label>Start Date</Label>
+                  <Label>Clock In Time</Label>
                   <Input
-                    type="date"
-                    value={hkStartDate}
-                    onChange={(event) => setHkStartDate(event.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>End Date</Label>
-                  <Input
-                    type="date"
-                    value={hkEndDate}
-                    onChange={(event) => setHkEndDate(event.target.value)}
+                    type="time"
+                    value={hkSettings.clockInTime}
+                    onChange={(event) => setHkSettings((prev) => ({ ...prev, clockInTime: event.target.value }))}
                   />
                 </div>
                 <div className="flex items-end">
                   <Button asChild className="w-full">
                     <a href={hkPdfUrl} target="_blank" rel="noreferrer">Export PDF</a>
                   </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Upload Rooms Sold TXT</Label>
+                  <Input
+                    type="file"
+                    accept=".txt"
+                    multiple
+                    onChange={handleRoomsSoldUpload}
+                    disabled={hkImporting}
+                  />
+                  <div className="text-xs text-muted-foreground">Upload one or more .txt exports to auto-fill Rooms Sold.</div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-4">
+                <div className="space-y-2">
+                  <Label>Checkout Minutes</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={hkSettings.checkoutMinutes}
+                    onChange={(event) => setHkSettings((prev) => ({ ...prev, checkoutMinutes: toNumber(event.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Stayover Minutes</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={hkSettings.stayoverMinutes}
+                    onChange={(event) => setHkSettings((prev) => ({ ...prev, stayoverMinutes: toNumber(event.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Default Lunch Minutes</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={hkSettings.lunchMinutes}
+                    onChange={(event) => setHkSettings((prev) => ({ ...prev, lunchMinutes: toNumber(event.target.value) }))}
+                  />
                 </div>
               </div>
 
@@ -2546,686 +2871,441 @@ export default function AdminDashboard() {
               )}
 
               {!hkSummaryLoading && (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Occupied Rooms</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.occupiedRooms)}</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Rooms Cleaned</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.roomsCleaned)}</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Paid Hours</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.paidHours)}</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Productive Hours</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.productiveHours)}</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">MPOR Paid</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.mporPaid)}</div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">HPOR</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{formatHkValue(hkOverall.hpor)}</div>
-                    </CardContent>
-                  </Card>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="max-h-[70vh] overflow-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/70 sticky top-0 z-10">
+                        <tr>
+                          <th className="p-2 text-left">Date</th>
+                          <th className="p-2 text-right">Rooms Sold</th>
+                          <th className="p-2 text-right">Daily Hours</th>
+                          <th className="p-2 text-right">HPOR</th>
+                          <th className="p-2 text-right">Occupied</th>
+                          <th className="p-2 text-right">Total C/O</th>
+                          <th className="p-2 text-right">Total S/O</th>
+                          <th className="p-2 text-right">Total Rooms</th>
+                          <th className="p-2 text-right">Paid Hours</th>
+                          <th className="p-2 text-right">Prod Hours</th>
+                          <th className="p-2 text-right">Std Hours</th>
+                          <th className="p-2 text-right">Variance</th>
+                          <th className="p-2 text-right">MPOR Paid</th>
+                          <th className="p-2 text-right">MPOR Prod</th>
+                          <th className="p-2 text-right">HPOR</th>
+                          <th className="p-2 text-left">Notes</th>
+                          <th className="p-2 text-center">Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hkMonthDays.map((dateKey) => {
+                          const totals = computeDayTotals(dateKey);
+                          const meta = hkDayMeta[dateKey] || { occupiedRooms: "", roomsSold: "", totalDailyHours: "", notes: "" };
+                          const roomsSoldNumber = toNumber(meta.roomsSold);
+                          const totalDailyHoursNumber = toNumber(meta.totalDailyHours);
+                          const occupiedRooms = toNumber(meta.occupiedRooms);
+                          const mporPaid = totals.totalPaidHours > 0 ? totals.totalRooms / totals.totalPaidHours : 0;
+                          const mporProd = totals.totalProductiveHours > 0 ? totals.totalRooms / totals.totalProductiveHours : 0;
+                          const hpor = roomsSoldNumber > 0 && totalDailyHoursNumber > 0 ? totalDailyHoursNumber / roomsSoldNumber : null;
+                          const roomsSoldMissing = roomsSoldNumber <= 0;
+                          const isExpanded = hkExpandedDays[dateKey];
+
+                          return (
+                            <Fragment key={dateKey}>
+                              <tr className="border-b">
+                                <td className="p-2 font-medium">{dateKey}</td>
+                                <td className="p-2 text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    {meta.roomsSoldImported && (
+                                      <Badge variant="secondary" className="text-[10px]">Imported</Badge>
+                                    )}
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      value={meta.roomsSold}
+                                      onChange={(event) => updateDayMeta(dateKey, { roomsSold: event.target.value })}
+                                      className={`h-8 text-xs text-right ${roomsSoldMissing ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                                    />
+                                  </div>
+                                </td>
+                                <td className="p-2 text-right">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={meta.totalDailyHours}
+                                    onChange={(event) => updateDayMeta(dateKey, { totalDailyHours: event.target.value })}
+                                    className="h-8 text-xs text-right"
+                                  />
+                                </td>
+                                <td className="p-2 text-right">{hpor ? formatHkValue(hpor) : "—"}</td>
+                                <td className="p-2 text-right">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    value={meta.occupiedRooms}
+                                    onChange={(event) => updateDayMeta(dateKey, { occupiedRooms: event.target.value })}
+                                    className="h-8 text-xs text-right"
+                                  />
+                                </td>
+                                <td className="p-2 text-right">{formatHkValue(totals.totalCO)}</td>
+                                <td className="p-2 text-right">{formatHkValue(totals.totalSO)}</td>
+                                <td className="p-2 text-right">{formatHkValue(totals.totalRooms)}</td>
+                                <td className="p-2 text-right">{formatHkValue(totals.totalPaidHours)}</td>
+                                <td className="p-2 text-right">{formatHkValue(totals.totalProductiveHours)}</td>
+                                <td className="p-2 text-right">{formatHkValue(totals.totalStandardHours)}</td>
+                                <td className="p-2 text-right">{formatHkValue(totals.totalVariance)}</td>
+                                <td className="p-2 text-right">{formatHkValue(mporPaid)}</td>
+                                <td className="p-2 text-right">{formatHkValue(mporProd)}</td>
+                                <td className="p-2">
+                                  <Input
+                                    value={meta.notes}
+                                    onChange={(event) => updateDayMeta(dateKey, { notes: event.target.value })}
+                                    className="h-8 text-xs"
+                                  />
+                                </td>
+                                <td className="p-2 text-center">
+                                  <Button size="icon" variant="ghost" onClick={() => toggleHkDay(dateKey)}>
+                                    {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                  </Button>
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr className="bg-muted/20">
+                                  <td colSpan={16} className="p-4">
+                                    <div className="space-y-4">
+                                      <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div className="text-sm font-medium">Attendant Entries</div>
+                                        <div className="flex gap-2">
+                                          <Button size="sm" variant="outline" onClick={() => addAttendant(dateKey)}>Add Attendant</Button>
+                                          <Button size="sm" onClick={() => saveDay(dateKey)} disabled={hkSavingDays[dateKey]}>
+                                            {hkSavingDays[dateKey] ? "Saving..." : "Save Day"}
+                                          </Button>
+                                        </div>
+                                      </div>
+
+                                      {(hkAttendantsByDay[dateKey] || []).length === 0 ? (
+                                        <div className="text-sm text-muted-foreground">No entries yet.</div>
+                                      ) : (
+                                        <div className="overflow-x-auto">
+                                          <table className="w-full text-xs">
+                                            <thead className="bg-muted/60">
+                                              <tr>
+                                                <th className="p-2 text-left">Attendant</th>
+                                                <th className="p-2 text-right">C/O</th>
+                                                <th className="p-2 text-right">S/O</th>
+                                                <th className="p-2 text-right">Paid Hours</th>
+                                                <th className="p-2 text-right">Lunch</th>
+                                                <th className="p-2 text-center">4pm C/O</th>
+                                                <th className="p-2 text-right">Deep Clean</th>
+                                                <th className="p-2 text-right">Re-clean</th>
+                                                <th className="p-2 text-left">Notes</th>
+                                                <th className="p-2 text-right">Total Rooms</th>
+                                                <th className="p-2 text-right">Std Hours</th>
+                                                <th className="p-2 text-right">Variance</th>
+                                                <th className="p-2 text-right">MPOR Paid</th>
+                                                <th className="p-2 text-right">MPOR Prod</th>
+                                                <th className="p-2 text-center">Delete</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {(hkAttendantsByDay[dateKey] || []).map((entry, index) => {
+                                                const stats = computeEntryStats(entry);
+                                                return (
+                                                  <tr key={`${dateKey}-${index}`} className="border-b">
+                                                    <td className="p-2">
+                                                      <Input
+                                                        list="hk-attendant-roster"
+                                                        value={entry.attendantName}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { attendantName: event.target.value })}
+                                                        placeholder="Name"
+                                                        className="h-8 text-xs"
+                                                      />
+                                                    </td>
+                                                    <td className="p-2 text-right">
+                                                      <Input
+                                                        type="number"
+                                                        min="0"
+                                                        value={entry.checkoutsCleaned}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { checkoutsCleaned: toNumber(event.target.value) })}
+                                                        className="h-8 text-xs text-right"
+                                                      />
+                                                    </td>
+                                                    <td className="p-2 text-right">
+                                                      <Input
+                                                        type="number"
+                                                        min="0"
+                                                        value={entry.stayoversCleaned}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { stayoversCleaned: toNumber(event.target.value) })}
+                                                        className="h-8 text-xs text-right"
+                                                      />
+                                                    </td>
+                                                    <td className="p-2 text-right">
+                                                      <Input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={entry.paidHours}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { paidHours: event.target.value })}
+                                                        className="h-8 text-xs text-right"
+                                                      />
+                                                    </td>
+                                                    <td className="p-2 text-right">
+                                                      <Input
+                                                        type="number"
+                                                        min="0"
+                                                        value={entry.lunchMinutes}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { lunchMinutes: toNumber(event.target.value) })}
+                                                        className="h-8 text-xs text-right"
+                                                      />
+                                                    </td>
+                                                    <td className="p-2 text-center">
+                                                      <Checkbox
+                                                        checked={entry.lateCheckouts > 0}
+                                                        onCheckedChange={(checked) => updateAttendant(dateKey, index, { lateCheckouts: checked ? 1 : 0 })}
+                                                      />
+                                                    </td>
+                                                    <td className="p-2 text-right">
+                                                      <Input
+                                                        type="number"
+                                                        min="0"
+                                                        value={entry.deepCleans}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { deepCleans: toNumber(event.target.value) })}
+                                                        className="h-8 text-xs text-right"
+                                                      />
+                                                    </td>
+                                                    <td className="p-2 text-right">
+                                                      <Input
+                                                        type="number"
+                                                        min="0"
+                                                        value={entry.recleans}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { recleans: toNumber(event.target.value) })}
+                                                        className="h-8 text-xs text-right"
+                                                      />
+                                                    </td>
+                                                    <td className="p-2">
+                                                      <Input
+                                                        value={entry.notes}
+                                                        onChange={(event) => updateAttendant(dateKey, index, { notes: event.target.value })}
+                                                        className="h-8 text-xs"
+                                                      />
+                                                    </td>
+                                                    <td className="p-2 text-right">{formatHkValue(stats.totalRooms)}</td>
+                                                    <td className="p-2 text-right">{formatHkValue(stats.standardHours)}</td>
+                                                    <td className="p-2 text-right">{formatHkValue(stats.variance)}</td>
+                                                    <td className="p-2 text-right">{formatHkValue(stats.mporPaid)}</td>
+                                                    <td className="p-2 text-right">{formatHkValue(stats.mporProductive)}</td>
+                                                    <td className="p-2 text-center">
+                                                      <Button size="icon" variant="ghost" onClick={() => removeAttendant(dateKey, index)}>
+                                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                                      </Button>
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
+              <datalist id="hk-attendant-roster">
+                {hkRoster.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
             </CardContent>
           </Card>
 
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Daily Entry</CardTitle>
-                <CardDescription>Enter daily housekeeping totals</CardDescription>
+                <CardTitle>Weekly Rollups</CardTitle>
               </CardHeader>
               <CardContent>
-                <Form {...hkDailyForm}>
-                  <form onSubmit={hkDailyForm.handleSubmit(handleHkDailySubmit)} className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="property"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Property</FormLabel>
-                            <FormControl>
-                              <Input {...field} value={field.value ?? ""} placeholder="Property" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="metricDate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Date</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="date"
-                                value={field.value instanceof Date ? field.value.toISOString().split("T")[0] : (typeof field.value === "string" ? field.value.split("T")[0] : "")}
-                                onChange={(event) => field.onChange(event.target.value ? new Date(event.target.value) : undefined)}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-4">
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="occupiedRooms"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Occupied</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="checkouts"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Checkouts</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="stayovers"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Stayovers</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="roomsCleaned"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Rooms Cleaned</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-4">
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="paidHours"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Paid Hours</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" step="0.25" {...field} value={field.value ?? "0"} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="lunchMinutes"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Lunch Minutes</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="productiveHours"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Productive Hours</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" step="0.25" {...field} value={field.value ?? "0"} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="attendantsWorking"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Attendants</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-5">
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="lateCheckouts"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Late Checkouts</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="inspections"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Inspections</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="recleans"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Recleans</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="dndRooms"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>DND</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkDailyForm.control}
-                        name="oooRooms"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>OOO/OOS</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <FormField
-                      control={hkDailyForm.control}
-                      name="notes"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Notes</FormLabel>
-                          <FormControl>
-                            <Textarea {...field} value={field.value ?? ""} placeholder="Daily notes or exceptions" />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-
-                    <Button type="submit" disabled={saveHkDailyMutation.isPending}>
-                      {saveHkDailyMutation.isPending ? "Saving..." : "Save Daily"}
-                    </Button>
-                  </form>
-                </Form>
+                {hkWeeklyRollups.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No weekly rollups yet.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="p-2 text-left">Week</th>
+                          <th className="p-2 text-right">Occ</th>
+                          <th className="p-2 text-right">Sold</th>
+                          <th className="p-2 text-right">Daily Hrs</th>
+                          <th className="p-2 text-right">HPOR</th>
+                          <th className="p-2 text-right">Missing</th>
+                          <th className="p-2 text-right">CO</th>
+                          <th className="p-2 text-right">SO</th>
+                          <th className="p-2 text-right">Rooms</th>
+                          <th className="p-2 text-right">Paid</th>
+                          <th className="p-2 text-right">Prod</th>
+                          <th className="p-2 text-right">MPOR</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hkWeeklyRollups.map((entry: any) => (
+                          <tr key={entry.key} className="border-b">
+                            <td className="p-2">{entry.key}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.occupiedRooms)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.roomsSold)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.totalDailyHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.hporMissingDays)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {hkWeeklyRollups.some((entry: any) => (entry.hporMissingDays || 0) > 0) && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Some weeks have missing Rooms Sold or Daily Hours and were excluded from HPOR totals.
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Attendant Entry</CardTitle>
-                <CardDescription>Track individual attendant output</CardDescription>
+                <CardTitle>Monthly Rollups</CardTitle>
               </CardHeader>
               <CardContent>
-                <Form {...hkAttendantForm}>
-                  <form onSubmit={hkAttendantForm.handleSubmit(handleHkAttendantSubmit)} className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="property"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Property</FormLabel>
-                            <FormControl>
-                              <Input {...field} value={field.value ?? ""} placeholder="Property" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="metricDate"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Date</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="date"
-                                value={field.value instanceof Date ? field.value.toISOString().split("T")[0] : (typeof field.value === "string" ? field.value.split("T")[0] : "")}
-                                onChange={(event) => field.onChange(event.target.value ? new Date(event.target.value) : undefined)}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="attendantName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Attendant</FormLabel>
-                            <FormControl>
-                              <Input {...field} value={field.value ?? ""} placeholder="Name" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="checkoutsCleaned"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Checkouts</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="stayoversCleaned"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Stayovers</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="roomsCleaned"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Rooms Cleaned</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="paidHours"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Paid Hours</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" step="0.25" {...field} value={field.value ?? "0"} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="lunchMinutes"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Lunch Minutes</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="productiveHours"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Productive Hours</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" step="0.25" {...field} value={field.value ?? "0"} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-4">
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="deepCleans"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Deep Cleans</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="recleans"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Recleans</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="inspections"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Inspections</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={hkAttendantForm.control}
-                        name="lateCheckouts"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Late Checkouts</FormLabel>
-                            <FormControl>
-                              <Input type="number" min="0" {...field} value={field.value ?? 0} onChange={(event) => field.onChange(Number(event.target.value || 0))} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <FormField
-                      control={hkAttendantForm.control}
-                      name="notes"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Notes</FormLabel>
-                          <FormControl>
-                            <Textarea {...field} value={field.value ?? ""} placeholder="Notes or exceptions" />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-
-                    <Button type="submit" disabled={saveHkAttendantMutation.isPending}>
-                      {saveHkAttendantMutation.isPending ? "Saving..." : "Save Attendant"}
-                    </Button>
-                  </form>
-                </Form>
+                {hkMonthlyRollups.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No monthly rollups yet.</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="p-2 text-left">Month</th>
+                          <th className="p-2 text-right">Occ</th>
+                          <th className="p-2 text-right">Sold</th>
+                          <th className="p-2 text-right">Daily Hrs</th>
+                          <th className="p-2 text-right">HPOR</th>
+                          <th className="p-2 text-right">Missing</th>
+                          <th className="p-2 text-right">CO</th>
+                          <th className="p-2 text-right">SO</th>
+                          <th className="p-2 text-right">Rooms</th>
+                          <th className="p-2 text-right">Paid</th>
+                          <th className="p-2 text-right">Prod</th>
+                          <th className="p-2 text-right">MPOR</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hkMonthlyRollups.map((entry: any) => (
+                          <tr key={entry.key} className="border-b">
+                            <td className="p-2">{entry.key}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.occupiedRooms)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.roomsSold)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.totalDailyHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.hporMissingDays)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
+                            <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {hkMonthlyRollups.some((entry: any) => (entry.hporMissingDays || 0) > 0) && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        Some months have missing Rooms Sold or Daily Hours and were excluded from HPOR totals.
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Daily Metrics Log</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {hkDailyEntries.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No daily entries yet.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="p-2 text-left">Date</th>
-                        <th className="p-2 text-left">Property</th>
-                        <th className="p-2 text-right">Occ</th>
-                        <th className="p-2 text-right">CO</th>
-                        <th className="p-2 text-right">SO</th>
-                        <th className="p-2 text-right">Rooms</th>
-                        <th className="p-2 text-right">Paid</th>
-                        <th className="p-2 text-right">Prod</th>
-                        <th className="p-2 text-right">MPOR</th>
-                        <th className="p-2 text-right">HPOR</th>
-                        <th className="p-2 text-right">Avg Min</th>
-                        <th className="p-2 text-right">Edit</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {hkDailyEntries.map((entry: any) => (
-                        <tr key={`${entry.metricDate}-${entry.property}`} className="border-b">
-                          <td className="p-2">{entry.metricDate}</td>
-                          <td className="p-2">{entry.property}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.occupiedRooms)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.avgMinutesPerRoom)}</td>
-                          <td className="p-2 text-right">
-                            <Button size="icon" variant="ghost" onClick={() => handleHkDailyEdit(entry)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <Dialog open={hkImportDialogOpen} onOpenChange={setHkImportDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Rooms Sold Import Summary</DialogTitle>
+                <DialogDescription>Review what was updated from your TXT uploads.</DialogDescription>
+              </DialogHeader>
+              {hkImportSummary ? (
+                <div className="space-y-4 text-sm">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-md border p-3">
+                      <div className="text-muted-foreground">Files processed</div>
+                      <div className="text-lg font-semibold">{hkImportSummary.filesProcessed}</div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-muted-foreground">Dates updated</div>
+                      <div className="text-lg font-semibold">{hkImportSummary.updatedCount}</div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-muted-foreground">Parsed lines</div>
+                      <div className="text-lg font-semibold">{hkImportSummary.parsedCount}</div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-muted-foreground">Skipped lines</div>
+                      <div className="text-lg font-semibold">{hkImportSummary.skippedCount}</div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-muted-foreground">Conflicts</div>
+                      <div className="text-lg font-semibold">{hkImportSummary.conflictCount}</div>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <div className="text-muted-foreground">Overwritten dates</div>
+                      <div className="text-lg font-semibold">{hkImportSummary.overwrittenCount}</div>
+                    </div>
+                  </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Weekly Rollups</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {hkWeeklyRollups.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No weekly rollups yet.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="p-2 text-left">Week</th>
-                        <th className="p-2 text-right">Occ</th>
-                        <th className="p-2 text-right">CO</th>
-                        <th className="p-2 text-right">SO</th>
-                        <th className="p-2 text-right">Rooms</th>
-                        <th className="p-2 text-right">Paid</th>
-                        <th className="p-2 text-right">Prod</th>
-                        <th className="p-2 text-right">MPOR</th>
-                        <th className="p-2 text-right">HPOR</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {hkWeeklyRollups.map((entry: any) => (
-                        <tr key={entry.key} className="border-b">
-                          <td className="p-2">{entry.key}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.occupiedRooms)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  {hkImportSummary.skipped.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="font-medium">Skipped lines</div>
+                      <div className="max-h-40 overflow-auto rounded-md border p-2 text-xs">
+                        {hkImportSummary.skipped.map((item, index) => (
+                          <div key={`${item.fileName}-${item.line}-${index}`} className="border-b last:border-b-0 py-1">
+                            <span className="font-medium">{item.fileName}</span> line {item.line}: {item.reason}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Monthly Rollups</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {hkMonthlyRollups.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No monthly rollups yet.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="p-2 text-left">Month</th>
-                        <th className="p-2 text-right">Occ</th>
-                        <th className="p-2 text-right">CO</th>
-                        <th className="p-2 text-right">SO</th>
-                        <th className="p-2 text-right">Rooms</th>
-                        <th className="p-2 text-right">Paid</th>
-                        <th className="p-2 text-right">Prod</th>
-                        <th className="p-2 text-right">MPOR</th>
-                        <th className="p-2 text-right">HPOR</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {hkMonthlyRollups.map((entry: any) => (
-                        <tr key={entry.key} className="border-b">
-                          <td className="p-2">{entry.key}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.occupiedRooms)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.checkouts)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.stayovers)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  {hkImportSummary.conflicts.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="font-medium">Conflicts (last upload wins)</div>
+                      <div className="max-h-32 overflow-auto rounded-md border p-2 text-xs">
+                        {hkImportSummary.conflicts.map((item, index) => (
+                          <div key={`${item.date}-${index}`} className="border-b last:border-b-0 py-1">
+                            {item.date}: {item.previous ?? "-"} → {item.next}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Attendant Rollups</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {hkAttendantRollups.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No attendant rollups yet.</div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="p-2 text-left">Attendant</th>
-                        <th className="p-2 text-left">Property</th>
-                        <th className="p-2 text-right">Days</th>
-                        <th className="p-2 text-right">Rooms</th>
-                        <th className="p-2 text-right">Paid</th>
-                        <th className="p-2 text-right">Prod</th>
-                        <th className="p-2 text-right">MPOR</th>
-                        <th className="p-2 text-right">HPOR</th>
-                        <th className="p-2 text-right">Avg Min</th>
-                        <th className="p-2 text-right">Variance</th>
-                        <th className="p-2 text-right">Edit</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {hkAttendantRollups.map((entry: any) => (
-                        <tr key={`${entry.property}-${entry.attendantName}`} className="border-b">
-                          <td className="p-2">{entry.attendantName}</td>
-                          <td className="p-2">{entry.property}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.daysWorked)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.roomsCleaned)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.paidHours)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.productiveHours)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.mporPaid)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.hpor)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.avgMinutesPerRoom)}</td>
-                          <td className="p-2 text-right">{formatHkValue(entry.varianceHours)}</td>
-                          <td className="p-2 text-right">
-                            <Button size="icon" variant="ghost" onClick={() => handleHkAttendantEdit(entry)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <div className="text-sm text-muted-foreground">No import summary available.</div>
               )}
-            </CardContent>
-          </Card>
+              <DialogFooter>
+                <Button onClick={() => setHkImportDialogOpen(false)}>Close</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* CRM Tab - Sales & Marketing */}

@@ -709,6 +709,10 @@ export const hkDailyMetrics = pgTable("hk_daily_metrics", {
   metricDate: date("metric_date").notNull(),
   property: text("property").notNull(),
   occupiedRooms: integer("occupied_rooms").default(0),
+  roomsSold: integer("rooms_sold"),
+  totalDailyHours: decimal("total_daily_hours", { precision: 6, scale: 2 }),
+  roomsSoldImported: boolean("rooms_sold_imported").default(false),
+  roomsSoldImportedAt: timestamp("rooms_sold_imported_at"),
   checkouts: integer("checkouts").default(0),
   stayovers: integer("stayovers").default(0),
   roomsCleaned: integer("rooms_cleaned").default(0),
@@ -730,6 +734,18 @@ export const hkDailyMetrics = pgTable("hk_daily_metrics", {
   index("idx_hk_daily_date").on(table.metricDate),
   index("idx_hk_daily_property").on(table.property),
 ]);
+
+export const hkRoomsSoldImports = pgTable("hk_rooms_sold_imports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  uploadedBy: varchar("uploaded_by").references(() => users.id),
+  filenames: jsonb("filenames"),
+  parsedCount: integer("parsed_count").default(0),
+  updatedCount: integer("updated_count").default(0),
+  skippedCount: integer("skipped_count").default(0),
+  conflictCount: integer("conflict_count").default(0),
+  details: jsonb("details"),
+});
 
 export const hkAttendantMetrics = pgTable("hk_attendant_metrics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1613,9 +1629,17 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
 });
 
 const hkCountSchema = z.coerce.number().int().min(0).default(0);
+const hkOptionalCountSchema = z.preprocess(
+  (value) => (value === "" || value === null || value === undefined ? null : value),
+  z.coerce.number().int().min(0).nullable()
+);
 const hkDecimalSchema = z.preprocess(
   (value) => (value === "" || value === null || value === undefined ? "0" : value),
   z.string().regex(/^\d+(\.\d{1,2})?$/)
+);
+const hkOptionalDecimalSchema = z.preprocess(
+  (value) => (value === "" || value === null || value === undefined ? null : value),
+  z.string().regex(/^\d+(\.\d{1,2})?$/).nullable()
 );
 
 export const insertHkDailyMetricSchema = createInsertSchema(hkDailyMetrics).omit({
@@ -1627,6 +1651,8 @@ export const insertHkDailyMetricSchema = createInsertSchema(hkDailyMetrics).omit
   metricDate: z.coerce.date(),
   property: z.string().min(1, "Property is required"),
   occupiedRooms: hkCountSchema,
+  roomsSold: hkOptionalCountSchema.optional(),
+  totalDailyHours: hkOptionalDecimalSchema.optional(),
   checkouts: hkCountSchema,
   stayovers: hkCountSchema,
   roomsCleaned: hkCountSchema,
@@ -1836,6 +1862,7 @@ export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 
 export type HkDailyMetric = typeof hkDailyMetrics.$inferSelect;
 export type InsertHkDailyMetric = z.infer<typeof insertHkDailyMetricSchema>;
+export type HkRoomsSoldImport = typeof hkRoomsSoldImports.$inferSelect;
 
 export type HkAttendantMetric = typeof hkAttendantMetrics.$inferSelect;
 export type InsertHkAttendantMetric = z.infer<typeof insertHkAttendantMetricSchema>;

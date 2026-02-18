@@ -20,7 +20,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
-import { format, getISOWeek, getISOWeekYear, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
+import { format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
@@ -257,6 +257,10 @@ const computeRate = (hours: number, rooms: number, multiplier = 1) => {
 
 const computeDailyDerived = (entry: HkDailyMetric) => {
   const occupiedRooms = normalizeHkNumber(entry.occupiedRooms);
+  const roomsSoldValue = entry.roomsSold ?? null;
+  const totalDailyHoursValue = entry.totalDailyHours ?? null;
+  const roomsSold = normalizeHkNumber(entry.roomsSold);
+  const totalDailyHours = normalizeHkNumber(entry.totalDailyHours);
   const checkouts = normalizeHkNumber(entry.checkouts);
   const stayovers = normalizeHkNumber(entry.stayovers);
   const roomsCleaned = normalizeHkNumber(entry.roomsCleaned);
@@ -266,12 +270,14 @@ const computeDailyDerived = (entry: HkDailyMetric) => {
   const varianceHours = standardHours === null ? null : roundTo(paidHours - standardHours);
   const mporPaid = computeRate(paidHours, occupiedRooms, 60);
   const mporProductive = computeRate(productiveHours, occupiedRooms, 60);
-  const hpor = computeRate(paidHours, occupiedRooms, 1);
+  const hpor = computeRate(totalDailyHours, roomsSold, 1);
   const avgMinutesPerRoom = computeRate(productiveHours, roomsCleaned, 60);
 
   return {
     ...entry,
     metricDate: formatMetricDate(entry.metricDate as any),
+    roomsSold: roomsSoldValue,
+    totalDailyHours: totalDailyHoursValue,
     standardHours,
     varianceHours,
     mporPaid,
@@ -306,10 +312,143 @@ const computeAttendantDerived = (entry: HkAttendantMetric) => {
   };
 };
 
+const normalizeHeaderToken = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const detectRoomsSoldHeader = (line: string) => {
+  if (!line) return null;
+  const delimiter = line.includes("\t") ? "\t" : line.includes(",") ? "," : "  ";
+  const columns = delimiter === "  " ? line.trim().split(/\s{2,}/) : line.split(delimiter);
+  const normalized = columns.map((col) => normalizeHeaderToken(col));
+  const dateIndex = normalized.findIndex((token) => token.includes("date"));
+  const roomsIndex = normalized.findIndex((token) =>
+    ["roomssold", "roomsold", "rmsold", "rooms", "roomsoccupied", "occupied", "occ"].some((key) => token.includes(key))
+  );
+  if (dateIndex === -1 || roomsIndex === -1) return null;
+  return { delimiter, dateIndex, roomsIndex };
+};
+
+const parseRoomsSoldDateToken = (token: string) => {
+  const trimmed = token.trim();
+  const isoMatch = trimmed.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    if (!Number.isNaN(date.getTime())) return format(date, "yyyy-MM-dd");
+  }
+
+  const slashMatch = trimmed.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+  if (slashMatch) {
+    const [, month, day, year] = slashMatch;
+    const date = parse(`${month}/${day}/${year}`, "M/d/yyyy", new Date());
+    if (!Number.isNaN(date.getTime())) return format(date, "yyyy-MM-dd");
+  }
+
+  const monthMap: Record<string, number> = {
+    jan: 0,
+    feb: 1,
+    mar: 2,
+    apr: 3,
+    may: 4,
+    jun: 5,
+    jul: 6,
+    aug: 7,
+    sep: 8,
+    oct: 9,
+    nov: 10,
+    dec: 11,
+  };
+  const alphaMatch = trimmed.match(/\b(\d{1,2})-([A-Za-z]{3})-(\d{4})\b/);
+  if (alphaMatch) {
+    const [, day, monthToken, year] = alphaMatch;
+    const monthIndex = monthMap[monthToken.toLowerCase()];
+    if (monthIndex !== undefined) {
+      const date = new Date(Number(year), monthIndex, Number(day));
+      if (!Number.isNaN(date.getTime())) return format(date, "yyyy-MM-dd");
+    }
+  }
+  return null;
+};
+
+const extractRoomsSoldFromLine = (line: string, dateToken?: string | null) => {
+  const lower = line.toLowerCase();
+  const keywords = [
+    "rooms sold",
+    "roomsold",
+    "rms sold",
+    "roomsoccupied",
+    "rooms occupied",
+    "occupied",
+    "occ",
+    "rooms",
+  ];
+  let keywordIndex = -1;
+  let keyword = "";
+  for (const key of keywords) {
+    const index = lower.indexOf(key);
+    if (index !== -1 && (keywordIndex === -1 || index < keywordIndex)) {
+      keywordIndex = index;
+      keyword = key;
+    }
+  }
+  if (keywordIndex !== -1) {
+    const after = line.slice(keywordIndex + keyword.length);
+    const match = after.match(/\b\d[\d,]*\b/);
+    if (match) return Number(match[0].replace(/,/g, ""));
+  }
+
+  const cleaned = dateToken ? line.replace(dateToken, " ") : line;
+  const numbers = cleaned.match(/\b\d{1,4}\b/g) || [];
+  if (numbers.length === 1) return Number(numbers[0]);
+  return null;
+};
+
+const parseRoomsSoldFile = (content: string) => {
+  const lines = content.split(/\r?\n/);
+  const skipped: Array<{ line: number; reason: string; raw: string }> = [];
+  const parsed: Array<{ line: number; date: string; roomsSold: number; raw: string }> = [];
+  const headerLineIndex = lines.findIndex((line) => detectRoomsSoldHeader(line));
+  const headerInfo = headerLineIndex >= 0 ? detectRoomsSoldHeader(lines[headerLineIndex]) : null;
+
+  lines.forEach((rawLine, index) => {
+    const line = rawLine.trim();
+    if (!line) return;
+    if (headerInfo && index <= headerLineIndex) return;
+
+    let dateToken: string | null = null;
+    let roomsSold: number | null = null;
+
+    if (headerInfo) {
+      const parts = headerInfo.delimiter === "  " ? line.split(/\s{2,}/) : line.split(headerInfo.delimiter);
+      const dateCell = parts[headerInfo.dateIndex] ?? "";
+      const roomsCell = parts[headerInfo.roomsIndex] ?? "";
+      dateToken = parseRoomsSoldDateToken(dateCell);
+      const roomsMatch = roomsCell.match(/\b\d[\d,]*\b/);
+      roomsSold = roomsMatch ? Number(roomsMatch[0].replace(/,/g, "")) : null;
+    } else {
+      const dateMatch = rawLine.match(/\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}\/\d{4}\b|\b\d{1,2}-[A-Za-z]{3}-\d{4}\b/);
+      dateToken = dateMatch ? parseRoomsSoldDateToken(dateMatch[0]) : null;
+      roomsSold = extractRoomsSoldFromLine(rawLine, dateMatch?.[0]);
+    }
+
+    if (!dateToken) {
+      skipped.push({ line: index + 1, reason: "No date found", raw: rawLine });
+      return;
+    }
+    if (roomsSold === null || Number.isNaN(roomsSold)) {
+      skipped.push({ line: index + 1, reason: "No rooms sold value found", raw: rawLine });
+      return;
+    }
+    parsed.push({ line: index + 1, date: dateToken, roomsSold, raw: rawLine });
+  });
+
+  return { parsed, skipped };
+};
+
 const aggregateDailyTotals = (entries: HkDailyMetric[]) => {
   return entries.reduce(
     (acc, entry) => {
       acc.occupiedRooms += normalizeHkNumber(entry.occupiedRooms);
+      acc.roomsSold += normalizeHkNumber(entry.roomsSold);
       acc.checkouts += normalizeHkNumber(entry.checkouts);
       acc.stayovers += normalizeHkNumber(entry.stayovers);
       acc.roomsCleaned += normalizeHkNumber(entry.roomsCleaned);
@@ -322,10 +461,20 @@ const aggregateDailyTotals = (entries: HkDailyMetric[]) => {
       acc.recleans += normalizeHkNumber(entry.recleans);
       acc.dndRooms += normalizeHkNumber(entry.dndRooms);
       acc.oooRooms += normalizeHkNumber(entry.oooRooms);
+      const roomsSold = normalizeHkNumber(entry.roomsSold);
+      const totalDailyHours = normalizeHkNumber(entry.totalDailyHours);
+      if (roomsSold > 0 && totalDailyHours > 0) {
+        acc.totalDailyHours += totalDailyHours;
+        acc.totalRoomsSoldForHpor += roomsSold;
+        acc.hporEligibleDays += 1;
+      } else {
+        acc.hporMissingDays += 1;
+      }
       return acc;
     },
     {
       occupiedRooms: 0,
+      roomsSold: 0,
       checkouts: 0,
       stayovers: 0,
       roomsCleaned: 0,
@@ -338,6 +487,10 @@ const aggregateDailyTotals = (entries: HkDailyMetric[]) => {
       recleans: 0,
       dndRooms: 0,
       oooRooms: 0,
+      totalDailyHours: 0,
+      totalRoomsSoldForHpor: 0,
+      hporEligibleDays: 0,
+      hporMissingDays: 0,
     }
   );
 };
@@ -349,11 +502,12 @@ const buildDailyRollup = (totals: ReturnType<typeof aggregateDailyTotals>) => {
     ...totals,
     paidHours: roundTo(totals.paidHours),
     productiveHours: roundTo(totals.productiveHours),
+    totalDailyHours: roundTo(totals.totalDailyHours),
     standardHours,
     varianceHours,
     mporPaid: computeRate(totals.paidHours, totals.occupiedRooms, 60),
     mporProductive: computeRate(totals.productiveHours, totals.occupiedRooms, 60),
-    hpor: computeRate(totals.paidHours, totals.occupiedRooms, 1),
+    hpor: computeRate(totals.totalDailyHours, totals.totalRoomsSoldForHpor, 1),
     avgMinutesPerRoom: computeRate(totals.productiveHours, totals.roomsCleaned, 60),
   };
 };
@@ -374,6 +528,7 @@ const groupDailyByIsoWeek = (entries: HkDailyMetric[]) => {
     if (bucket) {
       const totals = bucket.totals;
       totals.occupiedRooms += normalizeHkNumber(entry.occupiedRooms);
+      totals.roomsSold += normalizeHkNumber(entry.roomsSold);
       totals.checkouts += normalizeHkNumber(entry.checkouts);
       totals.stayovers += normalizeHkNumber(entry.stayovers);
       totals.roomsCleaned += normalizeHkNumber(entry.roomsCleaned);
@@ -386,6 +541,15 @@ const groupDailyByIsoWeek = (entries: HkDailyMetric[]) => {
       totals.recleans += normalizeHkNumber(entry.recleans);
       totals.dndRooms += normalizeHkNumber(entry.dndRooms);
       totals.oooRooms += normalizeHkNumber(entry.oooRooms);
+      const roomsSold = normalizeHkNumber(entry.roomsSold);
+      const totalDailyHours = normalizeHkNumber(entry.totalDailyHours);
+      if (roomsSold > 0 && totalDailyHours > 0) {
+        totals.totalDailyHours += totalDailyHours;
+        totals.totalRoomsSoldForHpor += roomsSold;
+        totals.hporEligibleDays += 1;
+      } else {
+        totals.hporMissingDays += 1;
+      }
     }
   });
 
@@ -415,6 +579,7 @@ const groupDailyByMonth = (entries: HkDailyMetric[]) => {
     if (bucket) {
       const totals = bucket.totals;
       totals.occupiedRooms += normalizeHkNumber(entry.occupiedRooms);
+      totals.roomsSold += normalizeHkNumber(entry.roomsSold);
       totals.checkouts += normalizeHkNumber(entry.checkouts);
       totals.stayovers += normalizeHkNumber(entry.stayovers);
       totals.roomsCleaned += normalizeHkNumber(entry.roomsCleaned);
@@ -427,6 +592,15 @@ const groupDailyByMonth = (entries: HkDailyMetric[]) => {
       totals.recleans += normalizeHkNumber(entry.recleans);
       totals.dndRooms += normalizeHkNumber(entry.dndRooms);
       totals.oooRooms += normalizeHkNumber(entry.oooRooms);
+      const roomsSold = normalizeHkNumber(entry.roomsSold);
+      const totalDailyHours = normalizeHkNumber(entry.totalDailyHours);
+      if (roomsSold > 0 && totalDailyHours > 0) {
+        totals.totalDailyHours += totalDailyHours;
+        totals.totalRoomsSoldForHpor += roomsSold;
+        totals.hporEligibleDays += 1;
+      } else {
+        totals.hporMissingDays += 1;
+      }
     }
   });
 
@@ -2052,6 +2226,19 @@ const upload = multer({
       cb(new Error('Only image, PDF, and Word document files are allowed'));
     }
   }
+});
+
+const roomsSoldUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const isTxt = file.mimetype === "text/plain" || file.originalname.toLowerCase().endsWith(".txt");
+    if (isTxt) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only .txt files are allowed for rooms sold imports"));
+    }
+  },
 });
 
 // IP-based rate limiting middleware
@@ -7732,6 +7919,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         property,
         paidHours: String(result.data.paidHours),
         productiveHours: String(result.data.productiveHours),
+        roomsSold: result.data.roomsSold ?? null,
+        totalDailyHours: result.data.totalDailyHours ?? null,
         notes: notes?.trim() || undefined,
         createdBy: userId ? String(userId) : null,
       };
@@ -7739,6 +7928,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(saved);
     } catch (error) {
       res.status(500).json({ error: "Failed to save HK daily metrics" });
+    }
+  });
+
+  app.patch("/api/admin/hk-metrics/day", isAuthenticated, requireHkMetricsAdmin, async (req: any, res) => {
+    try {
+      const patchSchema = z.object({
+        metricDate: z.coerce.date(),
+        property: z.string().min(1),
+        roomsSold: z.coerce.number().int().min(0).optional().nullable(),
+        totalDailyHours: z.union([z.string().regex(/^\d+(\.\d{1,2})?$/), z.number().min(0)])
+          .optional()
+          .nullable(),
+        occupiedRooms: z.coerce.number().int().min(0).optional().nullable(),
+        notes: z.string().optional().nullable(),
+      });
+      const result = patchSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      const property = result.data.property.trim();
+      if (!property) {
+        return res.status(400).json({ error: "Property is required" });
+      }
+
+      const totalDailyHours =
+        result.data.totalDailyHours === null || result.data.totalDailyHours === undefined
+          ? null
+          : String(result.data.totalDailyHours);
+      const roomsSoldOverride = result.data.roomsSold !== undefined;
+
+      const saved = await storage.upsertHkDailyMetricFields({
+        metricDate: formatMetricDate(result.data.metricDate as any) || format(result.data.metricDate, "yyyy-MM-dd"),
+        property,
+        roomsSold: result.data.roomsSold ?? undefined,
+        totalDailyHours,
+        occupiedRooms: result.data.occupiedRooms ?? undefined,
+        notes: result.data.notes === null || result.data.notes === undefined ? undefined : result.data.notes,
+        roomsSoldImported: roomsSoldOverride ? false : undefined,
+        roomsSoldImportedAt: roomsSoldOverride ? null : undefined,
+        createdBy: userId ? String(userId) : null,
+      });
+      res.json(saved);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update HK daily metrics" });
     }
   });
 
@@ -7771,6 +8005,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to save attendant metrics" });
     }
   });
+
+  app.post(
+    "/api/admin/hk-metrics/import-rooms-sold",
+    isAuthenticated,
+    requireHkMetricsAdmin,
+    roomsSoldUpload.array("files"),
+    async (req: any, res) => {
+      try {
+        const property = typeof req.body?.property === "string" ? req.body.property.trim() : "";
+        if (!property) {
+          return res.status(400).json({ error: "Property is required" });
+        }
+        const files = (req.files as Express.Multer.File[]) || [];
+        if (!files.length) {
+          return res.status(400).json({ error: "No TXT files uploaded" });
+        }
+
+        const parsedEntries: Array<{ date: string; roomsSold: number; fileName: string; line: number }> = [];
+        const skippedEntries: Array<{ fileName: string; line: number; reason: string; raw: string }> = [];
+
+        files.forEach((file) => {
+          const content = file.buffer.toString("utf-8");
+          const { parsed, skipped } = parseRoomsSoldFile(content);
+          parsed.forEach((entry) => {
+            parsedEntries.push({ date: entry.date, roomsSold: entry.roomsSold, fileName: file.originalname, line: entry.line });
+          });
+          skipped.forEach((entry) => {
+            skippedEntries.push({ fileName: file.originalname, line: entry.line, reason: entry.reason, raw: entry.raw });
+          });
+        });
+
+        const perDate = new Map<string, { roomsSold: number; source: string; line: number }>();
+        const overwriteLog: Array<{ date: string; previous: number; next: number }> = [];
+        parsedEntries.forEach((entry) => {
+          if (perDate.has(entry.date)) {
+            const previous = perDate.get(entry.date);
+            if (previous && previous.roomsSold !== entry.roomsSold) {
+              overwriteLog.push({ date: entry.date, previous: previous.roomsSold, next: entry.roomsSold });
+            }
+          }
+          perDate.set(entry.date, { roomsSold: entry.roomsSold, source: entry.fileName, line: entry.line });
+        });
+
+        const dates = Array.from(perDate.keys());
+        const existingEntries = await storage.getHkDailyMetricsForDates(property, dates);
+        const existingMap = new Map<string, HkDailyMetric>();
+        existingEntries.forEach((entry) => {
+          const metricDate = formatMetricDate(entry.metricDate as any);
+          if (metricDate) existingMap.set(metricDate, entry);
+        });
+
+        let updatedCount = 0;
+        let conflictCount = 0;
+        const conflicts: Array<{ date: string; previous: number | null; next: number }> = [];
+        const importedAt = new Date();
+
+        const perDateEntries: Array<[string, { roomsSold: number; source: string; line: number }]> = [];
+        perDate.forEach((value, key) => {
+          perDateEntries.push([key, value]);
+        });
+
+        await Promise.all(
+          perDateEntries.map(async ([date, payload]) => {
+            const existing = existingMap.get(date);
+            if (existing && existing.roomsSold !== null && Number(existing.roomsSold) !== payload.roomsSold) {
+              conflictCount += 1;
+              conflicts.push({ date, previous: Number(existing.roomsSold), next: payload.roomsSold });
+            }
+            await storage.upsertHkDailyMetricFields({
+              metricDate: date,
+              property,
+              roomsSold: payload.roomsSold,
+              roomsSoldImported: true,
+              roomsSoldImportedAt: importedAt,
+            });
+            updatedCount += 1;
+          })
+        );
+
+        const userId = req.user?.claims?.sub || req.session?.userId;
+        const parsedCount = parsedEntries.length;
+        const skippedCount = skippedEntries.length;
+        await storage.createHkRoomsSoldImport({
+          uploadedBy: userId ? String(userId) : null,
+          filenames: files.map((file) => file.originalname),
+          parsedCount,
+          updatedCount,
+          skippedCount,
+          conflictCount,
+          details: {
+            overwritten: overwriteLog,
+            conflicts,
+            skipped: skippedEntries,
+          },
+        });
+
+        res.json({
+          filesProcessed: files.length,
+          parsedCount,
+          updatedCount,
+          skippedCount,
+          conflictCount,
+          overwrittenCount: overwriteLog.length,
+          overwrittenDates: overwriteLog.map((entry) => entry.date),
+          skipped: skippedEntries,
+          conflicts,
+        });
+      } catch (error) {
+        res.status(500).json({ error: "Failed to import rooms sold TXT files" });
+      }
+    }
+  );
 
   app.get("/api/admin/hk-metrics/pdf", isAuthenticated, requireHkMetricsAdmin, async (req, res) => {
     try {

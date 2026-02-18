@@ -108,6 +108,7 @@ import {
   promoAlerts,
   hkDailyMetrics,
   hkAttendantMetrics,
+  hkRoomsSoldImports,
   promoCodes,
   promoCodeUsages,
   refreshTokens,
@@ -348,7 +349,28 @@ export interface IStorage {
 
   // Housekeeping metrics
   getHkDailyMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkDailyMetric[]>;
+  getHkDailyMetricsForDates(property: string, dates: string[]): Promise<HkDailyMetric[]>;
   upsertHkDailyMetric(metric: InsertHkDailyMetric & { createdBy?: string | null }): Promise<HkDailyMetric>;
+  upsertHkDailyMetricFields(metric: {
+    metricDate: string;
+    property: string;
+    roomsSold?: number | null;
+    totalDailyHours?: string | null;
+    occupiedRooms?: number | null;
+    notes?: string | null;
+    roomsSoldImported?: boolean | null;
+    roomsSoldImportedAt?: Date | null;
+    createdBy?: string | null;
+  }): Promise<HkDailyMetric>;
+  createHkRoomsSoldImport(importRecord: {
+    uploadedBy?: string | null;
+    filenames: string[];
+    parsedCount: number;
+    updatedCount: number;
+    skippedCount: number;
+    conflictCount: number;
+    details: any;
+  }): Promise<void>;
   getHkAttendantMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkAttendantMetric[]>;
   upsertHkAttendantMetric(metric: InsertHkAttendantMetric & { createdBy?: string | null }): Promise<HkAttendantMetric>;
   listHkProperties(): Promise<string[]>;
@@ -2267,6 +2289,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(hkDailyMetrics.metricDate));
   }
 
+  async getHkDailyMetricsForDates(property: string, dates: string[]): Promise<HkDailyMetric[]> {
+    if (!dates.length) return [];
+    return await db
+      .select()
+      .from(hkDailyMetrics)
+      .where(and(eq(hkDailyMetrics.property, property), inArray(hkDailyMetrics.metricDate, dates)));
+  }
+
   async upsertHkDailyMetric(metric: InsertHkDailyMetric & { createdBy?: string | null }): Promise<HkDailyMetric> {
     const payload = { ...metric, updatedAt: new Date() };
     const [saved] = await db
@@ -2278,6 +2308,61 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return saved;
+  }
+
+  async upsertHkDailyMetricFields(metric: {
+    metricDate: string;
+    property: string;
+    roomsSold?: number | null;
+    totalDailyHours?: string | null;
+    occupiedRooms?: number | null;
+    notes?: string | null;
+    roomsSoldImported?: boolean | null;
+    roomsSoldImportedAt?: Date | null;
+    createdBy?: string | null;
+  }): Promise<HkDailyMetric> {
+    const { metricDate, property, ...fields } = metric;
+    const payload = {
+      metricDate,
+      property,
+      ...fields,
+      updatedAt: new Date(),
+    };
+    const updates: Record<string, any> = { updatedAt: payload.updatedAt };
+    (Object.keys(fields) as Array<keyof typeof fields>).forEach((key) => {
+      if (fields[key] !== undefined) {
+        updates[key] = fields[key];
+      }
+    });
+    const [saved] = await db
+      .insert(hkDailyMetrics)
+      .values(payload)
+      .onConflictDoUpdate({
+        target: [hkDailyMetrics.metricDate, hkDailyMetrics.property],
+        set: updates,
+      })
+      .returning();
+    return saved;
+  }
+
+  async createHkRoomsSoldImport(importRecord: {
+    uploadedBy?: string | null;
+    filenames: string[];
+    parsedCount: number;
+    updatedCount: number;
+    skippedCount: number;
+    conflictCount: number;
+    details: any;
+  }): Promise<void> {
+    await db.insert(hkRoomsSoldImports).values({
+      uploadedBy: importRecord.uploadedBy ?? null,
+      filenames: importRecord.filenames,
+      parsedCount: importRecord.parsedCount,
+      updatedCount: importRecord.updatedCount,
+      skippedCount: importRecord.skippedCount,
+      conflictCount: importRecord.conflictCount,
+      details: importRecord.details,
+    });
   }
 
   async getHkAttendantMetrics(startDate: string, endDate: string, property?: string | null): Promise<HkAttendantMetric[]> {

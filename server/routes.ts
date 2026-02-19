@@ -10811,8 +10811,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const cacheKey = "ALL";
       const now = Date.now();
       const cached = tfrCache.get(cacheKey);
-      const cacheValid = cached && cached.expiresAt > now;
       const debug = String(req.query?.debug || "") === "1";
+      const force = String(req.query?.force || "") === "1";
+      const cacheValid = !force && cached && cached.expiresAt > now;
       const bbox = parseBboxParam(req.query?.bbox);
       const lat = Number(req.query?.lat);
       const lon = Number(req.query?.lon);
@@ -10918,6 +10919,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           if (!centroid) return false;
           return distanceNmBetween(lat, lon, centroid.lat, centroid.lon) <= radiusNm;
         });
+      }
+
+      if (debug && !arcgisMeta && !(payload?.features || []).length) {
+        const arcgisResult = await fetchArcGisTfrs();
+        arcgisMeta = {
+          attempted: true,
+          ok: Boolean(arcgisResult?.data),
+          error: arcgisResult?.error,
+        };
       }
 
       const responsePayload: any = {

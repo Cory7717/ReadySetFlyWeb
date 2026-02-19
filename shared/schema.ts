@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index, uniqueIndex, foreignKey, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index, uniqueIndex, foreignKey, date, time } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1215,6 +1215,87 @@ export const notificationPreferences = pgTable("notification_preferences", {
   index("idx_notification_preferences_user").on(table.userId),
 ]);
 
+// CFI Profiles (public instructor directory)
+export const cfiProfiles = pgTable("cfi_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  displayName: text("display_name").notNull(),
+  headline: text("headline"),
+  bio: text("bio"),
+  locationCity: text("location_city"),
+  locationState: text("location_state"),
+  airportHome: text("airport_home"),
+  hourlyRateCents: integer("hourly_rate_cents"),
+  ratingsHeld: jsonb("ratings_held").default(sql`'[]'::jsonb`),
+  aircraftTypes: jsonb("aircraft_types").default(sql`'[]'::jsonb`),
+  languages: jsonb("languages").default(sql`'[]'::jsonb`),
+  contactNote: text("contact_note"),
+  preferredPayments: text("preferred_payments"),
+  isPublished: boolean("is_published").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_cfi_profiles_user").on(table.userId),
+  uniqueIndex("uniq_cfi_profiles_slug").on(table.slug),
+  index("idx_cfi_profiles_slug").on(table.slug),
+]);
+
+export const cfiCredentials = pgTable("cfi_credentials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cfiProfileId: varchar("cfi_profile_id").notNull().references(() => cfiProfiles.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileName: text("file_name").notNull(),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+  expiresOn: date("expires_on"),
+  notes: text("notes"),
+}, (table) => [
+  index("idx_cfi_credentials_profile").on(table.cfiProfileId),
+]);
+
+export const cfiAvailabilityRules = pgTable("cfi_availability_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cfiProfileId: varchar("cfi_profile_id").notNull().references(() => cfiProfiles.id, { onDelete: "cascade" }),
+  timezone: text("timezone").notNull(),
+  weekday: integer("weekday").notNull(),
+  startTime: time("start_time").notNull(),
+  endTime: time("end_time").notNull(),
+  isActive: boolean("is_active").default(true),
+}, (table) => [
+  index("idx_cfi_availability_profile").on(table.cfiProfileId),
+]);
+
+export const cfiBookingRequests = pgTable("cfi_booking_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cfiProfileId: varchar("cfi_profile_id").notNull().references(() => cfiProfiles.id, { onDelete: "cascade" }),
+  studentUserId: varchar("student_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  requestedStart: timestamp("requested_start").notNull(),
+  requestedEnd: timestamp("requested_end").notNull(),
+  timezone: text("timezone").notNull(),
+  location: text("location"),
+  sessionType: text("session_type").notNull(),
+  notes: text("notes"),
+  status: text("status").notNull().default("REQUESTED"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_cfi_booking_profile_status").on(table.cfiProfileId, table.status),
+  index("idx_cfi_booking_student").on(table.studentUserId),
+]);
+
+export const cfiLegalAcceptances = pgTable("cfi_legal_acceptances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  acceptanceType: text("acceptance_type").notNull(),
+  acceptedAt: timestamp("accepted_at").defaultNow(),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  version: text("version").notNull(),
+}, (table) => [
+  index("idx_cfi_legal_user").on(table.userId),
+]);
+
 // User Settings (lightweight per-user preferences)
 export const userSettings = pgTable("user_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1432,6 +1513,38 @@ export const insertNotificationPreferencesSchema = createInsertSchema(notificati
   userId: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertCfiProfileSchema = createInsertSchema(cfiProfiles).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCfiCredentialSchema = createInsertSchema(cfiCredentials).omit({
+  id: true,
+  cfiProfileId: true,
+  uploadedAt: true,
+});
+
+export const insertCfiAvailabilityRuleSchema = createInsertSchema(cfiAvailabilityRules).omit({
+  id: true,
+  cfiProfileId: true,
+});
+
+export const insertCfiBookingRequestSchema = createInsertSchema(cfiBookingRequests).omit({
+  id: true,
+  cfiProfileId: true,
+  studentUserId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCfiLegalAcceptanceSchema = createInsertSchema(cfiLegalAcceptances).omit({
+  id: true,
+  userId: true,
+  acceptedAt: true,
 });
 
 export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
@@ -1916,6 +2029,16 @@ export type LogbookProSettings = typeof logbookProSettings.$inferSelect;
 export type InsertLogbookProSettings = z.infer<typeof insertLogbookProSettingsSchema>;
 export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
 export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
+export type CfiProfile = typeof cfiProfiles.$inferSelect;
+export type InsertCfiProfile = z.infer<typeof insertCfiProfileSchema>;
+export type CfiCredential = typeof cfiCredentials.$inferSelect;
+export type InsertCfiCredential = z.infer<typeof insertCfiCredentialSchema>;
+export type CfiAvailabilityRule = typeof cfiAvailabilityRules.$inferSelect;
+export type InsertCfiAvailabilityRule = z.infer<typeof insertCfiAvailabilityRuleSchema>;
+export type CfiBookingRequest = typeof cfiBookingRequests.$inferSelect;
+export type InsertCfiBookingRequest = z.infer<typeof insertCfiBookingRequestSchema>;
+export type CfiLegalAcceptance = typeof cfiLegalAcceptances.$inferSelect;
+export type InsertCfiLegalAcceptance = z.infer<typeof insertCfiLegalAcceptanceSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
 export type PushToken = typeof pushTokens.$inferSelect;

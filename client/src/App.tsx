@@ -55,6 +55,12 @@ import AdsbReceiverHelp from "@/pages/adsb-receiver-help";
 import NotificationsPage from "@/pages/notifications";
 import AdsbLive from "@/pages/adsb-live";
 import Eb6Calculator from "@/pages/tools/Eb6Calculator";
+import CfiDirectory from "@/pages/cfi";
+import CfiProfile from "@/pages/cfi/profile";
+import CfiRequest from "@/pages/cfi/request";
+import CfiDashboard from "@/pages/cfi/dashboard";
+import CfiTerms from "@/pages/cfi/terms";
+import CfiStudentTerms from "@/pages/cfi/student-terms";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -115,6 +121,10 @@ function Router() {
       <Route path="/admin/invite" component={RequireAuth} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
+      <Route path="/cfi" component={CfiDirectory} />
+      <Route path="/cfi/terms" component={CfiTerms} />
+      <Route path="/cfi/student-terms" component={CfiStudentTerms} />
+      <Route path="/cfi/:slug" component={CfiProfile} />
       <Route path="/delete-account" component={DeleteAccount} />
       <Route path="/404" component={NotFound} />
       
@@ -122,12 +132,14 @@ function Router() {
       {isAuthenticated ? (
         <>
           <Route path="/dashboard" component={Dashboard} />
+          <Route path="/dashboard/cfi" component={CfiDashboard} />
           <Route path="/profile" component={Profile} />
           <Route path="/my-listings" component={MyListings} />
           <Route path="/favorites" component={Favorites} />
           <Route path="/messages" component={Messages} />
           <Route path="/rentals" component={Home} />
           <Route path="/marketplace" component={Marketplace} />
+          <Route path="/cfi/:slug/request" component={CfiRequest} />
           <Route path="/aircraft/:id" component={AircraftDetail} />
           <Route path="/pilot-tools" component={PilotTools} />
           <Route path="/aviation-weather" component={AviationWeatherHub} />
@@ -180,12 +192,14 @@ function Router() {
         <>
           {/* Show "Sign In Required" page for unauthenticated users trying to access protected routes */}
           <Route path="/dashboard" component={RequireAuth} />
+          <Route path="/dashboard/cfi" component={RequireAuth} />
           <Route path="/profile" component={RequireAuth} />
           <Route path="/my-listings" component={RequireAuth} />
           <Route path="/favorites" component={RequireAuth} />
           <Route path="/messages" component={RequireAuth} />
           <Route path="/rentals" component={RequireAuth} />
           <Route path="/marketplace" component={RequireAuth} />
+          <Route path="/cfi/:slug/request" component={RequireAuth} />
           <Route path="/aircraft/:id" component={RequireAuth} />
           <Route path="/pilot-tools" component={RequireAuth} />
           <Route path="/aviation-weather" component={RequireAuth} />

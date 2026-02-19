@@ -65,6 +65,16 @@ import {
   type InsertLogbookProSettings,
   type NotificationPreferences,
   type InsertNotificationPreferences,
+  type CfiProfile,
+  type InsertCfiProfile,
+  type CfiCredential,
+  type InsertCfiCredential,
+  type CfiAvailabilityRule,
+  type InsertCfiAvailabilityRule,
+  type CfiBookingRequest,
+  type InsertCfiBookingRequest,
+  type CfiLegalAcceptance,
+  type InsertCfiLegalAcceptance,
   type UserSettings,
   type InsertUserSettings,
   type PushToken,
@@ -119,6 +129,11 @@ import {
   logbookEntries,
   logbookProSettings,
   notificationPreferences,
+  cfiProfiles,
+  cfiCredentials,
+  cfiAvailabilityRules,
+  cfiBookingRequests,
+  cfiLegalAcceptances,
   userSettings,
   pushTokens,
   userNotifications,
@@ -462,6 +477,28 @@ export interface IStorage {
   // Notification Preferences + User Notifications
   getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
   upsertNotificationPreferences(userId: string, updates: InsertNotificationPreferences): Promise<NotificationPreferences>;
+  // CFI Booking Platform
+  getCfiProfileByUser(userId: string): Promise<CfiProfile | undefined>;
+  getCfiProfileBySlug(slug: string): Promise<CfiProfile | undefined>;
+  getCfiProfileById(id: string): Promise<CfiProfile | undefined>;
+  listPublishedCfiProfiles(filters?: { q?: string; state?: string; airport?: string }): Promise<CfiProfile[]>;
+  createCfiProfile(profile: InsertCfiProfile & { userId: string }): Promise<CfiProfile>;
+  updateCfiProfile(id: string, userId: string, updates: Partial<CfiProfile>): Promise<CfiProfile | undefined>;
+  getCfiCredentials(profileId: string): Promise<CfiCredential[]>;
+  createCfiCredential(credential: InsertCfiCredential & { cfiProfileId: string }): Promise<CfiCredential>;
+  deleteCfiCredential(id: string, profileId: string): Promise<boolean>;
+  getCfiAvailabilityRules(profileId: string): Promise<CfiAvailabilityRule[]>;
+  replaceCfiAvailabilityRules(profileId: string, rules: InsertCfiAvailabilityRule[]): Promise<CfiAvailabilityRule[]>;
+  createCfiAvailabilityRule(rule: InsertCfiAvailabilityRule & { cfiProfileId: string }): Promise<CfiAvailabilityRule>;
+  updateCfiAvailabilityRule(id: string, profileId: string, updates: Partial<CfiAvailabilityRule>): Promise<CfiAvailabilityRule | undefined>;
+  deleteCfiAvailabilityRule(id: string, profileId: string): Promise<boolean>;
+  createCfiBookingRequest(request: InsertCfiBookingRequest & { cfiProfileId: string; studentUserId: string }): Promise<CfiBookingRequest>;
+  getCfiBookingRequest(id: string): Promise<CfiBookingRequest | undefined>;
+  getCfiBookingRequestsForCfi(profileId: string): Promise<CfiBookingRequest[]>;
+  getCfiBookingRequestsForStudent(userId: string): Promise<CfiBookingRequest[]>;
+  updateCfiBookingRequest(id: string, updates: Partial<CfiBookingRequest>): Promise<CfiBookingRequest | undefined>;
+  createCfiLegalAcceptance(acceptance: InsertCfiLegalAcceptance & { userId: string }): Promise<CfiLegalAcceptance>;
+  getCfiLatestLegalAcceptance(userId: string, acceptanceType: string): Promise<CfiLegalAcceptance | undefined>;
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
   upsertUserSettings(userId: string, updates: InsertUserSettings): Promise<UserSettings>;
   getUserNotifications(userId: string, limit?: number): Promise<UserNotification[]>;
@@ -2903,6 +2940,177 @@ export class DatabaseStorage implements IStorage {
       .values({ ...updates, userId })
       .returning();
     return prefs;
+  }
+
+  // CFI Booking Platform
+  async getCfiProfileByUser(userId: string): Promise<CfiProfile | undefined> {
+    const [profile] = await db.select().from(cfiProfiles).where(eq(cfiProfiles.userId, userId));
+    return profile;
+  }
+
+  async getCfiProfileBySlug(slug: string): Promise<CfiProfile | undefined> {
+    const [profile] = await db.select().from(cfiProfiles).where(eq(cfiProfiles.slug, slug));
+    return profile;
+  }
+
+  async getCfiProfileById(id: string): Promise<CfiProfile | undefined> {
+    const [profile] = await db.select().from(cfiProfiles).where(eq(cfiProfiles.id, id));
+    return profile;
+  }
+
+  async listPublishedCfiProfiles(filters?: { q?: string; state?: string; airport?: string }): Promise<CfiProfile[]> {
+    const conditions: any[] = [eq(cfiProfiles.isPublished, true)];
+    if (filters?.q) {
+      const like = `%${filters.q}%`;
+      conditions.push(
+        or(
+          ilike(cfiProfiles.displayName, like),
+          ilike(cfiProfiles.headline, like),
+          ilike(cfiProfiles.locationCity, like),
+          ilike(cfiProfiles.locationState, like),
+          ilike(cfiProfiles.airportHome, like)
+        )
+      );
+    }
+    if (filters?.state) {
+      conditions.push(ilike(cfiProfiles.locationState, filters.state));
+    }
+    if (filters?.airport) {
+      conditions.push(ilike(cfiProfiles.airportHome, filters.airport));
+    }
+    return await db
+      .select()
+      .from(cfiProfiles)
+      .where(and(...conditions))
+      .orderBy(asc(cfiProfiles.displayName));
+  }
+
+  async createCfiProfile(profile: InsertCfiProfile & { userId: string }): Promise<CfiProfile> {
+    const [created] = await db.insert(cfiProfiles).values(profile).returning();
+    return created;
+  }
+
+  async updateCfiProfile(id: string, userId: string, updates: Partial<CfiProfile>): Promise<CfiProfile | undefined> {
+    const [updated] = await db
+      .update(cfiProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(cfiProfiles.id, id), eq(cfiProfiles.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async getCfiCredentials(profileId: string): Promise<CfiCredential[]> {
+    return await db
+      .select()
+      .from(cfiCredentials)
+      .where(eq(cfiCredentials.cfiProfileId, profileId))
+      .orderBy(desc(cfiCredentials.uploadedAt));
+  }
+
+  async createCfiCredential(credential: InsertCfiCredential & { cfiProfileId: string }): Promise<CfiCredential> {
+    const [created] = await db.insert(cfiCredentials).values(credential).returning();
+    return created;
+  }
+
+  async deleteCfiCredential(id: string, profileId: string): Promise<boolean> {
+    const result = await db
+      .delete(cfiCredentials)
+      .where(and(eq(cfiCredentials.id, id), eq(cfiCredentials.cfiProfileId, profileId)));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getCfiAvailabilityRules(profileId: string): Promise<CfiAvailabilityRule[]> {
+    return await db
+      .select()
+      .from(cfiAvailabilityRules)
+      .where(eq(cfiAvailabilityRules.cfiProfileId, profileId))
+      .orderBy(asc(cfiAvailabilityRules.weekday), asc(cfiAvailabilityRules.startTime));
+  }
+
+  async replaceCfiAvailabilityRules(profileId: string, rules: InsertCfiAvailabilityRule[]): Promise<CfiAvailabilityRule[]> {
+    await db.delete(cfiAvailabilityRules).where(eq(cfiAvailabilityRules.cfiProfileId, profileId));
+    if (!rules.length) return [];
+    const withProfile = rules.map((rule) => ({ ...rule, cfiProfileId: profileId }));
+    return await db.insert(cfiAvailabilityRules).values(withProfile as any).returning();
+  }
+
+  async createCfiAvailabilityRule(rule: InsertCfiAvailabilityRule & { cfiProfileId: string }): Promise<CfiAvailabilityRule> {
+    const [created] = await db.insert(cfiAvailabilityRules).values(rule).returning();
+    return created;
+  }
+
+  async updateCfiAvailabilityRule(
+    id: string,
+    profileId: string,
+    updates: Partial<CfiAvailabilityRule>
+  ): Promise<CfiAvailabilityRule | undefined> {
+    const [updated] = await db
+      .update(cfiAvailabilityRules)
+      .set(updates)
+      .where(and(eq(cfiAvailabilityRules.id, id), eq(cfiAvailabilityRules.cfiProfileId, profileId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteCfiAvailabilityRule(id: string, profileId: string): Promise<boolean> {
+    const result = await db
+      .delete(cfiAvailabilityRules)
+      .where(and(eq(cfiAvailabilityRules.id, id), eq(cfiAvailabilityRules.cfiProfileId, profileId)));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async createCfiBookingRequest(
+    request: InsertCfiBookingRequest & { cfiProfileId: string; studentUserId: string }
+  ): Promise<CfiBookingRequest> {
+    const [created] = await db.insert(cfiBookingRequests).values(request).returning();
+    return created;
+  }
+
+  async getCfiBookingRequest(id: string): Promise<CfiBookingRequest | undefined> {
+    const [request] = await db.select().from(cfiBookingRequests).where(eq(cfiBookingRequests.id, id));
+    return request;
+  }
+
+  async getCfiBookingRequestsForCfi(profileId: string): Promise<CfiBookingRequest[]> {
+    return await db
+      .select()
+      .from(cfiBookingRequests)
+      .where(eq(cfiBookingRequests.cfiProfileId, profileId))
+      .orderBy(desc(cfiBookingRequests.createdAt));
+  }
+
+  async getCfiBookingRequestsForStudent(userId: string): Promise<CfiBookingRequest[]> {
+    return await db
+      .select()
+      .from(cfiBookingRequests)
+      .where(eq(cfiBookingRequests.studentUserId, userId))
+      .orderBy(desc(cfiBookingRequests.createdAt));
+  }
+
+  async updateCfiBookingRequest(id: string, updates: Partial<CfiBookingRequest>): Promise<CfiBookingRequest | undefined> {
+    const [updated] = await db
+      .update(cfiBookingRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(cfiBookingRequests.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createCfiLegalAcceptance(
+    acceptance: InsertCfiLegalAcceptance & { userId: string }
+  ): Promise<CfiLegalAcceptance> {
+    const [created] = await db.insert(cfiLegalAcceptances).values(acceptance).returning();
+    return created;
+  }
+
+  async getCfiLatestLegalAcceptance(userId: string, acceptanceType: string): Promise<CfiLegalAcceptance | undefined> {
+    const [acceptance] = await db
+      .select()
+      .from(cfiLegalAcceptances)
+      .where(and(eq(cfiLegalAcceptances.userId, userId), eq(cfiLegalAcceptances.acceptanceType, acceptanceType)))
+      .orderBy(desc(cfiLegalAcceptances.acceptedAt))
+      .limit(1);
+    return acceptance;
   }
 
   async getUserSettings(userId: string): Promise<UserSettings | undefined> {

@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -10926,7 +10926,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
     async function requireMembership(req: any, res: any, next: any) {
       try {
-        const userId = req.user?.claims?.sub;
+        const userId = req.user?.claims?.sub || req.session?.userId;
         if (!userId) {
           return res.status(401).json({ error: "Unauthorized" });
         }
@@ -10967,6 +10967,400 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         res.status(500).json({ error: "Failed to validate subscription" });
       }
     }
+
+  const normalizeCfiSlug = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+  const parseCfiDate = (value: unknown) => {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+
+  // CFI Booking Platform (public directory)
+  app.get("/api/cfi/profiles", async (req, res) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const state = typeof req.query.state === "string" ? req.query.state : undefined;
+      const airport = typeof req.query.airport === "string" ? req.query.airport : undefined;
+      const profiles = await storage.listPublishedCfiProfiles({ q, state, airport });
+      res.json(profiles);
+    } catch (error) {
+      console.error("Failed to list CFI profiles:", error);
+      res.status(500).json({ error: "Failed to load CFI directory" });
+    }
+  });
+
+  app.get("/api/cfi/profiles/:slug", async (req: any, res) => {
+    try {
+      const profile = await storage.getCfiProfileBySlug(req.params.slug);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!profile.isPublished && profile.userId !== userId) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      res.json(profile);
+    } catch (error) {
+      console.error("Failed to fetch CFI profile:", error);
+      res.status(500).json({ error: "Failed to load CFI profile" });
+    }
+  });
+
+  // CFI dashboard (Pro Core)
+  app.get("/api/cfi/profile", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.json(null);
+      }
+      const [credentials, availability, cfiTerms] = await Promise.all([
+        storage.getCfiCredentials(profile.id),
+        storage.getCfiAvailabilityRules(profile.id),
+        storage.getCfiLatestLegalAcceptance(userId, "cfi_terms"),
+      ]);
+      res.json({ profile, credentials, availability, legal: { cfi_terms: !!cfiTerms } });
+    } catch (error) {
+      console.error("Failed to load CFI dashboard:", error);
+      res.status(500).json({ error: "Failed to load CFI dashboard" });
+    }
+  });
+
+  app.post("/api/cfi/profile", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const existing = await storage.getCfiProfileByUser(userId);
+      if (existing) {
+        return res.status(409).json({ error: "CFI profile already exists" });
+      }
+      const payload = { ...req.body };
+      if (payload.slug) {
+        payload.slug = normalizeCfiSlug(payload.slug);
+      }
+      const result = insertCfiProfileSchema.safeParse(payload);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      if (result.data.slug) {
+        const slugOwner = await storage.getCfiProfileBySlug(result.data.slug);
+        if (slugOwner) {
+          return res.status(409).json({ error: "Slug already in use" });
+        }
+      }
+      const profile = await storage.createCfiProfile({ ...result.data, userId } as any);
+      res.status(201).json(profile);
+    } catch (error) {
+      console.error("Failed to create CFI profile:", error);
+      res.status(500).json({ error: "Failed to create CFI profile" });
+    }
+  });
+
+  app.patch("/api/cfi/profile", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const existing = await storage.getCfiProfileByUser(userId);
+      if (!existing) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const payload = { ...req.body };
+      if (payload.slug) {
+        payload.slug = normalizeCfiSlug(payload.slug);
+      }
+      const result = insertCfiProfileSchema.partial().safeParse(payload);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      if (result.data.slug && result.data.slug !== existing.slug) {
+        const slugOwner = await storage.getCfiProfileBySlug(result.data.slug);
+        if (slugOwner && slugOwner.userId !== userId) {
+          return res.status(409).json({ error: "Slug already in use" });
+        }
+      }
+      const updated = await storage.updateCfiProfile(existing.id, userId, result.data as any);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update CFI profile:", error);
+      res.status(500).json({ error: "Failed to update CFI profile" });
+    }
+  });
+
+  app.post("/api/cfi/profile/publish", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const existing = await storage.getCfiProfileByUser(userId);
+      if (!existing) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const accepted = await storage.getCfiLatestLegalAcceptance(userId, "cfi_terms");
+      if (!accepted) {
+        return res.status(403).json({ error: "CFI terms acceptance required" });
+      }
+      const updated = await storage.updateCfiProfile(existing.id, userId, { isPublished: true });
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to publish CFI profile:", error);
+      res.status(500).json({ error: "Failed to publish CFI profile" });
+    }
+  });
+
+  app.get("/api/cfi/credentials", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.json([]);
+      }
+      const credentials = await storage.getCfiCredentials(profile.id);
+      res.json(credentials);
+    } catch (error) {
+      console.error("Failed to load CFI credentials:", error);
+      res.status(500).json({ error: "Failed to load CFI credentials" });
+    }
+  });
+
+  app.post("/api/cfi/credentials", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const result = insertCfiCredentialSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const created = await storage.createCfiCredential({ ...result.data, cfiProfileId: profile.id } as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create CFI credential:", error);
+      res.status(500).json({ error: "Failed to create CFI credential" });
+    }
+  });
+
+  app.delete("/api/cfi/credentials/:id", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const success = await storage.deleteCfiCredential(req.params.id, profile.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete CFI credential:", error);
+      res.status(500).json({ error: "Failed to delete CFI credential" });
+    }
+  });
+
+  app.get("/api/cfi/availability", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.json([]);
+      }
+      const rules = await storage.getCfiAvailabilityRules(profile.id);
+      res.json(rules);
+    } catch (error) {
+      console.error("Failed to load CFI availability:", error);
+      res.status(500).json({ error: "Failed to load CFI availability" });
+    }
+  });
+
+  app.put("/api/cfi/availability", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const result = z.array(insertCfiAvailabilityRuleSchema).safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const rules = await storage.replaceCfiAvailabilityRules(profile.id, result.data as any);
+      res.json(rules);
+    } catch (error) {
+      console.error("Failed to update CFI availability:", error);
+      res.status(500).json({ error: "Failed to update CFI availability" });
+    }
+  });
+
+  app.get("/api/cfi/booking-requests", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.json([]);
+      }
+      const requests = await storage.getCfiBookingRequestsForCfi(profile.id);
+      res.json(requests);
+    } catch (error) {
+      console.error("Failed to load CFI booking requests:", error);
+      res.status(500).json({ error: "Failed to load CFI booking requests" });
+    }
+  });
+
+  app.patch("/api/cfi/booking-requests/:id", isAuthenticated, requireMembership, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const request = await storage.getCfiBookingRequest(req.params.id);
+      if (!request || request.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Booking request not found" });
+      }
+      const payload = z
+        .object({ status: z.string().min(1) })
+        .safeParse(req.body || {});
+      if (!payload.success) {
+        return res.status(400).json({ error: payload.error.format() });
+      }
+      const updated = await storage.updateCfiBookingRequest(req.params.id, {
+        status: payload.data.status,
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update CFI booking request:", error);
+      res.status(500).json({ error: "Failed to update CFI booking request" });
+    }
+  });
+
+  app.get("/api/cfi/booking-requests/sent", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const requests = await storage.getCfiBookingRequestsForStudent(userId);
+      res.json(requests);
+    } catch (error) {
+      console.error("Failed to load student booking requests:", error);
+      res.status(500).json({ error: "Failed to load booking requests" });
+    }
+  });
+
+  app.post("/api/cfi/profiles/:slug/requests", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileBySlug(req.params.slug);
+      if (!profile || !profile.isPublished) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      if (profile.userId === userId) {
+        return res.status(400).json({ error: "Cannot request your own profile" });
+      }
+      const accepted = await storage.getCfiLatestLegalAcceptance(userId, "cfi_student_terms");
+      if (!accepted) {
+        return res.status(403).json({ error: "Student terms acceptance required" });
+      }
+      const payload = { ...req.body };
+      payload.requestedStart = parseCfiDate(payload.requestedStart);
+      payload.requestedEnd = parseCfiDate(payload.requestedEnd);
+      if (!payload.requestedStart || !payload.requestedEnd) {
+        return res.status(400).json({ error: "Invalid requested start/end" });
+      }
+      const result = insertCfiBookingRequestSchema.safeParse(payload);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const created = await storage.createCfiBookingRequest({
+        ...result.data,
+        cfiProfileId: profile.id,
+        studentUserId: userId,
+      } as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create CFI booking request:", error);
+      res.status(500).json({ error: "Failed to create CFI booking request" });
+    }
+  });
+
+  app.post("/api/cfi/legal-acceptances", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const payload = {
+        ...req.body,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"],
+      };
+      const result = insertCfiLegalAcceptanceSchema.safeParse(payload);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const created = await storage.createCfiLegalAcceptance({ ...result.data, userId } as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to record CFI legal acceptance:", error);
+      res.status(500).json({ error: "Failed to record legal acceptance" });
+    }
+  });
+
+  app.get("/api/cfi/legal-acceptances", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const acceptanceType = typeof req.query.type === "string" ? req.query.type : "";
+      if (!acceptanceType) {
+        return res.status(400).json({ error: "Acceptance type required" });
+      }
+      const acceptance = await storage.getCfiLatestLegalAcceptance(userId, acceptanceType);
+      res.json(acceptance || null);
+    } catch (error) {
+      console.error("Failed to fetch CFI legal acceptance:", error);
+      res.status(500).json({ error: "Failed to fetch legal acceptance" });
+    }
+  });
 
   // Pilot Logbook Routes (authenticated users only)
   app.get("/api/logbook", isAuthenticated, async (req: any, res) => {

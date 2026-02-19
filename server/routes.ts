@@ -10689,6 +10689,31 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.get("/api/notams/health", async (_req, res) => {
+    try {
+      const [latest] = await db
+        .select({ updatedAt: notamsTable.updatedAt })
+        .from(notamsTable)
+        .orderBy(desc(notamsTable.updatedAt))
+        .limit(1);
+
+      const lastUpdatedAt = latest?.updatedAt ? new Date(latest.updatedAt) : null;
+      const maxAgeMinutes = Number(process.env.NOTAM_HEALTH_MAX_AGE_MINUTES || 60);
+      const ageMs = lastUpdatedAt ? Date.now() - lastUpdatedAt.getTime() : null;
+      const isStale = ageMs === null ? true : ageMs > maxAgeMinutes * 60 * 1000;
+
+      res.json({
+        ok: !isStale,
+        lastUpdatedAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
+        maxAgeMinutes,
+        isStale,
+      });
+    } catch (error) {
+      console.error("NOTAM health check failed:", error);
+      res.status(500).json({ ok: false, error: "Failed to check NOTAM health" });
+    }
+  });
+
   app.get("/api/notams/:icao", async (req, res) => {
     try {
       const requestedIcao = normalizeIcao(req.params.icao || "");
@@ -10806,31 +10831,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error: any) {
       console.error("NOTAM fetch failed:", error);
       res.status(500).json({ error: error.message || "Failed to fetch NOTAMs" });
-    }
-  });
-
-  app.get("/api/notams/health", async (_req, res) => {
-    try {
-      const [latest] = await db
-        .select({ updatedAt: notamsTable.updatedAt })
-        .from(notamsTable)
-        .orderBy(desc(notamsTable.updatedAt))
-        .limit(1);
-
-      const lastUpdatedAt = latest?.updatedAt ? new Date(latest.updatedAt) : null;
-      const maxAgeMinutes = Number(process.env.NOTAM_HEALTH_MAX_AGE_MINUTES || 60);
-      const ageMs = lastUpdatedAt ? Date.now() - lastUpdatedAt.getTime() : null;
-      const isStale = ageMs === null ? true : ageMs > maxAgeMinutes * 60 * 1000;
-
-      res.json({
-        ok: !isStale,
-        lastUpdatedAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
-        maxAgeMinutes,
-        isStale,
-      });
-    } catch (error) {
-      console.error("NOTAM health check failed:", error);
-      res.status(500).json({ ok: false, error: "Failed to check NOTAM health" });
     }
   });
 

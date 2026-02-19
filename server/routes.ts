@@ -1373,6 +1373,7 @@ let runwayCache: { data: Map<string, RunwayMeta[]>; expiresAt: number } | null =
 const NOTAM_CACHE_TTL_MS = 2 * 60 * 1000;
 const notamCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
+const TFR_EMPTY_CACHE_TTL_MS = 5 * 60 * 1000;
 const tfrCache = new Map<string, { data: any; expiresAt: number }>();
 const FAA_TFR_ARCGIS_URL = "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query";
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
@@ -1677,25 +1678,34 @@ function normalizeArcGisFeature(feature: any) {
 
 async function fetchArcGisTfrs() {
   try {
-    const url = `${FAA_TFR_ARCGIS_URL}?where=1%3D1&outFields=*&f=geojson&outSR=4326`;
+    const url = `${FAA_TFR_ARCGIS_URL}?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&outSR=4326`;
     const response = await fetchWithTimeout(
       url,
       { headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" } },
       8000
     );
-    if (!response.ok) return null;
+    if (!response.ok) {
+      return { data: null, error: `HTTP ${response.status}` };
+    }
     const payload = await response.json().catch(() => null);
-    if (!payload?.features || !Array.isArray(payload.features)) return null;
+    if (payload?.error) {
+      return { data: null, error: payload.error?.message || "ArcGIS error" };
+    }
+    if (!payload?.features || !Array.isArray(payload.features)) {
+      return { data: null, error: "ArcGIS response missing features" };
+    }
     const features = payload.features.map(normalizeArcGisFeature).filter(Boolean);
     return {
-      type: "FeatureCollection",
-      features,
-      updatedAt: new Date().toISOString(),
-      source: "faa-arcgis",
+      data: {
+        type: "FeatureCollection",
+        features,
+        updatedAt: new Date().toISOString(),
+        source: "faa-arcgis",
+      },
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("ArcGIS TFR fetch failed:", error);
-    return null;
+    return { data: null, error: error?.message || "ArcGIS fetch failed" };
   }
 }
 
@@ -10802,11 +10812,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const now = Date.now();
       const cached = tfrCache.get(cacheKey);
       const cacheValid = cached && cached.expiresAt > now;
+      const debug = String(req.query?.debug || "") === "1";
       const bbox = parseBboxParam(req.query?.bbox);
       const lat = Number(req.query?.lat);
       const lon = Number(req.query?.lon);
       const radiusNm = Number(req.query?.radiusNm);
       const hasRadiusFilter = Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(radiusNm);
+
+      let arcgisMeta: { attempted: boolean; ok: boolean; error?: string } | null = null;
 
       const buildPayload = async () => {
         const nowDate = new Date();
@@ -10850,8 +10863,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           .filter(Boolean);
 
         if (!features.length) {
-          const arcgis = await fetchArcGisTfrs();
-          if (arcgis) return arcgis;
+          const arcgisResult = await fetchArcGisTfrs();
+          arcgisMeta = {
+            attempted: true,
+            ok: Boolean(arcgisResult?.data),
+            error: arcgisResult?.error,
+          };
+          if (arcgisResult?.data) return arcgisResult.data;
         }
 
         return {
@@ -10868,7 +10886,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!payload) {
         try {
           payload = await buildPayload();
-          tfrCache.set(cacheKey, { data: payload, expiresAt: Date.now() + TFR_CACHE_TTL_MS });
+          const ttl = payload?.features?.length ? TFR_CACHE_TTL_MS : TFR_EMPTY_CACHE_TTL_MS;
+          tfrCache.set(cacheKey, { data: payload, expiresAt: Date.now() + ttl });
         } catch (error) {
           console.error("TFR fetch failed:", error);
           if (cached?.data) {
@@ -10901,11 +10920,17 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         });
       }
 
-      res.json({
+      const responsePayload: any = {
         ...payload,
         features: filteredFeatures,
         stale,
-      });
+      };
+
+      if (debug && arcgisMeta) {
+        responsePayload.debug = { arcgis: arcgisMeta };
+      }
+
+      res.json(responsePayload);
     } catch (error: any) {
       console.error("TFR fetch failed:", error);
       const cached = tfrCache.get("ALL");

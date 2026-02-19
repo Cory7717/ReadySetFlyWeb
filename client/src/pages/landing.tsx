@@ -883,52 +883,7 @@ export default function Landing() {
         </div>
       </div>
 
-            {/* Safety Tools In Context */}
-      <div className="bg-gradient-to-br from-blue-50 to-background dark:from-blue-950/20 dark:to-background py-12 sm:py-16">
-        <div className="container mx-auto px-4">
-          <Card className="max-w-4xl mx-auto border-primary/20">
-            <CardContent className="p-6 sm:p-8 space-y-6">
-              <div className="space-y-2 text-center">
-                <h2 className="text-2xl sm:text-3xl font-bold">Safety tools, surfaced at the right time</h2>
-                <p className="text-base sm:text-lg text-muted-foreground">
-                  RSF keeps the focus on the plan. As you build a route, the right calculators and trainers appear automatically.
-                </p>
-              </div>
-              <div className="grid gap-4 md:grid-cols-3 text-sm">
-                <div className="rounded-lg border p-4">
-                  <div className="font-semibold">Performance</div>
-                  <p className="text-muted-foreground">
-                    Density altitude and crosswind checks surface when conditions warrant.
-                  </p>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <div className="font-semibold">Training</div>
-                  <p className="text-muted-foreground">
-                    VOR, comms, and six-pack trainers appear when the route needs them.
-                  </p>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <div className="font-semibold">Post-flight</div>
-                  <p className="text-muted-foreground">
-                    Log the flight, update currency, and reflect once you are done.
-                  </p>
-                </div>
-              </div>
-              <div className="flex justify-center">
-                <Button asChild>
-                  <Link
-                    href="/pilot-tools"
-                    onClick={() => trackEvent("cta_click", { label: "pilot_tools_secondary", target: "/pilot-tools" })}
-                  >
-                    Explore pilot tools
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-{/* Features Section */}
+      {/* Features Section */}
       <div id="features" className="container mx-auto px-4 py-12 sm:py-16">
         <h2 className="text-2xl sm:text-3xl font-bold text-center mb-3">
           Plan. Brief. Train. Reflect.

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { useAuth } from "@/hooks/useAuth";
 
 const formatRate = (value?: number | null) => {
   if (!value && value !== 0) return "Rate on request";
@@ -28,6 +29,7 @@ const normalizeList = (value: unknown): string[] => {
 };
 
 export default function CfiDirectory() {
+  const { isAuthenticated } = useAuth();
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
   const [airport, setAirport] = useState("");
@@ -68,10 +70,20 @@ export default function CfiDirectory() {
             <Button asChild>
               <Link href="/dashboard/cfi">Become a CFI on RSF</Link>
             </Button>
+            {!isAuthenticated && (
+              <Button asChild variant="outline">
+                <Link href="/register">Create a CFI account</Link>
+              </Button>
+            )}
             <Button asChild variant="outline">
               <Link href="/cfi/student-terms">Student terms</Link>
             </Button>
           </div>
+          {!isAuthenticated && (
+            <p className="text-xs text-muted-foreground">
+              Already have an RSF account? <Link href="/login" className="text-primary underline">Sign in</Link> to publish your profile.
+            </p>
+          )}
         </div>
 
         <Card>

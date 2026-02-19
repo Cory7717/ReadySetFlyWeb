@@ -1374,6 +1374,7 @@ const NOTAM_CACHE_TTL_MS = 2 * 60 * 1000;
 const notamCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
 const tfrCache = new Map<string, { data: any; expiresAt: number }>();
+const FAA_TFR_ARCGIS_URL = "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query";
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
 
 function normalizeIcao(value: string) {
@@ -1625,6 +1626,77 @@ function getFeatureCentroid(feature: any) {
     lat: (bounds.minLat + bounds.maxLat) / 2,
     lon: (bounds.minLon + bounds.maxLon) / 2,
   };
+}
+
+function parseArcGisDate(value: any) {
+  if (!value) return null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Date(value).toISOString();
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+      return new Date(parsed).toISOString();
+    }
+  }
+  return null;
+}
+
+function normalizeArcGisFeature(feature: any) {
+  if (!feature?.geometry) return null;
+  const props = feature?.properties || {};
+  const notamId =
+    props.NOTAM ||
+    props.NOTAM_ID ||
+    props.NOTAMID ||
+    props.NOTAM_ID_1 ||
+    props.TFR_ID ||
+    props.NAME ||
+    props.OBJECTID;
+  const location = props.LOCATION || props.AREA || props.NAME || props.EVENT || props.CITY || null;
+  const reason = props.REASON || props.EVENT || props.TYPE || props.PURPOSE || null;
+  const altitudeParts = [props.LOWER_ALT, props.UPPER_ALT].filter(Boolean);
+  const altitude = altitudeParts.length ? altitudeParts.join(" - ") : props.ALTITUDE || props.ALT || null;
+  const effectiveAt = parseArcGisDate(props.START || props.START_DATE || props.EFFECTIVE || props.BEGIN);
+  const expiresAt = parseArcGisDate(props.END || props.END_DATE || props.EXPIRES || props.ENDDATE);
+
+  return {
+    ...feature,
+    properties: {
+      notamId: notamId ? String(notamId) : "TFR",
+      location,
+      reason,
+      altitude,
+      effectiveAt,
+      expiresAt,
+      source: "faa-arcgis",
+      raw: props,
+    },
+  };
+}
+
+async function fetchArcGisTfrs() {
+  try {
+    const url = `${FAA_TFR_ARCGIS_URL}?where=1%3D1&outFields=*&f=geojson&outSR=4326`;
+    const response = await fetchWithTimeout(
+      url,
+      { headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" } },
+      8000
+    );
+    if (!response.ok) return null;
+    const payload = await response.json().catch(() => null);
+    if (!payload?.features || !Array.isArray(payload.features)) return null;
+    const features = payload.features.map(normalizeArcGisFeature).filter(Boolean);
+    return {
+      type: "FeatureCollection",
+      features,
+      updatedAt: new Date().toISOString(),
+      source: "faa-arcgis",
+    };
+  } catch (error) {
+    console.error("ArcGIS TFR fetch failed:", error);
+    return null;
+  }
 }
 
 function extractLineValue(text: string, label: string) {
@@ -10777,10 +10849,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           })
           .filter(Boolean);
 
+        if (!features.length) {
+          const arcgis = await fetchArcGisTfrs();
+          if (arcgis) return arcgis;
+        }
+
         return {
           type: "FeatureCollection",
           features,
           updatedAt: new Date().toISOString(),
+          source: "notam-cache",
         };
       };
 

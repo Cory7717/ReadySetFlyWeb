@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { BookOpen, ClipboardList, CalendarDays, Navigation2, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle } from "lucide-react";
+import { BookOpen, CalendarDays, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -360,13 +360,24 @@ export default function Landing() {
               </Button>
             ))}
           </div>
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">CFI instructor?</span>
+            <Button size="sm" variant="secondary" asChild>
+              <Link
+                href="/cfi"
+                onClick={() => trackEvent("starting_point_tool_click", { tool_slug: "cfi-directory" })}
+              >
+                Create your profile
+              </Link>
+            </Button>
+          </div>
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
               {
                 id: "experienced_pilot",
                 title: "Experienced Pilot",
                 subtitle: "Planning, performance, currency, and proficiency tools",
-                primary: { label: "Open flight planning", href: "/flight-planner", track: "start_experienced_primary" },
+                primary: { label: "Open pilot tools", href: "/pilot-tools", track: "start_experienced_primary" },
                 links: [
                   { label: "Pilot calculators", href: "/pilot-tools", track: "start_experienced_calculators" },
                   { label: "Digital logbook", href: "/logbook", track: "start_experienced_logbook" },
@@ -440,75 +451,6 @@ export default function Landing() {
                 </CardContent>
               </Card>
             ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Pilot Tools Spotlight */}
-      <div className="py-8 sm:py-10">
-        <div className="container mx-auto px-4">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] items-center">
-            <div className="space-y-3">
-              <Badge variant="outline" className="w-fit">Pilot Tools</Badge>
-              <h2 className="text-2xl sm:text-3xl font-semibold">Plan, log, and stay current</h2>
-              <p className="text-sm sm:text-base text-muted-foreground">
-                Jump straight into the Flight Planner and Logbook. Free users can start immediately, with upgrades
-                available for saved plans, alerts, and analytics.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Button asChild>
-                  <Link
-                    href="/flight-planner"
-                    onClick={() => trackEvent("cta_click", { label: "pilot_tools_planner", target: "/flight-planner" })}
-                  >
-                    Open Flight Planner
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link
-                    href="/logbook"
-                    onClick={() => trackEvent("cta_click", { label: "pilot_tools_logbook", target: "/logbook" })}
-                  >
-                    Open Logbook
-                  </Link>
-                </Button>
-              </div>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Card className="border-muted-foreground/20">
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <Navigation2 className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">Flight Planner</CardTitle>
-                      <CardDescription>Route, weather, and advisory flow.</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                  Build routes, review NOTAMs, and keep one plan saved for free. RSF Pro adds unlimited plans and
-                  advanced analysis.
-                </CardContent>
-              </Card>
-              <Card className="border-muted-foreground/20">
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <ClipboardList className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">Logbook</CardTitle>
-                      <CardDescription>Entries, totals, and currency.</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">
-                  Track flights and export data. Upgrade to unlock alerts, endorsements, and analytics.
-                </CardContent>
-              </Card>
-            </div>
           </div>
         </div>
       </div>
@@ -758,53 +700,6 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* Planning-first flow */}
-      <div className="py-10 sm:py-14">
-        <div className="container mx-auto px-4 space-y-8">
-          <div className="text-center space-y-2">
-            <div className="text-sm text-muted-foreground">Planning-first flow</div>
-            <h2 className="text-2xl sm:text-3xl font-semibold">RSF quietly watches the whole flight</h2>
-            <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto">
-              Before, during, and after -- planning is the spine. Tools appear when they matter, not as a menu.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-4">
-            {[
-              {
-                title: "Plan",
-                description: "Enter route, altitude, and aircraft details.",
-                icon: Navigation2,
-              },
-              {
-                title: "Assess",
-                description: "Get route analysis that surfaces issues early.",
-                icon: Shield,
-              },
-              {
-                title: "Train",
-                description: "Contextual trainers appear based on your flight.",
-                icon: BookOpen,
-              },
-              {
-                title: "Log",
-                description: "Capture the flight and reflect while it's fresh.",
-                icon: ClipboardList,
-              },
-            ].map((item) => (
-              <Card key={item.title} className="border-muted-foreground/20">
-                <CardContent className="pt-6 space-y-2 text-center">
-                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <item.icon className="h-5 w-5" />
-                  </div>
-                  <div className="text-base font-semibold">{item.title}</div>
-                  <p className="text-xs text-muted-foreground">{item.description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-      </div>
-      </div>
-
       {/* Safety-first intent */}
       <div className="py-10 sm:py-12 bg-muted/30">
         <div className="container mx-auto px-4">
@@ -1022,10 +917,10 @@ export default function Landing() {
               <div className="flex justify-center">
                 <Button asChild>
                   <Link
-                    href="/flight-planner"
-                    onClick={() => trackEvent("cta_click", { label: "plan_flight_secondary", target: "/flight-planner" })}
+                    href="/pilot-tools"
+                    onClick={() => trackEvent("cta_click", { label: "pilot_tools_secondary", target: "/pilot-tools" })}
                   >
-                    Plan a flight
+                    Explore pilot tools
                   </Link>
                 </Button>
               </div>
@@ -1091,18 +986,18 @@ export default function Landing() {
       <div className="bg-muted/50 py-12 sm:py-16">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-2xl sm:text-3xl font-bold mb-4">
-            Ready to Plan a Flight?
+            Ready to get started?
           </h2>
           <p className="text-base sm:text-xl text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-            Build a route and get route analysis in minutes.
+            Jump into planning tools, training, and the logbook in minutes.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button asChild size="lg" data-testid="button-cta-plan-flight">
               <Link
-                href="/flight-planner"
-                onClick={() => trackEvent("cta_click", { label: "plan_flight_cta", target: "/flight-planner" })}
+                href="/pilot-tools"
+                onClick={() => trackEvent("cta_click", { label: "pilot_tools_cta", target: "/pilot-tools" })}
               >
-                Plan a Flight
+                Explore Pilot Tools
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" data-testid="button-cta-student-hub">

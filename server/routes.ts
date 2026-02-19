@@ -1375,7 +1375,9 @@ const notamCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
 const TFR_EMPTY_CACHE_TTL_MS = 5 * 60 * 1000;
 const tfrCache = new Map<string, { data: any; expiresAt: number }>();
+const TFR_ARCGIS_PROXY_URL = (process.env.TFR_ARCGIS_PROXY_URL || "").trim();
 const FAA_TFR_ARCGIS_URLS = [
+  ...(TFR_ARCGIS_PROXY_URL ? [TFR_ARCGIS_PROXY_URL] : []),
   "https://gis.faa.gov/arcgis/rest/services/TFMS/TFR/MapServer/0/query",
   "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query",
 ];

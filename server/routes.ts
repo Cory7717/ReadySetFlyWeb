@@ -1375,7 +1375,10 @@ const notamCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
 const TFR_EMPTY_CACHE_TTL_MS = 5 * 60 * 1000;
 const tfrCache = new Map<string, { data: any; expiresAt: number }>();
-const FAA_TFR_ARCGIS_URL = "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query";
+const FAA_TFR_ARCGIS_URLS = [
+  "https://gis.faa.gov/arcgis/rest/services/TFMS/TFR/MapServer/0/query",
+  "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query",
+];
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
 
 function normalizeIcao(value: string) {
@@ -1677,36 +1680,47 @@ function normalizeArcGisFeature(feature: any) {
 }
 
 async function fetchArcGisTfrs() {
-  try {
-    const url = `${FAA_TFR_ARCGIS_URL}?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&outSR=4326`;
-    const response = await fetchWithTimeout(
-      url,
-      { headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" } },
-      8000
-    );
-    if (!response.ok) {
-      return { data: null, error: `HTTP ${response.status}` };
+  let lastError = "ArcGIS fetch failed";
+  let lastUrl = "";
+
+  for (const baseUrl of FAA_TFR_ARCGIS_URLS) {
+    const url = `${baseUrl}?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&outSR=4326`;
+    lastUrl = baseUrl;
+    try {
+      const response = await fetchWithTimeout(
+        url,
+        { headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" } },
+        8000
+      );
+      if (!response.ok) {
+        lastError = `HTTP ${response.status}`;
+        continue;
+      }
+      const payload = await response.json().catch(() => null);
+      if (payload?.error) {
+        lastError = payload.error?.message || "ArcGIS error";
+        continue;
+      }
+      if (!payload?.features || !Array.isArray(payload.features)) {
+        lastError = "ArcGIS response missing features";
+        continue;
+      }
+      const features = payload.features.map(normalizeArcGisFeature).filter(Boolean);
+      return {
+        data: {
+          type: "FeatureCollection",
+          features,
+          updatedAt: new Date().toISOString(),
+          source: "faa-arcgis",
+        },
+      };
+    } catch (error: any) {
+      console.error("ArcGIS TFR fetch failed:", error);
+      lastError = error?.message || "ArcGIS fetch failed";
     }
-    const payload = await response.json().catch(() => null);
-    if (payload?.error) {
-      return { data: null, error: payload.error?.message || "ArcGIS error" };
-    }
-    if (!payload?.features || !Array.isArray(payload.features)) {
-      return { data: null, error: "ArcGIS response missing features" };
-    }
-    const features = payload.features.map(normalizeArcGisFeature).filter(Boolean);
-    return {
-      data: {
-        type: "FeatureCollection",
-        features,
-        updatedAt: new Date().toISOString(),
-        source: "faa-arcgis",
-      },
-    };
-  } catch (error: any) {
-    console.error("ArcGIS TFR fetch failed:", error);
-    return { data: null, error: error?.message || "ArcGIS fetch failed" };
   }
+
+  return { data: null, error: `${lastError} (${lastUrl})` };
 }
 
 function extractLineValue(text: string, label: string) {

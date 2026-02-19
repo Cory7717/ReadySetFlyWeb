@@ -1372,7 +1372,7 @@ const RUNWAY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let runwayCache: { data: Map<string, RunwayMeta[]>; expiresAt: number } | null = null;
 const NOTAM_CACHE_TTL_MS = 2 * 60 * 1000;
 const notamCache = new Map<string, { data: any; expiresAt: number }>();
-const TFR_CACHE_TTL_MS = 2 * 60 * 1000;
+const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
 const tfrCache = new Map<string, { data: any; expiresAt: number }>();
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
 
@@ -1570,6 +1570,61 @@ function parseTfrPolygon(text: string) {
   }
 
   return points;
+}
+
+function parseBboxParam(value: unknown) {
+  if (typeof value !== "string") return null;
+  const parts = value.split(",").map((item) => Number(item.trim()));
+  if (parts.length !== 4 || parts.some((num) => !Number.isFinite(num))) return null;
+  const [minLon, minLat, maxLon, maxLat] = parts;
+  return { minLon, minLat, maxLon, maxLat };
+}
+
+function getFeatureBounds(feature: any) {
+  const coords: [number, number][] = [];
+  const geometry = feature?.geometry;
+  if (!geometry) return null;
+  const collect = (arr: any) => {
+    if (!Array.isArray(arr)) return;
+    if (typeof arr[0] === "number" && typeof arr[1] === "number") {
+      coords.push([arr[0], arr[1]]);
+      return;
+    }
+    arr.forEach(collect);
+  };
+  collect(geometry.coordinates);
+  if (!coords.length) return null;
+  let minLon = coords[0][0];
+  let maxLon = coords[0][0];
+  let minLat = coords[0][1];
+  let maxLat = coords[0][1];
+  coords.forEach(([lon, lat]) => {
+    if (lon < minLon) minLon = lon;
+    if (lon > maxLon) maxLon = lon;
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+  });
+  return { minLon, minLat, maxLon, maxLat };
+}
+
+function featureIntersectsBbox(feature: any, bbox: { minLon: number; minLat: number; maxLon: number; maxLat: number }) {
+  const bounds = getFeatureBounds(feature);
+  if (!bounds) return false;
+  return !(
+    bounds.maxLon < bbox.minLon ||
+    bounds.minLon > bbox.maxLon ||
+    bounds.maxLat < bbox.minLat ||
+    bounds.minLat > bbox.maxLat
+  );
+}
+
+function getFeatureCentroid(feature: any) {
+  const bounds = getFeatureBounds(feature);
+  if (!bounds) return null;
+  return {
+    lat: (bounds.minLat + bounds.maxLat) / 2,
+    lon: (bounds.minLon + bounds.maxLon) / 2,
+  };
 }
 
 function extractLineValue(text: string, label: string) {
@@ -10671,72 +10726,115 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/tfrs", async (req, res) => {
     try {
-      const cacheKey = String(req.query?.icao || "all").toUpperCase();
+      const cacheKey = "ALL";
+      const now = Date.now();
       const cached = tfrCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) {
-        return res.json(cached.data);
-      }
+      const cacheValid = cached && cached.expiresAt > now;
+      const bbox = parseBboxParam(req.query?.bbox);
+      const lat = Number(req.query?.lat);
+      const lon = Number(req.query?.lon);
+      const radiusNm = Number(req.query?.radiusNm);
+      const hasRadiusFilter = Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(radiusNm);
 
-      const altIcao =
-        cacheKey.length === 4 && cacheKey.startsWith("K") ? cacheKey.slice(1) : null;
-      const now = new Date();
-      const rows = await db
-        .select()
-        .from(notamsTable)
-        .where(or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, now)))
-        .orderBy(desc(notamsTable.effectiveAt), desc(notamsTable.createdAt))
-        .limit(500);
+      const buildPayload = async () => {
+        const nowDate = new Date();
+        const rows = await db
+          .select()
+          .from(notamsTable)
+          .where(or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, nowDate)))
+          .orderBy(desc(notamsTable.effectiveAt), desc(notamsTable.createdAt))
+          .limit(500);
 
-      const features = rows
-        .filter((row) => row.text && isTfrNotam(row.text, row.notamId))
-        .map((row) => {
-          if (
-            cacheKey !== "ALL" &&
-            row.icao !== cacheKey &&
-            (!altIcao || row.icao !== altIcao)
-          ) {
-            return null;
-          }
-          const points = parseTfrPolygon(row.text || "");
-          if (!points || points.length < 3) return null;
+        const features = rows
+          .filter((row) => row.text && isTfrNotam(row.text, row.notamId))
+          .map((row) => {
+            const points = parseTfrPolygon(row.text || "");
+            if (!points || points.length < 3) return null;
 
-          const reason = extractLineValue(row.text, "Reason for NOTAM");
-          const location = extractLineValue(row.text, "Location");
-          const tfrType = extractLineValue(row.text, "Type");
-          const altitude = extractLineValue(row.text, "Altitude");
+            const reason = extractLineValue(row.text, "Reason for NOTAM");
+            const location = extractLineValue(row.text, "Location");
+            const tfrType = extractLineValue(row.text, "Type");
+            const altitude = extractLineValue(row.text, "Altitude");
 
-          return {
-            type: "Feature",
-            geometry: {
-              type: "Polygon",
-              coordinates: [points.map((p) => [p.lon, p.lat])],
-            },
-            properties: {
-              notamId: row.notamId,
-              icao: row.icao,
-              location,
-              reason,
-              tfrType,
-              altitude,
-              effectiveAt: row.effectiveAt ? row.effectiveAt.toISOString() : null,
-              expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
-              text: row.text,
-            },
-          };
-        })
-        .filter(Boolean);
+            return {
+              type: "Feature",
+              geometry: {
+                type: "Polygon",
+                coordinates: [points.map((p) => [p.lon, p.lat])],
+              },
+              properties: {
+                notamId: row.notamId,
+                icao: row.icao,
+                location,
+                reason,
+                tfrType,
+                altitude,
+                effectiveAt: row.effectiveAt ? row.effectiveAt.toISOString() : null,
+                expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+                text: row.text,
+              },
+            };
+          })
+          .filter(Boolean);
 
-      const payload = {
-        type: "FeatureCollection",
-        features,
-        updatedAt: new Date().toISOString(),
+        return {
+          type: "FeatureCollection",
+          features,
+          updatedAt: new Date().toISOString(),
+        };
       };
 
-      tfrCache.set(cacheKey, { data: payload, expiresAt: Date.now() + TFR_CACHE_TTL_MS });
-      res.json(payload);
+      let payload = cacheValid ? cached?.data : null;
+      let stale = false;
+
+      if (!payload) {
+        try {
+          payload = await buildPayload();
+          tfrCache.set(cacheKey, { data: payload, expiresAt: Date.now() + TFR_CACHE_TTL_MS });
+        } catch (error) {
+          console.error("TFR fetch failed:", error);
+          if (cached?.data) {
+            payload = cached.data;
+            stale = true;
+          } else {
+            return res.status(502).json({ error: "Failed to fetch TFRs", stale: false });
+          }
+        }
+      }
+
+      const icaoFilter = String(req.query?.icao || "").toUpperCase();
+      const altIcao = icaoFilter.length === 4 && icaoFilter.startsWith("K") ? icaoFilter.slice(1) : null;
+
+      let filteredFeatures = (payload.features || []).filter((feature: any) => {
+        if (!icaoFilter) return true;
+        const icao = feature?.properties?.icao;
+        return icao === icaoFilter || (altIcao && icao === altIcao);
+      });
+
+      if (bbox) {
+        filteredFeatures = filteredFeatures.filter((feature: any) => featureIntersectsBbox(feature, bbox));
+      }
+
+      if (hasRadiusFilter) {
+        filteredFeatures = filteredFeatures.filter((feature: any) => {
+          const centroid = getFeatureCentroid(feature);
+          if (!centroid) return false;
+          return distanceNmBetween(lat, lon, centroid.lat, centroid.lon) <= radiusNm;
+        });
+      }
+
+      res.json({
+        ...payload,
+        features: filteredFeatures,
+        stale,
+      });
     } catch (error: any) {
       console.error("TFR fetch failed:", error);
-      res.status(500).json({ error: "Failed to fetch TFRs" });
+      const cached = tfrCache.get("ALL");
+      if (cached?.data) {
+        return res.status(200).json({ ...cached.data, stale: true });
+      }
+      res.status(502).json({ error: "Failed to fetch TFRs", stale: false });
     }
   });
 

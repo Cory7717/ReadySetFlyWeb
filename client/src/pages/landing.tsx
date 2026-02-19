@@ -272,6 +272,10 @@ export default function Landing() {
       container.style.scrollBehavior = "";
     };
   }, [feedEvents.length, eventsHovering, autoPauseUntil]);
+
+  useEffect(() => {
+    trackEvent("starting_point_section_view");
+  }, []);
   
   return (
     <div className="min-h-screen">
@@ -327,6 +331,117 @@ export default function Landing() {
             </div>
           </div>
       </div>
+      </div>
+
+      {/* Choose your starting point */}
+      <div className="py-10 sm:py-12">
+        <div className="container mx-auto px-4">
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-semibold">Choose your starting point</h2>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              RSF supports pilots at every stage -- pick a starting point.
+            </p>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">Popular tools:</span>
+            {[
+              { label: "EB-6 Advanced", href: "/tools/eb6", slug: "eb6-advanced" },
+              { label: "VOR/Knob Trainer", href: "/student/vor-trainer", slug: "vor-knob" },
+              { label: "Six-Pack Panel", href: "/student/six-pack-trainer", slug: "six-pack" },
+              { label: "IFR Tools", href: "/ifr-tools", slug: "ifr-tools" },
+            ].map((tool) => (
+              <Button key={tool.slug} size="sm" variant="outline" asChild>
+                <Link
+                  href={tool.href}
+                  onClick={() => trackEvent("starting_point_tool_click", { tool_slug: tool.slug })}
+                >
+                  {tool.label}
+                </Link>
+              </Button>
+            ))}
+          </div>
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                id: "experienced_pilot",
+                title: "Experienced Pilot",
+                subtitle: "Planning, performance, currency, and proficiency tools",
+                primary: { label: "Open flight planning", href: "/flight-planner", track: "start_experienced_primary" },
+                links: [
+                  { label: "Pilot calculators", href: "/pilot-tools", track: "start_experienced_calculators" },
+                  { label: "Digital logbook", href: "/logbook", track: "start_experienced_logbook" },
+                  { label: "Currency tracking", href: "/logbook", track: "start_experienced_currency" },
+                  { label: "IFR tools", href: "/ifr-tools", track: "start_experienced_ifr" },
+                ],
+              },
+              {
+                id: "student_pilot",
+                title: "Student Pilot",
+                subtitle: "Training guidance, fundamentals, and progress tracking",
+                primary: { label: "Open Student Hub", href: "/student", track: "start_student_primary" },
+                links: [
+                  { label: "6-Pack trainer", href: "/student/six-pack-trainer", track: "start_student_six_pack" },
+                  { label: "Training syllabi", href: "/student/syllabi", track: "start_student_syllabi" },
+                  { label: "Cost calculator", href: "/student/cost", track: "start_student_cost" },
+                  { label: "Student weather", href: "/student/weather", track: "start_student_weather" },
+                ],
+              },
+              {
+                id: "rent_aircraft",
+                title: "Rent an Aircraft",
+                subtitle: "Find rentals, flight schools, and verified access",
+                primary: { label: "Browse rentals", href: "/rentals", track: "start_rentals_primary" },
+                links: [
+                  { label: "Flight schools", href: "/rentals", track: "start_rentals_schools" },
+                  { label: "Verification & safety", href: "/faq", track: "start_rentals_verification" },
+                ],
+              },
+              {
+                id: "marketplace_jobs",
+                title: "Marketplace & Jobs",
+                subtitle: "Aircraft, jobs, services, and charter listings",
+                primary: { label: "Open marketplace", href: "/marketplace", track: "start_marketplace_primary" },
+                links: [
+                  { label: "Aircraft listings", href: "/marketplace", track: "start_marketplace_aircraft" },
+                  { label: "Aviation jobs", href: "/marketplace", track: "start_marketplace_jobs" },
+                  { label: "Services & charter", href: "/marketplace", track: "start_marketplace_services" },
+                ],
+              },
+            ].map((card) => (
+              <Card key={card.title} className="border-muted-foreground/20">
+                <CardContent className="p-5 space-y-4">
+                  <div className="space-y-2">
+                    <div className="text-lg font-semibold">{card.title}</div>
+                    <p className="text-sm text-muted-foreground">{card.subtitle}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {card.links.map((link) => (
+                      <Button key={link.label} size="sm" variant="outline" asChild>
+                        <Link
+                          href={link.href}
+                          onClick={() => trackEvent("cta_click", { label: link.track, target: link.href })}
+                        >
+                          {link.label}
+                        </Link>
+                      </Button>
+                    ))}
+                  </div>
+                  <Button size="sm" variant="secondary" className="w-fit" asChild>
+                    <Link
+                      href={card.primary.href}
+                      onClick={() => {
+                        trackEvent("starting_point_card_click", { card_id: card.id });
+                        trackEvent("cta_click", { label: card.primary.track, target: card.primary.href });
+                      }}
+                    >
+                      {card.primary.label}
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Pilot Tools Spotlight */}
@@ -639,92 +754,6 @@ export default function Landing() {
                 </div>
               </CardContent>
             </Card>
-          </div>
-        </div>
-      </div>
-
-      {/* Choose your starting point */}
-      <div className="py-10 sm:py-12">
-        <div className="container mx-auto px-4">
-          <div className="text-center space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-semibold">Choose your starting point</h2>
-            <p className="text-sm sm:text-base text-muted-foreground">
-              RSF supports pilots at every stage -- pick a starting point.
-            </p>
-          </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {[
-              {
-                title: "Experienced Pilot",
-                subtitle: "Planning, performance, currency, and proficiency tools",
-                primary: { label: "Open flight planning", href: "/flight-planner", track: "start_experienced_primary" },
-                links: [
-                  { label: "Pilot calculators", href: "/pilot-tools", track: "start_experienced_calculators" },
-                  { label: "Digital logbook", href: "/logbook", track: "start_experienced_logbook" },
-                  { label: "Currency tracking", href: "/logbook", track: "start_experienced_currency" },
-                  { label: "IFR tools", href: "/ifr-tools", track: "start_experienced_ifr" },
-                ],
-              },
-              {
-                title: "Student Pilot",
-                subtitle: "Training guidance, fundamentals, and progress tracking",
-                primary: { label: "Open Student Hub", href: "/student", track: "start_student_primary" },
-                links: [
-                  { label: "6-Pack trainer", href: "/student/six-pack-trainer", track: "start_student_six_pack" },
-                  { label: "Training syllabi", href: "/student/syllabi", track: "start_student_syllabi" },
-                  { label: "Cost calculator", href: "/student/cost", track: "start_student_cost" },
-                  { label: "Student weather", href: "/student/weather", track: "start_student_weather" },
-                ],
-              },
-              {
-                title: "Rent an Aircraft",
-                subtitle: "Find rentals, flight schools, and verified access",
-                primary: { label: "Browse rentals", href: "/rentals", track: "start_rentals_primary" },
-                links: [
-                  { label: "Flight schools", href: "/rentals", track: "start_rentals_schools" },
-                  { label: "Verification & safety", href: "/faq", track: "start_rentals_verification" },
-                ],
-              },
-              {
-                title: "Marketplace & Jobs",
-                subtitle: "Aircraft, jobs, services, and charter listings",
-                primary: { label: "Open marketplace", href: "/marketplace", track: "start_marketplace_primary" },
-                links: [
-                  { label: "Aircraft listings", href: "/marketplace", track: "start_marketplace_aircraft" },
-                  { label: "Aviation jobs", href: "/marketplace", track: "start_marketplace_jobs" },
-                  { label: "Services & charter", href: "/marketplace", track: "start_marketplace_services" },
-                ],
-              },
-            ].map((card) => (
-              <Card key={card.title} className="border-muted-foreground/20">
-                <CardContent className="p-5 space-y-4">
-                  <div className="space-y-2">
-                    <div className="text-lg font-semibold">{card.title}</div>
-                    <p className="text-sm text-muted-foreground">{card.subtitle}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {card.links.map((link) => (
-                      <Button key={link.label} size="sm" variant="outline" asChild>
-                        <Link
-                          href={link.href}
-                          onClick={() => trackEvent("cta_click", { label: link.track, target: link.href })}
-                        >
-                          {link.label}
-                        </Link>
-                      </Button>
-                    ))}
-                  </div>
-                  <Button size="sm" variant="secondary" className="w-fit" asChild>
-                    <Link
-                      href={card.primary.href}
-                      onClick={() => trackEvent("cta_click", { label: card.primary.track, target: card.primary.href })}
-                    >
-                      {card.primary.label}
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
           </div>
         </div>
       </div>

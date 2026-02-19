@@ -13,9 +13,11 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, Navigation, Search } from "lucide-react";
 import { apiUrl } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 
 type TfrFeatureCollection = FeatureCollection & {
   updatedAt?: string;
+  stale?: boolean;
 };
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
@@ -28,19 +30,26 @@ export default function TfrMap() {
   const [query, setQuery] = useState("");
   const [icaoFilter, setIcaoFilter] = useState(initialIcao.toUpperCase());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activeBbox, setActiveBbox] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const mapRef = useRef<L.Map | null>(null);
 
   const normalizedIcao = icaoFilter.trim().toUpperCase();
   const activeIcao = ICAO_REGEX.test(normalizedIcao) ? normalizedIcao : "";
 
   const { data, isLoading, error, refetch } = useQuery<TfrFeatureCollection>({
-    queryKey: ["/api/tfrs", activeIcao],
+    queryKey: ["/api/tfrs", activeIcao, activeBbox],
     queryFn: async () => {
-      const url = activeIcao ? `/api/tfrs?icao=${activeIcao}` : "/api/tfrs";
+      const params = new URLSearchParams();
+      if (activeIcao) params.set("icao", activeIcao);
+      if (activeBbox) params.set("bbox", activeBbox);
+      const url = params.toString() ? `/api/tfrs?${params}` : "/api/tfrs";
       const res = await fetch(apiUrl(url), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch TFRs");
       return res.json();
     },
+    refetchInterval: 1000 * 60 * 60,
+    refetchIntervalInBackground: true,
   });
 
   const features = data?.features ?? [];
@@ -62,6 +71,11 @@ export default function TfrMap() {
     features: filtered,
   };
 
+  const selectedFeature = useMemo(() => {
+    if (!selectedId) return null;
+    return filtered.find((feature: any) => feature?.properties?.notamId === selectedId) || null;
+  }, [filtered, selectedId]);
+
   const bounds = useMemo(() => {
     if (!filtered.length) return null;
     const allCoords: [number, number][] = [];
@@ -74,6 +88,57 @@ export default function TfrMap() {
     if (!allCoords.length) return null;
     return L.latLngBounds(allCoords);
   }, [filtered]);
+
+  const handleRefresh = () => {
+    trackEvent("tfr_map_refresh");
+    refetch();
+  };
+
+  const handleSearchArea = () => {
+    if (!mapRef.current) return;
+    const mapBounds = mapRef.current.getBounds();
+    const bbox = [
+      mapBounds.getWest().toFixed(5),
+      mapBounds.getSouth().toFixed(5),
+      mapBounds.getEast().toFixed(5),
+      mapBounds.getNorth().toFixed(5),
+    ].join(",");
+    setActiveBbox(bbox);
+    trackEvent("tfr_bbox_search", { bbox });
+  };
+
+  const clearAreaFilter = () => {
+    setActiveBbox(null);
+  };
+
+  const handleFeatureClick = (feature: any) => {
+    const featureId = feature?.properties?.notamId || null;
+    if (!featureId) return;
+    setSelectedId(featureId);
+    trackEvent("tfr_selected", { tfr_id: featureId });
+    if (mapRef.current) {
+      const layer = L.geoJSON(feature);
+      const featureBounds = layer.getBounds();
+      if (featureBounds.isValid()) {
+        mapRef.current.fitBounds(featureBounds.pad(0.2));
+      }
+    }
+  };
+
+  const featureStyle = (feature: any) => {
+    const featureId = feature?.properties?.notamId;
+    const isSelected = selectedId && featureId === selectedId;
+    return {
+      color: isSelected ? "#0ea5e9" : "#f97316",
+      weight: isSelected ? 3 : 2,
+      fillColor: isSelected ? "#0ea5e9" : "#f97316",
+      fillOpacity: isSelected ? 0.35 : 0.25,
+    };
+  };
+
+  useEffect(() => {
+    trackEvent("tfr_map_view");
+  }, []);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -124,12 +189,26 @@ export default function TfrMap() {
                 />
               </div>
             </div>
-            <Button variant="outline" onClick={() => refetch()}>
+            <Button variant="outline" onClick={handleRefresh}>
               Refresh
             </Button>
+            <Button variant="secondary" onClick={handleSearchArea}>
+              Search this map area
+            </Button>
+            {activeBbox && (
+              <Button variant="ghost" onClick={clearAreaFilter}>
+                Clear area filter
+              </Button>
+            )}
             <Badge variant="outline">NOTAMs powered by FAA SWIM</Badge>
           </CardContent>
         </Card>
+
+        {data?.stale && (
+          <Alert>
+            <AlertDescription>Data may be up to 1 hour old while we reconnect to the upstream feed.</AlertDescription>
+          </Alert>
+        )}
 
         {error && (
           <Alert variant="destructive">
@@ -175,12 +254,16 @@ export default function TfrMap() {
                   />
                   <GeoJSON
                     data={geoJson}
-                    style={() => ({
-                      color: "#f97316",
-                      weight: 2,
-                      fillColor: "#f97316",
-                      fillOpacity: 0.25,
-                    })}
+                    style={featureStyle}
+                    onEachFeature={(feature, layer) => {
+                      const notamId = (feature as any)?.properties?.notamId;
+                      if (notamId) {
+                        layer.bindTooltip(String(notamId), { sticky: true });
+                      }
+                      layer.on({
+                        click: () => handleFeatureClick(feature),
+                      });
+                    }}
                   />
                 </MapContainer>
               </div>
@@ -193,11 +276,35 @@ export default function TfrMap() {
               <CardDescription>Quick reference list</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {selectedFeature && (
+                <div className="rounded-lg border p-3 text-sm space-y-1 bg-muted/30">
+                  <div className="font-semibold">{selectedFeature.properties?.notamId}</div>
+                  {selectedFeature.properties?.location && (
+                    <div className="text-muted-foreground">{selectedFeature.properties.location}</div>
+                  )}
+                  {selectedFeature.properties?.reason && (
+                    <div className="text-muted-foreground">{selectedFeature.properties.reason}</div>
+                  )}
+                  {selectedFeature.properties?.altitude && (
+                    <div className="text-muted-foreground">Altitude: {selectedFeature.properties.altitude}</div>
+                  )}
+                  {selectedFeature.properties?.effectiveAt && (
+                    <div className="text-xs text-muted-foreground">Effective: {selectedFeature.properties.effectiveAt}</div>
+                  )}
+                  {selectedFeature.properties?.expiresAt && (
+                    <div className="text-xs text-muted-foreground">Expires: {selectedFeature.properties.expiresAt}</div>
+                  )}
+                </div>
+              )}
               {filtered.length === 0 && (
                 <p className="text-sm text-muted-foreground">No TFRs match this filter.</p>
               )}
               {filtered.slice(0, 6).map((feature: any) => (
-                <div key={feature.properties?.notamId} className="rounded-lg border p-3 text-sm space-y-1">
+                <div
+                  key={feature.properties?.notamId}
+                  className="rounded-lg border p-3 text-sm space-y-1 cursor-pointer hover:border-primary/40"
+                  onClick={() => handleFeatureClick(feature)}
+                >
                   <div className="font-semibold">{feature.properties?.notamId}</div>
                   {feature.properties?.location && (
                     <div className="text-muted-foreground">{feature.properties.location}</div>

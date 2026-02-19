@@ -1682,6 +1682,7 @@ function normalizeArcGisFeature(feature: any) {
 async function fetchArcGisTfrs() {
   let lastError = "ArcGIS fetch failed";
   let lastUrl = "";
+  const attempts: Array<{ url: string; ok: boolean; status?: number; error?: string }> = [];
 
   for (const baseUrl of FAA_TFR_ARCGIS_URLS) {
     const url = `${baseUrl}?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&outSR=4326`;
@@ -1689,20 +1690,29 @@ async function fetchArcGisTfrs() {
     try {
       const response = await fetchWithTimeout(
         url,
-        { headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" } },
+        {
+          headers: {
+            "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+            "Referer": "https://tfr.faa.gov",
+            "Origin": "https://tfr.faa.gov",
+          },
+        },
         8000
       );
       if (!response.ok) {
         lastError = `HTTP ${response.status}`;
+        attempts.push({ url: baseUrl, ok: false, status: response.status, error: lastError });
         continue;
       }
       const payload = await response.json().catch(() => null);
       if (payload?.error) {
         lastError = payload.error?.message || "ArcGIS error";
+        attempts.push({ url: baseUrl, ok: false, error: lastError });
         continue;
       }
       if (!payload?.features || !Array.isArray(payload.features)) {
         lastError = "ArcGIS response missing features";
+        attempts.push({ url: baseUrl, ok: false, error: lastError });
         continue;
       }
       const features = payload.features.map(normalizeArcGisFeature).filter(Boolean);
@@ -1713,14 +1723,16 @@ async function fetchArcGisTfrs() {
           updatedAt: new Date().toISOString(),
           source: "faa-arcgis",
         },
+        attempts,
       };
     } catch (error: any) {
       console.error("ArcGIS TFR fetch failed:", error);
       lastError = error?.message || "ArcGIS fetch failed";
+      attempts.push({ url: baseUrl, ok: false, error: lastError });
     }
   }
 
-  return { data: null, error: `${lastError} (${lastUrl})` };
+  return { data: null, error: `${lastError} (${lastUrl})`, attempts };
 }
 
 function extractLineValue(text: string, label: string) {
@@ -10834,7 +10846,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const radiusNm = Number(req.query?.radiusNm);
       const hasRadiusFilter = Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(radiusNm);
 
-      let arcgisMeta: { attempted: boolean; ok: boolean; error?: string } | null = null;
+      let arcgisMeta:
+        | { attempted: boolean; ok: boolean; error?: string; attempts?: Array<{ url: string; ok: boolean; status?: number; error?: string }> }
+        | null = null;
 
       const buildPayload = async () => {
         const nowDate = new Date();
@@ -10883,6 +10897,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             attempted: true,
             ok: Boolean(arcgisResult?.data),
             error: arcgisResult?.error,
+            attempts: arcgisResult?.attempts,
           };
           if (arcgisResult?.data) return arcgisResult.data;
         }
@@ -10941,6 +10956,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           attempted: true,
           ok: Boolean(arcgisResult?.data),
           error: arcgisResult?.error,
+          attempts: arcgisResult?.attempts,
         };
       }
 

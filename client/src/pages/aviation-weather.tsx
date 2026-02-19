@@ -120,9 +120,9 @@ export default function AviationWeatherHub() {
   });
 
   const notamsQuery = useQuery({
-    queryKey: ["/api/aviation/notams", searchIcao],
+    queryKey: ["/api/notams", searchIcao],
     queryFn: async () => {
-      const res = await fetch(apiUrl(`/api/aviation/notams/${searchIcao}`), { credentials: "include" });
+      const res = await fetch(apiUrl(`/api/notams?icao=${searchIcao}`), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch NOTAMs");
       return res.json();
     },
@@ -390,7 +390,12 @@ export default function AviationWeatherHub() {
               <CardDescription>Active notices for {searchIcao}. US-only (FAA).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              {notamsCount === 0 && <div className="text-sm text-muted-foreground">No NOTAMs available.</div>}
+              {notamsQuery.isError && (
+                <div className="text-sm text-muted-foreground">NOTAM feed unavailable.</div>
+              )}
+              {!notamsQuery.isError && notamsCount === 0 && (
+                <div className="text-sm text-muted-foreground">No active NOTAMs.</div>
+              )}
               {notamsQuery.data?.notams?.map((notam: any) => (
                 <div key={notam.id} className="rounded-lg border p-3 text-sm">
                   <div className="font-semibold">{notam.id}</div>

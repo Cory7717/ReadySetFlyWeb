@@ -156,13 +156,13 @@ export default function Landing() {
     staleTime: 1000 * 60 * 10,
   });
 
-  const { data: notams, isLoading: notamsLoading } = useQuery<{
+  const { data: notams, isLoading: notamsLoading, isError: notamsError } = useQuery<{
     icao: string;
     notams: Array<{ id: string; text: string; effective?: string; expires?: string }>;
   }>({
-    queryKey: [`/api/notams/${searchIcao}`],
+    queryKey: ["/api/notams", searchIcao],
     queryFn: async () => {
-      const res = await fetch(apiUrl(`/api/notams/${searchIcao}`), {
+      const res = await fetch(apiUrl(`/api/notams?icao=${searchIcao}`), {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch NOTAMs");
@@ -675,7 +675,9 @@ export default function Landing() {
                     <Label className="text-sm font-semibold">NOTAMs</Label>
                     {notamsLoading && <Badge variant="secondary">Loading NOTAMs</Badge>}
                   </div>
-                  {notams?.notams?.length ? (
+                  {notamsError ? (
+                    <p className="text-sm text-muted-foreground">NOTAM feed unavailable.</p>
+                  ) : notams?.notams?.length ? (
                     <div className="space-y-2">
                       {notams.notams.slice(0, 6).map((item) => (
                         <div key={item.id} className="rounded-lg border p-3 text-xs space-y-1">
@@ -690,7 +692,7 @@ export default function Landing() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">No NOTAMs available at this time.</p>
+                    <p className="text-sm text-muted-foreground">No active NOTAMs.</p>
                   )}
                   <p className="text-xs text-muted-foreground">NOTAMs powered by FAA SWIM.</p>
                 </div>

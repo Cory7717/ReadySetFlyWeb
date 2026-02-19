@@ -1376,11 +1376,14 @@ const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
 const TFR_EMPTY_CACHE_TTL_MS = 5 * 60 * 1000;
 const tfrCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_ARCGIS_PROXY_URL = (process.env.TFR_ARCGIS_PROXY_URL || "").trim();
-const FAA_TFR_ARCGIS_URLS = [
-  ...(TFR_ARCGIS_PROXY_URL ? [TFR_ARCGIS_PROXY_URL] : []),
-  "https://gis.faa.gov/arcgis/rest/services/TFMS/TFR/MapServer/0/query",
-  "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query",
-];
+const NOTAM_SOURCE = (process.env.NOTAM_SOURCE || "http").trim().toLowerCase();
+const NOTAM_HTTP_BASE_URL = (process.env.NOTAM_HTTP_BASE_URL || "").trim();
+const FAA_TFR_ARCGIS_URLS = TFR_ARCGIS_PROXY_URL
+  ? [TFR_ARCGIS_PROXY_URL]
+  : [
+      "https://gis.faa.gov/arcgis/rest/services/TFMS/TFR/MapServer/0/query",
+      "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query",
+    ];
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
 
 function normalizeIcao(value: string) {
@@ -1681,13 +1684,29 @@ function normalizeArcGisFeature(feature: any) {
   };
 }
 
-async function fetchArcGisTfrs() {
+async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: number; maxLat: number }) {
   let lastError = "ArcGIS fetch failed";
   let lastUrl = "";
   const attempts: Array<{ url: string; ok: boolean; status?: number; error?: string }> = [];
 
+  const geometry = bbox
+    ? `${bbox.minLon},${bbox.minLat},${bbox.maxLon},${bbox.maxLat}`
+    : "-180,-90,180,90";
+
+  const params = new URLSearchParams({
+    where: "1=1",
+    outFields: "*",
+    returnGeometry: "true",
+    geometry,
+    geometryType: "esriGeometryEnvelope",
+    spatialRel: "esriSpatialRelIntersects",
+    inSR: "4326",
+    outSR: "4326",
+    f: "geojson",
+  });
+
   for (const baseUrl of FAA_TFR_ARCGIS_URLS) {
-    const url = `${baseUrl}?where=1%3D1&outFields=*&returnGeometry=true&f=geojson&outSR=4326`;
+    const url = `${baseUrl}?${params.toString()}`;
     lastUrl = baseUrl;
     try {
       const response = await fetchWithTimeout(
@@ -1702,7 +1721,9 @@ async function fetchArcGisTfrs() {
         8000
       );
       if (!response.ok) {
-        lastError = `HTTP ${response.status}`;
+        const errorText = await response.text().catch(() => "");
+        const snippet = errorText.trim().slice(0, 200);
+        lastError = `HTTP ${response.status}${snippet ? `: ${snippet}` : ""}`;
         attempts.push({ url: baseUrl, ok: false, status: response.status, error: lastError });
         continue;
       }
@@ -10250,7 +10271,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
       return res.status(400).json({ error: "Invalid ICAO code format" });
     }
-    res.redirect(307, `/api/notams/${requestedIcao}`);
+    res.redirect(307, `/api/notams?icao=${requestedIcao}`);
   });
 
   app.get("/api/aviation/pireps", async (req, res) => {
@@ -10689,6 +10710,89 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.get("/api/notams", async (req, res) => {
+    const start = Date.now();
+    try {
+      const requestedIcao = normalizeIcao(String(req.query?.icao || ""));
+      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      if (NOTAM_SOURCE === "swim_jms") {
+        return res.status(503).json({ error: "SWIM JMS ingestion not enabled" });
+      }
+
+      if (!NOTAM_HTTP_BASE_URL) {
+        return res.status(503).json({ error: "NOTAM HTTP source not configured" });
+      }
+
+      const url = buildNotamUrl(NOTAM_HTTP_BASE_URL, requestedIcao);
+      let extraHeaders: Record<string, string> = {};
+      const extraHeadersRaw = process.env.NOTAM_HTTP_HEADERS_JSON;
+      if (extraHeadersRaw) {
+        try {
+          extraHeaders = JSON.parse(extraHeadersRaw);
+        } catch (error) {
+          console.warn("NOTAM_HTTP_HEADERS_JSON is not valid JSON");
+        }
+      }
+
+      const response = await fetchWithTimeout(
+        url,
+        {
+          headers: {
+            Accept: "application/json",
+            ...extraHeaders,
+          },
+        },
+        8000
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        console.error(
+          JSON.stringify({
+            event: "notam_fetch_error",
+            source: NOTAM_SOURCE,
+            icao: requestedIcao,
+            status: response.status,
+            snippet: errorText.trim().slice(0, 200),
+            latencyMs: Date.now() - start,
+          })
+        );
+        return res.status(response.status).json({ error: `NOTAM fetch failed (${response.status})` });
+      }
+
+      const payload = await response.json().catch(() => null);
+      const notams = normalizeNotams(payload);
+      console.log(
+        JSON.stringify({
+          event: "notam_fetch",
+          source: NOTAM_SOURCE,
+          icao: requestedIcao,
+          status: response.status,
+          count: notams.length,
+          latencyMs: Date.now() - start,
+        })
+      );
+
+      return res.json({
+        icao: requestedIcao,
+        source: NOTAM_SOURCE,
+        notams,
+      });
+    } catch (error: any) {
+      console.error(
+        JSON.stringify({
+          event: "notam_fetch_error",
+          source: NOTAM_SOURCE,
+          error: error?.message || "Unknown error",
+        })
+      );
+      return res.status(500).json({ error: error.message || "Failed to fetch NOTAMs" });
+    }
+  });
+
   app.get("/api/notams/health", async (_req, res) => {
     try {
       const [latest] = await db
@@ -10714,128 +10818,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.get("/api/aviation/health", (_req, res) => {
+    res.json({
+      tfrProxyConfigured: Boolean(TFR_ARCGIS_PROXY_URL),
+      notamSource: NOTAM_SOURCE || "http",
+    });
+  });
+
   app.get("/api/notams/:icao", async (req, res) => {
-    try {
-      const requestedIcao = normalizeIcao(req.params.icao || "");
-      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
-        return res.status(400).json({ error: "Invalid ICAO code format" });
-      }
-
-      const useDbNotams =
-        Boolean(process.env.SWIM_JMS_QUEUE) ||
-        String(process.env.NOTAM_DB_ENABLED ?? "").toLowerCase() === "true";
-
-      if (useDbNotams) {
-        const now = new Date();
-        const altIcao =
-          requestedIcao.length === 4 && requestedIcao.startsWith("K")
-            ? requestedIcao.slice(1)
-            : null;
-        const icaoClause = altIcao
-          ? or(eq(notamsTable.icao, requestedIcao), eq(notamsTable.icao, altIcao))
-          : eq(notamsTable.icao, requestedIcao);
-        const rows = await db
-          .select()
-          .from(notamsTable)
-          .where(
-            and(
-              icaoClause,
-              or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, now))
-            )
-          )
-          .orderBy(desc(notamsTable.effectiveAt), desc(notamsTable.createdAt))
-          .limit(50);
-
-        if (rows.length > 0) {
-          return res.json({
-            icao: requestedIcao,
-            source: "swim",
-            notams: rows.map((row) => ({
-              id: row.notamId,
-              text: row.text,
-              effective: row.effectiveAt ? row.effectiveAt.toISOString() : undefined,
-              expires: row.expiresAt ? row.expiresAt.toISOString() : undefined,
-            })),
-          });
-        }
-      }
-
-      const cached = notamCache.get(requestedIcao);
-      if (cached && cached.expiresAt > Date.now()) {
-        return res.json({ icao: requestedIcao, source: "swim", ...cached.data });
-      }
-      const staleCache = cached && cached.expiresAt + 10 * 60 * 1000 > Date.now() ? cached : null;
-
-      const endpointTemplate = process.env.SWIM_NOTAM_ENDPOINT;
-      if (!endpointTemplate) {
-        return res.json({
-          icao: requestedIcao,
-          source: "swim",
-          notams: [],
-          notice: "NOTAM feed not configured. Awaiting SWIM stream.",
-        });
-      }
-
-      const accessToken = await getSwimAccessToken();
-      const url = buildNotamUrl(endpointTemplate, requestedIcao);
-
-      let extraHeaders: Record<string, string> = {};
-      const extraHeadersRaw = process.env.SWIM_NOTAM_HEADERS_JSON;
-      if (extraHeadersRaw) {
-        try {
-          extraHeaders = JSON.parse(extraHeadersRaw);
-        } catch (error) {
-          console.warn("SWIM_NOTAM_HEADERS_JSON is not valid JSON");
-        }
-      }
-
-      const response = await fetchWithTimeout(
-        url,
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/json",
-            ...extraHeaders,
-          },
-        },
-        8000
-      ).catch(() => null);
-
-      if (!response) {
-        if (staleCache) {
-          return res.json({ icao: requestedIcao, source: "swim", ...staleCache.data, stale: true });
-        }
-        return res.status(504).json({ error: "NOTAM fetch timeout" });
-      }
-
-      if (!response.ok) {
-        if (staleCache) {
-          return res.json({ icao: requestedIcao, source: "swim", ...staleCache.data, stale: true });
-        }
-        return res.status(response.status).json({ error: `NOTAM fetch failed (${response.status})` });
-      }
-
-      let payload: any = null;
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        payload = await response.json();
-      } else {
-        payload = await response.text();
-      }
-
-      const notams = normalizeNotams(payload);
-      const data = { notams, raw: notams.length === 0 ? payload : undefined };
-      notamCache.set(requestedIcao, { data, expiresAt: Date.now() + NOTAM_CACHE_TTL_MS });
-
-      res.json({ icao: requestedIcao, source: "swim", ...data });
-    } catch (error: any) {
-      console.error("NOTAM fetch failed:", error);
-      res.status(500).json({ error: error.message || "Failed to fetch NOTAMs" });
+    const requestedIcao = normalizeIcao(req.params.icao || "");
+    if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
+      return res.status(400).json({ error: "Invalid ICAO code format" });
     }
+    return res.redirect(307, `/api/notams?icao=${requestedIcao}`);
   });
 
   app.get("/api/tfrs", async (req, res) => {
     try {
+      const requestId = crypto.randomUUID?.() || crypto.randomBytes(8).toString("hex");
       const cacheKey = "ALL";
       const now = Date.now();
       const cached = tfrCache.get(cacheKey);
@@ -10894,7 +10894,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           .filter(Boolean);
 
         if (!features.length) {
-          const arcgisResult = await fetchArcGisTfrs();
+          const arcgisResult = await fetchArcGisTfrs(bbox || undefined);
           arcgisMeta = {
             attempted: true,
             ok: Boolean(arcgisResult?.data),
@@ -10953,13 +10953,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       if (debug && !arcgisMeta && !(payload?.features || []).length) {
-        const arcgisResult = await fetchArcGisTfrs();
+        const arcgisResult = await fetchArcGisTfrs(bbox || undefined);
         arcgisMeta = {
           attempted: true,
           ok: Boolean(arcgisResult?.data),
           error: arcgisResult?.error,
           attempts: arcgisResult?.attempts,
         };
+      }
+
+      if (arcgisMeta?.attempted && !arcgisMeta.ok) {
+        console.error(
+          JSON.stringify({
+            event: "tfr_upstream_error",
+            requestId,
+            error: arcgisMeta.error,
+            attempts: arcgisMeta.attempts,
+          })
+        );
       }
 
       const responsePayload: any = {
@@ -10972,9 +10983,30 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         responsePayload.debug = { arcgis: arcgisMeta };
       }
 
+      const latencyMs = Date.now() - now;
+      const arcgisAttempt = arcgisMeta?.attempts?.find((attempt) => attempt.ok) || arcgisMeta?.attempts?.[0];
+      console.log(
+        JSON.stringify({
+          event: "tfr_fetch",
+          requestId,
+          proxyConfigured: Boolean(TFR_ARCGIS_PROXY_URL),
+          source: payload?.source || "unknown",
+          arcgisUrl: arcgisAttempt?.url,
+          arcgisStatus: arcgisAttempt?.status,
+          count: filteredFeatures.length,
+          stale,
+          latencyMs,
+        })
+      );
+
       res.json(responsePayload);
     } catch (error: any) {
-      console.error("TFR fetch failed:", error);
+      console.error(
+        JSON.stringify({
+          event: "tfr_fetch_error",
+          error: error?.message || "Unknown error",
+        })
+      );
       const cached = tfrCache.get("ALL");
       if (cached?.data) {
         return res.status(200).json({ ...cached.data, stale: true });

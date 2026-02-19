@@ -1067,7 +1067,7 @@ export default function FlightPlanner() {
   const notamsSummaryQuery = useQuery({
     queryKey: ["/api/notams", primaryIcao],
     queryFn: async () => {
-      const res = await fetch(apiUrl(`/api/notams/${primaryIcao}`), { credentials: "include" });
+      const res = await fetch(apiUrl(`/api/notams?icao=${primaryIcao}`), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch NOTAMs");
       return res.json();
     },
@@ -2198,7 +2198,7 @@ export default function FlightPlanner() {
             <div className="rounded-lg border p-3">
               <div className="text-xs text-muted-foreground">NOTAMs</div>
               <div className="text-sm font-semibold">
-                {notamsCount > 0 ? `${notamsCount} active` : "None loaded"}
+                {notamsSummaryQuery.isError ? "Unavailable" : notamsCount > 0 ? `${notamsCount} active` : "None loaded"}
               </div>
             </div>
           </div>
@@ -2281,7 +2281,12 @@ export default function FlightPlanner() {
                 <DialogDescription>Latest NOTAMs for {primaryIcao || "your route"}.</DialogDescription>
               </DialogHeader>
               <div className="space-y-2 text-sm">
-                {notamsCount === 0 && <div className="text-muted-foreground">No NOTAMs loaded.</div>}
+                {notamsSummaryQuery.isError && (
+                  <div className="text-muted-foreground">NOTAM feed unavailable.</div>
+                )}
+                {!notamsSummaryQuery.isError && notamsCount === 0 && (
+                  <div className="text-muted-foreground">No active NOTAMs.</div>
+                )}
                 {notamsSummaryQuery.data?.notams?.map((notam: any) => (
                   <div key={notam.id} className="rounded-lg border p-2">
                     <div className="font-semibold">{notam.id}</div>

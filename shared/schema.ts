@@ -1215,6 +1215,19 @@ export const notificationPreferences = pgTable("notification_preferences", {
   index("idx_notification_preferences_user").on(table.userId),
 ]);
 
+// User Settings (lightweight per-user preferences)
+export const userSettings = pgTable("user_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  eb6OutputMode: text("eb6_output_mode").default("quick"),
+  eb6SelectedOutputs: text("eb6_selected_outputs").array().default(sql`ARRAY[]::text[]`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_user_settings_user").on(table.userId),
+  index("idx_user_settings_user").on(table.userId),
+]);
+
 // Push tokens (Expo)
 export const pushTokens = pgTable("push_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1415,6 +1428,13 @@ export const insertLogbookProSettingsSchema = createInsertSchema(logbookProSetti
 });
 
 export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
   id: true,
   userId: true,
   createdAt: true,
@@ -1896,6 +1916,8 @@ export type LogbookProSettings = typeof logbookProSettings.$inferSelect;
 export type InsertLogbookProSettings = z.infer<typeof insertLogbookProSettingsSchema>;
 export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
 export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
+export type UserSettings = typeof userSettings.$inferSelect;
+export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
 export type PushToken = typeof pushTokens.$inferSelect;
 export type InsertPushToken = z.infer<typeof insertPushTokenSchema>;
 export type UserNotification = typeof userNotifications.$inferSelect;

@@ -54,6 +54,7 @@ import RadioCommsTrainer from "@/pages/radio-comms-trainer";
 import AdsbReceiverHelp from "@/pages/adsb-receiver-help";
 import NotificationsPage from "@/pages/notifications";
 import AdsbLive from "@/pages/adsb-live";
+import Eb6Calculator from "@/pages/tools/Eb6Calculator";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -108,38 +109,10 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/verify-email" component={VerifyEmail} />
-      <Route path="/rentals" component={Home} />
-      <Route path="/marketplace" component={Marketplace} />
       <Route path="/faq" component={FaqPage} />
-      <Route path="/aircraft/:id" component={AircraftDetail} />
-      <Route path="/pilot-tools" component={PilotTools} />
-      <Route path="/aviation-weather" component={AviationWeatherHub} />
-      <Route path="/tfr-map" component={TfrMap} />
-      <Route path="/approach-plates" component={ApproachPlates} />
-      <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
-      <Route path="/weight-balance" component={WeightBalance} />
       <Route path="/logbook/pro" component={LogbookPro} />
-      <Route path="/flight-planner" component={FlightPlanner} />
-      <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
-      <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
-      <Route path="/live-traffic" component={AdsbLive} />
       <Route path="/events" component={() => <StudentPageLoader component={EventsPage} />} />
       <Route path="/admin/invite" component={RequireAuth} />
-      <Route path="/student" component={() => <StudentPageLoader component={StudentHub} />} />
-      <Route path="/start-flying" component={() => <StudentPageLoader component={StudentHub} />} />
-      <Route path="/student/wizard" component={() => <StudentPageLoader component={StudentWizard} />} />
-      <Route path="/student/roadmap" component={() => <StudentPageLoader component={StudentRoadmap} />} />
-      <Route path="/student/cost" component={() => <StudentPageLoader component={StudentCost} />} />
-      <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
-      <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
-      <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
-      <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />
-      <Route path="/student/six-pack-trainer" component={() => <StudentPageLoader component={StudentSixPackTrainer} />} />
-      <Route path="/student/checklists" component={() => <StudentPageLoader component={StudentChecklists} />} />
-      <Route path="/student/weather" component={() => <StudentPageLoader component={StudentWeather} />} />
-      <Route path="/gps-sims" component={() => <StudentPageLoader component={GpsSimsHub} />} />
-      <Route path="/gps-sims/:unitId" component={() => <StudentPageLoader component={GpsSimsUnit} />} />
-      <Route path="/ifr-tools" component={() => <StudentPageLoader component={IfrTools} />} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
       <Route path="/delete-account" component={DeleteAccount} />
@@ -153,6 +126,20 @@ function Router() {
           <Route path="/my-listings" component={MyListings} />
           <Route path="/favorites" component={Favorites} />
           <Route path="/messages" component={Messages} />
+          <Route path="/rentals" component={Home} />
+          <Route path="/marketplace" component={Marketplace} />
+          <Route path="/aircraft/:id" component={AircraftDetail} />
+          <Route path="/pilot-tools" component={PilotTools} />
+          <Route path="/aviation-weather" component={AviationWeatherHub} />
+          <Route path="/tfr-map" component={TfrMap} />
+          <Route path="/approach-plates" component={ApproachPlates} />
+          <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
+          <Route path="/weight-balance" component={WeightBalance} />
+          <Route path="/tools/eb6" component={Eb6Calculator} />
+          <Route path="/flight-planner" component={FlightPlanner} />
+          <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
+          <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
+          <Route path="/live-traffic" component={AdsbLive} />
           <Route path="/list-aircraft" component={ListAircraft} />
           <Route path="/edit-aircraft/:id" component={ListAircraft} />
           <Route path="/create-marketplace-listing" component={CreateMarketplaceListing} />
@@ -173,6 +160,21 @@ function Router() {
           <Route path="/my-aircraft" component={MyAircraft} />
           <Route path="/notifications" component={NotificationsPage} />
           <Route path="/admin/aircraft-library" component={AdminAircraftLibrary} />
+          <Route path="/student" component={() => <StudentPageLoader component={StudentHub} />} />
+          <Route path="/start-flying" component={() => <StudentPageLoader component={StudentHub} />} />
+          <Route path="/student/wizard" component={() => <StudentPageLoader component={StudentWizard} />} />
+          <Route path="/student/roadmap" component={() => <StudentPageLoader component={StudentRoadmap} />} />
+          <Route path="/student/cost" component={() => <StudentPageLoader component={StudentCost} />} />
+          <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
+          <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
+          <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
+          <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />
+          <Route path="/student/six-pack-trainer" component={() => <StudentPageLoader component={StudentSixPackTrainer} />} />
+          <Route path="/student/checklists" component={() => <StudentPageLoader component={StudentChecklists} />} />
+          <Route path="/student/weather" component={() => <StudentPageLoader component={StudentWeather} />} />
+          <Route path="/gps-sims" component={() => <StudentPageLoader component={GpsSimsHub} />} />
+          <Route path="/gps-sims/:unitId" component={() => <StudentPageLoader component={GpsSimsUnit} />} />
+          <Route path="/ifr-tools" component={() => <StudentPageLoader component={IfrTools} />} />
         </>
       ) : (
         <>
@@ -182,6 +184,20 @@ function Router() {
           <Route path="/my-listings" component={RequireAuth} />
           <Route path="/favorites" component={RequireAuth} />
           <Route path="/messages" component={RequireAuth} />
+          <Route path="/rentals" component={RequireAuth} />
+          <Route path="/marketplace" component={RequireAuth} />
+          <Route path="/aircraft/:id" component={RequireAuth} />
+          <Route path="/pilot-tools" component={RequireAuth} />
+          <Route path="/aviation-weather" component={RequireAuth} />
+          <Route path="/tfr-map" component={RequireAuth} />
+          <Route path="/approach-plates" component={RequireAuth} />
+          <Route path="/ownership-cost-calculator" component={RequireAuth} />
+          <Route path="/weight-balance" component={RequireAuth} />
+          <Route path="/tools/eb6" component={RequireAuth} />
+          <Route path="/flight-planner" component={RequireAuth} />
+          <Route path="/radio-comms-trainer" component={RequireAuth} />
+          <Route path="/adsb-receiver-help" component={RequireAuth} />
+          <Route path="/live-traffic" component={RequireAuth} />
           <Route path="/list-aircraft" component={RequireAuth} />
           <Route path="/edit-aircraft/:id" component={RequireAuth} />
           <Route path="/create-marketplace-listing" component={RequireAuth} />
@@ -201,6 +217,21 @@ function Router() {
           <Route path="/my-aircraft" component={RequireAuth} />
           <Route path="/notifications" component={RequireAuth} />
           <Route path="/admin/aircraft-library" component={RequireAuth} />
+          <Route path="/student" component={RequireAuth} />
+          <Route path="/start-flying" component={RequireAuth} />
+          <Route path="/student/wizard" component={RequireAuth} />
+          <Route path="/student/roadmap" component={RequireAuth} />
+          <Route path="/student/cost" component={RequireAuth} />
+          <Route path="/student/progress" component={RequireAuth} />
+          <Route path="/student/written" component={RequireAuth} />
+          <Route path="/student/syllabi" component={RequireAuth} />
+          <Route path="/student/vor-trainer" component={RequireAuth} />
+          <Route path="/student/six-pack-trainer" component={RequireAuth} />
+          <Route path="/student/checklists" component={RequireAuth} />
+          <Route path="/student/weather" component={RequireAuth} />
+          <Route path="/gps-sims" component={RequireAuth} />
+          <Route path="/gps-sims/:unitId" component={RequireAuth} />
+          <Route path="/ifr-tools" component={RequireAuth} />
         </>
       )}
       

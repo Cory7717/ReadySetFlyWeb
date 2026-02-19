@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -9377,6 +9377,38 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Error updating user profile:", error);
       res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+
+  app.get("/api/user/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const settings = await storage.getUserSettings(String(userId));
+      res.json(settings || { eb6OutputMode: "quick", eb6SelectedOutputs: [] });
+    } catch (error) {
+      console.error("Failed to fetch user settings:", error);
+      res.status(500).json({ error: "Failed to fetch user settings" });
+    }
+  });
+
+  app.put("/api/user/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const result = insertUserSettingsSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const settings = await storage.upsertUserSettings(String(userId), result.data as any);
+      res.json(settings);
+    } catch (error) {
+      console.error("Failed to update user settings:", error);
+      res.status(500).json({ error: "Failed to update user settings" });
     }
   });
 

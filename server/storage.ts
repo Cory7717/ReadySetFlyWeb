@@ -65,6 +65,8 @@ import {
   type InsertLogbookProSettings,
   type NotificationPreferences,
   type InsertNotificationPreferences,
+  type UserSettings,
+  type InsertUserSettings,
   type PushToken,
   type InsertPushToken,
   type UserNotification,
@@ -117,6 +119,7 @@ import {
   logbookEntries,
   logbookProSettings,
   notificationPreferences,
+  userSettings,
   pushTokens,
   userNotifications,
   endorsements,
@@ -459,6 +462,8 @@ export interface IStorage {
   // Notification Preferences + User Notifications
   getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
   upsertNotificationPreferences(userId: string, updates: InsertNotificationPreferences): Promise<NotificationPreferences>;
+  getUserSettings(userId: string): Promise<UserSettings | undefined>;
+  upsertUserSettings(userId: string, updates: InsertUserSettings): Promise<UserSettings>;
   getUserNotifications(userId: string, limit?: number): Promise<UserNotification[]>;
   getUnreadUserNotifications(userId: string): Promise<UserNotification[]>;
   getUserNotificationByTypeAndDate(userId: string, type: string, referenceDate: Date | null): Promise<UserNotification | undefined>;
@@ -2898,6 +2903,28 @@ export class DatabaseStorage implements IStorage {
       .values({ ...updates, userId })
       .returning();
     return prefs;
+  }
+
+  async getUserSettings(userId: string): Promise<UserSettings | undefined> {
+    const [settings] = await db.select().from(userSettings).where(eq(userSettings.userId, userId));
+    return settings;
+  }
+
+  async upsertUserSettings(userId: string, updates: InsertUserSettings): Promise<UserSettings> {
+    const existing = await this.getUserSettings(userId);
+    if (existing) {
+      const [settings] = await db
+        .update(userSettings)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(userSettings.userId, userId))
+        .returning();
+      return settings;
+    }
+    const [settings] = await db
+      .insert(userSettings)
+      .values({ ...updates, userId })
+      .returning();
+    return settings;
   }
 
   async getUserNotifications(userId: string, limit = 50): Promise<UserNotification[]> {

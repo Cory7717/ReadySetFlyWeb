@@ -10940,17 +10940,23 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           });
         }
 
-        const fallback = await fetchHttpNotams(requestedIcao, start, "http_fallback");
-        if (fallback.ok) {
-          return res.json({
-            icao: requestedIcao,
-            source: "http_fallback",
-            notams: fallback.notams,
-          });
+        if (NOTAM_HTTP_BASE_URL) {
+          const fallback = await fetchHttpNotams(requestedIcao, start, "http_fallback");
+          if (fallback.ok) {
+            return res.json({
+              icao: requestedIcao,
+              source: "http_fallback",
+              notams: fallback.notams,
+            });
+          }
+
+          return res
+            .status(fallback.status)
+            .json({ icao: requestedIcao, source: NOTAM_SOURCE, notams: [], notice: "Awaiting SWIM stream." });
         }
 
         return res
-          .status(fallback.status)
+          .status(200)
           .json({ icao: requestedIcao, source: NOTAM_SOURCE, notams: [], notice: "Awaiting SWIM stream." });
       }
 

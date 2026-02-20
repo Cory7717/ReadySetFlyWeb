@@ -32,6 +32,16 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["pilot logbook", "logbook pro", "logbook entries", "flight log"],
   },
   {
+    label: "NOTAMs",
+    path: "/pilot-tools",
+    keywords: ["notams", "notam", "runway advisory", "airport briefing"],
+  },
+  {
+    label: "TFR Map",
+    path: "/tfr-map",
+    keywords: ["tfr", "temporary flight restriction", "tfrs", "map"],
+  },
+  {
     label: "Approach Plates",
     path: "/approach-plates",
     keywords: ["ifr charts", "plates", "approach", "charts"],
@@ -154,7 +164,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 overflow-x-hidden">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 overflow-x-hidden overflow-y-visible">
       <div className="container mx-auto px-3 sm:px-4 lg:px-8 min-w-0">
         <div className="flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4 min-w-0">
           {/* Logo */}
@@ -219,7 +229,7 @@ export function Header() {
             {/* Tool Search */}
             <form
               ref={searchRef}
-              className="relative w-[140px] sm:w-[180px] md:w-[220px] lg:w-[260px] flex-shrink-0"
+              className="relative w-[140px] sm:w-[180px] md:w-[220px] lg:w-[260px] flex-shrink-0 overflow-visible z-40"
               onSubmit={(event) => {
                 event.preventDefault();
                 handleToolSubmit();
@@ -256,7 +266,7 @@ export function Header() {
                 autoComplete="off"
               />
               {toolMenuOpen && toolQuery.trim().length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-1 rounded-lg border bg-background shadow-lg z-50 overflow-hidden">
+                <div className="absolute left-0 right-0 top-full mt-1 rounded-lg border bg-background shadow-lg z-[60] overflow-hidden">
                   {toolMatches.length === 0 ? (
                     <div className="px-3 py-2 text-xs text-muted-foreground">No matches found.</div>
                   ) : (

@@ -42,6 +42,16 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["tfr", "temporary flight restriction", "tfrs", "map"],
   },
   {
+    label: "IFR Tools",
+    path: "/ifr-tools",
+    keywords: ["ifr", "instrument", "procedures", "ifr tools"],
+  },
+  {
+    label: "Airport Briefing",
+    path: "/pilot-tools",
+    keywords: ["runway briefing", "airport briefing", "notams", "runways"],
+  },
+  {
     label: "Approach Plates",
     path: "/approach-plates",
     keywords: ["ifr charts", "plates", "approach", "charts"],
@@ -164,7 +174,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 overflow-x-hidden overflow-y-visible">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 overflow-visible">
       <div className="container mx-auto px-3 sm:px-4 lg:px-8 min-w-0">
         <div className="flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4 min-w-0">
           {/* Logo */}

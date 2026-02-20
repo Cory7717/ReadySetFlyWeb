@@ -241,7 +241,11 @@
   }
 
   html, body {
-    @apply overflow-x-hidden;
+    @apply overflow-x-hidden overflow-y-visible;
+  }
+
+  #root {
+    @apply overflow-visible;
   }
 
   body {

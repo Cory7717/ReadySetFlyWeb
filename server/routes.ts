@@ -1383,6 +1383,8 @@ const tfrCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_ARCGIS_PROXY_URL = (process.env.TFR_ARCGIS_PROXY_URL || "").trim();
 const NOTAM_SOURCE = (process.env.NOTAM_SOURCE || "http").trim().toLowerCase();
 const NOTAM_HTTP_BASE_URL = (process.env.NOTAM_HTTP_BASE_URL || "").trim();
+const SWIM_NOTAM_QUERY_BASE_URL = (process.env.SWIM_NOTAM_QUERY_BASE_URL || "").trim();
+const SWIM_NOTAM_QUERY_HEADERS_JSON = (process.env.SWIM_NOTAM_QUERY_HEADERS_JSON || "").trim();
 const TFMS_ENABLED = String(process.env.TFMS_ENABLED || "false").toLowerCase() === "true";
 const TFMS_PROVIDER = resolveTfmsProviderKey(process.env.TFMS_PROVIDER);
 const TFMS_CACHE_TTL_SECONDS = Number(process.env.TFMS_CACHE_TTL_SECONDS || 300);
@@ -1412,6 +1414,23 @@ const setTfmsCache = <T,>(key: string, value: T) => {
     tfmsCache.clear();
   }
   tfmsCache.set(key, { expiresAt: Date.now() + TFMS_CACHE_TTL_MS, value });
+};
+
+const getNotamCache = <T,>(key: string): T | null => {
+  const entry = notamCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    notamCache.delete(key);
+    return null;
+  }
+  return entry.data as T;
+};
+
+const setNotamCache = <T,>(key: string, value: T) => {
+  if (notamCache.size > 200) {
+    notamCache.clear();
+  }
+  notamCache.set(key, { expiresAt: Date.now() + NOTAM_CACHE_TTL_MS, data: value });
 };
 
 function normalizeIcao(value: string) {
@@ -2232,6 +2251,24 @@ function normalizeNotams(payload: any): Array<{ id: string; text: string; effect
   }
 
   return [];
+}
+
+function stableNotamIdFromText(text: string) {
+  return crypto.createHash("sha256").update(text).digest("hex").slice(0, 24);
+}
+
+function parseNotamDateValue(value: any): Date | null {
+  if (!value) return null;
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value;
+  if (typeof value === "string") {
+    const iso = parseISO(value);
+    if (Number.isFinite(iso.getTime())) return iso;
+    const fallback = new Date(value);
+    if (Number.isFinite(fallback.getTime())) return fallback;
+    return null;
+  }
+  const fallback = new Date(value);
+  return Number.isFinite(fallback.getTime()) ? fallback : null;
 }
 
 function getDtppMetaUrl() {
@@ -10819,6 +10856,128 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  const fetchSwimNotamSnapshot = async (
+    requestedIcao: string,
+    start: number
+  ): Promise<{ ok: true; notams: Array<{ id: string; text: string; effective?: string; expires?: string }> } | { ok: false; status: number; error: string }> => {
+    if (!SWIM_NOTAM_QUERY_BASE_URL) {
+      return { ok: false, status: 503, error: "SWIM NOTAM query not configured" };
+    }
+
+    const url = buildNotamUrl(SWIM_NOTAM_QUERY_BASE_URL, requestedIcao);
+    let extraHeaders: Record<string, string> = {};
+    if (SWIM_NOTAM_QUERY_HEADERS_JSON) {
+      try {
+        extraHeaders = JSON.parse(SWIM_NOTAM_QUERY_HEADERS_JSON);
+      } catch (error) {
+        console.warn("SWIM_NOTAM_QUERY_HEADERS_JSON is not valid JSON");
+      }
+    }
+
+    let token: string | null = null;
+    if (process.env.SWIM_TOKEN_URL && process.env.SWIM_CLIENT_ID && process.env.SWIM_CLIENT_SECRET) {
+      try {
+        token = await getSwimAccessToken();
+      } catch (error: any) {
+        console.warn(`SWIM NOTAM snapshot token failed: ${error?.message || "unknown error"}`);
+      }
+    }
+
+    try {
+      const response = await fetchWithTimeout(
+        url,
+        {
+          headers: {
+            Accept: "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...extraHeaders,
+          },
+        },
+        8000
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        console.error(
+          JSON.stringify({
+            event: "notam_backfill_error",
+            source: "swim_snapshot",
+            icao: requestedIcao,
+            status: response.status,
+            snippet: errorText.trim().slice(0, 200),
+            latencyMs: Date.now() - start,
+          })
+        );
+        return { ok: false, status: response.status, error: `SWIM NOTAM snapshot failed (${response.status})` };
+      }
+
+      const payload = await response.json().catch(() => null);
+      const notams = normalizeNotams(payload);
+      console.log(
+        JSON.stringify({
+          event: "notam_backfill_fetch",
+          source: "swim_snapshot",
+          icao: requestedIcao,
+          count: notams.length,
+          latencyMs: Date.now() - start,
+        })
+      );
+      return { ok: true, notams };
+    } catch (error: any) {
+      console.error(
+        JSON.stringify({
+          event: "notam_backfill_error",
+          source: "swim_snapshot",
+          icao: requestedIcao,
+          error: error?.message || "fetch failed",
+          latencyMs: Date.now() - start,
+        })
+      );
+      return { ok: false, status: 502, error: "SWIM NOTAM snapshot failed (network)" };
+    }
+  };
+
+  const upsertNotamsFromSnapshot = async (
+    requestedIcao: string,
+    notams: Array<{ id: string; text: string; effective?: string; expires?: string }>
+  ) => {
+    if (!notams.length) return;
+    for (const item of notams) {
+      const text = item?.text ? String(item.text) : "";
+      if (!text.trim()) continue;
+      const notamId = item?.id ? String(item.id) : stableNotamIdFromText(`${requestedIcao}|${text}`);
+      const effectiveAt = parseNotamDateValue(item?.effective);
+      const expiresAt = parseNotamDateValue(item?.expires);
+      try {
+        await db
+          .insert(notamsTable)
+          .values({
+            icao: requestedIcao,
+            notamId,
+            text,
+            effectiveAt: effectiveAt ?? null,
+            expiresAt: expiresAt ?? null,
+            source: "swim_backfill",
+            raw: item,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: notamsTable.notamId,
+            set: {
+              icao: requestedIcao,
+              text,
+              effectiveAt: effectiveAt ?? null,
+              expiresAt: expiresAt ?? null,
+              raw: item,
+              updatedAt: new Date(),
+            },
+          });
+      } catch (error) {
+        console.warn("SWIM snapshot upsert failed:", error);
+      }
+    }
+  };
+
   const fetchHttpNotams = async (
     requestedIcao: string,
     start: number,
@@ -10938,6 +11097,46 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               expires: row.expiresAt ? row.expiresAt.toISOString() : undefined,
             })),
           });
+        }
+
+        const backfillCandidates = [requestedIcao];
+        if (altIcao) backfillCandidates.push(altIcao);
+
+        if (SWIM_NOTAM_QUERY_BASE_URL) {
+          let backfillNotams: Array<{ id: string; text: string; effective?: string; expires?: string }> | null = null;
+          let backfillIcao = requestedIcao;
+
+          for (const candidate of backfillCandidates) {
+            const cacheKey = `swim_backfill:${candidate}`;
+            const cached = getNotamCache<Array<{ id: string; text: string; effective?: string; expires?: string }>>(cacheKey);
+            if (cached) {
+              backfillNotams = cached;
+              backfillIcao = candidate;
+              if (cached.length > 0) break;
+              continue;
+            }
+
+            const snapshot = await fetchSwimNotamSnapshot(candidate, start);
+            if (snapshot.ok) {
+              setNotamCache(cacheKey, snapshot.notams);
+              backfillNotams = snapshot.notams;
+              backfillIcao = candidate;
+              if (snapshot.notams.length > 0) break;
+            } else {
+              if (snapshot.status === 401 || snapshot.status === 403) {
+                break;
+              }
+            }
+          }
+
+          if (backfillNotams && backfillNotams.length > 0) {
+            await upsertNotamsFromSnapshot(backfillIcao, backfillNotams);
+            return res.json({
+              icao: requestedIcao,
+              source: "swim_backfill",
+              notams: backfillNotams,
+            });
+          }
         }
 
         if (NOTAM_HTTP_BASE_URL) {

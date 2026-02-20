@@ -87,7 +87,12 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative h-[500px] sm:h-[600px] bg-gradient-to-r from-primary/20 to-secondary/20 flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-transparent z-10" />
-        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${wingtipImage})` }} />
+        <img
+          src={wingtipImage}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
         
         <div className="relative z-20 w-full max-w-5xl mx-auto px-3 sm:px-4 lg:px-8">
           <div className="text-center mb-6 sm:mb-8">

@@ -329,13 +329,15 @@ function collectEventTypes(payload: any): string[] {
 
 function extractFromText(text: string): Partial<NormalizedNotam> {
   const icaoMatch = text.match(/\bA\)\s*([A-Z]{3,4})/);
+  const leadingIcaoMatch = text.match(/^\s*([A-Z0-9]{3,4})\b/);
   const effMatch = text.match(/\bB\)\s*([0-9]{10})/);
   const expMatch = text.match(/\bC\)\s*([0-9]{10})/);
   const idMatch = text.match(/\b([A-Z]{3,4}\s\d{2}\/\d{3})\b/);
+  const localIdMatch = text.match(/\b([A-Z]\d{3,4}\/\d{2,4})\b/);
 
   return {
-    icao: icaoMatch?.[1]?.toUpperCase(),
-    notamId: idMatch?.[1]?.replace(/\s+/g, " "),
+    icao: (icaoMatch?.[1] || leadingIcaoMatch?.[1])?.toUpperCase(),
+    notamId: (idMatch?.[1] || localIdMatch?.[1])?.replace(/\s+/g, " "),
     effectiveAt: parseNotamDate(effMatch?.[1]),
     expiresAt: parseNotamDate(expMatch?.[1]),
   };
@@ -728,7 +730,8 @@ function normalizeNotamItem(item: any): NormalizedNotam | null {
   const notamIdCandidate = item?.notamId || item?.id || extracted.notamId || derivedKey;
   const textLooksLikeNotam = looksLikeNotamText(text);
   const hasSignals = hasNotamSignals(item);
-  if (!notamIdCandidate && !textLooksLikeNotam && !hasSignals) return null;
+  const isLikelyLocal = Boolean(extracted.icao) && text.trim().length >= 10;
+  if (!notamIdCandidate && !textLooksLikeNotam && !hasSignals && !isLikelyLocal) return null;
   const notamId = notamIdCandidate || stableNotamId(text);
   const icao = (pickIcao(item) || extracted.icao || "ZZZZ").toUpperCase();
   const effectiveStartRaw = extractValueByKeys(item, EFFECTIVE_START_KEYS_LOWER);

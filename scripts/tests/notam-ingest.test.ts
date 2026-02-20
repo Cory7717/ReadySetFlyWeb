@@ -19,6 +19,10 @@ const eventTextNotamXml = readFileSync(
   new URL("../../test/fixtures/notam/event_text_notam.xml", import.meta.url),
   "utf-8"
 );
+const localFormatXml = readFileSync(
+  new URL("../../test/fixtures/notam/local_format.xml", import.meta.url),
+  "utf-8"
+);
 
 test("parser detects AIXMBasicMessage and namespaces", () => {
   const result = analyzeNotamMessage(canonicalXml);
@@ -80,6 +84,17 @@ test("event text NOTAMs are parsed and saved canonically", async () => {
     eventTextNotamXml,
     async () => ({ savedCount: 1, errorCount: 0, errors: [] }),
     { messageId: "msg-event-text" }
+  );
+  assert.ok(result.parsedNotamCount > 0);
+  assert.equal(result.canonicalWriteAttempted, true);
+  assert.equal(result.canonicalWriteSucceeded, true);
+});
+
+test("local format NOTAM text is saved canonically", async () => {
+  const result = await ingestNotamMessage(
+    localFormatXml,
+    async () => ({ savedCount: 1, errorCount: 0, errors: [] }),
+    { messageId: "msg-local-format" }
   );
   assert.ok(result.parsedNotamCount > 0);
   assert.equal(result.canonicalWriteAttempted, true);

@@ -410,6 +410,7 @@ const EFFECTIVE_START_KEYS_LOWER = new Set([
   "effectivestarttime",
   "starttime",
   "startdate",
+  "beginposition",
   "validfrom",
   "fromtime",
   "fromdate",
@@ -421,6 +422,7 @@ const EFFECTIVE_END_KEYS_LOWER = new Set([
   "effectiveendtime",
   "endtime",
   "enddate",
+  "endposition",
   "validto",
   "totime",
   "todate",
@@ -730,7 +732,10 @@ function normalizeNotamItem(item: any): NormalizedNotam | null {
   const notamIdCandidate = item?.notamId || item?.id || extracted.notamId || derivedKey;
   const textLooksLikeNotam = looksLikeNotamText(text);
   const hasSignals = hasNotamSignals(item);
-  const structuredIcao = pickIcao(item);
+  const structuredIcao =
+    pickIcao(item) ||
+    extractValueByKeys(item, ICAO_KEYS_LOWER) ||
+    extractValueByKeys(item, LOCATION_KEYS_LOWER);
   const resolvedIcao = (structuredIcao || extracted.icao || "ZZZZ").toUpperCase();
   const effectiveStartRaw = extractValueByKeys(item, EFFECTIVE_START_KEYS_LOWER);
   const effectiveEndRaw = extractValueByKeys(item, EFFECTIVE_END_KEYS_LOWER);

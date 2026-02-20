@@ -1,5 +1,6 @@
-﻿import { Link, useLocation } from "wouter";
-import { User, Bell, LogOut } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "wouter";
+import { Bell, LogOut, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "./theme-toggle";
@@ -18,26 +19,139 @@ import {
 import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
 import { trackEvent } from "@/lib/analytics";
 
+type ToolSearchItem = {
+  label: string;
+  path: string;
+  keywords: string[];
+};
+
+const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
+  {
+    label: "Logbook",
+    path: "/logbook",
+    keywords: ["pilot logbook", "logbook pro", "logbook entries", "flight log"],
+  },
+  {
+    label: "Approach Plates",
+    path: "/approach-plates",
+    keywords: ["ifr charts", "plates", "approach", "charts"],
+  },
+  {
+    label: "Airport Briefing",
+    path: "/pilot-tools",
+    keywords: ["runway briefing", "airport briefing", "runway advisory"],
+  },
+  {
+    label: "VOR Trainer",
+    path: "/student/vor-trainer",
+    keywords: ["vor", "navigation", "training", "student"],
+  },
+  {
+    label: "Flight Planner",
+    path: "/flight-planner",
+    keywords: ["flight plan", "plan flight", "route"],
+  },
+  {
+    label: "Marketplace",
+    path: "/marketplace",
+    keywords: ["buy", "sell", "listings", "marketplace"],
+  },
+  {
+    label: "Rentals",
+    path: "/rentals",
+    keywords: ["rent", "aircraft rental", "rentals"],
+  },
+  {
+    label: "Aviation Weather",
+    path: "/aviation-weather",
+    keywords: ["weather", "metar", "taf", "briefing"],
+  },
+];
+
 export function Header() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { user } = useAuth();
   const { data: unreadNotifications } = useQuery<{ count: number }>({
     queryKey: ["/api/notifications/unread"],
     enabled: !!user,
   });
   const unreadCount = unreadNotifications?.count ?? 0;
-  
+
   const isPlanner = location.startsWith("/flight-planner");
   const isTraining = location.startsWith("/student") || location.startsWith("/start-flying");
   const isFaq = location === "/faq";
-  
-  const displayName = user?.firstName && user?.lastName 
+
+  const displayName = user?.firstName && user?.lastName
     ? `${user.firstName} ${user.lastName}`
     : user?.email || "User";
-  
+
   const initials = user?.firstName && user?.lastName
     ? `${user.firstName[0]}${user.lastName[0]}`
     : user?.email?.[0].toUpperCase() || "U";
+
+  const [toolQuery, setToolQuery] = useState("");
+  const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(0);
+  const searchRef = useRef<HTMLFormElement | null>(null);
+
+  const toolMatches = useMemo(() => {
+    const query = toolQuery.trim().toLowerCase();
+    if (!query) return [];
+    const scored = TOOL_SEARCH_ITEMS.map((item) => {
+      const label = item.label.toLowerCase();
+      const keywords = item.keywords.map((keyword) => keyword.toLowerCase());
+      let score = 0;
+      if (label.startsWith(query)) score = 3;
+      else if (label.includes(query)) score = 2;
+      else if (keywords.some((keyword) => keyword.includes(query))) score = 1;
+      return { item, score };
+    }).filter((entry) => entry.score > 0);
+
+    return scored
+      .sort((a, b) => b.score - a.score || a.item.label.localeCompare(b.item.label))
+      .map((entry) => entry.item)
+      .slice(0, 6);
+  }, [toolQuery]);
+
+  useEffect(() => {
+    if (toolMatches.length === 0) {
+      setHighlightIndex(0);
+      return;
+    }
+    setHighlightIndex((index) => Math.min(index, toolMatches.length - 1));
+  }, [toolMatches]);
+
+  useEffect(() => {
+    setToolQuery("");
+    setToolMenuOpen(false);
+  }, [location]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!searchRef.current) return;
+      if (searchRef.current.contains(event.target as Node)) return;
+      setToolMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const handleToolSelect = (item: ToolSearchItem) => {
+    trackEvent("tool_search_select", { label: item.label, target: item.path, query: toolQuery });
+    setToolQuery("");
+    setToolMenuOpen(false);
+    setLocation(item.path);
+  };
+
+  const handleToolSubmit = () => {
+    if (!toolQuery.trim()) return;
+    if (toolMatches.length > 0) {
+      handleToolSelect(toolMatches[highlightIndex] || toolMatches[0]);
+      return;
+    }
+    trackEvent("tool_search_no_match", { query: toolQuery.trim() });
+    setToolMenuOpen(false);
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 overflow-x-hidden">
@@ -49,57 +163,122 @@ export function Header() {
             <span className="font-display text-sm sm:text-xl font-bold hidden min-[400px]:inline">Ready Set Fly</span>
           </Link>
 
-          {/* Main Navigation Tabs - Compact on mobile */}
-          <nav className="flex flex-1 items-center gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 max-w-[58vw] sm:max-w-none overflow-x-auto whitespace-nowrap" role="navigation" aria-label="Main navigation">
-            <Link href="/flight-planner" data-testid="link-plan-flight">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isPlanner ? "bg-background shadow-sm" : ""}`}
-                onClick={() => trackEvent("nav_click", { label: "plan_flight", target: "/flight-planner" })}
-              >
-                Plan Flight
-              </Button>
-            </Link>
-            <Link href="/student" data-testid="link-training">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isTraining ? "bg-background shadow-sm" : ""}`}
-              >
-                Training
-              </Button>
-            </Link>
-            <Link href="/faq" data-testid="link-faq">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isFaq ? "bg-background shadow-sm" : ""}`}
-              >
-                FAQ
-              </Button>
-            </Link>
-            <Link href="/rentals" data-testid="link-rentals">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full text-xs sm:text-sm px-2 sm:px-4"
-                onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}
-              >
-                Rentals
-              </Button>
-            </Link>
-            <Link href="/marketplace" data-testid="link-marketplace">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full text-xs sm:text-sm px-2 sm:px-4"
-                onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}
-              >
-                Marketplace
-              </Button>
-            </Link>
-          </nav>
+          <div className="flex flex-1 items-center gap-2 min-w-0">
+            {/* Main Navigation Tabs - Compact on mobile */}
+            <nav className="flex flex-1 items-center gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 min-w-0 overflow-x-auto whitespace-nowrap" role="navigation" aria-label="Main navigation">
+              <Link href="/flight-planner" data-testid="link-plan-flight">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isPlanner ? "bg-background shadow-sm" : ""}`}
+                  onClick={() => trackEvent("nav_click", { label: "plan_flight", target: "/flight-planner" })}
+                >
+                  Plan Flight
+                </Button>
+              </Link>
+              <Link href="/student" data-testid="link-training">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isTraining ? "bg-background shadow-sm" : ""}`}
+                >
+                  Training
+                </Button>
+              </Link>
+              <Link href="/faq" data-testid="link-faq">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isFaq ? "bg-background shadow-sm" : ""}`}
+                >
+                  FAQ
+                </Button>
+              </Link>
+              <Link href="/rentals" data-testid="link-rentals">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full text-xs sm:text-sm px-2 sm:px-4"
+                  onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}
+                >
+                  Rentals
+                </Button>
+              </Link>
+              <Link href="/marketplace" data-testid="link-marketplace">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full text-xs sm:text-sm px-2 sm:px-4"
+                  onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}
+                >
+                  Marketplace
+                </Button>
+              </Link>
+            </nav>
+
+            {/* Tool Search */}
+            <form
+              ref={searchRef}
+              className="relative w-[140px] sm:w-[180px] md:w-[220px] lg:w-[260px] flex-shrink-0"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleToolSubmit();
+              }}
+            >
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="search"
+                placeholder="Search tools..."
+                value={toolQuery}
+                onChange={(event) => {
+                  setToolQuery(event.target.value);
+                  setToolMenuOpen(true);
+                }}
+                onFocus={() => setToolMenuOpen(true)}
+                onKeyDown={(event) => {
+                  if (event.key === "ArrowDown") {
+                    if (toolMatches.length === 0) return;
+                    event.preventDefault();
+                    setHighlightIndex((index) => Math.min(index + 1, toolMatches.length - 1));
+                  } else if (event.key === "ArrowUp") {
+                    if (toolMatches.length === 0) return;
+                    event.preventDefault();
+                    setHighlightIndex((index) => Math.max(index - 1, 0));
+                  } else if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleToolSubmit();
+                  } else if (event.key === "Escape") {
+                    setToolMenuOpen(false);
+                  }
+                }}
+                className="h-9 w-full rounded-full border border-input bg-background pl-8 pr-3 text-xs sm:text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                aria-label="Search tools and features"
+                autoComplete="off"
+              />
+              {toolMenuOpen && toolQuery.trim().length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 rounded-lg border bg-background shadow-lg z-50 overflow-hidden">
+                  {toolMatches.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">No matches found.</div>
+                  ) : (
+                    toolMatches.map((item, index) => (
+                      <button
+                        key={item.path}
+                        type="button"
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          handleToolSelect(item);
+                        }}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs sm:text-sm hover:bg-muted ${index === highlightIndex ? "bg-muted" : ""}`}
+                      >
+                        <span className="font-medium">{item.label}</span>
+                        <span className="text-[0.65rem] sm:text-xs text-muted-foreground">{item.path}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </form>
+          </div>
 
           {/* Right side actions */}
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 relative z-20">
@@ -225,4 +404,3 @@ export function Header() {
     </header>
   );
 }
-

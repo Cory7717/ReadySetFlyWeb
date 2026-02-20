@@ -10839,16 +10839,30 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
     }
 
-    const response = await fetchWithTimeout(
-      url,
-      {
-        headers: {
-          Accept: "application/json",
-          ...extraHeaders,
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(
+        url,
+        {
+          headers: {
+            Accept: "application/json",
+            ...extraHeaders,
+          },
         },
-      },
-      8000
-    );
+        8000
+      );
+    } catch (error: any) {
+      console.error(
+        JSON.stringify({
+          event: "notam_fetch_error",
+          source: sourceLabel,
+          icao: requestedIcao,
+          error: error?.message || "fetch failed",
+          latencyMs: Date.now() - start,
+        })
+      );
+      return { ok: false, status: 502, error: "NOTAM fetch failed (network)" };
+    }
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");

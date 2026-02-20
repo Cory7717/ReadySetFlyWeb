@@ -730,12 +730,17 @@ function normalizeNotamItem(item: any): NormalizedNotam | null {
   const notamIdCandidate = item?.notamId || item?.id || extracted.notamId || derivedKey;
   const textLooksLikeNotam = looksLikeNotamText(text);
   const hasSignals = hasNotamSignals(item);
-  const isLikelyLocal = Boolean(extracted.icao) && text.trim().length >= 10;
-  if (!notamIdCandidate && !textLooksLikeNotam && !hasSignals && !isLikelyLocal) return null;
-  const notamId = notamIdCandidate || stableNotamId(text);
-  const icao = (pickIcao(item) || extracted.icao || "ZZZZ").toUpperCase();
+  const structuredIcao = pickIcao(item);
+  const resolvedIcao = (structuredIcao || extracted.icao || "ZZZZ").toUpperCase();
   const effectiveStartRaw = extractValueByKeys(item, EFFECTIVE_START_KEYS_LOWER);
   const effectiveEndRaw = extractValueByKeys(item, EFFECTIVE_END_KEYS_LOWER);
+  const issueTimeRaw = extractValueByKeys(item, ISSUE_TIME_KEYS_LOWER);
+  const hasTemporal = Boolean(issueTimeRaw || effectiveStartRaw || effectiveEndRaw);
+  const isLikelyLocal = resolvedIcao !== "ZZZZ" && text.trim().length >= 10;
+  const hasSignal = textLooksLikeNotam || hasSignals || isLikelyLocal || hasTemporal;
+  if (!notamIdCandidate && !hasSignal) return null;
+  const notamId = notamIdCandidate || stableNotamId(`${resolvedIcao}|${issueTimeRaw ?? ""}|${text}`);
+  const icao = resolvedIcao;
   const effectiveAt = parseNotamDate(effectiveStartRaw) ?? extracted.effectiveAt;
   const expiresAt = parseNotamDate(effectiveEndRaw) ?? extracted.expiresAt;
 

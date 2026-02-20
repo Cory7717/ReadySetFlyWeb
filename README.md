@@ -29,6 +29,22 @@ NOTAM_HTTP_BASE_URL=https://<your-notam-provider>/notams
 NOTAM_HTTP_HEADERS_JSON={"Authorization":"Bearer <token>"}
 ```
 
+## TFMS Operational Intelligence (Tiered)
+
+TFMS endpoints are gated by membership tier and can be toggled on/off:
+
+```
+TFMS_ENABLED=true
+TFMS_PROVIDER=stub
+TFMS_CACHE_TTL_SECONDS=300
+```
+
+Endpoints:
+
+- `GET /api/tfms/status?dep=KDAL&dest=KATL&route=...`
+- `GET /api/tfms/overlay?bbox=minLon,minLat,maxLon,maxLat`
+- `GET /api/tfms/risk?dep=KDAL&dest=KATL&time=...`
+
 ## Health Checks
 
 - `GET /api/aviation/health`

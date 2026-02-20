@@ -596,6 +596,35 @@ export const notams = pgTable("notams", {
   index("idx_notams_icao").on(table.icao),
 ]);
 
+// TFMS (Operational Intelligence)
+export const tfmsEvents = pgTable("tfms_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(),
+  severity: text("severity").notNull(),
+  depIcao: text("dep_icao"),
+  destIcao: text("dest_icao"),
+  corridorGeom: jsonb("corridor_geom"),
+  effectiveStart: timestamp("effective_start"),
+  effectiveEnd: timestamp("effective_end"),
+  details: jsonb("details"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_tfms_events_dep").on(table.depIcao),
+  index("idx_tfms_events_dest").on(table.destIcao),
+  index("idx_tfms_events_effective").on(table.effectiveStart),
+]);
+
+export const tfmsOverlays = pgTable("tfms_overlays", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bbox: text("bbox").notNull(),
+  geojson: jsonb("geojson").notNull(),
+  generatedAt: timestamp("generated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_tfms_overlays_bbox").on(table.bbox),
+  index("idx_tfms_overlays_generated").on(table.generatedAt),
+]);
+
 // PayPal Order Consumption (replay protection)
 export const paypalOrderConsumptions = pgTable("paypal_order_consumptions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1969,6 +1998,8 @@ export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 
 export type Notam = typeof notams.$inferSelect;
+export type TfmsEvent = typeof tfmsEvents.$inferSelect;
+export type TfmsOverlay = typeof tfmsOverlays.$inferSelect;
 
 export type PaypalOrderConsumption = typeof paypalOrderConsumptions.$inferSelect;
 export type InsertPaypalOrderConsumption = z.infer<typeof insertPaypalOrderConsumptionSchema>;

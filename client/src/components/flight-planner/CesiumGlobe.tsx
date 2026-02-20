@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import { apiUrl } from "@/lib/api";
+import { clearTfmsOverlay, setTfmsOverlay } from "@/map/layers/tfmsOverlayLayer";
 
 import type { PlannerPoint } from "@/components/flight-planner/PlannerMap";
 
@@ -15,9 +16,11 @@ const buildPositions = (points: PlannerPoint[]) =>
 export default function CesiumGlobe({
   points,
   heightClassName = "h-[380px]",
+  tfmsOverlayEnabled = false,
 }: {
   points: PlannerPoint[];
   heightClassName?: string;
+  tfmsOverlayEnabled?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
@@ -31,6 +34,9 @@ export default function CesiumGlobe({
   const cloudLayerRef = useRef<Cesium.ImageryLayer | null>(null);
   const radarLayerRef = useRef<Cesium.ImageryLayer | null>(null);
   const nightLayerRef = useRef<Cesium.ImageryLayer | null>(null);
+  const overlayAbortRef = useRef<AbortController | null>(null);
+  const overlayTimerRef = useRef<number | null>(null);
+  const lastOverlayBboxRef = useRef<string | null>(null);
 
   const runtimeIonToken = (globalThis as any).CESIUM_ION_TOKEN as string | undefined;
   const envIonToken = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
@@ -261,6 +267,89 @@ export default function CesiumGlobe({
       viewer.scene.sun.show = showAtmosphere;
     }
   }, [showAtmosphere]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
+    if (!tfmsOverlayEnabled) {
+      lastOverlayBboxRef.current = null;
+      clearTfmsOverlay(viewer);
+      return;
+    }
+
+    let active = true;
+
+    const computeViewBbox = () => {
+      const rectangle = viewer.camera.computeViewRectangle();
+      if (!rectangle) return null;
+      let west = Cesium.Math.toDegrees(rectangle.west);
+      let south = Cesium.Math.toDegrees(rectangle.south);
+      let east = Cesium.Math.toDegrees(rectangle.east);
+      let north = Cesium.Math.toDegrees(rectangle.north);
+
+      if (!Number.isFinite(west) || !Number.isFinite(east) || !Number.isFinite(south) || !Number.isFinite(north)) {
+        return null;
+      }
+
+      if (west > east) {
+        west = -180;
+        east = 180;
+      }
+
+      return [west, south, east, north].map((value) => value.toFixed(5)).join(",");
+    };
+
+    const fetchOverlay = async () => {
+      const bbox = computeViewBbox();
+      if (!bbox || bbox === lastOverlayBboxRef.current) return;
+      lastOverlayBboxRef.current = bbox;
+
+      if (overlayAbortRef.current) {
+        overlayAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      overlayAbortRef.current = controller;
+
+      try {
+        const response = await fetch(apiUrl(`/api/tfms/overlay?bbox=${encodeURIComponent(bbox)}`), {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!active) return;
+        await setTfmsOverlay(viewer, data?.features || [], data?.styleHints);
+      } catch (error: any) {
+        if (error?.name === "AbortError") return;
+      }
+    };
+
+    const scheduleFetch = () => {
+      if (overlayTimerRef.current) {
+        window.clearTimeout(overlayTimerRef.current);
+      }
+      overlayTimerRef.current = window.setTimeout(fetchOverlay, 800);
+    };
+
+    scheduleFetch();
+    const listener = () => scheduleFetch();
+    viewer.camera.changed.addEventListener(listener);
+
+    return () => {
+      active = false;
+      viewer.camera.changed.removeEventListener(listener);
+      if (overlayTimerRef.current) {
+        window.clearTimeout(overlayTimerRef.current);
+        overlayTimerRef.current = null;
+      }
+      if (overlayAbortRef.current) {
+        overlayAbortRef.current.abort();
+        overlayAbortRef.current = null;
+      }
+      clearTfmsOverlay(viewer);
+    };
+  }, [tfmsOverlayEnabled]);
 
   useEffect(() => {
     const viewer = viewerRef.current;

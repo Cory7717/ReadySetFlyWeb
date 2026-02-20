@@ -35,6 +35,11 @@ import { paypalRequest } from "./paypal-client";
 import { getEntitlementsForUser, isSuperAdminEmail, mapPayPalStatusToMembership, resolveMembershipFromPlanId, resolvePayPalPlanId } from "./membership";
 import { maybeSyncLogbookProSubscription } from "./paypal-subscription-sync";
 import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
+import { resolveTfmsAccess } from "./lib/tier";
+import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
+import { createStubTfmsProvider } from "./services/tfms/providers/stub";
+import { createDbTfmsProvider } from "./services/tfms/providers/db";
+import { computeTfmsRisk } from "./services/tfms/risk";
 import {
   fetchMetar,
   fetchTaf,
@@ -1378,6 +1383,12 @@ const tfrCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_ARCGIS_PROXY_URL = (process.env.TFR_ARCGIS_PROXY_URL || "").trim();
 const NOTAM_SOURCE = (process.env.NOTAM_SOURCE || "http").trim().toLowerCase();
 const NOTAM_HTTP_BASE_URL = (process.env.NOTAM_HTTP_BASE_URL || "").trim();
+const TFMS_ENABLED = String(process.env.TFMS_ENABLED || "false").toLowerCase() === "true";
+const TFMS_PROVIDER = resolveTfmsProviderKey(process.env.TFMS_PROVIDER);
+const TFMS_CACHE_TTL_SECONDS = Number(process.env.TFMS_CACHE_TTL_SECONDS || 300);
+const TFMS_CACHE_TTL_MS = Math.max(30, TFMS_CACHE_TTL_SECONDS) * 1000;
+const tfmsProvider = TFMS_PROVIDER === "db" ? createDbTfmsProvider() : createStubTfmsProvider();
+const tfmsCache = new Map<string, { expiresAt: number; value: any }>();
 const FAA_TFR_ARCGIS_URLS = TFR_ARCGIS_PROXY_URL
   ? [TFR_ARCGIS_PROXY_URL]
   : [
@@ -1385,6 +1396,23 @@ const FAA_TFR_ARCGIS_URLS = TFR_ARCGIS_PROXY_URL
       "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query",
     ];
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
+
+const getTfmsCache = <T,>(key: string): T | null => {
+  const entry = tfmsCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    tfmsCache.delete(key);
+    return null;
+  }
+  return entry.value as T;
+};
+
+const setTfmsCache = <T,>(key: string, value: T) => {
+  if (tfmsCache.size > 400) {
+    tfmsCache.clear();
+  }
+  tfmsCache.set(key, { expiresAt: Date.now() + TFMS_CACHE_TTL_MS, value });
+};
 
 function normalizeIcao(value: string) {
   return value.trim().toUpperCase();
@@ -10865,6 +10893,201 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       tfrProxyConfigured: Boolean(TFR_ARCGIS_PROXY_URL),
       notamSource: NOTAM_SOURCE || "http",
     });
+  });
+
+  const parseTfmsBbox = (raw: string | undefined): string | null => {
+    if (!raw) return null;
+    const parts = raw.split(",").map((value) => Number(value));
+    if (parts.length !== 4 || parts.some((value) => !Number.isFinite(value))) return null;
+    const [minLon, minLat, maxLon, maxLat] = parts;
+    if (minLon >= maxLon || minLat >= maxLat) return null;
+    return [minLon, minLat, maxLon, maxLat].map((value) => value.toFixed(5)).join(",");
+  };
+
+  app.get("/api/tfms/status", isAuthenticated, async (req: any, res) => {
+    const started = Date.now();
+    try {
+      if (!TFMS_ENABLED) {
+        return res.status(503).json({ error: "TFMS disabled" });
+      }
+
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const access = resolveTfmsAccess(user, "alerts");
+      if (!access.allowed) {
+        return res.status(403).json({ error: "Upgrade required", requiredTier: access.requiredTier });
+      }
+
+      const dep = normalizeIcao(String(req.query.dep || ""));
+      const dest = normalizeIcao(String(req.query.dest || ""));
+      const route = typeof req.query.route === "string" ? req.query.route.trim() : "";
+
+      if (!/^[A-Z0-9]{3,4}$/.test(dep) || !/^[A-Z0-9]{3,4}$/.test(dest)) {
+        return res.status(400).json({ error: "Invalid dep/dest ICAO code" });
+      }
+
+      const cacheKey = `tfms:status:${TFMS_PROVIDER}:${dep}:${dest}:${route}`;
+      let cacheHit = false;
+      let payload = getTfmsCache<TfmsStatus>(cacheKey);
+      if (!payload) {
+        payload = await tfmsProvider.getStatus({ dep, dest, route, now: new Date() });
+        setTfmsCache(cacheKey, payload);
+      } else {
+        cacheHit = true;
+      }
+
+      console.log(
+        JSON.stringify({
+          event: "tfms.status.request",
+          userId,
+          tier: access.tier,
+          dep,
+          dest,
+          provider: TFMS_PROVIDER,
+          cacheHit,
+          durationMs: Date.now() - started,
+          resultCounts: { alerts: payload.alerts.length },
+        })
+      );
+
+      return res.json(payload);
+    } catch (error: any) {
+      console.error("TFMS status failed:", error);
+      return res.status(500).json({ error: "Failed to load TFMS status" });
+    }
+  });
+
+  app.get("/api/tfms/overlay", isAuthenticated, async (req: any, res) => {
+    const started = Date.now();
+    try {
+      if (!TFMS_ENABLED) {
+        return res.status(503).json({ error: "TFMS disabled" });
+      }
+
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const access = resolveTfmsAccess(user, "overlay");
+      if (!access.allowed) {
+        return res.status(403).json({ error: "Upgrade required", requiredTier: access.requiredTier });
+      }
+
+      const rawBbox = typeof req.query.bbox === "string" ? req.query.bbox : undefined;
+      const bbox = parseTfmsBbox(rawBbox);
+      if (!bbox) {
+        return res.status(400).json({ error: "Invalid bbox" });
+      }
+
+      const cacheKey = `tfms:overlay:${TFMS_PROVIDER}:${bbox}`;
+      let cacheHit = false;
+      let payload = getTfmsCache<TfmsOverlay>(cacheKey);
+      if (!payload) {
+        payload = await tfmsProvider.getOverlay({ bbox, now: new Date() });
+        setTfmsCache(cacheKey, payload);
+      } else {
+        cacheHit = true;
+      }
+
+      console.log(
+        JSON.stringify({
+          event: "tfms.overlay.request",
+          userId,
+          tier: access.tier,
+          bbox,
+          provider: TFMS_PROVIDER,
+          cacheHit,
+          durationMs: Date.now() - started,
+          resultCounts: { features: payload.features.length },
+        })
+      );
+
+      return res.json(payload);
+    } catch (error: any) {
+      console.error("TFMS overlay failed:", error);
+      return res.status(500).json({ error: "Failed to load TFMS overlay" });
+    }
+  });
+
+  app.get("/api/tfms/risk", isAuthenticated, async (req: any, res) => {
+    const started = Date.now();
+    try {
+      if (!TFMS_ENABLED) {
+        return res.status(503).json({ error: "TFMS disabled" });
+      }
+
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const access = resolveTfmsAccess(user, "risk");
+      if (!access.allowed) {
+        return res.status(403).json({ error: "Upgrade required", requiredTier: access.requiredTier });
+      }
+
+      const dep = normalizeIcao(String(req.query.dep || ""));
+      const dest = normalizeIcao(String(req.query.dest || ""));
+      const route = typeof req.query.route === "string" ? req.query.route.trim() : "";
+      if (!/^[A-Z0-9]{3,4}$/.test(dep) || !/^[A-Z0-9]{3,4}$/.test(dest)) {
+        return res.status(400).json({ error: "Invalid dep/dest ICAO code" });
+      }
+
+      const cacheKey = `tfms:risk:${TFMS_PROVIDER}:${dep}:${dest}:${route}`;
+      let cacheHit = false;
+      let payload = getTfmsCache<any>(cacheKey);
+      if (!payload) {
+        const inputs = await tfmsProvider.getRiskInputs({ dep, dest, route, now: new Date() });
+        const result = computeTfmsRisk(inputs.alerts, inputs.congestion);
+        payload = {
+          generatedAt: new Date().toISOString(),
+          riskScore: result.riskScore,
+          rating: result.rating,
+          factors: result.factors,
+          disclaimer: "Decision-support only; verify with official sources.",
+        };
+        setTfmsCache(cacheKey, payload);
+      } else {
+        cacheHit = true;
+      }
+
+      console.log(
+        JSON.stringify({
+          event: "tfms.risk.request",
+          userId,
+          tier: access.tier,
+          dep,
+          dest,
+          provider: TFMS_PROVIDER,
+          cacheHit,
+          durationMs: Date.now() - started,
+        })
+      );
+
+      return res.json(payload);
+    } catch (error: any) {
+      console.error("TFMS risk failed:", error);
+      return res.status(500).json({ error: "Failed to load TFMS risk" });
+    }
   });
 
   app.get("/api/notams/:icao", async (req, res) => {

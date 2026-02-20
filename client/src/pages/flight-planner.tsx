@@ -23,6 +23,7 @@ import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/fli
 import { cn } from "@/lib/utils";
 import type { FlightPlan } from "@shared/schema";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
+import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 
 const PlannerMap = lazy(() => import("@/components/flight-planner/PlannerMap"));
 const CesiumGlobe = lazy(() => import("@/components/flight-planner/CesiumGlobe"));
@@ -323,6 +324,11 @@ export default function FlightPlanner() {
   const queryClient = useQueryClient();
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canPersist ?? (user?.logbookProStatus === "active");
+  const tfmsTier: TfmsTier = entitlements?.tier === "pro_plus"
+    ? "pro_plus"
+    : entitlements?.tier === "pro"
+      ? "pro_core"
+      : "free";
   const isGuest = !isAuthenticated;
   const isFree = isAuthenticated && !isPro;
   const isStudent = Boolean(
@@ -369,6 +375,7 @@ export default function FlightPlanner() {
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
   const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds" | "clouds" | "globe">("standard");
   const [windsAltitudeChoice, setWindsAltitudeChoice] = useState("planned");
+  const [tfmsOverlayEnabled, setTfmsOverlayEnabled] = useState(false);
   const [activeWeatherDetail, setActiveWeatherDetail] = useState<
     "metar" | "notams" | "pireps" | "hazards" | "winds" | "icing" | "turbulence" | null
   >(null);
@@ -394,6 +401,12 @@ export default function FlightPlanner() {
   const windsAltitudeFt = windsAltitudeChoice === "planned"
     ? plannedAltitudeValue
     : Number(windsAltitudeChoice);
+
+  useEffect(() => {
+    if (tfmsTier !== "pro_plus" && tfmsOverlayEnabled) {
+      setTfmsOverlayEnabled(false);
+    }
+  }, [tfmsTier, tfmsOverlayEnabled]);
 
   const openWeatherDetail = (
     id: "metar" | "notams" | "pireps" | "hazards" | "winds" | "icing" | "turbulence"
@@ -1820,6 +1833,7 @@ export default function FlightPlanner() {
                 {mapStyle === "globe" ? (
                   <CesiumGlobe
                     points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                    tfmsOverlayEnabled={tfmsTier === "pro_plus" && tfmsOverlayEnabled}
                   />
                 ) : (
                   <PlannerMap
@@ -2233,6 +2247,16 @@ export default function FlightPlanner() {
           )}
         </CardContent>
       </Card>
+
+      <OperationalIntelligencePanel
+        dep={departureResolved.trim().toUpperCase()}
+        dest={destinationResolved.trim().toUpperCase()}
+        route={[plannedStopsInput, waypointsInput].map((value) => value.trim()).filter(Boolean).join(" ")}
+        tier={tfmsTier}
+        mapStyle={mapStyle}
+        overlayEnabled={tfmsOverlayEnabled}
+        onToggleOverlay={setTfmsOverlayEnabled}
+      />
 
       <Dialog open={Boolean(activeWeatherDetail)} onOpenChange={(open) => !open && setActiveWeatherDetail(null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">

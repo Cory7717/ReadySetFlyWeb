@@ -88,6 +88,18 @@ export default function GpsSimsUnit() {
     activeLegIdent,
   } = derived;
 
+  const getHotspotClass = (id: string) => `rsf-hotspot-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+
+  const hotspotCss = useMemo(() => {
+    if (!unit?.panel?.hotspots) return "";
+    const rules = unit.panel.hotspots.map((hotspot) => {
+      const className = getHotspotClass(hotspot.id);
+      return `.${className}{left:${hotspot.x}%;top:${hotspot.y}%;width:${hotspot.width}%;height:${hotspot.height}%;touch-action:none;}`;
+    });
+    const cdiRule = `.rsf-cdi-indicator{left:calc(50% + ${cdiOffset}px);}`;
+    return `${rules.join("\n")}\n${cdiRule}`;
+  }, [unit?.panel?.hotspots, cdiOffset]);
+
   useEffect(() => {
     if (unit) {
       trackEvent("gps_sims_unit_view", { unit: unit.id });
@@ -443,8 +455,7 @@ export default function GpsSimsUnit() {
         <span>CDI</span>
         <div className="relative h-1 w-16 rounded-full bg-slate-700">
           <div
-            className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-amber-400"
-            style={{ left: `calc(50% + ${cdiOffset}px)` }}
+            className="rsf-cdi-indicator absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-amber-400"
           />
         </div>
       </div>
@@ -660,9 +671,9 @@ export default function GpsSimsUnit() {
           <CardContent className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div
               ref={panelRef}
-              className="relative overflow-hidden rounded-2xl border bg-slate-950/10"
-              style={{ aspectRatio: "2 / 1" }}
+              className="relative overflow-hidden rounded-2xl border bg-slate-950/10 aspect-[2/1]"
             >
+              <style>{hotspotCss}</style>
               <img
                 src={panelSrc}
                 alt={unit.panel.alt}
@@ -676,18 +687,11 @@ export default function GpsSimsUnit() {
                 <button
                   key={hotspot.id}
                   type="button"
-                  className={`absolute rounded-lg border text-xs font-semibold uppercase tracking-wide transition ${
+                  className={`absolute rounded-lg border text-xs font-semibold uppercase tracking-wide transition ${getHotspotClass(hotspot.id)} ${
                     hotspot.id === selectedHotspot?.id
                       ? "border-primary bg-primary/20 text-primary"
                       : "border-white/40 bg-white/10 text-white"
                   }`}
-                  style={{
-                    left: `${hotspot.x}%`,
-                    top: `${hotspot.y}%`,
-                    width: `${hotspot.width}%`,
-                    height: `${hotspot.height}%`,
-                    touchAction: "none",
-                  }}
                   onClick={() =>
                     hotspot.interaction?.type === "knob"
                       ? undefined

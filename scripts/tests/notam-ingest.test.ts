@@ -15,6 +15,10 @@ const emptyXml = readFileSync(
   new URL("../../test/fixtures/notam/empty.xml", import.meta.url),
   "utf-8"
 );
+const eventTextNotamXml = readFileSync(
+  new URL("../../test/fixtures/notam/event_text_notam.xml", import.meta.url),
+  "utf-8"
+);
 
 test("parser detects AIXMBasicMessage and namespaces", () => {
   const result = analyzeNotamMessage(canonicalXml);
@@ -69,6 +73,17 @@ test("canonical save does not trigger fallback", async () => {
   assert.equal(result.canonicalWriteAttempted, true);
   assert.equal(result.canonicalWriteSucceeded, true);
   assert.equal(result.fallbackWriteAttempted, false);
+});
+
+test("event text NOTAMs are parsed and saved canonically", async () => {
+  const result = await ingestNotamMessage(
+    eventTextNotamXml,
+    async () => ({ savedCount: 1, errorCount: 0, errors: [] }),
+    { messageId: "msg-event-text" }
+  );
+  assert.ok(result.parsedNotamCount > 0);
+  assert.equal(result.canonicalWriteAttempted, true);
+  assert.equal(result.canonicalWriteSucceeded, true);
 });
 
 test("oversized payload is filtered and stored", async () => {

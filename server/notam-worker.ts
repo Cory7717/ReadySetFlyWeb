@@ -118,13 +118,34 @@ const parser = new XMLParser({
 function parseNotamDate(raw?: string | null) {
   if (!raw) return null;
   const cleaned = raw.trim();
-  if (!/^\d{10}$/.test(cleaned)) return null;
-  const year = 2000 + Number(cleaned.slice(0, 2));
-  const month = Number(cleaned.slice(2, 4)) - 1;
-  const day = Number(cleaned.slice(4, 6));
-  const hour = Number(cleaned.slice(6, 8));
-  const minute = Number(cleaned.slice(8, 10));
-  return new Date(Date.UTC(year, month, day, hour, minute));
+  if (/^\d{10}$/.test(cleaned)) {
+    const year = 2000 + Number(cleaned.slice(0, 2));
+    const month = Number(cleaned.slice(2, 4)) - 1;
+    const day = Number(cleaned.slice(4, 6));
+    const hour = Number(cleaned.slice(6, 8));
+    const minute = Number(cleaned.slice(8, 10));
+    return new Date(Date.UTC(year, month, day, hour, minute));
+  }
+  if (/^\d{12}$/.test(cleaned)) {
+    const year = Number(cleaned.slice(0, 4));
+    const month = Number(cleaned.slice(4, 6)) - 1;
+    const day = Number(cleaned.slice(6, 8));
+    const hour = Number(cleaned.slice(8, 10));
+    const minute = Number(cleaned.slice(10, 12));
+    return new Date(Date.UTC(year, month, day, hour, minute));
+  }
+  if (/^\d{14}$/.test(cleaned)) {
+    const year = Number(cleaned.slice(0, 4));
+    const month = Number(cleaned.slice(4, 6)) - 1;
+    const day = Number(cleaned.slice(6, 8));
+    const hour = Number(cleaned.slice(8, 10));
+    const minute = Number(cleaned.slice(10, 12));
+    const second = Number(cleaned.slice(12, 14));
+    return new Date(Date.UTC(year, month, day, hour, minute, second));
+  }
+  const parsed = new Date(cleaned);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
 }
 
 function toArray<T>(value?: T | T[] | null): T[] {
@@ -234,13 +255,34 @@ function collectNotamNodes(payload: any): any[] {
     seen.add(value);
     for (const [key, entry] of Object.entries(value)) {
       const keyLower = key.toLowerCase();
-      if (keyLower.includes("notam")) {
+      const isNotamKey =
+        keyLower === "notam" ||
+        keyLower === "textnotam" ||
+        keyLower.endsWith("notam") ||
+        keyLower.includes("notamtext") ||
+        keyLower.includes("notamid");
+      if (isNotamKey) {
         if (typeof entry === "string" && looksLikeNotamText(entry)) {
           results.push(entry);
         } else if (typeof entry === "object") {
-          toArray(entry).forEach((item) => {
-            if (item) results.push(item);
-          });
+          if (keyLower === "textnotam" && entry && typeof entry === "object") {
+            const nested = (entry as any).NOTAM || (entry as any).notam;
+            if (nested) {
+              toArray(nested).forEach((item) => {
+                if (item) results.push(item);
+              });
+            } else {
+              toArray(entry).forEach((item) => {
+                if (item) results.push(item);
+              });
+            }
+          } else {
+            toArray(entry).forEach((item) => {
+              if (item && hasNotamSignals(item)) {
+                results.push(item);
+              }
+            });
+          }
         }
       }
       walk(entry, depth + 1);
@@ -346,6 +388,9 @@ const NOTAM_KEY_KEYS_LOWER = new Set([
   "id",
 ].map((key) => key.toLowerCase()));
 
+const NUMBER_KEYS_LOWER = new Set(["number", "notamnumber"].map((key) => key.toLowerCase()));
+const YEAR_KEYS_LOWER = new Set(["year"].map((key) => key.toLowerCase()));
+
 const ISSUE_TIME_KEYS_LOWER = new Set([
   "issuetime",
   "issue_time",
@@ -382,7 +427,7 @@ const EFFECTIVE_END_KEYS_LOWER = new Set([
   "expirydate",
 ].map((key) => key.toLowerCase()));
 
-const Q_CODE_KEYS_LOWER = new Set(["qcode", "q_code"].map((key) => key.toLowerCase()));
+const Q_CODE_KEYS_LOWER = new Set(["qcode", "q_code", "selectioncode"].map((key) => key.toLowerCase()));
 const PURPOSE_KEYS_LOWER = new Set(["purpose", "purposecode"].map((key) => key.toLowerCase()));
 const SCOPE_KEYS_LOWER = new Set(["scope", "scopecode"].map((key) => key.toLowerCase()));
 
@@ -501,6 +546,31 @@ function parseSeriesNumberYear(notamKey?: string) {
   return { series, number, year };
 }
 
+function deriveNotamKeyFromFields(item: any) {
+  const number = extractValueByKeys(item, NUMBER_KEYS_LOWER);
+  const year = extractValueByKeys(item, YEAR_KEYS_LOWER);
+  const location =
+    extractValueByKeys(item, ICAO_KEYS_LOWER) ||
+    extractValueByKeys(item, LOCATION_KEYS_LOWER);
+  if (!number || !year) return undefined;
+  if (location) return `${String(location).toUpperCase()} ${number}/${year}`;
+  return `${number}/${year}`;
+}
+
+function hasNotamSignals(item: any): boolean {
+  if (!item) return false;
+  const hasKey =
+    Boolean(extractValueByKeys(item, NUMBER_KEYS_LOWER)) ||
+    Boolean(extractValueByKeys(item, YEAR_KEYS_LOWER)) ||
+    Boolean(extractValueByKeys(item, Q_CODE_KEYS_LOWER)) ||
+    Boolean(extractValueByKeys(item, NOTAM_KEY_KEYS_LOWER));
+  if (hasKey) return true;
+  if (typeof item === "object") {
+    return Object.keys(item).some((key) => key.toLowerCase().includes("notam"));
+  }
+  return false;
+}
+
 function toIsoDateString(date?: Date | null) {
   if (!date) return undefined;
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return undefined;
@@ -532,7 +602,10 @@ function extractNotamSummary(item: any): NotamItemSummary {
     extractValueByKeys(item, NOTAM_KEY_KEYS_LOWER) ||
     item?.notamId ||
     item?.id ||
-    extractedFromText.notamId;
+    extractedFromText.notamId ||
+    deriveNotamKeyFromFields(item);
+  const number = extractValueByKeys(item, NUMBER_KEYS_LOWER);
+  const year = extractValueByKeys(item, YEAR_KEYS_LOWER);
   const icao =
     (pickIcao(item) ||
       extractValueByKeys(item, ICAO_KEYS_LOWER) ||
@@ -556,13 +629,16 @@ function extractNotamSummary(item: any): NotamItemSummary {
   const scope = extractValueByKeys(item, SCOPE_KEYS_LOWER);
   const classification = extractValueByKeys(item, CLASSIFICATION_KEYS_LOWER);
   const location = extractValueByKeys(item, LOCATION_KEYS_LOWER);
-  const { series, number, year } = parseSeriesNumberYear(notamKey);
+  const parsed = parseSeriesNumberYear(notamKey);
+  const series = parsed.series;
+  const mergedNumber = parsed.number || (number ? String(number) : undefined);
+  const mergedYear = parsed.year || (year ? String(year) : undefined);
 
   return {
     notamKey: notamKey ? String(notamKey) : undefined,
     series,
-    number,
-    year,
+    number: mergedNumber,
+    year: mergedYear,
     icao: icao ? String(icao).toUpperCase() : undefined,
     location: location ? String(location) : undefined,
     issueTime: issueTime ? String(issueTime) : undefined,
@@ -648,18 +724,24 @@ function normalizeNotamItem(item: any): NormalizedNotam | null {
   if (!text) return null;
 
   const extracted = extractFromText(text);
-  const notamIdCandidate = item?.notamId || item?.id || extracted.notamId;
+  const derivedKey = deriveNotamKeyFromFields(item);
+  const notamIdCandidate = item?.notamId || item?.id || extracted.notamId || derivedKey;
   const textLooksLikeNotam = looksLikeNotamText(text);
-  if (!notamIdCandidate && !textLooksLikeNotam) return null;
+  const hasSignals = hasNotamSignals(item);
+  if (!notamIdCandidate && !textLooksLikeNotam && !hasSignals) return null;
   const notamId = notamIdCandidate || stableNotamId(text);
   const icao = (pickIcao(item) || extracted.icao || "ZZZZ").toUpperCase();
+  const effectiveStartRaw = extractValueByKeys(item, EFFECTIVE_START_KEYS_LOWER);
+  const effectiveEndRaw = extractValueByKeys(item, EFFECTIVE_END_KEYS_LOWER);
+  const effectiveAt = parseNotamDate(effectiveStartRaw) ?? extracted.effectiveAt;
+  const expiresAt = parseNotamDate(effectiveEndRaw) ?? extracted.expiresAt;
 
   return {
     icao,
     notamId: String(notamId),
     text: String(text),
-    effectiveAt: extracted.effectiveAt,
-    expiresAt: extracted.expiresAt,
+    effectiveAt,
+    expiresAt,
     raw: item,
   };
 }
@@ -731,11 +813,12 @@ function normalizePayload(payload: any): NormalizedNotam[] {
     if (typeof value !== "object") return;
     seen.add(value);
     const entries = Object.entries(value);
-    const hasText = entries.some(
+    const textValue = entries.find(
       ([key, entry]) => matchesKey(key, TEXT_KEYS_LOWER) && typeof entry === "string"
-    );
-    const hasIcao = entries.some(([key, entry]) => matchesKey(key, ICAO_KEYS_LOWER) && entry);
-    if (hasText || hasIcao) candidates.push(value);
+    )?.[1] as string | undefined;
+    const hasText = Boolean(textValue && looksLikeNotamText(textValue));
+    const hasSignals = hasNotamSignals(value);
+    if (hasText || hasSignals) candidates.push(value);
     Object.values(value).forEach((entry) => walk(entry, depth + 1));
   };
   walk(payload, 0);

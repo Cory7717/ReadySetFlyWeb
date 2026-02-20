@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AIXMBasicMessage xmlns="http://www.aixm.aero/schema/5.1/message"
+  xmlns:aixm="http://www.aixm.aero/schema/5.1"
+  xmlns:event="http://www.aixm.aero/schema/5.1/event">
+  <hasMember>
+    <event:Event>
+      <event:timeSlice>
+        <event:EventTimeSlice>
+          <event:interpretation>BASELINE</event:interpretation>
+          <event:validTime>
+            <event:TimePeriod>
+              <event:beginPosition>2026-02-22T02:04:00.000Z</event:beginPosition>
+              <event:endPosition>2026-02-22T06:47:00.000Z</event:endPosition>
+            </event:TimePeriod>
+          </event:validTime>
+          <event:textNOTAM>
+            <event:NOTAM>
+              <event:number>440</event:number>
+              <event:year>2026</event:year>
+              <event:issued>2026-02-20T17:21:00.000Z</event:issued>
+              <event:selectionCode>QRACA</event:selectionCode>
+              <event:location>ZMA</event:location>
+              <event:effectiveStart>202602220204</event:effectiveStart>
+              <event:effectiveEnd>202602220647</event:effectiveEnd>
+              <event:text>AIRSPACE DCC EROP X3688 STLNK 6-104 AREA A STNR ALT RESERVATION SFC-UNL.</event:text>
+            </event:NOTAM>
+          </event:textNOTAM>
+        </event:EventTimeSlice>
+      </event:timeSlice>
+    </event:Event>
+  </hasMember>
+</AIXMBasicMessage>

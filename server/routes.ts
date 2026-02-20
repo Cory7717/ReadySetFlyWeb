@@ -10719,7 +10719,49 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       if (NOTAM_SOURCE === "swim_jms") {
-        return res.status(503).json({ error: "SWIM JMS ingestion not enabled" });
+        const nowDate = new Date();
+        const altIcao =
+          requestedIcao.length === 4 && requestedIcao.startsWith("K")
+            ? requestedIcao.slice(1)
+            : null;
+        const icaoClause = altIcao
+          ? or(eq(notamsTable.icao, requestedIcao), eq(notamsTable.icao, altIcao))
+          : eq(notamsTable.icao, requestedIcao);
+        const rows = await db
+          .select()
+          .from(notamsTable)
+          .where(and(icaoClause, or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, nowDate))))
+          .orderBy(desc(notamsTable.effectiveAt), desc(notamsTable.createdAt))
+          .limit(50);
+
+        if (rows.length > 0) {
+          console.log(
+            JSON.stringify({
+              event: "notam_fetch",
+              source: NOTAM_SOURCE,
+              icao: requestedIcao,
+              count: rows.length,
+              latencyMs: Date.now() - start,
+            })
+          );
+          return res.json({
+            icao: requestedIcao,
+            source: NOTAM_SOURCE,
+            notams: rows.map((row) => ({
+              id: row.notamId,
+              text: row.text,
+              effective: row.effectiveAt ? row.effectiveAt.toISOString() : undefined,
+              expires: row.expiresAt ? row.expiresAt.toISOString() : undefined,
+            })),
+          });
+        }
+
+        return res.json({
+          icao: requestedIcao,
+          source: NOTAM_SOURCE,
+          notams: [],
+          notice: "Awaiting SWIM stream.",
+        });
       }
 
       if (!NOTAM_HTTP_BASE_URL) {

@@ -10819,6 +10819,67 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  const fetchHttpNotams = async (
+    requestedIcao: string,
+    start: number,
+    sourceLabel: string
+  ): Promise<{ ok: true; notams: any[] } | { ok: false; status: number; error: string }> => {
+    if (!NOTAM_HTTP_BASE_URL) {
+      return { ok: false, status: 503, error: "NOTAM HTTP source not configured" };
+    }
+
+    const url = buildNotamUrl(NOTAM_HTTP_BASE_URL, requestedIcao);
+    let extraHeaders: Record<string, string> = {};
+    const extraHeadersRaw = process.env.NOTAM_HTTP_HEADERS_JSON;
+    if (extraHeadersRaw) {
+      try {
+        extraHeaders = JSON.parse(extraHeadersRaw);
+      } catch (error) {
+        console.warn("NOTAM_HTTP_HEADERS_JSON is not valid JSON");
+      }
+    }
+
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          Accept: "application/json",
+          ...extraHeaders,
+        },
+      },
+      8000
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      console.error(
+        JSON.stringify({
+          event: "notam_fetch_error",
+          source: sourceLabel,
+          icao: requestedIcao,
+          status: response.status,
+          snippet: errorText.trim().slice(0, 200),
+          latencyMs: Date.now() - start,
+        })
+      );
+      return { ok: false, status: response.status, error: `NOTAM fetch failed (${response.status})` };
+    }
+
+    const payload = await response.json().catch(() => null);
+    const notams = normalizeNotams(payload);
+    console.log(
+      JSON.stringify({
+        event: "notam_fetch",
+        source: sourceLabel,
+        icao: requestedIcao,
+        status: response.status,
+        count: notams.length,
+        latencyMs: Date.now() - start,
+      })
+    );
+    return { ok: true, notams };
+  };
+
   app.get("/api/notams", async (req, res) => {
     const start = Date.now();
     try {
@@ -10865,72 +10926,28 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           });
         }
 
-        return res.json({
-          icao: requestedIcao,
-          source: NOTAM_SOURCE,
-          notams: [],
-          notice: "Awaiting SWIM stream.",
-        });
-      }
-
-      if (!NOTAM_HTTP_BASE_URL) {
-        return res.status(503).json({ error: "NOTAM HTTP source not configured" });
-      }
-
-      const url = buildNotamUrl(NOTAM_HTTP_BASE_URL, requestedIcao);
-      let extraHeaders: Record<string, string> = {};
-      const extraHeadersRaw = process.env.NOTAM_HTTP_HEADERS_JSON;
-      if (extraHeadersRaw) {
-        try {
-          extraHeaders = JSON.parse(extraHeadersRaw);
-        } catch (error) {
-          console.warn("NOTAM_HTTP_HEADERS_JSON is not valid JSON");
-        }
-      }
-
-      const response = await fetchWithTimeout(
-        url,
-        {
-          headers: {
-            Accept: "application/json",
-            ...extraHeaders,
-          },
-        },
-        8000
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        console.error(
-          JSON.stringify({
-            event: "notam_fetch_error",
-            source: NOTAM_SOURCE,
+        const fallback = await fetchHttpNotams(requestedIcao, start, "http_fallback");
+        if (fallback.ok) {
+          return res.json({
             icao: requestedIcao,
-            status: response.status,
-            snippet: errorText.trim().slice(0, 200),
-            latencyMs: Date.now() - start,
-          })
-        );
-        return res.status(response.status).json({ error: `NOTAM fetch failed (${response.status})` });
+            source: "http_fallback",
+            notams: fallback.notams,
+          });
+        }
+
+        return res
+          .status(fallback.status)
+          .json({ icao: requestedIcao, source: NOTAM_SOURCE, notams: [], notice: "Awaiting SWIM stream." });
       }
 
-      const payload = await response.json().catch(() => null);
-      const notams = normalizeNotams(payload);
-      console.log(
-        JSON.stringify({
-          event: "notam_fetch",
-          source: NOTAM_SOURCE,
-          icao: requestedIcao,
-          status: response.status,
-          count: notams.length,
-          latencyMs: Date.now() - start,
-        })
-      );
-
+      const httpResult = await fetchHttpNotams(requestedIcao, start, NOTAM_SOURCE);
+      if (!httpResult.ok) {
+        return res.status(httpResult.status).json({ error: httpResult.error });
+      }
       return res.json({
         icao: requestedIcao,
         source: NOTAM_SOURCE,
-        notams,
+        notams: httpResult.notams,
       });
     } catch (error: any) {
       console.error(

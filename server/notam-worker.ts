@@ -29,6 +29,8 @@ type NormalizedNotam = {
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
+  removeNSPrefix: true,
+  textNodeName: "text",
   parseTagValue: true,
   trimValues: true,
 });
@@ -111,6 +113,8 @@ function extractIcaoFromValue(value: any): string | undefined {
     const match = value.toUpperCase().match(/\b[A-Z]{3,4}\b/);
     return match?.[0];
   }
+  const textValue = extractTextValue(value);
+  if (textValue) return extractIcaoFromValue(textValue);
   if (typeof value === "object") {
     const nested =
       value?.icao ||
@@ -128,20 +132,43 @@ function extractIcaoFromValue(value: any): string | undefined {
   return undefined;
 }
 
+function extractTextValue(value: any): string | undefined {
+  if (!value) return undefined;
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const extracted = extractTextValue(entry);
+      if (extracted) return extracted;
+    }
+    return undefined;
+  }
+  if (typeof value !== "object") return undefined;
+  const direct =
+    value.text ||
+    value["#text"] ||
+    value.value ||
+    value.content ||
+    value.body ||
+    value._text;
+  if (typeof direct === "string" && direct.trim()) return direct;
+  return undefined;
+}
+
 function pickText(item: any): string | null {
   if (item && typeof item === "object") {
     for (const [key, value] of Object.entries(item)) {
-      if (matchesKey(key, TEXT_KEYS_LOWER) && typeof value === "string" && value.trim()) {
-        return value;
+      if (matchesKey(key, TEXT_KEYS_LOWER)) {
+        const extracted = extractTextValue(value);
+        if (extracted && extracted.trim()) return extracted;
       }
     }
   }
   const nested =
-    item?.notam?.text ||
-    item?.notam?.notamText ||
-    item?.NOTAM?.text ||
-    item?.NOTAM?.notamText ||
-    item?.NOTAM?.["NOTAM_TEXT"];
+    extractTextValue(item?.notam?.text) ||
+    extractTextValue(item?.notam?.notamText) ||
+    extractTextValue(item?.NOTAM?.text) ||
+    extractTextValue(item?.NOTAM?.notamText) ||
+    extractTextValue(item?.NOTAM?.["NOTAM_TEXT"]);
   if (typeof nested === "string" && nested.trim()) return nested;
   return null;
 }

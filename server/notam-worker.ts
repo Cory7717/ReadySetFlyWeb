@@ -77,6 +77,8 @@ const TEXT_KEYS = [
   "notam-text",
 ];
 
+const NOTAM_TEXT_RE = /\bA\)\s*[A-Z0-9]{3,4}\b/i;
+
 const ICAO_KEYS = [
   "icao",
   "ICAO",
@@ -204,6 +206,41 @@ function normalizeNotamItem(item: any): NormalizedNotam | null {
   };
 }
 
+function looksLikeNotamText(value: string) {
+  if (!value || typeof value !== "string") return false;
+  if (NOTAM_TEXT_RE.test(value)) return true;
+  const upper = value.toUpperCase();
+  return upper.includes("NOTAM") && upper.includes("A)");
+}
+
+function collectNotamTextCandidates(payload: any): Array<{ text: string; icao?: string; raw?: any }> {
+  const results: Array<{ text: string; icao?: string; raw?: any }> = [];
+  const seen = new Set<any>();
+  const walk = (value: any, depth: number, inheritedIcao?: string) => {
+    if (!value || depth > 7) return;
+    if (seen.has(value)) return;
+    if (Array.isArray(value)) {
+      value.forEach((entry) => walk(entry, depth + 1, inheritedIcao));
+      return;
+    }
+    if (typeof value !== "object") return;
+    seen.add(value);
+
+    const currentIcao = pickIcao(value) || inheritedIcao;
+    for (const entry of Object.values(value)) {
+      const extracted = extractTextValue(entry);
+      if (extracted && looksLikeNotamText(extracted)) {
+        results.push({ text: extracted, icao: currentIcao, raw: value });
+      }
+    }
+
+    Object.values(value).forEach((entry) => walk(entry, depth + 1, currentIcao));
+  };
+
+  walk(payload, 0);
+  return results;
+}
+
 function normalizePayload(payload: any): NormalizedNotam[] {
   if (!payload) return [];
   const list =
@@ -245,7 +282,21 @@ function normalizePayload(payload: any): NormalizedNotam[] {
   };
   walk(payload, 0);
 
-  return candidates.map(normalizeNotamItem).filter(Boolean) as NormalizedNotam[];
+  const normalizedFromCandidates = candidates.map(normalizeNotamItem).filter(Boolean) as NormalizedNotam[];
+  if (normalizedFromCandidates.length > 0) return normalizedFromCandidates;
+
+  const textCandidates = collectNotamTextCandidates(payload);
+  const normalizedFromText = textCandidates
+    .map((candidate) =>
+      normalizeNotamItem({
+        text: candidate.text,
+        icao: candidate.icao,
+        raw: candidate.raw,
+      })
+    )
+    .filter(Boolean) as NormalizedNotam[];
+
+  return normalizedFromText;
 }
 
 async function upsertNotams(items: NormalizedNotam[]) {

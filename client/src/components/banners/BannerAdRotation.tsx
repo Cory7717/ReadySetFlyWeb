@@ -1,12 +1,24 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Mail } from "lucide-react";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 interface BannerAd {
   id: string;
+  orderId?: string | null;
   title: string;
   description?: string;
   imageUrl: string;
@@ -19,6 +31,14 @@ interface BannerAd {
   impressions: number;
   clicks: number;
 }
+
+const contactAdvertiserSchema = z.object({
+  name: z.string().min(1, "Name is required").max(160),
+  email: z.string().email("Valid email is required").max(255),
+  message: z.string().max(2000).optional().or(z.literal("")),
+});
+
+type ContactAdvertiserForm = z.infer<typeof contactAdvertiserSchema>;
 
 interface BannerAdRotationProps {
   placement: string;
@@ -35,6 +55,10 @@ export function BannerAdRotation({
 }: BannerAdRotationProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasTrackedImpression, setHasTrackedImpression] = useState(false);
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
+  const [contactAd, setContactAd] = useState<BannerAd | null>(null);
+  const { toast } = useToast();
+  const { user } = useAuth();
 
   const { data: bannerAds = [], isLoading } = useQuery<BannerAd[]>({
     queryKey: ["/api/banner-ads/active", placement, category],
@@ -54,18 +78,75 @@ export function BannerAdRotation({
 
   const trackImpressionMutation = useMutation({
     mutationFn: async (bannerId: string) => {
-      return apiRequest("POST", `/api/banner-ads/${bannerId}/impression`, {});
+      return apiRequest("POST", `/api/banner-ads/${bannerId}/impression`, { placement, category });
     },
   });
 
   const trackClickMutation = useMutation({
     mutationFn: async (bannerId: string) => {
-      return apiRequest("POST", `/api/banner-ads/${bannerId}/click`, {});
+      return apiRequest("POST", `/api/banner-ads/${bannerId}/click`, { placement, category });
+    },
+  });
+
+  const contactForm = useForm<ContactAdvertiserForm>({
+    resolver: zodResolver(contactAdvertiserSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      message: "",
+    },
+  });
+
+  const sendContactMutation = useMutation({
+    mutationFn: async (data: ContactAdvertiserForm) => {
+      if (!contactAd) {
+        throw new Error("No advertiser selected");
+      }
+      return apiRequest("POST", `/api/banner-ads/${contactAd.id}/contact`, {
+        name: data.name.trim(),
+        email: data.email.trim(),
+        message: data.message?.trim() || undefined,
+        placement,
+        category,
+      });
+    },
+    onSuccess: () => {
+      if (contactAd) {
+        const page = typeof window !== "undefined" ? window.location.pathname : undefined;
+        trackEvent("banner_ad_contact", {
+          bannerAdId: contactAd.id,
+          advertiserId: contactAd.orderId || undefined,
+          placement,
+          category,
+          page,
+        });
+      }
+      toast({
+        title: "Message sent",
+        description: "Your message was sent to the advertiser.",
+      });
+      setContactDialogOpen(false);
+      setContactAd(null);
+      const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+      contactForm.reset({
+        name: fullName || "",
+        email: user?.email || "",
+        message: "",
+      });
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Failed to send message.";
+      toast({
+        title: "Message failed",
+        description: message,
+        variant: "destructive",
+      });
     },
   });
 
   const currentAd = bannerAds[currentIndex];
   const isClickable = Boolean(currentAd?.link);
+  const canContact = Boolean(currentAd?.orderId);
 
   // Reset index and impression tracking when banner ads change
   useEffect(() => {
@@ -74,6 +155,16 @@ export function BannerAdRotation({
       setHasTrackedImpression(false);
     }
   }, [bannerAds]);
+
+  useEffect(() => {
+    if (!contactDialogOpen) return;
+    const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+    contactForm.reset({
+      name: fullName || "",
+      email: user?.email || "",
+      message: "",
+    });
+  }, [contactDialogOpen, user?.firstName, user?.lastName, user?.email]);
 
   // Rotate through ads
   useEffect(() => {
@@ -91,6 +182,14 @@ export function BannerAdRotation({
   useEffect(() => {
     if (currentAd && !hasTrackedImpression) {
       trackImpressionMutation.mutate(currentAd.id);
+      const page = typeof window !== "undefined" ? window.location.pathname : undefined;
+      trackEvent("banner_ad_impression", {
+        bannerAdId: currentAd.id,
+        advertiserId: currentAd.orderId || undefined,
+        placement,
+        category,
+        page,
+      });
       setHasTrackedImpression(true);
     }
   }, [currentAd?.id, hasTrackedImpression]);
@@ -121,6 +220,15 @@ export function BannerAdRotation({
     if (!currentAd?.link) return;
     const trackingUrl = buildTrackingUrl(currentAd.link, currentAd.id);
     trackClickMutation.mutate(currentAd.id);
+    const page = typeof window !== "undefined" ? window.location.pathname : undefined;
+    trackEvent("banner_ad_click", {
+      bannerAdId: currentAd.id,
+      advertiserId: currentAd.orderId || undefined,
+      placement,
+      category,
+      page,
+      targetUrl: currentAd.link,
+    });
     window.open(trackingUrl, "_blank", "noopener,noreferrer");
   };
 
@@ -163,12 +271,34 @@ export function BannerAdRotation({
               )}
             </div>
 
-            {currentAd.link && (
-              <div className="flex items-center gap-3 text-sm font-semibold text-foreground">
-                <span>Visit sponsor</span>
-                <ExternalLink className="h-4 w-4" />
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-foreground">
+              {currentAd.link && (
+                <span className="inline-flex items-center gap-2">
+                  <span>Visit sponsor</span>
+                  <ExternalLink className="h-4 w-4" />
+                </span>
+              )}
+              {canContact && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setContactAd(currentAd);
+                    setContactDialogOpen(true);
+                  }}
+                  onKeyDown={(event) => {
+                    event.stopPropagation();
+                  }}
+                  data-testid="button-contact-advertiser"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  Contact advertiser
+                </Button>
+              )}
+            </div>
 
             {bannerAds.length > 1 && (
               <div className="flex gap-2 pt-1">
@@ -200,6 +330,93 @@ export function BannerAdRotation({
           </div>
         </div>
       </Card>
+
+      <Dialog
+        open={contactDialogOpen}
+        onOpenChange={(open) => {
+          setContactDialogOpen(open);
+          if (!open) {
+            setContactAd(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md" data-testid="dialog-contact-advertiser">
+          <DialogHeader>
+            <DialogTitle>Contact advertiser</DialogTitle>
+            <DialogDescription>
+              Send a message about {contactAd?.title || "this sponsor"}.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...contactForm}>
+            <form
+              onSubmit={contactForm.handleSubmit((data) => sendContactMutation.mutate(data))}
+              className="space-y-4"
+            >
+              <FormField
+                control={contactForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Aviator Alex" {...field} data-testid="input-contact-advertiser-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={contactForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="alex@example.com" {...field} data-testid="input-contact-advertiser-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={contactForm.control}
+                name="message"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Message (optional)</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Let them know how they can help..."
+                        className="min-h-[120px]"
+                        {...field}
+                        data-testid="textarea-contact-advertiser-message"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setContactDialogOpen(false)}
+                  data-testid="button-cancel-contact-advertiser"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={sendContactMutation.isPending}
+                  data-testid="button-submit-contact-advertiser"
+                >
+                  {sendContactMutation.isPending ? "Sending..." : "Send message"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

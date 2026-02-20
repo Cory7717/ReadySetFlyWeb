@@ -24,7 +24,7 @@ import { format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, en
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
-import { sendContactFormEmail } from "./email-templates";
+import { sendBannerAdvertiserContactEmail, sendContactFormEmail } from "./email-templates";
 import { ADMIN_PERMISSIONS, ADMIN_ROLE_PERMISSIONS, normalizeAdminPermissions, type AdminPermission, type AdminRole } from "@shared/config/adminAccess";
 import registerMobileAuthRoutes from "./mobile-auth-routes";
 import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
@@ -9091,6 +9091,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to track click" });
+    }
+  });
+
+  app.post("/api/banner-ads/:id/contact", contactFormRateLimiter, async (req, res) => {
+    try {
+      const contactSchema = z.object({
+        name: z.string().trim().min(1, "Name is required").max(160),
+        email: z.string().trim().email("Valid email is required").max(255),
+        message: z.string().trim().max(2000).optional(),
+        placement: z.string().trim().max(120).optional(),
+        category: z.string().trim().max(120).optional(),
+      });
+
+      const parsed = contactSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: "Invalid contact data",
+          details: parsed.error.errors,
+        });
+      }
+
+      const ad = await storage.getBannerAd(req.params.id);
+      if (!ad) {
+        return res.status(404).json({ error: "Banner ad not found" });
+      }
+
+      if (!ad.orderId) {
+        return res.status(400).json({ error: "Banner ad advertiser not available" });
+      }
+
+      const order = await storage.getBannerAdOrder(ad.orderId);
+      if (!order || !order.sponsorEmail) {
+        return res.status(404).json({ error: "Advertiser not found" });
+      }
+
+      await sendBannerAdvertiserContactEmail({
+        sponsorEmail: order.sponsorEmail,
+        sponsorName: order.sponsorName,
+        adTitle: ad.title,
+        name: parsed.data.name,
+        email: parsed.data.email,
+        message: parsed.data.message,
+        placement: parsed.data.placement,
+        category: parsed.data.category,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Banner advertiser contact error:", error);
+      res.status(500).json({ error: "Failed to contact advertiser" });
     }
   });
 

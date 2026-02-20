@@ -1,5 +1,7 @@
 import crypto from "crypto";
+import { mkdir, writeFile } from "fs/promises";
 import { createRequire } from "module";
+import { join } from "path";
 import zlib from "zlib";
 import { XMLParser } from "fast-xml-parser";
 import { db } from "./db";
@@ -26,13 +28,53 @@ type NormalizedNotam = {
   raw?: any;
 };
 
+const EMPTY_REASONS = [
+  "NO_XML_BODY",
+  "PARSE_ERROR",
+  "MISSING_AIXM_BASIC_MESSAGE",
+  "MISSING_EVENT_SECTION",
+  "MISSING_FNS_PAYLOAD",
+  "NO_NOTAM_ELEMENTS",
+  "UNSUPPORTED_MESSAGE_TYPE",
+  "MISSING_REQUIRED_FIELDS",
+  "FILTERED_OUT",
+] as const;
+
+type EmptyReason = (typeof EMPTY_REASONS)[number];
+
+type NotamParseMeta = {
+  xmlByteLength: number;
+  rootTag?: string;
+  rootNamespaces: Record<string, string>;
+  hasFnsNamespace: boolean;
+  parseError?: string;
+};
+
+type NotamExtractResult = {
+  items: NormalizedNotam[];
+  parsedNotamCount: number;
+  hasAixmBasicMessage: boolean;
+  hasEventSection: boolean;
+  hasFnsPayload: boolean;
+  eventTypes: string[];
+  reasonEmpty?: EmptyReason;
+};
+
+type NotamIngestResult = NotamParseMeta &
+  NotamExtractResult & {
+    dbWriteAttempted: boolean;
+    dbWriteSucceeded: boolean;
+    dbErrorCode?: string;
+    dbErrorMessage?: string;
+  };
+
 const parser = new XMLParser({
   ignoreAttributes: false,
-  attributeNamePrefix: "",
+  attributeNamePrefix: "@_",
   removeNSPrefix: true,
   textNodeName: "text",
   parseTagValue: true,
-  trimValues: true,
+  trimValues: false,
 });
 
 function parseNotamDate(raw?: string | null) {
@@ -45,6 +87,158 @@ function parseNotamDate(raw?: string | null) {
   const hour = Number(cleaned.slice(6, 8));
   const minute = Number(cleaned.slice(8, 10));
   return new Date(Date.UTC(year, month, day, hour, minute));
+}
+
+function toArray<T>(value?: T | T[] | null): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function truncateText(value: string, maxChars: number) {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, maxChars)}\n...[truncated ${value.length - maxChars} chars]`;
+}
+
+function stringifyTruncated(value: any, maxChars: number) {
+  if (typeof value === "string") return truncateText(value, maxChars);
+  try {
+    return truncateText(JSON.stringify(value), maxChars);
+  } catch {
+    return truncateText(String(value), maxChars);
+  }
+}
+
+function extractRootInfo(xml: string): {
+  rootTag?: string;
+  rootNamespaces: Record<string, string>;
+  hasFnsNamespace: boolean;
+} {
+  const rootNamespaces: Record<string, string> = {};
+  if (!xml || typeof xml !== "string") {
+    return { rootNamespaces, hasFnsNamespace: false };
+  }
+
+  const match = xml.match(/<([A-Za-z0-9:_-]+)(\s[^>]*)?>/);
+  if (!match) {
+    return { rootNamespaces, hasFnsNamespace: false };
+  }
+
+  const rootTag = match[1];
+  const attrs = match[2] || "";
+  const nsRegex = /\s(xmlns(?::[A-Za-z0-9_-]+)?)=(["'])(.*?)\2/g;
+  let nsMatch: RegExpExecArray | null = null;
+  while ((nsMatch = nsRegex.exec(attrs))) {
+    const rawKey = nsMatch[1];
+    const uri = nsMatch[3];
+    const prefix = rawKey.includes(":") ? rawKey.split(":")[1] : "default";
+    rootNamespaces[prefix] = uri;
+  }
+
+  const hasFnsNamespace = Object.entries(rootNamespaces).some(([prefix, uri]) => {
+    const prefixLower = prefix.toLowerCase();
+    const uriLower = uri.toLowerCase();
+    return prefixLower.includes("fns") || uriLower.includes("fns") || uriLower.includes("notam");
+  });
+
+  return { rootTag, rootNamespaces, hasFnsNamespace };
+}
+
+function findFirstByKey(value: any, keyLower: string, depth: number = 0): any {
+  if (!value || depth > 8) return undefined;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findFirstByKey(entry, keyLower, depth + 1);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  if (typeof value !== "object") return undefined;
+  for (const [key, entry] of Object.entries(value)) {
+    if (key.toLowerCase() === keyLower) {
+      return entry;
+    }
+    const found = findFirstByKey(entry, keyLower, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function hasKeyMatch(value: any, matcher: (key: string) => boolean, depth: number = 0): boolean {
+  if (!value || depth > 8) return false;
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasKeyMatch(entry, matcher, depth + 1));
+  }
+  if (typeof value !== "object") return false;
+  for (const [key, entry] of Object.entries(value)) {
+    if (matcher(key)) return true;
+    if (hasKeyMatch(entry, matcher, depth + 1)) return true;
+  }
+  return false;
+}
+
+function collectNotamNodes(payload: any): any[] {
+  const results: any[] = [];
+  const seen = new Set<any>();
+  const walk = (value: any, depth: number) => {
+    if (!value || depth > 8) return;
+    if (seen.has(value)) return;
+    if (Array.isArray(value)) {
+      value.forEach((entry) => walk(entry, depth + 1));
+      return;
+    }
+    if (typeof value !== "object") return;
+    seen.add(value);
+    for (const [key, entry] of Object.entries(value)) {
+      const keyLower = key.toLowerCase();
+      if (keyLower.includes("notam")) {
+        if (typeof entry === "string" && looksLikeNotamText(entry)) {
+          results.push(entry);
+        } else if (typeof entry === "object") {
+          toArray(entry).forEach((item) => {
+            if (item) results.push(item);
+          });
+        }
+      }
+      walk(entry, depth + 1);
+    }
+  };
+  walk(payload, 0);
+  return results;
+}
+
+function collectEventTypes(payload: any): string[] {
+  const types = new Set<string>();
+  const keys = new Set([
+    "eventtype",
+    "eventtypecode",
+    "status",
+    "action",
+    "operation",
+    "operationtype",
+  ]);
+  const walk = (value: any, depth: number) => {
+    if (!value || depth > 8) return;
+    if (Array.isArray(value)) {
+      value.forEach((entry) => walk(entry, depth + 1));
+      return;
+    }
+    if (typeof value !== "object") return;
+    for (const [key, entry] of Object.entries(value)) {
+      if (keys.has(key.toLowerCase())) {
+        if (typeof entry === "string") {
+          const trimmed = entry.trim();
+          if (trimmed) types.add(trimmed);
+        } else if (Array.isArray(entry)) {
+          entry.forEach((item) => {
+            if (typeof item === "string" && item.trim()) types.add(item.trim());
+          });
+        }
+      }
+      walk(entry, depth + 1);
+    }
+  };
+  walk(payload, 0);
+  return Array.from(types);
 }
 
 function extractFromText(text: string): Partial<NormalizedNotam> {
@@ -189,17 +383,22 @@ function pickIcao(item: any): string | undefined {
 
 function normalizeNotamItem(item: any): NormalizedNotam | null {
   const text = pickText(item) || (typeof item === "string" ? item : null);
-  if (!text) return null;
+  const fallbackText =
+    text ||
+    (item && typeof item === "object" ? stringifyTruncated(item, 4000) : null);
+  if (!fallbackText) return null;
 
-  const extracted = extractFromText(text);
-  const notamId = item?.notamId || item?.id || extracted.notamId || stableNotamId(text);
-  const icao = (pickIcao(item) || extracted.icao || "").toUpperCase();
-  if (!icao) return null;
+  const extracted = extractFromText(fallbackText);
+  const notamIdCandidate = item?.notamId || item?.id || extracted.notamId;
+  const textLooksLikeNotam = looksLikeNotamText(fallbackText);
+  if (!notamIdCandidate && !textLooksLikeNotam) return null;
+  const notamId = notamIdCandidate || stableNotamId(fallbackText);
+  const icao = (pickIcao(item) || extracted.icao || "ZZZZ").toUpperCase();
 
   return {
     icao,
     notamId: String(notamId),
-    text: String(text),
+    text: String(fallbackText),
     effectiveAt: extracted.effectiveAt,
     expiresAt: extracted.expiresAt,
     raw: item,
@@ -300,45 +499,180 @@ function normalizePayload(payload: any): NormalizedNotam[] {
 }
 
 async function upsertNotams(items: NormalizedNotam[]) {
-  if (items.length === 0) return;
+  if (items.length === 0) return { savedCount: 0, errorCount: 0, errors: [] as any[] };
+  let savedCount = 0;
+  const errors: any[] = [];
   for (const item of items) {
-    await db
-      .insert(notamsTable)
-      .values({
-        icao: item.icao,
-        notamId: item.notamId,
-        text: item.text,
-        effectiveAt: item.effectiveAt ?? null,
-        expiresAt: item.expiresAt ?? null,
-        source: "swim",
-        raw: item.raw ?? null,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: notamsTable.notamId,
-        set: {
+    try {
+      await db
+        .insert(notamsTable)
+        .values({
           icao: item.icao,
+          notamId: item.notamId,
           text: item.text,
           effectiveAt: item.effectiveAt ?? null,
           expiresAt: item.expiresAt ?? null,
+          source: "swim",
           raw: item.raw ?? null,
           updatedAt: new Date(),
-        },
-      });
+        })
+        .onConflictDoUpdate({
+          target: notamsTable.notamId,
+          set: {
+            icao: item.icao,
+            text: item.text,
+            effectiveAt: item.effectiveAt ?? null,
+            expiresAt: item.expiresAt ?? null,
+            raw: item.raw ?? null,
+            updatedAt: new Date(),
+          },
+        });
+      savedCount += 1;
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  return { savedCount, errorCount: errors.length, errors };
+}
+
+function parseNotamBody(body: string): { payload: any; meta: NotamParseMeta; messageType: "xml" | "json" | "text" } {
+  const xmlByteLength = Buffer.byteLength(body || "", "utf-8");
+  const trimmed = (body || "").trim();
+  const rootInfo = extractRootInfo(trimmed);
+  const meta: NotamParseMeta = {
+    xmlByteLength,
+    rootTag: rootInfo.rootTag,
+    rootNamespaces: rootInfo.rootNamespaces,
+    hasFnsNamespace: rootInfo.hasFnsNamespace,
+  };
+
+  if (!trimmed) {
+    return {
+      payload: undefined,
+      meta: { ...meta, parseError: "NO_XML_BODY" },
+      messageType: "text",
+    };
+  }
+
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      return { payload: JSON.parse(trimmed), meta, messageType: "json" };
+    } catch {
+      // fall through to XML parsing
+    }
+  }
+
+  try {
+    return { payload: parser.parse(trimmed), meta, messageType: "xml" };
+  } catch (error: any) {
+    return {
+      payload: undefined,
+      meta: { ...meta, parseError: error?.message || "PARSE_ERROR" },
+      messageType: "xml",
+    };
   }
 }
 
-function parsePayload(body: string) {
-  try {
-    return JSON.parse(body);
-  } catch {
-    // fall through
+export function analyzeNotamMessage(body: string): NotamParseMeta & NotamExtractResult & { messageType: string } {
+  const { payload, meta, messageType } = parseNotamBody(body);
+  const aixmNode = findFirstByKey(payload, "aixmbasicmessage");
+  const payloadRoot = aixmNode ?? payload;
+  const hasAixmBasicMessage =
+    Boolean(aixmNode) || Boolean(meta.rootTag?.toLowerCase().includes("aixmbasicmessage"));
+  const hasEventSection = hasKeyMatch(payloadRoot, (key) => key.toLowerCase().includes("event"));
+  const eventTypes = collectEventTypes(payloadRoot);
+
+  if (!payload) {
+    return {
+      ...meta,
+      messageType,
+      items: [],
+      parsedNotamCount: 0,
+      hasAixmBasicMessage,
+      hasEventSection,
+      hasFnsPayload: false,
+      eventTypes,
+      reasonEmpty: meta.parseError === "NO_XML_BODY" ? "NO_XML_BODY" : "PARSE_ERROR",
+    };
   }
-  try {
-    return parser.parse(body);
-  } catch {
-    return body;
+
+  const notamNodes = collectNotamNodes(payloadRoot);
+  const hasFnsPayload = notamNodes.length > 0;
+  const normalized =
+    notamNodes.length > 0 ? normalizePayload(notamNodes) : normalizePayload(payloadRoot);
+  const parsedNotamCount = Math.max(notamNodes.length, normalized.length);
+
+  let reasonEmpty: EmptyReason | undefined;
+  if (normalized.length === 0) {
+    if (messageType !== "xml" && !hasAixmBasicMessage) {
+      reasonEmpty = "UNSUPPORTED_MESSAGE_TYPE";
+    } else if (!hasAixmBasicMessage) {
+      reasonEmpty = "MISSING_AIXM_BASIC_MESSAGE";
+    } else if (!hasEventSection) {
+      reasonEmpty = "MISSING_EVENT_SECTION";
+    } else if (!hasFnsPayload) {
+      reasonEmpty = "MISSING_FNS_PAYLOAD";
+    } else if (parsedNotamCount === 0) {
+      reasonEmpty = "NO_NOTAM_ELEMENTS";
+    } else {
+      reasonEmpty = "MISSING_REQUIRED_FIELDS";
+    }
   }
+
+  return {
+    ...meta,
+    messageType,
+    items: normalized,
+    parsedNotamCount,
+    hasAixmBasicMessage,
+    hasEventSection,
+    hasFnsPayload,
+    eventTypes,
+    reasonEmpty,
+  };
+}
+
+export async function ingestNotamMessage(
+  body: string,
+  writer: (items: NormalizedNotam[]) => Promise<{ savedCount: number; errorCount: number; errors: any[] }> = upsertNotams
+): Promise<NotamIngestResult & { savedCount: number; dbErrorCount: number }> {
+  const analysis = analyzeNotamMessage(body);
+  let dbWriteAttempted = false;
+  let dbWriteSucceeded = false;
+  let dbErrorCode: string | undefined;
+  let dbErrorMessage: string | undefined;
+  let savedCount = 0;
+  let dbErrorCount = 0;
+
+  if (analysis.items.length > 0) {
+    dbWriteAttempted = true;
+    try {
+      const result = await writer(analysis.items);
+      savedCount = result.savedCount;
+      dbErrorCount = result.errorCount;
+      dbWriteSucceeded = result.errorCount === 0;
+      if (result.errorCount > 0) {
+        const firstError = result.errors[0] as any;
+        dbErrorCode = firstError?.code ? String(firstError.code) : undefined;
+        dbErrorMessage = firstError?.message ? String(firstError.message) : "DB write failed";
+      }
+    } catch (error: any) {
+      dbErrorCount = analysis.items.length;
+      dbWriteSucceeded = false;
+      dbErrorCode = error?.code ? String(error.code) : undefined;
+      dbErrorMessage = error?.message ? String(error.message) : "DB write failed";
+    }
+  }
+
+  return {
+    ...analysis,
+    dbWriteAttempted,
+    dbWriteSucceeded,
+    dbErrorCode,
+    dbErrorMessage,
+    savedCount,
+    dbErrorCount,
+  };
 }
 
 function resolveSolaceLogLevel() {
@@ -405,11 +739,46 @@ function messageToString(message: any): string {
   return "";
 }
 
+function extractMessageId(message: any): string | undefined {
+  if (!message) return undefined;
+  const candidates = [
+    message.getApplicationMessageId?.(),
+    message.getMessageId?.(),
+    message.getCorrelationId?.(),
+    message.getSequenceNumber?.(),
+  ];
+  for (const candidate of candidates) {
+    if (candidate === undefined || candidate === null) continue;
+    const value = String(candidate).trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function redactXmlSample(xml: string) {
+  if (!xml) return xml;
+  return xml
+    .replace(/(<(password|passwd|secret|token)[^>]*>)([^<]*)(<\/\2>)/gi, "$1[redacted]$4")
+    .replace(/(password|passwd|secret|token)=["'][^"']+["']/gi, "$1=\"[redacted]\"");
+}
+
 export function startSwimNotamWorker() {
   const debugNotams = String(process.env.SWIM_NOTAM_DEBUG || "").toLowerCase() === "true";
+  const debugCaptureEnabled =
+    String(process.env.NOTAM_INGEST_DEBUG_CAPTURE || "").toLowerCase() === "true";
+  const rawCaptureLimit = Number(process.env.NOTAM_INGEST_DEBUG_CAPTURE_LIMIT || 1);
+  const rawCaptureMax = Number(process.env.NOTAM_INGEST_DEBUG_CAPTURE_MAX_CHARS || 12000);
+  const debugCaptureLimit = Number.isFinite(rawCaptureLimit)
+    ? Math.max(0, rawCaptureLimit)
+    : 1;
+  const debugCaptureMaxChars = Number.isFinite(rawCaptureMax)
+    ? Math.max(500, rawCaptureMax)
+    : 12000;
   let receivedCount = 0;
   let savedCount = 0;
   let emptyCount = 0;
+  let dbErrorCount = 0;
+  let capturedEmptyCount = 0;
   const queueName = process.env.SWIM_JMS_QUEUE;
   const username = process.env.SWIM_JMS_USERNAME;
   const password = process.env.SWIM_JMS_PASSWORD;
@@ -523,33 +892,71 @@ export function startSwimNotamWorker() {
       try {
         receivedCount += 1;
         const body = messageToString(message);
-        const payload = parsePayload(body);
-        const normalized = normalizePayload(payload);
-        if (normalized.length === 0 && typeof payload === "string") {
-          const fallback = normalizeNotamItem(payload);
-          if (fallback) {
-            normalized.push(fallback);
+        const messageId = extractMessageId(message);
+        const analysis = await ingestNotamMessage(body);
+
+        savedCount += analysis.savedCount;
+        if (analysis.reasonEmpty) {
+          emptyCount += 1;
+        }
+        if (analysis.dbErrorCount > 0) {
+          dbErrorCount += analysis.dbErrorCount;
+        }
+
+        let samplePath: string | undefined;
+        if (
+          analysis.reasonEmpty &&
+          debugCaptureEnabled &&
+          capturedEmptyCount < debugCaptureLimit
+        ) {
+          try {
+            const dir = join(process.cwd(), "debug", "notam");
+            await mkdir(dir, { recursive: true });
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            const fileName = `empty-${timestamp}-${messageId || receivedCount}.xml`;
+            const fullPath = join(dir, fileName);
+            const safeXml = truncateText(
+              redactXmlSample(body || ""),
+              debugCaptureMaxChars
+            );
+            await writeFile(fullPath, safeXml, "utf-8");
+            capturedEmptyCount += 1;
+            samplePath = fullPath;
+          } catch (error: any) {
+            console.warn("Failed to capture empty NOTAM sample:", error?.message || error);
           }
         }
-        await upsertNotams(normalized);
-        savedCount += normalized.length;
-        if (debugNotams) {
-          const shouldLog = receivedCount <= 5 || receivedCount % 50 === 0;
-          if (normalized.length === 0) {
-            emptyCount += 1;
-          }
-          if (shouldLog || normalized.length === 0) {
-            const snippet = typeof body === "string" ? body.slice(0, 300) : "";
-            console.log(
-              JSON.stringify({
-                event: "notam_ingest",
-                receivedCount,
-                savedCount,
-                emptyCount,
-                bodySample: snippet,
-              })
-            );
-          }
+
+        const shouldLog =
+          (debugNotams && (receivedCount <= 5 || receivedCount % 50 === 0)) ||
+          Boolean(analysis.reasonEmpty) ||
+          analysis.dbErrorCount > 0;
+
+        if (shouldLog) {
+          console.log(
+            JSON.stringify({
+              event: "notam_ingest",
+              messageId,
+              receivedCount,
+              savedCount,
+              emptyCount,
+              parsedNotamCount: analysis.parsedNotamCount,
+              eventTypes: analysis.eventTypes,
+              hasAixmBasicMessage: analysis.hasAixmBasicMessage,
+              hasEventSection: analysis.hasEventSection,
+              hasFnsNamespace: analysis.hasFnsNamespace,
+              hasFnsPayload: analysis.hasFnsPayload,
+              reasonEmpty: analysis.reasonEmpty,
+              dbWriteAttempted: analysis.dbWriteAttempted,
+              dbWriteSucceeded: analysis.dbWriteSucceeded,
+              dbErrorCode: analysis.dbErrorCode,
+              dbErrorMessage: analysis.dbErrorMessage,
+              parseError: analysis.parseError,
+              xmlByteLength: analysis.xmlByteLength,
+              rootNamespaces: analysis.rootNamespaces,
+              samplePath,
+            })
+          );
         }
       } catch (ingestError: any) {
         console.error("NOTAM ingest error:", ingestError?.message || ingestError);

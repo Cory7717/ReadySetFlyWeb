@@ -383,6 +383,122 @@ Ready Set Fly - Connecting Pilots with Aircraft
   }
 }
 
+export async function sendBannerAdvertiserContactEmail(data: {
+  sponsorEmail: string;
+  sponsorName?: string | null;
+  adTitle: string;
+  name: string;
+  email: string;
+  message?: string | null;
+  placement?: string | null;
+  category?: string | null;
+}) {
+  const { getUncachableResendClient } = await import('./resendClient');
+  const { client: resend, fromEmail } = await getUncachableResendClient();
+  const safeMessage = data.message?.trim();
+  const messageHtml = safeMessage ? safeMessage.replace(/\n/g, '<br>') : "<em>No message provided.</em>";
+  const messageText = safeMessage ? safeMessage : "No message provided.";
+  const placementLabel = data.placement || "Not specified";
+  const categoryLabel = data.category || "General";
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #0f172a; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f8fafc; }
+    .info-box { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 10px 0; }
+    .message-box { background: #f3f4f6; border-left: 4px solid #0f172a; padding: 15px; margin: 15px 0; }
+    .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Ready Set Fly (RSF) Banner Ad Inquiry</h1>
+      <p>Message from a Ready Set Fly visitor</p>
+    </div>
+    
+    <div class="content">
+      <p>Hi ${data.sponsorName || "Advertiser"},</p>
+      <p>A Ready Set Fly visitor requested to contact you about your banner ad.</p>
+      
+      <div class="info-box">
+        <h3>Banner Ad Details</h3>
+        <p><strong>Ad:</strong> ${data.adTitle}</p>
+        <p><strong>Placement:</strong> ${placementLabel}</p>
+        <p><strong>Category:</strong> ${categoryLabel}</p>
+      </div>
+      
+      <div class="info-box">
+        <h3>Visitor Contact</h3>
+        <p><strong>Name:</strong> ${data.name}</p>
+        <p><strong>Email:</strong> ${data.email}</p>
+      </div>
+      
+      <div class="message-box">
+        <h3>Message</h3>
+        <p>${messageHtml}</p>
+      </div>
+      
+      <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
+        Reply to this email to respond directly to ${data.email}
+      </p>
+    </div>
+    
+    <div class="footer">
+      <p>This message was sent by Ready Set Fly on behalf of ${data.name}.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const textBody = `
+READY SET FLY BANNER AD INQUIRY
+
+Hi ${data.sponsorName || "Advertiser"},
+
+A Ready Set Fly visitor requested to contact you about your banner ad.
+
+BANNER AD DETAILS
+-----------------
+Ad: ${data.adTitle}
+Placement: ${placementLabel}
+Category: ${categoryLabel}
+
+VISITOR CONTACT
+---------------
+Name: ${data.name}
+Email: ${data.email}
+
+MESSAGE
+-------
+${messageText}
+
+---
+Reply to this email to respond directly to ${data.email}.
+This message was sent by Ready Set Fly on behalf of ${data.name}.
+  `.trim();
+
+  try {
+    await resend.emails.send({
+      from: fromEmail,
+      to: data.sponsorEmail,
+      subject: `[RSF] Banner Ad Inquiry: ${data.adTitle}`,
+      html: htmlBody,
+      text: textBody,
+      replyTo: data.email,
+    });
+  } catch (error) {
+    console.error("Failed to send banner advertiser contact email:", error);
+  }
+}
+
 export async function sendWelcomeEmail(data: {
   email: string;
   firstName?: string | null;

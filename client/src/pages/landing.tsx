@@ -371,6 +371,40 @@ export default function Landing() {
               </Link>
             </Button>
           </div>
+          <Card className="mt-6 border-primary/20 bg-primary/5">
+            <CardContent className="p-5 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-base sm:text-lg font-semibold">
+                  <BookOpen className="h-5 w-5 text-primary" />
+                  CFI Instructors: Create your RSF profile
+                </div>
+                <p className="text-sm text-muted-foreground max-w-2xl">
+                  Get discovered by student pilots, highlight your ratings, and accept booking requests through the CFI marketplace.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="outline"
+                  asChild
+                >
+                  <Link
+                    href="/cfi"
+                    onClick={() => trackEvent("cta_click", { label: "landing_cfi_directory", target: "/cfi" })}
+                  >
+                    View CFI directory
+                  </Link>
+                </Button>
+                <Button asChild>
+                  <Link
+                    href="/dashboard/cfi"
+                    onClick={() => trackEvent("cta_click", { label: "landing_cfi_create_profile", target: "/dashboard/cfi" })}
+                  >
+                    Create your profile
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
               {

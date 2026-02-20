@@ -596,6 +596,27 @@ export const notams = pgTable("notams", {
   index("idx_notams_icao").on(table.icao),
 ]);
 
+export const notamIngestEvents = pgTable("notam_ingest_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  source: text("source").default("SWIM_AIM_FNS"),
+  messageId: text("message_id").notNull(),
+  receivedAt: timestamp("received_at").defaultNow(),
+  parsedNotamCount: integer("parsed_notam_count").notNull(),
+  reason: text("reason").notNull(),
+  missingFields: text("missing_fields").array().notNull().default(sql`ARRAY[]::text[]`),
+  eventTypes: text("event_types").array().notNull().default(sql`ARRAY[]::text[]`),
+  xmlByteLength: integer("xml_byte_length"),
+  notamKeys: text("notam_keys").array().notNull().default(sql`ARRAY[]::text[]`),
+  icaos: text("icaos").array().notNull().default(sql`ARRAY[]::text[]`),
+  excerpt: text("excerpt"),
+  details: jsonb("details"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_notam_ingest_message").on(table.messageId),
+  index("idx_notam_ingest_reason").on(table.reason),
+  index("idx_notam_ingest_created").on(table.createdAt),
+]);
+
 // TFMS (Operational Intelligence)
 export const tfmsEvents = pgTable("tfms_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -878,6 +899,8 @@ export const bannerAdOrders = pgTable("banner_ad_orders", {
   title: text("title").notNull(),
   description: text("description"), // Tagline
   imageUrl: text("image_url"), // Created by admin, uploaded to object storage
+  videoUrl: text("video_url"),
+  videoMuted: boolean("video_muted").default(true),
   link: text("link").notNull(), // Sponsor's website
   
   // Placement preferences
@@ -932,6 +955,8 @@ export const bannerAds = pgTable("banner_ads", {
   title: text("title").notNull(),
   description: text("description"), // Optional tagline/description
   imageUrl: text("image_url").notNull(), // Stored in object storage
+  videoUrl: text("video_url"),
+  videoMuted: boolean("video_muted").default(true),
   link: text("link").notNull(), // Clickable link to sponsor's website
   
   // Placement - can show on multiple pages
@@ -1872,6 +1897,9 @@ export const insertBannerAdOrderSchema = createInsertSchema(bannerAdOrders).omit
   sponsorName: z.string().min(1, "Sponsor name is required"),
   sponsorEmail: z.string().email("Valid email is required"),
   title: z.string().min(1, "Title is required"),
+  imageUrl: z.string().url("Image URL must be valid").optional().or(z.literal("")),
+  videoUrl: z.string().url("Video URL must be valid").optional().or(z.literal("")),
+  videoMuted: z.boolean().optional(),
   link: z.string().url("Please enter a valid URL (e.g., https://www.example.com)"),
   placements: z.array(z.string()).min(1, "At least one page placement is required"),
   tier: z.enum(["1month", "3months", "6months", "12months"]),
@@ -1885,7 +1913,9 @@ export const insertBannerAdSchema = createInsertSchema(bannerAds).omit({
   updatedAt: true,
 }).extend({
   placements: z.array(z.string()).min(1, "At least one page placement is required"),
-  imageUrl: z.string().min(1, "Banner image is required"),
+  imageUrl: z.string().url("Image URL must be valid").min(1, "Banner image is required"),
+  videoUrl: z.string().url("Video URL must be valid").optional().or(z.literal("")),
+  videoMuted: z.boolean().optional(),
   link: z.string().url("Please enter a valid URL (e.g., https://www.example.com)"),
   title: z.string().min(1, "Title is required"),
 });
@@ -1998,6 +2028,7 @@ export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 
 export type Notam = typeof notams.$inferSelect;
+export type NotamIngestEvent = typeof notamIngestEvents.$inferSelect;
 export type TfmsEvent = typeof tfmsEvents.$inferSelect;
 export type TfmsOverlay = typeof tfmsOverlays.$inferSelect;
 

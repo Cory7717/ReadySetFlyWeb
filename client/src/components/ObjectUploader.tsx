@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 interface ObjectUploaderProps {
   maxNumberOfFiles?: number;
   maxFileSize?: number;
+  allowedFileTypes?: string[];
+  enableImageEditor?: boolean;
   onGetUploadParameters: () => Promise<{
     method: "PUT";
     url: string;
@@ -58,6 +60,8 @@ interface ObjectUploaderProps {
 export function ObjectUploader({
   maxNumberOfFiles = 1,
   maxFileSize = 10485760, // 10MB default
+  allowedFileTypes = ["image/*"],
+  enableImageEditor = true,
   onGetUploadParameters,
   onComplete,
   onError,
@@ -67,20 +71,21 @@ export function ObjectUploader({
   children,
 }: ObjectUploaderProps) {
   const [showModal, setShowModal] = useState(false);
-  const [uppy] = useState(() =>
-    new Uppy({
+  const [uppy] = useState(() => {
+    const instance = new Uppy({
       restrictions: {
         maxNumberOfFiles,
         maxFileSize,
-        allowedFileTypes: ['image/*'],
+        allowedFileTypes,
       },
       autoProceed: false,
-    })
-      .use(AwsS3, {
-        shouldUseMultipart: false,
-        getUploadParameters: onGetUploadParameters,
-      })
-      .use(ImageEditor, {
+    }).use(AwsS3, {
+      shouldUseMultipart: false,
+      getUploadParameters: onGetUploadParameters,
+    });
+
+    if (enableImageEditor) {
+      instance.use(ImageEditor, {
         quality: 0.9,
         cropperOptions: {
           viewMode: 1,
@@ -90,18 +95,23 @@ export function ObjectUploader({
           zoomable: true,
           responsive: true,
         },
-      })
+      });
+    }
+
+    instance
       .on("error", (err) => {
-        if (onError) onError(err?.message || 'Upload error');
+        if (onError) onError(err?.message || "Upload error");
       })
       .on("upload-error", (_file, err) => {
-        if (onError) onError(err?.message || 'Upload error');
+        if (onError) onError(err?.message || "Upload error");
       })
       .on("complete", (result) => {
         onComplete?.(result);
         setShowModal(false);
-      })
-  );
+      });
+
+    return instance;
+  });
 
   return (
     <div>

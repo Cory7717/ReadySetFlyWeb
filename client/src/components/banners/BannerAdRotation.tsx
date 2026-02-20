@@ -22,6 +22,8 @@ interface BannerAd {
   title: string;
   description?: string;
   imageUrl: string;
+  videoUrl?: string | null;
+  videoMuted?: boolean | null;
   link: string;
   placements: string[];
   category?: string;
@@ -147,6 +149,8 @@ export function BannerAdRotation({
   const currentAd = bannerAds[currentIndex];
   const isClickable = Boolean(currentAd?.link);
   const canContact = Boolean(currentAd?.orderId);
+  const hasVideo = Boolean(currentAd?.videoUrl);
+  const isVideoMuted = currentAd?.videoMuted !== false;
 
   // Reset index and impression tracking when banner ads change
   useEffect(() => {
@@ -317,7 +321,27 @@ export function BannerAdRotation({
           </div>
 
           <div className="relative min-h-[150px] sm:min-h-[180px]">
-            {currentAd.imageUrl ? (
+            {hasVideo ? (
+              <div
+                className="h-full w-full"
+                onClick={(event) => {
+                  if (!isVideoMuted) {
+                    event.stopPropagation();
+                  }
+                }}
+              >
+                <video
+                  src={currentAd.videoUrl ?? undefined}
+                  className="h-full w-full object-cover"
+                  autoPlay={isVideoMuted}
+                  loop={isVideoMuted}
+                  muted={isVideoMuted}
+                  poster={currentAd.imageUrl || undefined}
+                  playsInline
+                  controls={!isVideoMuted}
+                />
+              </div>
+            ) : currentAd.imageUrl ? (
               <img
                 src={currentAd.imageUrl}
                 alt={currentAd.title}

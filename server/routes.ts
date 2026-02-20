@@ -9029,7 +9029,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Copy all other fields
-      const fieldsToUpdate = ['title', 'description', 'imageUrl', 'link', 'placements', 'category', 'isActive'];
+      const fieldsToUpdate = [
+        'title',
+        'description',
+        'imageUrl',
+        'videoUrl',
+        'videoMuted',
+        'link',
+        'placements',
+        'category',
+        'isActive',
+      ];
       for (const field of fieldsToUpdate) {
         if (field in req.body) {
           updateData[field] = req.body[field];

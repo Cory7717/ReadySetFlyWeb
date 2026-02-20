@@ -5,7 +5,7 @@ import { join } from "path";
 import zlib from "zlib";
 import { XMLParser } from "fast-xml-parser";
 import { db } from "./db";
-import { notams as notamsTable } from "@shared/schema";
+import { notams as notamsTable, notamIngestEvents } from "@shared/schema";
 
 const require = createRequire(import.meta.url);
 let solclientjs: any = null;
@@ -66,7 +66,45 @@ type NotamIngestResult = NotamParseMeta &
     dbWriteSucceeded: boolean;
     dbErrorCode?: string;
     dbErrorMessage?: string;
+    canonicalWriteAttempted: boolean;
+    canonicalWriteSucceeded: boolean;
+    fallbackWriteAttempted: boolean;
+    fallbackWriteSucceeded: boolean;
+    missingFields?: string[];
+    extracted?: {
+      notamKey?: string;
+      icao?: string;
+      issueTime?: string;
+      effectiveStart?: string;
+      effectiveEnd?: string;
+      textLen?: number;
+      eventTypes?: string[];
+      classification?: string;
+    };
+    reason?: string;
   };
+
+type FallbackIngestWriter = (data: {
+  source?: string;
+  messageId: string;
+  parsedNotamCount: number;
+  reason: string;
+  missingFields?: string[];
+  eventTypes?: string[];
+  xmlByteLength?: number;
+  notamKeys?: string[];
+  icaos?: string[];
+  excerpt?: string | null;
+  details?: any;
+}) => Promise<any>;
+
+type IngestOptions = {
+  maxXmlBytes?: number;
+  messageId?: string;
+  fallbackWriter?: FallbackIngestWriter;
+  storeExcerpt?: boolean;
+  excerptMaxChars?: number;
+};
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -106,6 +144,12 @@ function stringifyTruncated(value: any, maxChars: number) {
   } catch {
     return truncateText(String(value), maxChars);
   }
+}
+
+function buildExcerpt(body: string, storeExcerpt: boolean, maxChars: number) {
+  if (!storeExcerpt) return null;
+  if (!body) return null;
+  return truncateText(redactXmlSample(body), maxChars);
 }
 
 function extractRootInfo(xml: string): {
@@ -291,6 +335,76 @@ const ICAO_KEYS = [
 const TEXT_KEYS_LOWER = new Set(TEXT_KEYS.map((key) => key.toLowerCase()));
 const ICAO_KEYS_LOWER = new Set(ICAO_KEYS.map((key) => key.toLowerCase()));
 
+const NOTAM_KEY_KEYS_LOWER = new Set([
+  "notamid",
+  "notam_id",
+  "notamId",
+  "seriesnumber",
+  "series_number",
+  "reference",
+  "notamnumber",
+  "id",
+].map((key) => key.toLowerCase()));
+
+const ISSUE_TIME_KEYS_LOWER = new Set([
+  "issuetime",
+  "issue_time",
+  "issued",
+  "issuedtime",
+  "issuedate",
+  "created",
+  "createdat",
+  "creationtime",
+  "datetime",
+].map((key) => key.toLowerCase()));
+
+const EFFECTIVE_START_KEYS_LOWER = new Set([
+  "effectivestart",
+  "effectivestarttime",
+  "starttime",
+  "startdate",
+  "validfrom",
+  "fromtime",
+  "fromdate",
+  "effectivefrom",
+].map((key) => key.toLowerCase()));
+
+const EFFECTIVE_END_KEYS_LOWER = new Set([
+  "effectiveend",
+  "effectiveendtime",
+  "endtime",
+  "enddate",
+  "validto",
+  "totime",
+  "todate",
+  "effectiveto",
+  "expirationdate",
+  "expirydate",
+].map((key) => key.toLowerCase()));
+
+const Q_CODE_KEYS_LOWER = new Set(["qcode", "q_code"].map((key) => key.toLowerCase()));
+const PURPOSE_KEYS_LOWER = new Set(["purpose", "purposecode"].map((key) => key.toLowerCase()));
+const SCOPE_KEYS_LOWER = new Set(["scope", "scopecode"].map((key) => key.toLowerCase()));
+
+const CLASSIFICATION_KEYS_LOWER = new Set([
+  "classification",
+  "class",
+  "type",
+  "notamtype",
+  "notam_type",
+].map((key) => key.toLowerCase()));
+
+const LOCATION_KEYS_LOWER = new Set([
+  "location",
+  "locationindicator",
+  "location_indicator",
+  "aerodrome",
+  "facility",
+  "area",
+  "region",
+  "locationname",
+].map((key) => key.toLowerCase()));
+
 function keyVariants(rawKey: string) {
   const trimmed = rawKey.trim();
   if (!trimmed) return [rawKey];
@@ -350,6 +464,154 @@ function extractTextValue(value: any): string | undefined {
   return undefined;
 }
 
+function extractValueByKeys(value: any, keysLower: Set<string>, depth: number = 0): string | undefined {
+  if (!value || depth > 7) return undefined;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const extracted = extractValueByKeys(entry, keysLower, depth + 1);
+      if (extracted) return extracted;
+    }
+    return undefined;
+  }
+  if (typeof value !== "object") return undefined;
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (matchesKey(key, keysLower)) {
+      const extracted = extractTextValue(entry);
+      if (extracted) return extracted;
+      if (typeof entry === "string") return entry;
+    }
+  }
+
+  for (const entry of Object.values(value)) {
+    const extracted = extractValueByKeys(entry, keysLower, depth + 1);
+    if (extracted) return extracted;
+  }
+
+  return undefined;
+}
+
+function parseSeriesNumberYear(notamKey?: string) {
+  if (!notamKey) return {};
+  const match = notamKey.match(/([A-Z]{0,3})\s*(\d{1,2})\/(\d{3,4})/i);
+  if (!match) return {};
+  const series = match[1] ? match[1].toUpperCase() : undefined;
+  const number = match[2];
+  const year = match[3];
+  return { series, number, year };
+}
+
+function toIsoDateString(date?: Date | null) {
+  if (!date) return undefined;
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
+}
+
+type NotamItemSummary = {
+  notamKey?: string;
+  series?: string;
+  number?: string;
+  year?: string;
+  icao?: string;
+  location?: string;
+  issueTime?: string;
+  effectiveStart?: string;
+  effectiveEnd?: string;
+  text?: string;
+  textLen?: number;
+  qCode?: string;
+  purpose?: string;
+  scope?: string;
+  classification?: string;
+};
+
+function extractNotamSummary(item: any): NotamItemSummary {
+  const text = pickText(item) || (typeof item === "string" ? item : undefined);
+  const extractedFromText = text ? extractFromText(text) : {};
+  const notamKey =
+    extractValueByKeys(item, NOTAM_KEY_KEYS_LOWER) ||
+    item?.notamId ||
+    item?.id ||
+    extractedFromText.notamId;
+  const icao =
+    (pickIcao(item) ||
+      extractValueByKeys(item, ICAO_KEYS_LOWER) ||
+      extractedFromText.icao) ??
+    undefined;
+  const issueTime =
+    extractValueByKeys(item, ISSUE_TIME_KEYS_LOWER) ||
+    toIsoDateString(extractedFromText.effectiveAt) ||
+    undefined;
+  const effectiveStart =
+    extractValueByKeys(item, EFFECTIVE_START_KEYS_LOWER) ||
+    toIsoDateString(extractedFromText.effectiveAt) ||
+    undefined;
+  const effectiveEnd =
+    extractValueByKeys(item, EFFECTIVE_END_KEYS_LOWER) ||
+    toIsoDateString(extractedFromText.expiresAt) ||
+    undefined;
+
+  const qCode = extractValueByKeys(item, Q_CODE_KEYS_LOWER);
+  const purpose = extractValueByKeys(item, PURPOSE_KEYS_LOWER);
+  const scope = extractValueByKeys(item, SCOPE_KEYS_LOWER);
+  const classification = extractValueByKeys(item, CLASSIFICATION_KEYS_LOWER);
+  const location = extractValueByKeys(item, LOCATION_KEYS_LOWER);
+  const { series, number, year } = parseSeriesNumberYear(notamKey);
+
+  return {
+    notamKey: notamKey ? String(notamKey) : undefined,
+    series,
+    number,
+    year,
+    icao: icao ? String(icao).toUpperCase() : undefined,
+    location: location ? String(location) : undefined,
+    issueTime: issueTime ? String(issueTime) : undefined,
+    effectiveStart: effectiveStart ? String(effectiveStart) : undefined,
+    effectiveEnd: effectiveEnd ? String(effectiveEnd) : undefined,
+    text,
+    textLen: text ? text.length : undefined,
+    qCode: qCode ? String(qCode) : undefined,
+    purpose: purpose ? String(purpose) : undefined,
+    scope: scope ? String(scope) : undefined,
+    classification: classification ? String(classification) : undefined,
+  };
+}
+
+function mergeSummary(target: NotamItemSummary, source: NotamItemSummary) {
+  const merged = { ...target };
+  for (const [key, value] of Object.entries(source)) {
+    if (value === undefined || value === null || value === "") continue;
+    if (key === "textLen") {
+      const current = merged.textLen || 0;
+      const next = typeof value === "number" ? value : current;
+      merged.textLen = Math.max(current, next);
+      continue;
+    }
+    if (!(merged as any)[key]) {
+      (merged as any)[key] = value;
+    }
+  }
+  return merged;
+}
+
+function computeMissingFields(summary: NotamItemSummary): string[] {
+  const missing: string[] = [];
+  if (!summary.notamKey) missing.push("notamKey");
+  if (!summary.series) missing.push("series");
+  if (!summary.number) missing.push("number");
+  if (!summary.year) missing.push("year");
+  if (!summary.icao) missing.push("icao");
+  if (!summary.location) missing.push("location");
+  if (!summary.issueTime) missing.push("issueTime");
+  if (!summary.effectiveStart) missing.push("effectiveStart");
+  if (!summary.effectiveEnd) missing.push("effectiveEnd");
+  if (!summary.text) missing.push("text");
+  if (!summary.qCode) missing.push("qCode");
+  if (!summary.purpose) missing.push("purpose");
+  if (!summary.scope) missing.push("scope");
+  return missing;
+}
+
 function pickText(item: any): string | null {
   if (item && typeof item === "object") {
     for (const [key, value] of Object.entries(item)) {
@@ -383,22 +645,19 @@ function pickIcao(item: any): string | undefined {
 
 function normalizeNotamItem(item: any): NormalizedNotam | null {
   const text = pickText(item) || (typeof item === "string" ? item : null);
-  const fallbackText =
-    text ||
-    (item && typeof item === "object" ? stringifyTruncated(item, 4000) : null);
-  if (!fallbackText) return null;
+  if (!text) return null;
 
-  const extracted = extractFromText(fallbackText);
+  const extracted = extractFromText(text);
   const notamIdCandidate = item?.notamId || item?.id || extracted.notamId;
-  const textLooksLikeNotam = looksLikeNotamText(fallbackText);
+  const textLooksLikeNotam = looksLikeNotamText(text);
   if (!notamIdCandidate && !textLooksLikeNotam) return null;
-  const notamId = notamIdCandidate || stableNotamId(fallbackText);
+  const notamId = notamIdCandidate || stableNotamId(text);
   const icao = (pickIcao(item) || extracted.icao || "ZZZZ").toUpperCase();
 
   return {
     icao,
     notamId: String(notamId),
-    text: String(fallbackText),
+    text: String(text),
     effectiveAt: extracted.effectiveAt,
     expiresAt: extracted.expiresAt,
     raw: item,
@@ -535,7 +794,42 @@ async function upsertNotams(items: NormalizedNotam[]) {
   return { savedCount, errorCount: errors.length, errors };
 }
 
-function parseNotamBody(body: string): { payload: any; meta: NotamParseMeta; messageType: "xml" | "json" | "text" } {
+async function insertNotamIngestEvent(data: {
+  source?: string;
+  messageId: string;
+  parsedNotamCount: number;
+  reason: string;
+  missingFields?: string[];
+  eventTypes?: string[];
+  xmlByteLength?: number;
+  notamKeys?: string[];
+  icaos?: string[];
+  excerpt?: string | null;
+  details?: any;
+}) {
+  const payload = {
+    source: data.source ?? "SWIM_AIM_FNS",
+    messageId: data.messageId,
+    parsedNotamCount: data.parsedNotamCount,
+    reason: data.reason,
+    missingFields: data.missingFields ?? [],
+    eventTypes: data.eventTypes ?? [],
+    xmlByteLength: data.xmlByteLength ?? null,
+    notamKeys: data.notamKeys ?? [],
+    icaos: data.icaos ?? [],
+    excerpt: data.excerpt ?? null,
+    details: data.details ?? null,
+    createdAt: new Date(),
+  };
+
+  const [created] = await db.insert(notamIngestEvents).values(payload).returning();
+  return created;
+}
+
+function parseNotamBody(
+  body: string,
+  maxXmlBytes?: number
+): { payload: any; meta: NotamParseMeta; messageType: "xml" | "json" | "text"; oversize: boolean } {
   const xmlByteLength = Buffer.byteLength(body || "", "utf-8");
   const trimmed = (body || "").trim();
   const rootInfo = extractRootInfo(trimmed);
@@ -545,36 +839,51 @@ function parseNotamBody(body: string): { payload: any; meta: NotamParseMeta; mes
     rootNamespaces: rootInfo.rootNamespaces,
     hasFnsNamespace: rootInfo.hasFnsNamespace,
   };
+  const oversize = typeof maxXmlBytes === "number" && xmlByteLength > maxXmlBytes;
 
   if (!trimmed) {
     return {
       payload: undefined,
       meta: { ...meta, parseError: "NO_XML_BODY" },
       messageType: "text",
+      oversize,
+    };
+  }
+
+  if (oversize) {
+    return {
+      payload: undefined,
+      meta: { ...meta, parseError: "MAX_XML_BYTES_EXCEEDED" },
+      messageType: "xml",
+      oversize,
     };
   }
 
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
-      return { payload: JSON.parse(trimmed), meta, messageType: "json" };
+      return { payload: JSON.parse(trimmed), meta, messageType: "json", oversize };
     } catch {
       // fall through to XML parsing
     }
   }
 
   try {
-    return { payload: parser.parse(trimmed), meta, messageType: "xml" };
+    return { payload: parser.parse(trimmed), meta, messageType: "xml", oversize };
   } catch (error: any) {
     return {
       payload: undefined,
       meta: { ...meta, parseError: error?.message || "PARSE_ERROR" },
       messageType: "xml",
+      oversize,
     };
   }
 }
 
-export function analyzeNotamMessage(body: string): NotamParseMeta & NotamExtractResult & { messageType: string } {
-  const { payload, meta, messageType } = parseNotamBody(body);
+export function analyzeNotamMessage(
+  body: string,
+  options?: { maxXmlBytes?: number }
+): NotamParseMeta & NotamExtractResult & { messageType: string; oversize: boolean; rawItems: any[] } {
+  const { payload, meta, messageType, oversize } = parseNotamBody(body, options?.maxXmlBytes);
   const aixmNode = findFirstByKey(payload, "aixmbasicmessage");
   const payloadRoot = aixmNode ?? payload;
   const hasAixmBasicMessage =
@@ -586,42 +895,54 @@ export function analyzeNotamMessage(body: string): NotamParseMeta & NotamExtract
     return {
       ...meta,
       messageType,
+      oversize,
+      rawItems: [],
       items: [],
       parsedNotamCount: 0,
       hasAixmBasicMessage,
       hasEventSection,
       hasFnsPayload: false,
       eventTypes,
-      reasonEmpty: meta.parseError === "NO_XML_BODY" ? "NO_XML_BODY" : "PARSE_ERROR",
+      reasonEmpty:
+        meta.parseError === "NO_XML_BODY"
+          ? "NO_XML_BODY"
+          : meta.parseError === "MAX_XML_BYTES_EXCEEDED"
+            ? "FILTERED_OUT"
+            : "PARSE_ERROR",
     };
   }
 
   const notamNodes = collectNotamNodes(payloadRoot);
-  const hasFnsPayload = notamNodes.length > 0;
-  const normalized =
-    notamNodes.length > 0 ? normalizePayload(notamNodes) : normalizePayload(payloadRoot);
-  const parsedNotamCount = Math.max(notamNodes.length, normalized.length);
+  const textCandidates = collectNotamTextCandidates(payloadRoot);
+  const rawItems = notamNodes.length > 0 ? notamNodes : textCandidates.map((candidate) => ({
+    text: candidate.text,
+    icao: candidate.icao,
+    raw: candidate.raw,
+  }));
+  const normalized = rawItems.length > 0 ? normalizePayload(rawItems) : normalizePayload(payloadRoot);
+  const parsedNotamCount = Math.max(rawItems.length, normalized.length);
+  const hasFnsPayload = rawItems.length > 0 || normalized.length > 0;
 
   let reasonEmpty: EmptyReason | undefined;
   if (normalized.length === 0) {
-    if (messageType !== "xml" && !hasAixmBasicMessage) {
+    if (parsedNotamCount === 0 && messageType !== "xml" && !hasAixmBasicMessage) {
       reasonEmpty = "UNSUPPORTED_MESSAGE_TYPE";
-    } else if (!hasAixmBasicMessage) {
+    } else if (parsedNotamCount === 0 && !hasAixmBasicMessage) {
       reasonEmpty = "MISSING_AIXM_BASIC_MESSAGE";
-    } else if (!hasEventSection) {
+    } else if (parsedNotamCount === 0 && !hasEventSection) {
       reasonEmpty = "MISSING_EVENT_SECTION";
-    } else if (!hasFnsPayload) {
+    } else if (parsedNotamCount === 0 && !hasFnsPayload) {
       reasonEmpty = "MISSING_FNS_PAYLOAD";
     } else if (parsedNotamCount === 0) {
       reasonEmpty = "NO_NOTAM_ELEMENTS";
-    } else {
-      reasonEmpty = "MISSING_REQUIRED_FIELDS";
     }
   }
 
   return {
     ...meta,
     messageType,
+    oversize,
+    rawItems,
     items: normalized,
     parsedNotamCount,
     hasAixmBasicMessage,
@@ -634,33 +955,172 @@ export function analyzeNotamMessage(body: string): NotamParseMeta & NotamExtract
 
 export async function ingestNotamMessage(
   body: string,
-  writer: (items: NormalizedNotam[]) => Promise<{ savedCount: number; errorCount: number; errors: any[] }> = upsertNotams
-): Promise<NotamIngestResult & { savedCount: number; dbErrorCount: number }> {
-  const analysis = analyzeNotamMessage(body);
+  writer: (items: NormalizedNotam[]) => Promise<{ savedCount: number; errorCount: number; errors: any[] }> = upsertNotams,
+  options?: IngestOptions
+): Promise<NotamIngestResult & { savedCount: number; dbErrorCount: number; rawItems: any[]; notamKeys: string[]; icaos: string[] }> {
+  const analysis = analyzeNotamMessage(body, { maxXmlBytes: options?.maxXmlBytes });
+  const messageId = options?.messageId ?? "unknown";
+  const fallbackWriter = options?.fallbackWriter;
+  const storeExcerpt = options?.storeExcerpt ?? false;
+  const rawExcerptMax = Number(options?.excerptMaxChars ?? 12000);
+  const excerptMaxChars = Number.isFinite(rawExcerptMax) ? Math.max(200, rawExcerptMax) : 12000;
+  const excerpt = buildExcerpt(body || "", storeExcerpt, excerptMaxChars);
   let dbWriteAttempted = false;
   let dbWriteSucceeded = false;
   let dbErrorCode: string | undefined;
   let dbErrorMessage: string | undefined;
   let savedCount = 0;
   let dbErrorCount = 0;
+  let canonicalWriteAttempted = false;
+  let canonicalWriteSucceeded = false;
+  let fallbackWriteAttempted = false;
+  let fallbackWriteSucceeded = false;
+  let missingFields: string[] | undefined;
+  let extracted: NotamIngestResult["extracted"];
+  let reason: string | undefined;
 
-  if (analysis.items.length > 0) {
+  const canonicalItems: NormalizedNotam[] = [];
+  const summarySeed: NotamItemSummary = {};
+  const notamKeys = new Set<string>();
+  const icaos = new Set<string>();
+
+  const summaryItems = (analysis.rawItems && analysis.rawItems.length > 0)
+    ? analysis.rawItems
+    : analysis.items;
+
+  for (const rawItem of summaryItems || []) {
+    const summary = extractNotamSummary(rawItem);
+    const merged = mergeSummary(summarySeed, summary);
+    summarySeed.notamKey = merged.notamKey;
+    summarySeed.series = merged.series;
+    summarySeed.number = merged.number;
+    summarySeed.year = merged.year;
+    summarySeed.icao = merged.icao;
+    summarySeed.location = merged.location;
+    summarySeed.issueTime = merged.issueTime;
+    summarySeed.effectiveStart = merged.effectiveStart;
+    summarySeed.effectiveEnd = merged.effectiveEnd;
+    summarySeed.text = merged.text;
+    summarySeed.textLen = merged.textLen;
+    summarySeed.qCode = merged.qCode;
+    summarySeed.purpose = merged.purpose;
+    summarySeed.scope = merged.scope;
+    summarySeed.classification = merged.classification;
+
+    if (summary.notamKey) notamKeys.add(summary.notamKey);
+    if (summary.icao) icaos.add(summary.icao);
+
+    const canonical = normalizeNotamItem(rawItem);
+    if (canonical) {
+      canonicalItems.push(canonical);
+    }
+  }
+
+  extracted = {
+    notamKey: summarySeed.notamKey,
+    icao: summarySeed.icao,
+    issueTime: summarySeed.issueTime,
+    effectiveStart: summarySeed.effectiveStart,
+    effectiveEnd: summarySeed.effectiveEnd,
+    textLen: summarySeed.textLen,
+    eventTypes: analysis.eventTypes,
+    classification: summarySeed.classification,
+  };
+
+  if (analysis.reasonEmpty === "FILTERED_OUT") {
+    reason = "FILTERED_OUT";
+    if (fallbackWriter) {
+      fallbackWriteAttempted = true;
+      try {
+        await fallbackWriter({
+          messageId,
+          parsedNotamCount: analysis.parsedNotamCount,
+          reason,
+          eventTypes: analysis.eventTypes,
+          xmlByteLength: analysis.xmlByteLength,
+          notamKeys: Array.from(notamKeys),
+          icaos: Array.from(icaos),
+          excerpt,
+          details: extracted ? { extracted } : undefined,
+        });
+        fallbackWriteSucceeded = true;
+      } catch (error: any) {
+        dbErrorCount += 1;
+        dbErrorCode = error?.code ? String(error.code) : undefined;
+        dbErrorMessage = error?.message ? String(error.message) : "DB write failed";
+        reason = "DB_ERROR";
+      }
+    }
+    return {
+      ...analysis,
+      dbWriteAttempted,
+      dbWriteSucceeded,
+      dbErrorCode,
+      dbErrorMessage,
+      savedCount,
+      dbErrorCount,
+      canonicalWriteAttempted,
+      canonicalWriteSucceeded,
+      fallbackWriteAttempted,
+      fallbackWriteSucceeded,
+      missingFields,
+      extracted,
+      reason,
+      notamKeys: Array.from(notamKeys),
+      icaos: Array.from(icaos),
+    };
+  }
+
+  if (canonicalItems.length > 0) {
+    canonicalWriteAttempted = true;
     dbWriteAttempted = true;
     try {
-      const result = await writer(analysis.items);
+      const result = await writer(canonicalItems);
       savedCount = result.savedCount;
       dbErrorCount = result.errorCount;
       dbWriteSucceeded = result.errorCount === 0;
+      canonicalWriteSucceeded = result.errorCount === 0;
       if (result.errorCount > 0) {
         const firstError = result.errors[0] as any;
         dbErrorCode = firstError?.code ? String(firstError.code) : undefined;
         dbErrorMessage = firstError?.message ? String(firstError.message) : "DB write failed";
+        reason = "DB_ERROR";
       }
     } catch (error: any) {
-      dbErrorCount = analysis.items.length;
+      dbErrorCount = canonicalItems.length;
       dbWriteSucceeded = false;
+      canonicalWriteSucceeded = false;
       dbErrorCode = error?.code ? String(error.code) : undefined;
       dbErrorMessage = error?.message ? String(error.message) : "DB write failed";
+      reason = "DB_ERROR";
+    }
+  }
+
+  if (analysis.parsedNotamCount > 0 && analysis.hasFnsPayload && canonicalItems.length === 0) {
+    missingFields = computeMissingFields(summarySeed);
+    reason = "MISSING_REQUIRED_FIELDS";
+    if (fallbackWriter) {
+      fallbackWriteAttempted = true;
+      try {
+        await fallbackWriter({
+          messageId,
+          parsedNotamCount: analysis.parsedNotamCount,
+          reason,
+          missingFields,
+          eventTypes: analysis.eventTypes,
+          xmlByteLength: analysis.xmlByteLength,
+          notamKeys: Array.from(notamKeys),
+          icaos: Array.from(icaos),
+          excerpt,
+          details: extracted ? { extracted } : undefined,
+        });
+        fallbackWriteSucceeded = true;
+      } catch (error: any) {
+        dbErrorCount += 1;
+        dbErrorCode = error?.code ? String(error.code) : undefined;
+        dbErrorMessage = error?.message ? String(error.message) : "DB write failed";
+        reason = "DB_ERROR";
+      }
     }
   }
 
@@ -672,6 +1132,15 @@ export async function ingestNotamMessage(
     dbErrorMessage,
     savedCount,
     dbErrorCount,
+    canonicalWriteAttempted,
+    canonicalWriteSucceeded,
+    fallbackWriteAttempted,
+    fallbackWriteSucceeded,
+    missingFields,
+    extracted,
+    reason,
+    notamKeys: Array.from(notamKeys),
+    icaos: Array.from(icaos),
   };
 }
 
@@ -774,6 +1243,16 @@ export function startSwimNotamWorker() {
   const debugCaptureMaxChars = Number.isFinite(rawCaptureMax)
     ? Math.max(500, rawCaptureMax)
     : 12000;
+  const storeExcerptEnabled =
+    String(process.env.NOTAM_INGEST_STORE_EXCERPT || "").toLowerCase() === "true";
+  const rawExcerptMax = Number(process.env.NOTAM_INGEST_EXCERPT_MAX_CHARS || 12000);
+  const excerptMaxChars = Number.isFinite(rawExcerptMax)
+    ? Math.max(500, rawExcerptMax)
+    : 12000;
+  const rawMaxXmlBytes = Number(process.env.NOTAM_INGEST_MAX_XML_BYTES || 400000);
+  const maxXmlBytes = Number.isFinite(rawMaxXmlBytes)
+    ? Math.max(1000, rawMaxXmlBytes)
+    : 400000;
   let receivedCount = 0;
   let savedCount = 0;
   let emptyCount = 0;
@@ -893,10 +1372,16 @@ export function startSwimNotamWorker() {
         receivedCount += 1;
         const body = messageToString(message);
         const messageId = extractMessageId(message);
-        const analysis = await ingestNotamMessage(body);
+        const analysis = await ingestNotamMessage(body, upsertNotams, {
+          maxXmlBytes,
+          messageId,
+          fallbackWriter: insertNotamIngestEvent,
+          storeExcerpt: storeExcerptEnabled,
+          excerptMaxChars,
+        });
 
         savedCount += analysis.savedCount;
-        if (analysis.reasonEmpty) {
+        if (analysis.reasonEmpty && analysis.reasonEmpty !== "FILTERED_OUT") {
           emptyCount += 1;
         }
         if (analysis.dbErrorCount > 0) {
@@ -906,6 +1391,7 @@ export function startSwimNotamWorker() {
         let samplePath: string | undefined;
         if (
           analysis.reasonEmpty &&
+          analysis.reasonEmpty !== "FILTERED_OUT" &&
           debugCaptureEnabled &&
           capturedEmptyCount < debugCaptureLimit
         ) {
@@ -930,6 +1416,8 @@ export function startSwimNotamWorker() {
         const shouldLog =
           (debugNotams && (receivedCount <= 5 || receivedCount % 50 === 0)) ||
           Boolean(analysis.reasonEmpty) ||
+          Boolean(analysis.reason) ||
+          analysis.fallbackWriteAttempted ||
           analysis.dbErrorCount > 0;
 
         if (shouldLog) {
@@ -947,10 +1435,18 @@ export function startSwimNotamWorker() {
               hasFnsNamespace: analysis.hasFnsNamespace,
               hasFnsPayload: analysis.hasFnsPayload,
               reasonEmpty: analysis.reasonEmpty,
+              reason: analysis.reason,
+              missingFields: analysis.missingFields,
+              extracted: analysis.extracted,
               dbWriteAttempted: analysis.dbWriteAttempted,
               dbWriteSucceeded: analysis.dbWriteSucceeded,
               dbErrorCode: analysis.dbErrorCode,
               dbErrorMessage: analysis.dbErrorMessage,
+              dbErrorCount: analysis.dbErrorCount,
+              canonicalWriteAttempted: analysis.canonicalWriteAttempted,
+              canonicalWriteSucceeded: analysis.canonicalWriteSucceeded,
+              fallbackWriteAttempted: analysis.fallbackWriteAttempted,
+              fallbackWriteSucceeded: analysis.fallbackWriteSucceeded,
               parseError: analysis.parseError,
               xmlByteLength: analysis.xmlByteLength,
               rootNamespaces: analysis.rootNamespaces,

@@ -12,6 +12,8 @@ export function BannerAd({ banner, className = "" }: BannerAdProps) {
   const [, setLocation] = useLocation();
   const [impressionTracked, setImpressionTracked] = useState(false);
   const bannerRef = useRef<HTMLDivElement>(null);
+  const hasVideo = Boolean(banner.videoUrl);
+  const isVideoMuted = banner.videoMuted !== false;
 
   // Track impression when banner is visible
   useEffect(() => {
@@ -68,11 +70,24 @@ export function BannerAd({ banner, className = "" }: BannerAdProps) {
       onClick={handleClick}
       data-testid={`banner-ad-${banner.id}`}
     >
-      <img
-        src={banner.imageUrl}
-        alt={banner.title}
-        className="w-full h-full object-cover"
-      />
+      {hasVideo ? (
+        <video
+          src={banner.videoUrl ?? undefined}
+          className="w-full h-full object-cover"
+          autoPlay={isVideoMuted}
+          loop={isVideoMuted}
+          muted={isVideoMuted}
+          poster={banner.imageUrl || undefined}
+          playsInline
+          controls={!isVideoMuted}
+        />
+      ) : (
+        <img
+          src={banner.imageUrl}
+          alt={banner.title}
+          className="w-full h-full object-cover"
+        />
+      )}
     </div>
   );
 }

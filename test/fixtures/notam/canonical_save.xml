@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<aixm:AIXMBasicMessage xmlns:aixm="http://www.aixm.aero/schema/5.1" xmlns:fns="http://www.faa.gov/fns" xmlns:event="http://www.aixm.aero/schema/5.1/event">
+  <aixm:hasMember>
+    <event:Event>
+      <event:timeSlice>
+        <event:EventTimeSlice>
+          <event:interpretation>SNAPSHOT</event:interpretation>
+        </event:EventTimeSlice>
+      </event:timeSlice>
+      <fns:NOTAM>
+        <fns:notamId>FDC 2/3456</fns:notamId>
+        <fns:notamText>FDC 2/3456 A) KLAX B) 2601010000 C) 2601012359 D) DAILY 0000-2359 E) TEST NOTAM</fns:notamText>
+      </fns:NOTAM>
+    </event:Event>
+  </aixm:hasMember>
+</aixm:AIXMBasicMessage>

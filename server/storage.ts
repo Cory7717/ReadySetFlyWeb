@@ -2727,6 +2727,8 @@ export class DatabaseStorage implements IStorage {
       title: order.title,
       description: order.description,
       imageUrl: order.imageUrl,
+      videoUrl: order.videoUrl ?? undefined,
+      videoMuted: order.videoMuted ?? true,
       link: order.link,
       placements: order.placements,
       category: order.category,

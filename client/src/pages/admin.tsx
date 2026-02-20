@@ -194,12 +194,14 @@ export default function AdminDashboard() {
   const [bannerDialogOpen, setBannerDialogOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<BannerAd | null>(null);
   const [bannerImageUrl, setBannerImageUrl] = useState<string>("");
+  const [bannerVideoUrl, setBannerVideoUrl] = useState<string>("");
   
   // Banner ad orders state
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<BannerAdOrder | null>(null);
   const [selectedTier, setSelectedTier] = useState<BannerAdTier>("3months");
   const [orderImageUrl, setOrderImageUrl] = useState<string>("");
+  const [orderVideoUrl, setOrderVideoUrl] = useState<string>("");
   const [promoCodeInput, setPromoCodeInput] = useState("");
   const [promoCodeValid, setPromoCodeValid] = useState<boolean | null>(null);
   const [promoCodeMessage, setPromoCodeMessage] = useState("");
@@ -278,6 +280,8 @@ export default function AdminDashboard() {
       title: "",
       description: "",
       imageUrl: "",
+      videoUrl: "",
+      videoMuted: true,
       link: "",
       placements: [],
       category: undefined,
@@ -299,6 +303,8 @@ export default function AdminDashboard() {
       title: "",
       description: "",
       imageUrl: "",
+      videoUrl: "",
+      videoMuted: true,
       link: "",
       placements: [],
       category: undefined,
@@ -1069,6 +1075,43 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleBannerVideoUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    try {
+      for (const file of result.successful || []) {
+        if (file.uploadURL) {
+          const parsedUrl = new URL(file.uploadURL);
+          const objectPath = parsedUrl.pathname.slice(1);
+
+          await fetch('/api/objects/set-acl', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              path: objectPath,
+              access: 'publicRead',
+            }),
+          });
+
+          const videoUrl = file.uploadURL.split('?')[0];
+          setBannerVideoUrl(videoUrl);
+          bannerForm.setValue('videoUrl', videoUrl, { shouldValidate: true, shouldDirty: true });
+
+          toast({
+            title: "Video uploaded successfully",
+            description: "Your banner video is ready to use",
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error processing banner video upload:', error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to process the uploaded video. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Order image upload handlers
   const handleOrderGetUploadParameters = async () => {
     const response = await fetch('/api/objects/upload', {
@@ -1121,6 +1164,43 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleOrderVideoUploadComplete = async (result: UploadResult<Record<string, unknown>, Record<string, unknown>>) => {
+    try {
+      for (const file of result.successful || []) {
+        if (file.uploadURL) {
+          const parsedUrl = new URL(file.uploadURL);
+          const objectPath = parsedUrl.pathname.slice(1);
+
+          await fetch('/api/objects/set-acl', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              path: objectPath,
+              access: 'publicRead',
+            }),
+          });
+
+          const videoUrl = file.uploadURL.split('?')[0];
+          setOrderVideoUrl(videoUrl);
+          orderForm.setValue('videoUrl', videoUrl, { shouldValidate: true, shouldDirty: true });
+
+          toast({
+            title: "Video uploaded successfully",
+            description: "Your banner video is ready to use",
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error processing order video upload:', error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to process the uploaded video. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Banner ad mutations
   const createBannerAdMutation = useMutation({
     mutationFn: async (data: InsertBannerAd) => {
@@ -1132,6 +1212,7 @@ export default function AdminDashboard() {
       setBannerDialogOpen(false);
       setEditingBanner(null);
       setBannerImageUrl("");
+      setBannerVideoUrl("");
       toast({ title: "Banner ad created successfully" });
     },
     onError: (error: Error) => {
@@ -1153,6 +1234,7 @@ export default function AdminDashboard() {
       setBannerDialogOpen(false);
       setEditingBanner(null);
       setBannerImageUrl("");
+      setBannerVideoUrl("");
       toast({ title: "Banner ad updated successfully" });
     },
     onError: (error: Error) => {
@@ -1202,6 +1284,7 @@ export default function AdminDashboard() {
       setOrderDialogOpen(false);
       setEditingOrder(null);
       setOrderImageUrl("");
+      setOrderVideoUrl("");
       toast({ title: "Banner ad order created successfully" });
     },
     onError: (error: Error) => {
@@ -1223,6 +1306,7 @@ export default function AdminDashboard() {
       setOrderDialogOpen(false);
       setEditingOrder(null);
       setOrderImageUrl("");
+      setOrderVideoUrl("");
       toast({ title: "Banner ad order updated successfully" });
     },
     onError: (error: Error) => {
@@ -5120,6 +5204,7 @@ export default function AdminDashboard() {
                 onClick={() => {
                   setEditingOrder(null);
                   setOrderImageUrl("");
+                  setOrderVideoUrl("");
                   orderForm.reset();
                   setOrderDialogOpen(true);
                 }}
@@ -5150,6 +5235,7 @@ export default function AdminDashboard() {
                     onClick={() => {
                       setEditingOrder(null);
                       setOrderImageUrl("");
+                      setOrderVideoUrl("");
                       orderForm.reset();
                       setOrderDialogOpen(true);
                     }}
@@ -5288,6 +5374,24 @@ export default function AdminDashboard() {
                                 </Button>
                               )
                             )}
+                            {isSuperAdmin &&
+                              !isOrderActivated(order.id) &&
+                              (order.paymentStatus !== 'paid' || order.approvalStatus !== 'approved') && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    if (confirm("Activate this order without payment? This will mark it paid and approved.")) {
+                                      activateOrderMutation.mutate(order.id);
+                                    }
+                                  }}
+                                  disabled={activateOrderMutation.isPending}
+                                  data-testid={`button-activate-order-superadmin-${order.id}`}
+                                >
+                                  <Rocket className="h-4 w-4 mr-1" />
+                                  Activate (Super Admin)
+                                </Button>
+                              )}
                             {/* Only allow editing order details if not yet activated */}
                             {!isOrderActivated(order.id) && (
                               <Button
@@ -5296,6 +5400,7 @@ export default function AdminDashboard() {
                                 onClick={() => {
                                   setEditingOrder(order);
                                   setOrderImageUrl(order.imageUrl ?? "");
+                                  setOrderVideoUrl(order.videoUrl ?? "");
                                   setSelectedTier(order.tier as "1month" | "3months" | "6months" | "12months");
                                   
                                   // Load promo code state if exists
@@ -5319,6 +5424,8 @@ export default function AdminDashboard() {
                                     title: order.title,
                                     description: order.description ?? "",
                                     imageUrl: order.imageUrl ?? "",
+                                    videoUrl: order.videoUrl ?? "",
+                                    videoMuted: order.videoMuted ?? true,
                                     link: order.link ?? "",
                                     placements: order.placements ?? [],
                                     category: order.category ?? undefined,
@@ -5379,6 +5486,7 @@ export default function AdminDashboard() {
                   onClick={() => {
                     setEditingBanner(null);
                     setBannerImageUrl("");
+                    setBannerVideoUrl("");
                     bannerForm.reset();
                     setBannerDialogOpen(true);
                   }}
@@ -5408,14 +5516,23 @@ export default function AdminDashboard() {
                     <Card key={banner.id} data-testid={`banner-card-${banner.id}`}>
                       <CardContent className="p-4">
                         <div className="flex items-start gap-4">
-                          {/* Banner Image Preview */}
-                          {banner.imageUrl && (
+                          {/* Banner Media Preview */}
+                          {(banner.videoUrl || banner.imageUrl) && (
                             <div className="w-32 h-20 rounded overflow-hidden flex-shrink-0 bg-muted">
-                              <img 
-                                src={banner.imageUrl} 
-                                alt={banner.title}
-                                className="w-full h-full object-cover"
-                              />
+                              {banner.videoUrl ? (
+                                <video
+                                  src={banner.videoUrl}
+                                  className="w-full h-full object-cover"
+                                  muted={banner.videoMuted ?? true}
+                                  playsInline
+                                />
+                              ) : (
+                                <img
+                                  src={banner.imageUrl}
+                                  alt={banner.title}
+                                  className="w-full h-full object-cover"
+                                />
+                              )}
                             </div>
                           )}
                           
@@ -5538,9 +5655,12 @@ export default function AdminDashboard() {
                               onClick={() => {
                                 setEditingBanner(banner);
                                 setBannerImageUrl(banner.imageUrl || ""); // Populate image preview
+                                setBannerVideoUrl(banner.videoUrl || "");
                                 bannerForm.reset({
                                   title: banner.title,
                                   imageUrl: banner.imageUrl || "",
+                                  videoUrl: banner.videoUrl || "",
+                                  videoMuted: banner.videoMuted ?? true,
                                   link: banner.link ?? "",
                                   description: banner.description ?? "",
                                   placements: banner.placements || [],
@@ -6621,6 +6741,7 @@ export default function AdminDashboard() {
             setEditingBanner(null);
             bannerForm.reset();
             setBannerImageUrl("");
+            setBannerVideoUrl("");
           }
         }}
       >
@@ -6642,6 +6763,8 @@ export default function AdminDashboard() {
                     title: data.title,
                     description: data.description,
                     imageUrl: bannerImageUrl || data.imageUrl,
+                    videoUrl: bannerVideoUrl || data.videoUrl,
+                    videoMuted: data.videoMuted ?? true,
                     link: data.link,
                     placements: data.placements,
                     category: data.category,
@@ -6755,6 +6878,65 @@ export default function AdminDashboard() {
                             </div>
                           </FormControl>
                           <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={bannerForm.control}
+                      name="videoUrl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Banner Video (Optional)</FormLabel>
+                          <FormControl>
+                            <div className="space-y-2">
+                              <Input
+                                placeholder="Video URL"
+                                {...field}
+                                value={field.value ?? ""}
+                                data-testid="input-banner-video-url"
+                              />
+                              <ObjectUploader
+                                onGetUploadParameters={handleBannerGetUploadParameters}
+                                onComplete={handleBannerVideoUploadComplete}
+                                maxNumberOfFiles={1}
+                                maxFileSize={52428800}
+                                allowedFileTypes={["video/*"]}
+                                enableImageEditor={false}
+                                buttonVariant="secondary"
+                              >
+                                Upload video
+                              </ObjectUploader>
+                              {(field.value || bannerVideoUrl) && (
+                                <video
+                                  src={field.value || bannerVideoUrl}
+                                  className="w-full h-40 rounded-md object-cover"
+                                  muted={bannerForm.watch("videoMuted") ?? true}
+                                  controls
+                                  playsInline
+                                  data-testid="preview-banner-video"
+                                />
+                              )}
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={bannerForm.control}
+                      name="videoMuted"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-2 space-y-0">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value ?? true}
+                              onCheckedChange={field.onChange}
+                              data-testid="checkbox-banner-video-muted"
+                            />
+                          </FormControl>
+                          <FormLabel className="cursor-pointer font-normal">Mute video by default</FormLabel>
                         </FormItem>
                       )}
                     />
@@ -6895,6 +7077,7 @@ export default function AdminDashboard() {
                       setEditingBanner(null);
                       bannerForm.reset();
                       setBannerImageUrl("");
+                      setBannerVideoUrl("");
                     }}
                     data-testid="button-cancel-edit-banner"
                   >
@@ -6934,6 +7117,7 @@ export default function AdminDashboard() {
             setPromoCodeMessage("");
             setAppliedPromoCode(null);
             setOrderImageUrl("");
+            setOrderVideoUrl("");
           }
         }}
       >
@@ -6961,7 +7145,9 @@ export default function AdminDashboard() {
                   // Ensure imageUrl from state is included (fallback if form field is empty)
                   const submissionData = {
                     ...data,
-                    imageUrl: data.imageUrl || orderImageUrl
+                    imageUrl: data.imageUrl || orderImageUrl,
+                    videoUrl: data.videoUrl || orderVideoUrl,
+                    videoMuted: data.videoMuted ?? true,
                   };
                   
                   if (editingOrder) {
@@ -7099,6 +7285,65 @@ export default function AdminDashboard() {
                         </div>
                       </FormControl>
                       <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={orderForm.control}
+                  name="videoUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Banner Video (Optional)</FormLabel>
+                      <FormControl>
+                        <div className="space-y-2">
+                          <Input
+                            placeholder="Video URL"
+                            {...field}
+                            value={field.value ?? ""}
+                            data-testid="input-order-video-url"
+                          />
+                          <ObjectUploader
+                            onGetUploadParameters={handleOrderGetUploadParameters}
+                            onComplete={handleOrderVideoUploadComplete}
+                            maxNumberOfFiles={1}
+                            maxFileSize={52428800}
+                            allowedFileTypes={["video/*"]}
+                            enableImageEditor={false}
+                            buttonVariant="secondary"
+                          >
+                            Upload Video
+                          </ObjectUploader>
+                          {(field.value || orderVideoUrl) && (
+                            <video
+                              src={field.value || orderVideoUrl}
+                              className="w-full h-40 rounded-md object-cover"
+                              muted={orderForm.watch("videoMuted") ?? true}
+                              controls
+                              playsInline
+                              data-testid="preview-order-video"
+                            />
+                          )}
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={orderForm.control}
+                  name="videoMuted"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value ?? true}
+                          onCheckedChange={field.onChange}
+                          data-testid="checkbox-order-video-muted"
+                        />
+                      </FormControl>
+                      <FormLabel className="cursor-pointer font-normal">Mute video by default</FormLabel>
                     </FormItem>
                   )}
                 />
@@ -7376,6 +7621,8 @@ export default function AdminDashboard() {
                       setOrderDialogOpen(false);
                       setEditingOrder(null);
                       orderForm.reset();
+                      setOrderImageUrl("");
+                      setOrderVideoUrl("");
                     }}
                     data-testid="button-cancel-create-order"
                   >

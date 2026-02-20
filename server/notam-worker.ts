@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { createRequire } from "module";
+import zlib from "zlib";
 import { XMLParser } from "fast-xml-parser";
 import { db } from "./db";
 import { notams as notamsTable } from "@shared/schema";
@@ -89,6 +90,21 @@ const ICAO_KEYS = [
   "facility",
 ];
 
+const TEXT_KEYS_LOWER = new Set(TEXT_KEYS.map((key) => key.toLowerCase()));
+const ICAO_KEYS_LOWER = new Set(ICAO_KEYS.map((key) => key.toLowerCase()));
+
+function keyVariants(rawKey: string) {
+  const trimmed = rawKey.trim();
+  if (!trimmed) return [rawKey];
+  const parts = trimmed.split(":");
+  const last = parts[parts.length - 1] || trimmed;
+  return [trimmed, last];
+}
+
+function matchesKey(rawKey: string, keysLower: Set<string>) {
+  return keyVariants(rawKey).some((variant) => keysLower.has(variant.toLowerCase()));
+}
+
 function extractIcaoFromValue(value: any): string | undefined {
   if (!value) return undefined;
   if (typeof value === "string") {
@@ -113,9 +129,12 @@ function extractIcaoFromValue(value: any): string | undefined {
 }
 
 function pickText(item: any): string | null {
-  for (const key of TEXT_KEYS) {
-    const value = item?.[key];
-    if (typeof value === "string" && value.trim()) return value;
+  if (item && typeof item === "object") {
+    for (const [key, value] of Object.entries(item)) {
+      if (matchesKey(key, TEXT_KEYS_LOWER) && typeof value === "string" && value.trim()) {
+        return value;
+      }
+    }
   }
   const nested =
     item?.notam?.text ||
@@ -128,10 +147,13 @@ function pickText(item: any): string | null {
 }
 
 function pickIcao(item: any): string | undefined {
-  for (const key of ICAO_KEYS) {
-    const value = item?.[key];
-    const extracted = extractIcaoFromValue(value);
-    if (extracted) return extracted;
+  if (item && typeof item === "object") {
+    for (const [key, value] of Object.entries(item)) {
+      if (matchesKey(key, ICAO_KEYS_LOWER)) {
+        const extracted = extractIcaoFromValue(value);
+        if (extracted) return extracted;
+      }
+    }
   }
   return undefined;
 }
@@ -186,8 +208,11 @@ function normalizePayload(payload: any): NormalizedNotam[] {
     }
     if (typeof value !== "object") return;
     seen.add(value);
-    const hasText = TEXT_KEYS.some((key) => typeof value?.[key] === "string");
-    const hasIcao = ICAO_KEYS.some((key) => value?.[key]);
+    const entries = Object.entries(value);
+    const hasText = entries.some(
+      ([key, entry]) => matchesKey(key, TEXT_KEYS_LOWER) && typeof entry === "string"
+    );
+    const hasIcao = entries.some(([key, entry]) => matchesKey(key, ICAO_KEYS_LOWER) && entry);
     if (hasText || hasIcao) candidates.push(value);
     Object.values(value).forEach((entry) => walk(entry, depth + 1));
   };
@@ -261,14 +286,27 @@ function messageToString(message: any): string {
     const binary = message.getBinaryAttachment?.();
     if (binary) {
       if (typeof binary === "string") return binary;
-      if (binary instanceof Uint8Array) {
-        return Buffer.from(binary).toString("utf-8");
-      }
-      if (binary instanceof ArrayBuffer) {
-        return Buffer.from(new Uint8Array(binary)).toString("utf-8");
-      }
-      if (Buffer.isBuffer(binary)) {
-        return binary.toString("utf-8");
+      const buffer =
+        binary instanceof Uint8Array
+          ? Buffer.from(binary)
+          : binary instanceof ArrayBuffer
+            ? Buffer.from(new Uint8Array(binary))
+            : Buffer.isBuffer(binary)
+              ? binary
+              : null;
+      if (buffer) {
+        const isGzip = buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
+        const isZlib =
+          buffer.length >= 2 &&
+          buffer[0] === 0x78 &&
+          (buffer[1] === 0x01 || buffer[1] === 0x9c || buffer[1] === 0xda);
+        try {
+          if (isGzip) return zlib.gunzipSync(buffer).toString("utf-8");
+          if (isZlib) return zlib.inflateSync(buffer).toString("utf-8");
+        } catch {
+          // fall back to raw text
+        }
+        return buffer.toString("utf-8");
       }
     }
   } catch {
@@ -290,6 +328,10 @@ function messageToString(message: any): string {
 }
 
 export function startSwimNotamWorker() {
+  const debugNotams = String(process.env.SWIM_NOTAM_DEBUG || "").toLowerCase() === "true";
+  let receivedCount = 0;
+  let savedCount = 0;
+  let emptyCount = 0;
   const queueName = process.env.SWIM_JMS_QUEUE;
   const username = process.env.SWIM_JMS_USERNAME;
   const password = process.env.SWIM_JMS_PASSWORD;
@@ -401,6 +443,7 @@ export function startSwimNotamWorker() {
 
     safeOn(consumer, consumerMessageEvent, async (message: any) => {
       try {
+        receivedCount += 1;
         const body = messageToString(message);
         const payload = parsePayload(body);
         const normalized = normalizePayload(payload);
@@ -411,6 +454,25 @@ export function startSwimNotamWorker() {
           }
         }
         await upsertNotams(normalized);
+        savedCount += normalized.length;
+        if (debugNotams) {
+          const shouldLog = receivedCount <= 5 || receivedCount % 50 === 0;
+          if (normalized.length === 0) {
+            emptyCount += 1;
+          }
+          if (shouldLog || normalized.length === 0) {
+            const snippet = typeof body === "string" ? body.slice(0, 300) : "";
+            console.log(
+              JSON.stringify({
+                event: "notam_ingest",
+                receivedCount,
+                savedCount,
+                emptyCount,
+                bodySample: snippet,
+              })
+            );
+          }
+        }
       } catch (ingestError: any) {
         console.error("NOTAM ingest error:", ingestError?.message || ingestError);
       } finally {

@@ -86,6 +86,16 @@ function StudentPageLoader({ component: Component }: { component: ComponentType 
   );
 }
 
+function RedirectTo({ to }: { to: string }) {
+  const [location, setLocation] = useLocation();
+  useEffect(() => {
+    const queryIndex = location.indexOf("?");
+    const suffix = queryIndex >= 0 ? location.slice(queryIndex) : "";
+    setLocation(`${to}${suffix}`, { replace: true });
+  }, [location, setLocation, to]);
+  return null;
+}
+
 function AnalyticsTracker() {
   const [path] = useLocation();
   useEffect(() => {
@@ -126,6 +136,7 @@ function Router() {
       <Route path="/cfi/student-terms" component={CfiStudentTerms} />
       <Route path="/cfi/:slug" component={CfiProfile} />
       <Route path="/delete-account" component={DeleteAccount} />
+      <Route path="/tools/eb6" component={() => <RedirectTo to="/tools/e6b" />} />
       <Route path="/404" component={NotFound} />
       
       {/* Protected routes - require authentication */}
@@ -147,7 +158,7 @@ function Router() {
           <Route path="/approach-plates" component={ApproachPlates} />
           <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
           <Route path="/weight-balance" component={WeightBalance} />
-          <Route path="/tools/eb6" component={Eb6Calculator} />
+          <Route path="/tools/e6b" component={Eb6Calculator} />
           <Route path="/flight-planner" component={FlightPlanner} />
           <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
           <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
@@ -207,7 +218,7 @@ function Router() {
           <Route path="/approach-plates" component={RequireAuth} />
           <Route path="/ownership-cost-calculator" component={RequireAuth} />
           <Route path="/weight-balance" component={RequireAuth} />
-          <Route path="/tools/eb6" component={RequireAuth} />
+          <Route path="/tools/e6b" component={RequireAuth} />
           <Route path="/flight-planner" component={RequireAuth} />
           <Route path="/radio-comms-trainer" component={RequireAuth} />
           <Route path="/adsb-receiver-help" component={RequireAuth} />

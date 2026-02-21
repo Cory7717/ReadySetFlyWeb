@@ -133,19 +133,19 @@ export default function Eb6Calculator() {
   );
 
   useEffect(() => {
-    trackEvent("tool_view", { tool: "eb6" });
+    trackEvent("tool_view", { tool: "e6b" });
   }, []);
 
   useEffect(() => {
     if (!loadedPrefs) return;
-    trackEvent("tool_setting_change", { tool: "eb6", setting: "mode", value: outputMode });
+    trackEvent("tool_setting_change", { tool: "e6b", setting: "mode", value: outputMode });
   }, [outputMode, loadedPrefs]);
 
   useEffect(() => {
     if (!loadedPrefs || outputMode !== "custom") return;
     const handle = window.setTimeout(() => {
       trackEvent("tool_setting_change", {
-        tool: "eb6",
+        tool: "e6b",
         setting: "custom_outputs",
         value: customOutputs.length,
       });
@@ -339,7 +339,7 @@ export default function Eb6Calculator() {
   return (
     <div className="container mx-auto p-6 max-w-6xl space-y-6">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold">EB-6 Advanced</h1>
+        <h1 className="text-3xl font-bold">E6-B Advanced</h1>
         <p className="text-muted-foreground">Performance + wind + fuel - fast answers with configurable outputs.</p>
       </div>
 
@@ -347,7 +347,7 @@ export default function Eb6Calculator() {
         <Card>
           <CardHeader>
             <CardTitle>Inputs</CardTitle>
-            <CardDescription>Required fields drive the core EB-6 outputs.</CardDescription>
+            <CardDescription>Required fields drive the core E6-B outputs.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3">

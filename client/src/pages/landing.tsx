@@ -371,7 +371,7 @@ export default function Landing() {
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
             <span className="font-semibold text-foreground">Popular tools:</span>
             {[
-              { label: "EB-6 Advanced", href: "/tools/eb6", slug: "eb6-advanced" },
+              { label: "E6-B Advanced", href: "/tools/e6b", slug: "e6b-advanced" },
               { label: "VOR/Knob Trainer", href: "/student/vor-trainer", slug: "vor-knob" },
               { label: "Six-Pack Panel", href: "/student/six-pack-trainer", slug: "six-pack" },
               { label: "IFR Tools", href: "/ifr-tools", slug: "ifr-tools" },

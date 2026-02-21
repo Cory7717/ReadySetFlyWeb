@@ -67,9 +67,9 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["gps simulator", "g1000", "gtn", "gtx", "ifr gps"],
   },
   {
-    label: "EB-6 Calculator",
-    path: "/tools/eb6",
-    keywords: ["eb6", "eb-6", "e6b", "e6-b", "flight computer", "wind triangle"],
+    label: "E6-B Calculator",
+    path: "/tools/e6b",
+    keywords: ["e6b", "e6-b", "flight computer", "wind triangle"],
   },
   {
     label: "Weight & Balance",

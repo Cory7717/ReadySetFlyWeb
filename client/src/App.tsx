@@ -294,7 +294,7 @@ function Router() {
   );
 }
 
-function App() {
+function AppShell() {
   const { isAuthenticated } = useAuth();
   useEffect(() => {
     setAuthState(isAuthenticated);
@@ -304,24 +304,30 @@ function App() {
   }, [isAuthenticated]);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="light">
-        <TooltipProvider>
-          <div className="min-h-screen bg-background flex flex-col">
-            {/* Show Header for all users (authenticated and anonymous) */}
-            <Header />
-            <div className="flex-1">
-              <AnalyticsTracker />
-              <ScrollToTopOnRoute />
-              <Router />
-            </div>
-            <Footer />
+    <ThemeProvider defaultTheme="light">
+      <TooltipProvider>
+        <div className="min-h-screen bg-background flex flex-col">
+          {/* Show Header for all users (authenticated and anonymous) */}
+          <Header />
+          <div className="flex-1">
+            <AnalyticsTracker />
+            <ScrollToTopOnRoute />
+            <Router />
           </div>
-          <AuthGateModal />
-          <SignupNudgeBanner />
-          <Toaster />
-        </TooltipProvider>
-      </ThemeProvider>
+          <Footer />
+        </div>
+        <AuthGateModal />
+        <SignupNudgeBanner />
+        <Toaster />
+      </TooltipProvider>
+    </ThemeProvider>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppShell />
     </QueryClientProvider>
   );
 }

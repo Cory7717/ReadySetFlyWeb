@@ -3,10 +3,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent } from "@/lib/analytics";
 import { OutputModeSelector, type OutputDefinition } from "@/components/tools/OutputModeSelector";
 import { ResultTiles, type ResultTile } from "@/components/tools/ResultTiles";
+import WindTriangleViz from "@/components/e6b/WindTriangleViz";
+import E6BHowItWorksModal from "@/components/e6b/E6BHowItWorksModal";
 import {
   calcDensityAltitude,
   calcEnduranceHours,
@@ -18,6 +22,7 @@ import {
   calcWindComponents,
   calcWca,
 } from "@/lib/calculators/eb6";
+import { computeWindTriangle } from "@/lib/e6b/windTriangle";
 import {
   type Eb6OutputMode,
   readLocalEb6Prefs,
@@ -25,6 +30,11 @@ import {
   fetchEb6Prefs,
   saveEb6Prefs,
 } from "@/lib/prefs/eb6Prefs";
+import { Info } from "lucide-react";
+
+const TOOL_DISPLAY_NAME = "E6B Flight Computer";
+const TOOL_META_DESCRIPTION =
+  "E6B Flight Computer for wind correction, ground speed, time, fuel, and altitude performance. Live interactive wind triangle.";
 
 const QUICK_OUTPUTS = [
   "pressure_altitude",
@@ -101,6 +111,28 @@ const formatValueInt = (value: number | null) => {
   return Math.round(value).toLocaleString();
 };
 
+const formatHeading = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return "--";
+  const rounded = Math.round(value) % 360;
+  return rounded.toString().padStart(3, "0");
+};
+
+const formatWca = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return "--";
+  const direction = value > 0 ? "R" : value < 0 ? "L" : "";
+  return `${Math.abs(value).toFixed(1)} deg${direction ? ` ${direction}` : ""}`;
+};
+
+const EXAMPLE_VALUES = {
+  altimeter: "29.92",
+  fieldElevation: "500",
+  oat: "15",
+  kias: "120",
+  windDirection: "210",
+  windSpeed: "15",
+  trueCourse: "180",
+};
+
 export default function Eb6Calculator() {
   const { isAuthenticated } = useAuth();
   const [altimeter, setAltimeter] = useState("29.92");
@@ -115,7 +147,25 @@ export default function Eb6Calculator() {
   const [outputMode, setOutputMode] = useState<Eb6OutputMode>("quick");
   const [customOutputs, setCustomOutputs] = useState<string[]>(QUICK_OUTPUTS);
   const [loadedPrefs, setLoadedPrefs] = useState(false);
+  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
+  const [interactiveAccordionValue, setInteractiveAccordionValue] = useState<string>("");
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(min-width: 1024px)").matches;
+  });
   const saveTimer = useRef<number | null>(null);
+  const interactiveUsedRef = useRef(false);
+  const prevInputsRef = useRef({
+    altimeter,
+    fieldElevation,
+    oat,
+    kias,
+    windDirection,
+    windSpeed,
+    trueCourse,
+    fuelBurn,
+    fuelAvailable,
+  });
 
   const debouncedInputs = useDebouncedValue(
     {
@@ -134,6 +184,55 @@ export default function Eb6Calculator() {
 
   useEffect(() => {
     trackEvent("tool_view", { tool: "e6b" });
+  }, []);
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    let descriptionElement = document.querySelector("meta[name='description']");
+    const previousDescription = descriptionElement?.getAttribute("content");
+    let createdDescription = false;
+
+    document.title = `${TOOL_DISPLAY_NAME} | Ready Set Fly`;
+    if (descriptionElement) {
+      descriptionElement.setAttribute("content", TOOL_META_DESCRIPTION);
+    } else {
+      const meta = document.createElement("meta");
+      meta.setAttribute("name", "description");
+      meta.setAttribute("content", TOOL_META_DESCRIPTION);
+      document.head.appendChild(meta);
+      descriptionElement = meta;
+      createdDescription = true;
+    }
+    return () => {
+      document.title = previousTitle;
+      if (createdDescription && descriptionElement) {
+        descriptionElement.remove();
+        return;
+      }
+      if (descriptionElement && previousDescription !== null) {
+        descriptionElement.setAttribute("content", previousDescription);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", update);
+      return () => mq.removeEventListener("change", update);
+    }
+    mq.addListener(update);
+    return () => mq.removeListener(update);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.sessionStorage.getItem("rsf_e6b_interactive_used")) {
+      interactiveUsedRef.current = true;
+    }
   }, []);
 
   useEffect(() => {
@@ -243,6 +342,30 @@ export default function Eb6Calculator() {
 
   const hasRequiredInputs = !errors.altimeter && !errors.fieldElevation && !errors.oat && !errors.kias && !errors.windDirection && !errors.windSpeed && !errors.trueCourse;
 
+  const windTriangle = useMemo(() => {
+    const altimeterValue = toNumber(debouncedInputs.altimeter);
+    const elevationValue = toNumber(debouncedInputs.fieldElevation);
+    const oatValue = toNumber(debouncedInputs.oat);
+    const kiasValue = toNumber(debouncedInputs.kias);
+    const windDirValue = toNumber(debouncedInputs.windDirection);
+    const windSpeedValue = toNumber(debouncedInputs.windSpeed);
+    const courseValue = toNumber(debouncedInputs.trueCourse);
+
+    let tas: number | null = null;
+    if (altimeterValue !== null && elevationValue !== null && oatValue !== null && kiasValue !== null) {
+      const pressureAltitude = calcPressureAltitude(altimeterValue, elevationValue);
+      const densityAltitude = calcDensityAltitude(pressureAltitude, oatValue, elevationValue);
+      tas = calcTAS(kiasValue, densityAltitude);
+    }
+
+    return computeWindTriangle({
+      tas,
+      windDir: windDirValue,
+      windSpeed: windSpeedValue,
+      course: courseValue,
+    });
+  }, [debouncedInputs]);
+
   const results = useMemo(() => {
     if (!hasRequiredInputs) return [] as ResultTile[];
 
@@ -301,7 +424,7 @@ export default function Eb6Calculator() {
         label: "Wind Components",
         value: `H ${formatValue(Math.abs(wind.headwind), 1)} / X ${formatValue(Math.abs(wind.crosswind), 1)}`,
         unit: "kt",
-        helper: `${headwindLabel} · crosswind ${crosswindDir}`,
+        helper: `${headwindLabel} - crosswind ${crosswindDir}`,
       },
       wca: {
         id: "wca",
@@ -335,103 +458,215 @@ export default function Eb6Calculator() {
   }, [debouncedInputs, hasRequiredInputs, selectedOutputs]);
 
   const missingMessage = !hasRequiredInputs ? "Enter required fields to compute results." : null;
+  const interactiveVisible = isDesktop || interactiveAccordionValue === "interactive";
+
+  useEffect(() => {
+    if (!interactiveVisible) {
+      prevInputsRef.current = debouncedInputs;
+      return;
+    }
+    if (interactiveUsedRef.current) {
+      prevInputsRef.current = debouncedInputs;
+      return;
+    }
+    const prev = prevInputsRef.current;
+    const keys = Object.keys(prev) as Array<keyof typeof prev>;
+    const changed = keys.some((key) => prev[key] !== debouncedInputs[key]);
+    if (changed) {
+      trackEvent("e6b_interactive_view_used");
+      interactiveUsedRef.current = true;
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem("rsf_e6b_interactive_used", "1");
+      }
+    }
+    prevInputsRef.current = debouncedInputs;
+  }, [debouncedInputs, interactiveVisible]);
 
   return (
     <div className="container mx-auto p-6 max-w-6xl space-y-6">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold">e6b advanced</h1>
-        <p className="text-muted-foreground">Performance + wind + fuel - fast answers with configurable outputs.</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-bold">{TOOL_DISPLAY_NAME}</h1>
+          <Button variant="ghost" size="sm" className="gap-2" onClick={() => setHowItWorksOpen(true)}>
+            <Info className="h-4 w-4" />
+            How E6Bs work
+          </Button>
+        </div>
+        <p className="text-muted-foreground">
+          Performance, wind, and fuel calculations with a live wind triangle trainer.
+        </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Inputs</CardTitle>
-            <CardDescription>Required fields drive the core e6b outputs.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3">
-              <div className="space-y-1">
-                <Label>Altimeter setting (inHg)</Label>
-                <Input value={altimeter} onChange={(event) => setAltimeter(event.target.value)} />
-                {errors.altimeter && <div className="text-xs text-destructive">{errors.altimeter}</div>}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Inputs</CardTitle>
+              <CardDescription>Required fields drive the core E6B outputs.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3">
+                <div className="space-y-1">
+                  <Label>Altimeter setting (inHg)</Label>
+                  <Input value={altimeter} onChange={(event) => setAltimeter(event.target.value)} />
+                  {errors.altimeter && <div className="text-xs text-destructive">{errors.altimeter}</div>}
+                </div>
+                <div className="space-y-1">
+                  <Label>Field elevation (ft)</Label>
+                  <Input value={fieldElevation} onChange={(event) => setFieldElevation(event.target.value)} />
+                  {errors.fieldElevation && <div className="text-xs text-destructive">{errors.fieldElevation}</div>}
+                </div>
+                <div className="space-y-1">
+                  <Label>OAT (C)</Label>
+                  <Input value={oat} onChange={(event) => setOat(event.target.value)} />
+                  {errors.oat && <div className="text-xs text-destructive">{errors.oat}</div>}
+                </div>
+                <div className="space-y-1">
+                  <Label>Indicated airspeed (KIAS)</Label>
+                  <Input value={kias} onChange={(event) => setKias(event.target.value)} />
+                  {errors.kias && <div className="text-xs text-destructive">{errors.kias}</div>}
+                </div>
+                <div className="space-y-1">
+                  <Label>Wind direction (deg)</Label>
+                  <Input value={windDirection} onChange={(event) => setWindDirection(event.target.value)} />
+                  {errors.windDirection && <div className="text-xs text-destructive">{errors.windDirection}</div>}
+                </div>
+                <div className="space-y-1">
+                  <Label>Wind speed (kt)</Label>
+                  <Input value={windSpeed} onChange={(event) => setWindSpeed(event.target.value)} />
+                  {errors.windSpeed && <div className="text-xs text-destructive">{errors.windSpeed}</div>}
+                </div>
+                <div className="space-y-1">
+                  <Label>True course (deg)</Label>
+                  <Input value={trueCourse} onChange={(event) => setTrueCourse(event.target.value)} />
+                  {errors.trueCourse && <div className="text-xs text-destructive">{errors.trueCourse}</div>}
+                </div>
+                <div className="space-y-1">
+                  <Label>Fuel burn (GPH)</Label>
+                  <Input value={fuelBurn} onChange={(event) => setFuelBurn(event.target.value)} />
+                  {errors.fuelBurn && <div className="text-xs text-destructive">{errors.fuelBurn}</div>}
+                </div>
+                <div className="space-y-1">
+                  <Label>Fuel available (gal)</Label>
+                  <Input value={fuelAvailable} onChange={(event) => setFuelAvailable(event.target.value)} />
+                  {errors.fuelAvailable && <div className="text-xs text-destructive">{errors.fuelAvailable}</div>}
+                </div>
+                <div className="pt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setAltimeter(EXAMPLE_VALUES.altimeter);
+                      setFieldElevation(EXAMPLE_VALUES.fieldElevation);
+                      setOat(EXAMPLE_VALUES.oat);
+                      setKias(EXAMPLE_VALUES.kias);
+                      setWindDirection(EXAMPLE_VALUES.windDirection);
+                      setWindSpeed(EXAMPLE_VALUES.windSpeed);
+                      setTrueCourse(EXAMPLE_VALUES.trueCourse);
+                    }}
+                  >
+                    Load example inputs
+                  </Button>
+                </div>
               </div>
-              <div className="space-y-1">
-                <Label>Field elevation (ft)</Label>
-                <Input value={fieldElevation} onChange={(event) => setFieldElevation(event.target.value)} />
-                {errors.fieldElevation && <div className="text-xs text-destructive">{errors.fieldElevation}</div>}
-              </div>
-              <div className="space-y-1">
-                <Label>OAT (C)</Label>
-                <Input value={oat} onChange={(event) => setOat(event.target.value)} />
-                {errors.oat && <div className="text-xs text-destructive">{errors.oat}</div>}
-              </div>
-              <div className="space-y-1">
-                <Label>Indicated airspeed (KIAS)</Label>
-                <Input value={kias} onChange={(event) => setKias(event.target.value)} />
-                {errors.kias && <div className="text-xs text-destructive">{errors.kias}</div>}
-              </div>
-              <div className="space-y-1">
-                <Label>Wind direction (deg)</Label>
-                <Input value={windDirection} onChange={(event) => setWindDirection(event.target.value)} />
-                {errors.windDirection && <div className="text-xs text-destructive">{errors.windDirection}</div>}
-              </div>
-              <div className="space-y-1">
-                <Label>Wind speed (kt)</Label>
-                <Input value={windSpeed} onChange={(event) => setWindSpeed(event.target.value)} />
-                {errors.windSpeed && <div className="text-xs text-destructive">{errors.windSpeed}</div>}
-              </div>
-              <div className="space-y-1">
-                <Label>True course (deg)</Label>
-                <Input value={trueCourse} onChange={(event) => setTrueCourse(event.target.value)} />
-                {errors.trueCourse && <div className="text-xs text-destructive">{errors.trueCourse}</div>}
-              </div>
-              <div className="space-y-1">
-                <Label>Fuel burn (GPH)</Label>
-                <Input value={fuelBurn} onChange={(event) => setFuelBurn(event.target.value)} />
-                {errors.fuelBurn && <div className="text-xs text-destructive">{errors.fuelBurn}</div>}
-              </div>
-              <div className="space-y-1">
-                <Label>Fuel available (gal)</Label>
-                <Input value={fuelAvailable} onChange={(event) => setFuelAvailable(event.target.value)} />
-                {errors.fuelAvailable && <div className="text-xs text-destructive">{errors.fuelAvailable}</div>}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Results</CardTitle>
-            <CardDescription>Choose Quick, Advanced, or Custom outputs.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <OutputModeSelector
-              mode={outputMode}
-              selectedOutputs={customOutputs}
-              outputGroups={OUTPUT_GROUPS}
-              onModeChange={setOutputMode}
-              onOutputsChange={setCustomOutputs}
-              onSelectAll={() => setCustomOutputs(ALL_OUTPUTS)}
-              onResetQuick={() => setCustomOutputs(QUICK_OUTPUTS)}
-            />
+          <Card>
+            <CardHeader>
+              <CardTitle>Results</CardTitle>
+              <CardDescription>Choose Quick, Advanced, or Custom outputs.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 md:grid-cols-3">
+                <div>
+                  <div className="text-xs uppercase text-muted-foreground">WCA</div>
+                  <div className="text-lg font-semibold">{formatWca(windTriangle.wcaDeg)}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-muted-foreground">Heading</div>
+                  <div className="text-lg font-semibold">{formatHeading(windTriangle.headingDeg)}</div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase text-muted-foreground">Ground Speed</div>
+                  <div className="text-lg font-semibold">{formatValue(windTriangle.groundSpeedKt, 1)} kt</div>
+                </div>
+              </div>
 
-            {missingMessage && (
-              <Alert>
-                <AlertDescription>{missingMessage}</AlertDescription>
-              </Alert>
-            )}
+              <OutputModeSelector
+                mode={outputMode}
+                selectedOutputs={customOutputs}
+                outputGroups={OUTPUT_GROUPS}
+                onModeChange={setOutputMode}
+                onOutputsChange={setCustomOutputs}
+                onSelectAll={() => setCustomOutputs(ALL_OUTPUTS)}
+                onResetQuick={() => setCustomOutputs(QUICK_OUTPUTS)}
+              />
 
-            {!missingMessage && results.length === 0 && (
-              <Alert>
-                <AlertDescription>Select outputs to view results.</AlertDescription>
-              </Alert>
-            )}
+              {missingMessage && (
+                <Alert>
+                  <AlertDescription>{missingMessage}</AlertDescription>
+                </Alert>
+              )}
 
-            {!missingMessage && results.length > 0 && <ResultTiles results={results} />}
-          </CardContent>
-        </Card>
+              {!missingMessage && results.length === 0 && (
+                <Alert>
+                  <AlertDescription>Select outputs to view results.</AlertDescription>
+                </Alert>
+              )}
+
+              {!missingMessage && results.length > 0 && <ResultTiles results={results} />}
+            </CardContent>
+          </Card>
+
+          <div className="lg:hidden">
+            <Accordion
+              type="single"
+              collapsible
+              value={interactiveAccordionValue}
+              onValueChange={setInteractiveAccordionValue}
+            >
+              <AccordionItem value="interactive" className="border rounded-lg">
+                <AccordionTrigger className="px-4 py-3 text-left">Interactive View</AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Visualize wind correction and ground track instantly.
+                    </p>
+                    <WindTriangleViz data={windTriangle} />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </div>
+        </div>
+
+        <div className="hidden lg:block">
+          <Card className="lg:sticky lg:top-24">
+            <CardHeader>
+              <CardTitle>Interactive Wind Triangle</CardTitle>
+              <CardDescription>Live heading + wind + ground track visualization.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <WindTriangleViz data={windTriangle} />
+            </CardContent>
+          </Card>
+        </div>
       </div>
+
+      <E6BHowItWorksModal
+        open={howItWorksOpen}
+        onOpenChange={setHowItWorksOpen}
+        onLoadExample={() => {
+          setAltimeter(EXAMPLE_VALUES.altimeter);
+          setFieldElevation(EXAMPLE_VALUES.fieldElevation);
+          setOat(EXAMPLE_VALUES.oat);
+          setKias(EXAMPLE_VALUES.kias);
+          setWindDirection(EXAMPLE_VALUES.windDirection);
+          setWindSpeed(EXAMPLE_VALUES.windSpeed);
+          setTrueCourse(EXAMPLE_VALUES.trueCourse);
+        }}
+      />
     </div>
   );
 }

@@ -2993,11 +2993,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (success) {
         // Logout the user by destroying the session
-        req.logout((err: any) => {
-          if (err) {
-            console.error("Error logging out after account deletion:", err);
-          }
-        });
+        if (req.session && typeof req.logout === "function") {
+          req.logout((err: any) => {
+            if (err) {
+              console.error("Error logging out after account deletion:", err);
+            }
+          });
+        }
         
         res.json({ message: "Account deleted successfully" });
       } else {
@@ -3012,16 +3014,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Web logout endpoint (used by header link)
   app.get("/api/logout", (req, res) => {
     try {
-      req.logout?.((err: any) => {
-        if (err) {
-          console.error("Logout error:", err);
-        }
-      });
-      req.session?.destroy((err: any) => {
-        if (err) {
-          console.error("Session destroy error:", err);
-        }
-      });
+      if (req.session && typeof req.logout === "function") {
+        req.logout((err: any) => {
+          if (err) {
+            console.error("Logout error:", err);
+          }
+        });
+        req.session.destroy((err: any) => {
+          if (err) {
+            console.error("Session destroy error:", err);
+          }
+        });
+      }
       res.clearCookie("connect.sid");
       return res.redirect("/");
     } catch (error) {

@@ -591,6 +591,19 @@ export const analyticsEvents = pgTable("analytics_events", {
   index("idx_analytics_events_visitor").on(table.visitorId),
 ]);
 
+// Partner Redirects (featured tool outbound tracking)
+export const partnerRedirects = pgTable("partner_redirects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partner: text("partner").notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  sessionId: text("session_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_partner_redirects_partner").on(table.partner),
+  index("idx_partner_redirects_user").on(table.userId),
+  index("idx_partner_redirects_created").on(table.createdAt),
+]);
+
 // NOTAMs (FAA SWIM ingestion)
 export const notams = pgTable("notams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1979,6 +1992,11 @@ export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).om
   createdAt: true,
 });
 
+export const insertPartnerRedirectSchema = createInsertSchema(partnerRedirects).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalRequests).omit({
   id: true,
   createdAt: true,
@@ -2038,6 +2056,9 @@ export type Transaction = typeof transactions.$inferSelect;
 
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
+
+export type PartnerRedirect = typeof partnerRedirects.$inferSelect;
+export type InsertPartnerRedirect = z.infer<typeof insertPartnerRedirectSchema>;
 
 export type Notam = typeof notams.$inferSelect;
 export type NotamIngestEvent = typeof notamIngestEvents.$inferSelect;

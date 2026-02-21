@@ -12,6 +12,7 @@ import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, C
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent } from "@/lib/analytics";
+import av8mapsLogo from "@assets/av8maps-logo.svg";
 
 interface WeatherData {
   icao: string;
@@ -143,6 +144,9 @@ export default function PilotTools() {
   const [altimeterSetting, setAltimeterSetting] = useState("29.92");
   const [oatValue, setOatValue] = useState("20");
   const [tempUnit, setTempUnit] = useState<"C" | "F">("C");
+  const [partnerRedirecting, setPartnerRedirecting] = useState(false);
+
+  const av8mapsActive = String(import.meta.env.VITE_PARTNER_AV8MAPS_ACTIVE ?? "true").toLowerCase() === "true";
 
   const heading = Number(runwayHeading) || 0;
   const windDir = Number(windDirection) || 0;
@@ -304,6 +308,14 @@ export default function PilotTools() {
     trackEvent("pilot_tools_view", { page: "/pilot-tools" });
   }, []);
 
+  const handleAv8mapsClick = () => {
+    if (partnerRedirecting) return;
+    setPartnerRedirecting(true);
+    trackEvent("partner_card_click", { partner: "av8maps", location: "tools_home" });
+    window.setTimeout(() => {
+      window.location.assign(apiUrl("/api/partner/redirect?partner=av8maps"));
+    }, 80);
+  };
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-5xl">
@@ -336,6 +348,31 @@ export default function PilotTools() {
             <Badge variant="outline">New</Badge>
           </CardContent>
         </Card>
+
+        {av8mapsActive && (
+          <Card className="border-amber-200/60 bg-amber-50/60">
+            <CardHeader>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <CardTitle className="flex items-center gap-3">
+                  <img src={av8mapsLogo} alt="Av8Maps" className="h-10 w-auto" />
+                  <span>Featured Partner Tool</span>
+                </CardTitle>
+                <Badge variant="secondary">Featured Partner</Badge>
+              </div>
+              <CardDescription>
+                Nationwide aviation business and services maps for pilots and operators. Explore FBOs, services,
+                and aviation resources across the U.S.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-3">
+              <Button onClick={handleAv8mapsClick} disabled={partnerRedirecting}>
+                Launch Av8Maps
+                <ExternalLink className="h-4 w-4 ml-2" />
+              </Button>
+              <Badge variant="outline">Av8Maps</Badge>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border-primary/20 bg-primary/5">
           <CardHeader>

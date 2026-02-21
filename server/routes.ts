@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -41,6 +41,7 @@ import { createStubTfmsProvider } from "./services/tfms/providers/stub";
 import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
 import { createDbTfmsProvider } from "./services/tfms/providers/db";
 import { computeTfmsRisk } from "./services/tfms/risk";
+import { partners } from "./config/partners";
 import {
   fetchMetar,
   fetchTaf,
@@ -7729,6 +7730,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Failed to record session ping:", error);
       res.status(500).json({ error: "Failed to record session ping" });
     }
+  });
+
+  app.get("/api/partner/redirect", async (req: any, res) => {
+    const rawPartner = Array.isArray(req.query.partner) ? req.query.partner[0] : req.query.partner;
+    const partnerKey = typeof rawPartner === "string" ? rawPartner.trim().toLowerCase() : "";
+    if (!partnerKey) {
+      return res.status(400).json({ error: "partner_required" });
+    }
+
+    const partner = partners[partnerKey];
+    if (!partner) {
+      return res.status(400).json({ error: "invalid_partner" });
+    }
+    if (!partner.active) {
+      return res.status(403).json({ error: "partner_inactive" });
+    }
+
+    const userId = req.user?.claims?.sub || req.session?.userId || null;
+    const sessionId = typeof req.sessionID === "string" ? req.sessionID : null;
+    const ip = String(req.headers["x-forwarded-for"] || req.ip || "");
+    const ipHash = ip ? crypto.createHash("sha256").update(ip).digest("hex").slice(0, 12) : undefined;
+    const meta = {
+      partner: partnerKey,
+      session_id: sessionId || undefined,
+      source: "featured_card",
+    };
+
+    console.log(JSON.stringify({
+      event: "partner_redirect",
+      partner: partnerKey,
+      user_id: userId || undefined,
+      session_id: sessionId || undefined,
+      source: "featured_card",
+      ipHash,
+    }));
+
+    const visitorId = sessionId || crypto.randomUUID();
+    const analyticsRecord = insertAnalyticsEventSchema.safeParse({
+      event: "partner_redirect",
+      page: "/pilot-tools",
+      visitorId,
+      userId: userId || undefined,
+      meta,
+    });
+
+    const redirectRecord = insertPartnerRedirectSchema.safeParse({
+      partner: partnerKey,
+      userId: userId || undefined,
+      sessionId: sessionId || undefined,
+    });
+
+    setImmediate(() => {
+      if (analyticsRecord.success) {
+        void storage.createAnalyticsEvent(analyticsRecord.data).catch((error) => {
+          console.warn("Failed to record partner redirect analytics:", error);
+        });
+      }
+      if (redirectRecord.success) {
+        void db.insert(partnerRedirects).values(redirectRecord.data).catch((error) => {
+          console.warn("Failed to record partner redirect:", error);
+        });
+      }
+    });
+
+    return res.redirect(302, partner.redirectUrl);
   });
 
   // Admin Analytics

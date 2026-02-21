@@ -149,12 +149,17 @@ export function FeaturedPartnerToolCard({
                 <img
                   src={logoSrc}
                   alt={`${title} logo`}
-                  className="h-14 sm:h-16 w-auto object-contain"
+                  className="h-20 sm:h-24 w-auto object-contain"
                   loading="lazy"
                 />
               </div>
-              <div className="space-y-1">
-                <CardTitle className="text-xl sm:text-2xl leading-snug">{title}</CardTitle>
+              <div className="space-y-2">
+                <div className="text-center sm:text-left">
+                  <div className="text-xl sm:text-2xl font-semibold">Av8Maps</div>
+                  <div className="text-sm sm:text-base text-muted-foreground">
+                    Nationwide GA Destination Maps
+                  </div>
+                </div>
                 <CardDescription className="text-sm text-muted-foreground">
                   {description}
                 </CardDescription>

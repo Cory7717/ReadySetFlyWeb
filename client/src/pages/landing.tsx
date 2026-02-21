@@ -13,7 +13,7 @@ import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useEffect, useMemo, useRef, useState } from "react";
-import av8mapsLogo from "@assets/Av8Maps.jpg";
+import av8mapsLogo from "@assets/Av8Maps.JPG";
 
 interface WeatherData {
   icao: string;

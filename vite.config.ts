@@ -23,6 +23,7 @@ export default defineConfig(async () => {
       CESIUM_BASE_URL: '"/cesium/"',
     },
     plugins: [react(), runtimeErrorOverlay(), cesium(), ...replitPlugins],
+    assetsInclude: ["**/*.JPG"],
     resolve: {
       alias: {
         "@": path.resolve(import.meta.dirname, "client", "src"),

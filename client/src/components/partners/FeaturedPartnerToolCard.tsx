@@ -157,7 +157,7 @@ export function FeaturedPartnerToolCard({
                 <div className="text-center sm:text-left">
                   <div className="text-xl sm:text-2xl font-semibold">Av8Maps</div>
                   <div className="text-sm sm:text-base text-muted-foreground">
-                    Nationwide GA Destination Maps
+                    Nationwide Fly-in Destination Maps
                   </div>
                 </div>
                 <CardDescription className="text-sm text-muted-foreground">

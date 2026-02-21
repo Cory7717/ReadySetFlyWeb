@@ -3,6 +3,7 @@ type PartnerConfig = {
   baseUrl: string;
   redirectUrl: string;
   active: boolean;
+  paths?: Record<string, string>;
   utm: {
     source: string;
     medium: string;
@@ -43,6 +44,14 @@ export const partners: Record<string, PartnerConfig> = {
     baseUrl: defaultAv8mapsBase,
     redirectUrl: av8mapsRedirect,
     active: isAv8mapsActive,
+    paths: {
+      "fly-in-camping": "/camping-with-your-plane/",
+      "fly-in-restaurants": "/sample-restaurant-map/",
+      "vacation-rentals-hotels": "/vacation-rentals-and-hotels/",
+      "find-an-ame": "/find-an-ame/",
+      "fly-ins-events": "/events/",
+      "seaplane-destinations": "/seaplane-bases-and-restaurants/",
+    },
     utm: av8mapsUtm,
   },
 };

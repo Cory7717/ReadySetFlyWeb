@@ -11,6 +11,7 @@ export type FeaturedPartnerTile = {
   title: string;
   description: string;
   slug: string;
+  dest?: string;
   icon?: ReactNode;
 };
 
@@ -40,11 +41,14 @@ const sanitizeParam = (value: string | undefined, fallback: string) => {
   return cleaned || fallback;
 };
 
-const buildOutboundUrl = (outboundPath: string, src: string, utmContent: string) => {
+const buildOutboundUrl = (outboundPath: string, src: string, utmContent: string, dest?: string) => {
   const base = apiUrl(outboundPath);
   const params = new URLSearchParams();
   params.set("src", src);
   params.set("utm_content", utmContent);
+  if (dest) {
+    params.set("dest", dest);
+  }
   const separator = base.includes("?") ? "&" : "?";
   return `${base}${separator}${params.toString()}`;
 };
@@ -220,7 +224,8 @@ export function FeaturedPartnerToolCard({
                     const href = buildOutboundUrl(
                       outboundPath,
                       "home_featured_partner_tile",
-                      sanitizeParam(tile.slug, "tile")
+                      sanitizeParam(tile.slug, "tile"),
+                      tile.dest
                     );
                     return (
                       <a

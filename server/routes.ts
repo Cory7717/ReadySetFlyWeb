@@ -7754,6 +7754,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   };
 
+  const resolvePartnerDestination = (partnerConfig: typeof partners.av8maps, destKey: string | null) => {
+    if (!destKey || !partnerConfig?.paths) return partnerConfig.baseUrl;
+    const path = partnerConfig.paths[destKey];
+    if (!path) return partnerConfig.baseUrl;
+    if (path.startsWith("http://") || path.startsWith("https://")) {
+      return path;
+    }
+    try {
+      return new URL(path, partnerConfig.baseUrl).toString();
+    } catch {
+      return partnerConfig.baseUrl;
+    }
+  };
+
   app.get("/out/av8maps", async (req: any, res) => {
     const partner = partners.av8maps;
     if (!partner?.active) {
@@ -7765,8 +7779,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     const source = sanitizeOutboundParam(req.query.src, "home_featured_partner");
     const content = sanitizeOutboundParam(req.query.utm_content, "cta");
+    const destKey = sanitizeOutboundParam(req.query.dest, "");
 
-    const redirectUrl = buildOutboundRedirectUrl(partner.baseUrl, {
+    const destination = resolvePartnerDestination(partner, destKey || null);
+    const redirectUrl = buildOutboundRedirectUrl(destination, {
       utm_source: partner.utm.source || "readysetfly",
       utm_medium: partner.utm.medium || "featured_partner",
       utm_campaign: partner.utm.campaign || "av8maps_partner",

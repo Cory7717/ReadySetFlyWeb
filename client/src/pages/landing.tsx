@@ -133,6 +133,21 @@ export default function Landing() {
     staleTime: 1000 * 60 * 10,
   });
 
+  const { data: airportMeta } = useQuery<AirportSearchResult | null>({
+    queryKey: ["/api/airports/search", searchIcao, "exact"],
+    queryFn: async () => {
+      if (!searchIcao) return null;
+      const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(searchIcao)}`));
+      if (!res.ok) return null;
+      const results = (await res.json()) as AirportSearchResult[];
+      if (!results?.length) return null;
+      const upper = searchIcao.toUpperCase();
+      return results.find((item) => item.icao?.toUpperCase() === upper) ?? results[0] ?? null;
+    },
+    enabled: Boolean(searchIcao),
+    staleTime: 1000 * 60 * 30,
+  });
+
   const { data: runwayBriefing, isLoading: runwayLoading } = useQuery<{
     icao: string;
     runwayInUse: string | null;
@@ -176,6 +191,17 @@ export default function Landing() {
   const runwayInUseDisplay =
     runwayBriefing?.runwayInUse || extractRunwayInUse(weather?.metar) || null;
   const atisInfo = extractAtisIdentifier(weather?.metar);
+  const airportLocation = [airportMeta?.city, airportMeta?.state].filter(Boolean).join(", ");
+  const airportDescriptor = [
+    airportMeta?.name ?? null,
+    airportLocation ? `(${airportLocation})` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const airportTitleBase = weather?.icao || searchIcao;
+  const conditionsTitle = `${airportTitleBase}${
+    airportDescriptor ? ` - ${airportDescriptor}` : ""
+  } - Current Conditions`;
 
   const submitIcao = () => {
     const normalized = icaoInput.trim().toUpperCase();
@@ -547,6 +573,12 @@ export default function Landing() {
                         )}
                       </div>
                     )}
+                    {airportMeta && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {airportMeta.name ?? "Unknown airport"}
+                        {airportLocation ? ` (${airportLocation})` : ""}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <Button
@@ -564,7 +596,7 @@ export default function Landing() {
             <Card id="airport-weather" className="border-muted-foreground/20">
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <CardTitle>{weather?.icao || searchIcao} - Current Conditions</CardTitle>
+                  <CardTitle>{conditionsTitle}</CardTitle>
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge
                       variant="secondary"

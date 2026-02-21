@@ -176,6 +176,23 @@ export default function PilotTools() {
     enabled: !!searchIcao,
   });
 
+  const { data: airportMeta } = useQuery<AirportSearchResult | null>({
+    queryKey: ["/api/airports/search", searchIcao, "exact"],
+    queryFn: async () => {
+      if (!searchIcao) return null;
+      const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(searchIcao)}`), {
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      const results = (await res.json()) as AirportSearchResult[];
+      if (!results?.length) return null;
+      const upper = searchIcao.toUpperCase();
+      return results.find((item) => item.icao?.toUpperCase() === upper) ?? results[0] ?? null;
+    },
+    enabled: !!searchIcao,
+    staleTime: 1000 * 60 * 30,
+  });
+
   const { data: runwayBriefing, isLoading: runwayLoading } = useQuery<{
     icao: string;
     runwayInUse: string | null;
@@ -271,6 +288,17 @@ export default function PilotTools() {
     runwayInUse ||
     runwayBriefing?.advisory?.runway ||
     null;
+  const airportLocation = [airportMeta?.city, airportMeta?.state].filter(Boolean).join(", ");
+  const airportDescriptor = [
+    airportMeta?.name ?? null,
+    airportLocation ? `(${airportLocation})` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const airportTitleBase = weather?.icao || searchIcao;
+  const conditionsTitle = `${airportTitleBase}${
+    airportDescriptor ? ` - ${airportDescriptor}` : ""
+  } - Current Conditions`;
 
   useEffect(() => {
     trackEvent("pilot_tools_view", { page: "/pilot-tools" });
@@ -635,6 +663,12 @@ export default function PilotTools() {
                     ))}
                   </div>
                 )}
+                {airportMeta && (
+                  <div className="text-xs text-muted-foreground">
+                    {airportMeta.name ?? "Unknown airport"}
+                    {airportLocation ? ` (${airportLocation})` : ""}
+                  </div>
+                )}
               </div>
               <Button onClick={handleSearch} disabled={isLoading}>
                 {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
@@ -663,7 +697,7 @@ export default function PilotTools() {
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle className="flex items-center gap-2">
                     <Cloud className="h-5 w-5" />
-                    {weather.icao} - Current Conditions
+                    {conditionsTitle}
                   </CardTitle>
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge 

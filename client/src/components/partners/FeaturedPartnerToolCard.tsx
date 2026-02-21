@@ -67,6 +67,7 @@ export function FeaturedPartnerToolCard({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const impressionLogged = useRef(false);
   const [embedStatus, setEmbedStatus] = useState<"idle" | "loaded" | "failed">("idle");
+  const [tilesExpanded, setTilesExpanded] = useState(false);
 
   const normalizedSource = sanitizeParam(source, DEFAULT_SOURCE);
   const impressionKey = `rsf_partner_impression_${partnerKey}`;
@@ -144,7 +145,14 @@ export function FeaturedPartnerToolCard({
           </div>
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="flex items-start gap-4">
-              <img src={logoSrc} alt={`${title} logo`} className="h-12 w-auto" loading="lazy" />
+              <div className="flex items-center justify-center rounded-md border bg-white/95 px-3 py-2 shadow-sm">
+                <img
+                  src={logoSrc}
+                  alt={`${title} logo`}
+                  className="h-8 sm:h-10 w-auto object-contain"
+                  loading="lazy"
+                />
+              </div>
               <div className="space-y-1">
                 <CardTitle className="text-lg sm:text-xl">{title}</CardTitle>
                 <CardDescription className="text-sm text-muted-foreground">
@@ -186,37 +194,55 @@ export function FeaturedPartnerToolCard({
           </div>
 
           {showTiles && tiles.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {tiles.map((tile) => {
-                const href = buildOutboundUrl(
-                  outboundPath,
-                  "home_featured_partner_tile",
-                  sanitizeParam(tile.slug, "tile")
-                );
-                return (
-                  <a
-                    key={tile.slug}
-                    href={href}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="group rounded-lg border bg-background p-4 transition hover:border-primary/40 hover:shadow-sm"
-                    onClick={() => handleEmbedInteraction("tile", tile.slug)}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-1 text-primary">{tile.icon}</div>
-                      <div className="space-y-1">
-                        <div className="text-sm font-semibold text-foreground">
-                          {tile.title}
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs font-semibold text-muted-foreground">
+                  Explore Av8Maps categories
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-expanded={tilesExpanded}
+                  onClick={() => setTilesExpanded((prev) => !prev)}
+                >
+                  {tilesExpanded ? "Hide categories" : "Show categories"}
+                </Button>
+              </div>
+              {tilesExpanded && (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {tiles.map((tile) => {
+                    const href = buildOutboundUrl(
+                      outboundPath,
+                      "home_featured_partner_tile",
+                      sanitizeParam(tile.slug, "tile")
+                    );
+                    return (
+                      <a
+                        key={tile.slug}
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="group rounded-lg border bg-background p-4 transition hover:border-primary/40 hover:shadow-sm"
+                        onClick={() => handleEmbedInteraction("tile", tile.slug)}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 text-primary">{tile.icon}</div>
+                          <div className="space-y-1">
+                            <div className="text-sm font-semibold text-foreground">
+                              {tile.title}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{tile.description}</p>
+                            <div className="text-xs text-primary font-semibold">
+                              Explore →
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-xs text-muted-foreground">{tile.description}</p>
-                        <div className="text-xs text-primary font-semibold">
-                          Explore →
-                        </div>
-                      </div>
-                    </div>
-                  </a>
-                );
-              })}
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </CardContent>

@@ -12,7 +12,7 @@ const CHECKLISTS = [
   },
   {
     title: 'What to Bring',
-    items: ['Headset', 'Logbook', 'Kneeboard', 'E6B / calculator', 'FAA handbooks'],
+    items: ['Headset', 'Logbook', 'Kneeboard', 'e6b / calculator', 'FAA handbooks'],
   },
 ];
 

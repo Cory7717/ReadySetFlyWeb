@@ -38,6 +38,7 @@ import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
 import { resolveTfmsAccess } from "./lib/tier";
 import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
 import { createStubTfmsProvider } from "./services/tfms/providers/stub";
+import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
 import { createDbTfmsProvider } from "./services/tfms/providers/db";
 import { computeTfmsRisk } from "./services/tfms/risk";
 import {
@@ -2641,6 +2642,26 @@ const aircraftTypeRateLimiter = createIpRateLimiter({
   max: 60,
   dailyMax: 1000,
   message: "Too many requests. Please slow down.",
+});
+
+const notamRateLimiter = createSoftAuthRateLimiter({
+  anonMax: Number(process.env.RATE_LIMIT_NOTAM_ANON_MAX || process.env.RATE_LIMIT_ANON_MAX || 30),
+  key: "notams",
+});
+
+const tfrRateLimiter = createSoftAuthRateLimiter({
+  anonMax: Number(process.env.RATE_LIMIT_TFR_ANON_MAX || process.env.RATE_LIMIT_ANON_MAX || 30),
+  key: "tfrs",
+});
+
+const weatherRateLimiter = createSoftAuthRateLimiter({
+  anonMax: Number(process.env.RATE_LIMIT_WEATHER_ANON_MAX || process.env.RATE_LIMIT_ANON_MAX || 60),
+  key: "weather",
+});
+
+const airportSearchRateLimiter = createSoftAuthRateLimiter({
+  anonMax: Number(process.env.RATE_LIMIT_AIRPORT_SEARCH_ANON_MAX || process.env.RATE_LIMIT_ANON_MAX || 60),
+  key: "airport_search",
 });
 
 // Verification middleware - checks if user is verified
@@ -9962,7 +9983,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     return best;
   }
 
-  app.get("/api/airports/search", airportLookupRateLimiter, async (req, res) => {
+  app.get("/api/airports/search", airportSearchRateLimiter, airportLookupRateLimiter, async (req, res) => {
     try {
       const rawQuery = String(req.query.q || "");
       const query = normalizeSearch(rawQuery);
@@ -10003,7 +10024,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/airports/route-suggestions", airportLookupRateLimiter, async (req, res) => {
+  app.get("/api/airports/route-suggestions", airportSearchRateLimiter, airportLookupRateLimiter, async (req, res) => {
     try {
       const departure = normalizeIcao(String(req.query.departure || ""));
       const destination = normalizeIcao(String(req.query.destination || ""));
@@ -10317,7 +10338,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/aviation-weather/:icao", async (req, res) => {
+  app.get("/api/aviation-weather/:icao", weatherRateLimiter, async (req, res) => {
     try {
       const requestedIcao = normalizeIcao(req.params.icao || "");
       
@@ -11100,7 +11121,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     return { ok: true, notams };
   };
 
-  app.get("/api/notams", async (req, res) => {
+  app.get("/api/notams", notamRateLimiter, async (req, res) => {
     const start = Date.now();
     try {
       const requestedIcao = normalizeIcao(String(req.query?.icao || ""));
@@ -11454,7 +11475,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/notams/:icao", async (req, res) => {
+  app.get("/api/notams/:icao", notamRateLimiter, async (req, res) => {
     const requestedIcao = normalizeIcao(req.params.icao || "");
     if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
       return res.status(400).json({ error: "Invalid ICAO code format" });
@@ -11462,7 +11483,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     return res.redirect(307, `/api/notams?icao=${requestedIcao}`);
   });
 
-  app.get("/api/tfrs", async (req, res) => {
+  app.get("/api/tfrs", tfrRateLimiter, async (req, res) => {
     try {
       const requestId = crypto.randomUUID?.() || crypto.randomBytes(8).toString("hex");
       const cacheKey = "ALL";

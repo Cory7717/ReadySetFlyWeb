@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
+import { runWithAuth } from "@/utils/authGate";
 
 interface FavoriteButtonProps {
   listingId: string;
@@ -97,25 +98,14 @@ export function FavoriteButton({
 
   const handleToggleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent event from bubbling up (e.g., card click)
-    
-    if (!user) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to save favorites",
-      });
-      return;
-    }
-
-    if (isFavorited) {
-      removeFavoriteMutation.mutate();
-    } else {
-      addFavoriteMutation.mutate();
-    }
+    runWithAuth("save_favorite", async () => {
+      if (isFavorited) {
+        removeFavoriteMutation.mutate();
+      } else {
+        addFavoriteMutation.mutate();
+      }
+    });
   };
-
-  if (!user) {
-    return null; // Don't show favorite button for unauthenticated users
-  }
 
   const isPending = addFavoriteMutation.isPending || removeFavoriteMutation.isPending;
 

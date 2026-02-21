@@ -9,6 +9,10 @@ import { Header } from "./components/header";
 import { Footer } from "./components/footer";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent, trackSessionPing } from "@/lib/analytics";
+import { SignupNudgeBanner } from "@/components/SignupNudgeBanner";
+import { AuthGateModal } from "@/components/AuthGateModal";
+import { recordAnonSession, recordAnonToolInteraction, isSoftAuthEnabled } from "@/utils/anonUsage";
+import { setAuthState } from "@/utils/authGate";
 import Home from "@/pages/home";
 import Landing from "@/pages/landing";
 import Marketplace from "@/pages/marketplace";
@@ -98,10 +102,35 @@ function RedirectTo({ to }: { to: string }) {
 
 function AnalyticsTracker() {
   const [path] = useLocation();
+  const { isAuthenticated } = useAuth();
   useEffect(() => {
     trackEvent("page_view", { page: path });
     trackSessionPing(path);
-  }, [path]);
+    const normalized = path.startsWith("/") ? path : `/${path}`;
+    const toolPrefixes = [
+      "/pilot-tools",
+      "/aviation-weather",
+      "/tfr-map",
+      "/approach-plates",
+      "/ownership-cost-calculator",
+      "/weight-balance",
+      "/tools/e6b",
+      "/flight-planner",
+      "/radio-comms-trainer",
+      "/adsb-receiver-help",
+      "/live-traffic",
+      "/student",
+      "/start-flying",
+      "/gps-sims",
+      "/ifr-tools",
+    ];
+    if (toolPrefixes.some((prefix) => normalized.startsWith(prefix))) {
+      trackEvent("tool_used", { tool: normalized });
+      if (!isAuthenticated) {
+        recordAnonToolInteraction();
+      }
+    }
+  }, [path, isAuthenticated]);
   return null;
 }
 
@@ -212,17 +241,17 @@ function Router() {
           <Route path="/marketplace" component={Marketplace} />
           <Route path="/cfi/:slug/request" component={RequireAuth} />
           <Route path="/aircraft/:id" component={AircraftDetail} />
-          <Route path="/pilot-tools" component={RequireAuth} />
-          <Route path="/aviation-weather" component={RequireAuth} />
-          <Route path="/tfr-map" component={RequireAuth} />
-          <Route path="/approach-plates" component={RequireAuth} />
-          <Route path="/ownership-cost-calculator" component={RequireAuth} />
-          <Route path="/weight-balance" component={RequireAuth} />
-          <Route path="/tools/e6b" component={RequireAuth} />
-          <Route path="/flight-planner" component={RequireAuth} />
-          <Route path="/radio-comms-trainer" component={RequireAuth} />
-          <Route path="/adsb-receiver-help" component={RequireAuth} />
-          <Route path="/live-traffic" component={RequireAuth} />
+          <Route path="/pilot-tools" component={PilotTools} />
+          <Route path="/aviation-weather" component={AviationWeatherHub} />
+          <Route path="/tfr-map" component={TfrMap} />
+          <Route path="/approach-plates" component={ApproachPlates} />
+          <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
+          <Route path="/weight-balance" component={WeightBalance} />
+          <Route path="/tools/e6b" component={Eb6Calculator} />
+          <Route path="/flight-planner" component={FlightPlanner} />
+          <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
+          <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
+          <Route path="/live-traffic" component={AdsbLive} />
           <Route path="/list-aircraft" component={RequireAuth} />
           <Route path="/edit-aircraft/:id" component={RequireAuth} />
           <Route path="/create-marketplace-listing" component={RequireAuth} />
@@ -242,21 +271,21 @@ function Router() {
           <Route path="/my-aircraft" component={RequireAuth} />
           <Route path="/notifications" component={RequireAuth} />
           <Route path="/admin/aircraft-library" component={RequireAuth} />
-          <Route path="/student" component={RequireAuth} />
-          <Route path="/start-flying" component={RequireAuth} />
-          <Route path="/student/wizard" component={RequireAuth} />
-          <Route path="/student/roadmap" component={RequireAuth} />
-          <Route path="/student/cost" component={RequireAuth} />
-          <Route path="/student/progress" component={RequireAuth} />
-          <Route path="/student/written" component={RequireAuth} />
-          <Route path="/student/syllabi" component={RequireAuth} />
-          <Route path="/student/vor-trainer" component={RequireAuth} />
-          <Route path="/student/six-pack-trainer" component={RequireAuth} />
-          <Route path="/student/checklists" component={RequireAuth} />
-          <Route path="/student/weather" component={RequireAuth} />
-          <Route path="/gps-sims" component={RequireAuth} />
-          <Route path="/gps-sims/:unitId" component={RequireAuth} />
-          <Route path="/ifr-tools" component={RequireAuth} />
+          <Route path="/student" component={() => <StudentPageLoader component={StudentHub} />} />
+          <Route path="/start-flying" component={() => <StudentPageLoader component={StudentHub} />} />
+          <Route path="/student/wizard" component={() => <StudentPageLoader component={StudentWizard} />} />
+          <Route path="/student/roadmap" component={() => <StudentPageLoader component={StudentRoadmap} />} />
+          <Route path="/student/cost" component={() => <StudentPageLoader component={StudentCost} />} />
+          <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
+          <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
+          <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
+          <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />
+          <Route path="/student/six-pack-trainer" component={() => <StudentPageLoader component={StudentSixPackTrainer} />} />
+          <Route path="/student/checklists" component={() => <StudentPageLoader component={StudentChecklists} />} />
+          <Route path="/student/weather" component={() => <StudentPageLoader component={StudentWeather} />} />
+          <Route path="/gps-sims" component={() => <StudentPageLoader component={GpsSimsHub} />} />
+          <Route path="/gps-sims/:unitId" component={() => <StudentPageLoader component={GpsSimsUnit} />} />
+          <Route path="/ifr-tools" component={() => <StudentPageLoader component={IfrTools} />} />
         </>
       )}
       
@@ -266,6 +295,14 @@ function Router() {
 }
 
 function App() {
+  const { isAuthenticated } = useAuth();
+  useEffect(() => {
+    setAuthState(isAuthenticated);
+    if (!isAuthenticated && isSoftAuthEnabled()) {
+      recordAnonSession();
+    }
+  }, [isAuthenticated]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light">
@@ -280,6 +317,8 @@ function App() {
             </div>
             <Footer />
           </div>
+          <AuthGateModal />
+          <SignupNudgeBanner />
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>

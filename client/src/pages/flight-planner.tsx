@@ -19,6 +19,7 @@ import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useStudentProfile } from "@/hooks/useStudentProfile";
 import { trackEvent } from "@/lib/analytics";
+import { runWithAuth } from "@/utils/authGate";
 import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/flightPlanner";
 import { cn } from "@/lib/utils";
 import type { FlightPlan } from "@shared/schema";
@@ -665,6 +666,9 @@ export default function FlightPlanner() {
     : savedProfiles.find((p) => p.id === selectedProfileId) || null;
   const selectedType = aircraftTypes.find((t) => t.id === selectedTypeId) || FALLBACK_TYPE;
   const planLimitReached = isFree && !editingPlan && savedPlans.length >= 1;
+  const savePlanActionRef = useRef<() => Promise<void>>(async () => {});
+  const saveProfileActionRef = useRef<() => Promise<void>>(async () => {});
+  const sendToLogbookActionRef = useRef<() => Promise<void>>(async () => {});
 
   const manualCruise = customProfile.cruiseKtasOverride ? Number(customProfile.cruiseKtasOverride) : null;
   const manualBurn = customProfile.fuelBurnOverrideGph ? Number(customProfile.fuelBurnOverrideGph) : null;
@@ -1521,6 +1525,54 @@ export default function FlightPlanner() {
     },
   });
 
+  savePlanActionRef.current = async () => {
+    if (!isAuthenticated) return;
+    if (planLimitReached) {
+      toast({
+        title: "Upgrade to RSF Pro",
+        description: "Free accounts can save one plan. Upgrade to unlock unlimited plans.",
+      });
+      trackEvent("planner_upgrade_prompt", { action: "save_plan_limit" });
+      window.location.href = "/logbook/pro";
+      return;
+    }
+    if (editingPlan) {
+      trackEvent("planner_save_plan", { action: "update" });
+      updatePlanMutation.mutate();
+      return;
+    }
+    trackEvent("planner_save_plan", { action: "create" });
+    createPlanMutation.mutate();
+  };
+
+  saveProfileActionRef.current = async () => {
+    if (!isAuthenticated) return;
+    if (!isPro) {
+      toast({
+        title: "Upgrade to RSF Pro",
+        description: "RSF Pro unlocks saved aircraft profiles.",
+      });
+      window.location.href = "/logbook/pro";
+      return;
+    }
+    saveProfileMutation.mutate();
+  };
+
+  sendToLogbookActionRef.current = async () => {
+    if (!isAuthenticated) return;
+    if (!isPro) {
+      toast({
+        title: "Upgrade to RSF Pro",
+        description: "RSF Pro membership is required to sync to logbook.",
+      });
+      trackEvent("planner_upgrade_prompt", { action: "send_to_logbook" });
+      window.location.href = "/logbook/pro";
+      return;
+    }
+    trackEvent("planner_send_to_logbook", { action: "create_entry" });
+    sendToLogbookMutation.mutate();
+  };
+
   useEffect(() => {
     if (!editingPlan) return;
     setForm({
@@ -2158,25 +2210,11 @@ export default function FlightPlanner() {
           </div>
           <Button
             variant="outline"
-            disabled={!isPro || !customProfile.name || saveProfileMutation.isPending}
+            disabled={!customProfile.name || saveProfileMutation.isPending}
             onClick={() => {
-              if (!isAuthenticated) {
-                toast({
-                  title: "Create a free account to continue",
-                  description: "Sign up to save aircraft profiles and keep them synced.",
-                });
-                window.location.href = "/register";
-                return;
-              }
-              if (!isPro) {
-                toast({
-                  title: "Upgrade to RSF Pro",
-                  description: "RSF Pro unlocks saved aircraft profiles.",
-                });
-                window.location.href = "/logbook/pro";
-                return;
-              }
-              saveProfileMutation.mutate();
+              runWithAuth("save_aircraft_profile", async () => {
+                await saveProfileActionRef.current();
+              });
             }}
           >
             Save Aircraft Profile
@@ -2723,31 +2761,9 @@ export default function FlightPlanner() {
           <div className="flex flex-wrap gap-3">
             <Button
               onClick={() => {
-                if (!isAuthenticated) {
-                  toast({
-                    title: "Create a free account to continue",
-                    description: "Save your plan and keep it ready for the next flight.",
-                  });
-                  trackEvent("planner_register_prompt", { action: "save_plan" });
-                  window.location.href = "/register";
-                  return;
-                }
-                if (planLimitReached) {
-                  toast({
-                    title: "Upgrade to RSF Pro",
-                    description: "Free accounts can save one plan. Upgrade to unlock unlimited plans.",
-                  });
-                  trackEvent("planner_upgrade_prompt", { action: "save_plan_limit" });
-                  window.location.href = "/logbook/pro";
-                  return;
-                }
-                if (editingPlan) {
-                  trackEvent("planner_save_plan", { action: "update" });
-                  updatePlanMutation.mutate();
-                } else {
-                  trackEvent("planner_save_plan", { action: "create" });
-                  createPlanMutation.mutate();
-                }
+                runWithAuth("save_flight_plan", async () => {
+                  await savePlanActionRef.current();
+                });
               }}
               disabled={createPlanMutation.isPending || updatePlanMutation.isPending}
             >
@@ -2756,26 +2772,9 @@ export default function FlightPlanner() {
             <Button
               variant="outline"
               onClick={() => {
-                if (!isAuthenticated) {
-                  toast({
-                    title: "Create a free account to continue",
-                    description: "RSF Pro syncs plans into your logbook and analytics.",
-                  });
-                  trackEvent("planner_register_prompt", { action: "send_to_logbook" });
-                  window.location.href = "/register";
-                  return;
-                }
-                if (!isPro) {
-                  toast({
-                    title: "Upgrade to RSF Pro",
-                    description: "RSF Pro membership is required to sync to logbook.",
-                  });
-                  trackEvent("planner_upgrade_prompt", { action: "send_to_logbook" });
-                  window.location.href = "/logbook/pro";
-                  return;
-                }
-                trackEvent("planner_send_to_logbook", { action: "create_entry" });
-                sendToLogbookMutation.mutate();
+                runWithAuth("sync_logbook_entry", async () => {
+                  await sendToLogbookActionRef.current();
+                });
               }}
             >
               Log this flight (after you fly)
@@ -2847,4 +2846,3 @@ export default function FlightPlanner() {
     </div>
   );
 }
-

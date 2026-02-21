@@ -596,13 +596,13 @@ export default function PilotTools() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Gauge className="h-5 w-5" />
-              E6-B Advanced Calculator
+              e6b advanced calculator
             </CardTitle>
             <CardDescription>Performance + wind + fuel with configurable outputs.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
             <Button asChild>
-              <Link href="/tools/e6b">Open E6-B Advanced</Link>
+              <Link href="/tools/e6b">Open e6b advanced</Link>
             </Button>
             <Badge variant="outline">New tool</Badge>
           </CardContent>

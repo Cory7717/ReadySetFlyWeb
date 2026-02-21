@@ -339,7 +339,7 @@ export default function Eb6Calculator() {
   return (
     <div className="container mx-auto p-6 max-w-6xl space-y-6">
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold">E6-B Advanced</h1>
+        <h1 className="text-3xl font-bold">e6b advanced</h1>
         <p className="text-muted-foreground">Performance + wind + fuel - fast answers with configurable outputs.</p>
       </div>
 
@@ -347,7 +347,7 @@ export default function Eb6Calculator() {
         <Card>
           <CardHeader>
             <CardTitle>Inputs</CardTitle>
-            <CardDescription>Required fields drive the core E6-B outputs.</CardDescription>
+            <CardDescription>Required fields drive the core e6b outputs.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3">

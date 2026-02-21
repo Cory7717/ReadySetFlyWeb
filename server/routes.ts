@@ -7732,6 +7732,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const sanitizeOutboundParam = (value: unknown, fallback: string) => {
+    if (typeof value !== "string") return fallback;
+    const trimmed = value.trim().toLowerCase();
+    const cleaned = trimmed.replace(/[^a-z0-9_-]/g, "");
+    return cleaned || fallback;
+  };
+
+  const buildOutboundRedirectUrl = (baseUrl: string, params: Record<string, string>) => {
+    try {
+      const url = new URL(baseUrl);
+      Object.entries(params).forEach(([key, val]) => {
+        if (val) {
+          url.searchParams.set(key, val);
+        }
+      });
+      return url.toString();
+    } catch (error) {
+      console.warn("Invalid partner base URL:", baseUrl, error);
+      return baseUrl;
+    }
+  };
+
+  app.get("/out/av8maps", async (req: any, res) => {
+    const partner = partners.av8maps;
+    if (!partner?.active) {
+      return res.status(403).json({ error: "partner_inactive" });
+    }
+    if (!partner?.baseUrl) {
+      return res.status(500).json({ error: "partner_unavailable" });
+    }
+
+    const source = sanitizeOutboundParam(req.query.src, "home_featured_partner");
+    const content = sanitizeOutboundParam(req.query.utm_content, "cta");
+
+    const redirectUrl = buildOutboundRedirectUrl(partner.baseUrl, {
+      utm_source: partner.utm.source || "readysetfly",
+      utm_medium: partner.utm.medium || "featured_partner",
+      utm_campaign: partner.utm.campaign || "av8maps_partner",
+      utm_content: content,
+    });
+
+    const userId = req.user?.claims?.sub || req.session?.userId || null;
+    const sessionId = typeof req.sessionID === "string" ? req.sessionID : null;
+    const ip = String(req.headers["x-forwarded-for"] || req.ip || "");
+    const ipHash = ip ? crypto.createHash("sha256").update(ip).digest("hex").slice(0, 12) : undefined;
+    const meta = {
+      partner: "av8maps",
+      placement: "home_featured_partner_card",
+      source,
+      utm_content: content,
+      session_id: sessionId || undefined,
+    };
+
+    console.log(JSON.stringify({
+      event: "partner_click",
+      partner: "av8maps",
+      source,
+      utm_content: content,
+      user_id: userId || undefined,
+      session_id: sessionId || undefined,
+      ipHash,
+    }));
+
+    const visitorId = sessionId || crypto.randomUUID();
+    const analyticsRecord = insertAnalyticsEventSchema.safeParse({
+      event: "partner_click",
+      page: "/",
+      visitorId,
+      userId: userId || undefined,
+      meta,
+    });
+
+    const redirectRecord = insertPartnerRedirectSchema.safeParse({
+      partner: "av8maps",
+      userId: userId || undefined,
+      sessionId: sessionId || undefined,
+    });
+
+    setImmediate(() => {
+      if (analyticsRecord.success) {
+        void storage.createAnalyticsEvent(analyticsRecord.data).catch((error) => {
+          console.warn("Failed to record partner click analytics:", error);
+        });
+      }
+      if (redirectRecord.success) {
+        void db.insert(partnerRedirects).values(redirectRecord.data).catch((error) => {
+          console.warn("Failed to record partner redirect:", error);
+        });
+      }
+    });
+
+    return res.redirect(302, redirectUrl);
+  });
+
   app.get("/api/partner/redirect", async (req: any, res) => {
     const rawPartner = Array.isArray(req.query.partner) ? req.query.partner[0] : req.query.partner;
     const partnerKey = typeof rawPartner === "string" ? rawPartner.trim().toLowerCase() : "";

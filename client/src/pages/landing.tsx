@@ -6,12 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
-import { BookOpen, CalendarDays, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle } from "lucide-react";
+import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
+import { BookOpen, CalendarDays, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import av8mapsLogo from "@assets/av8maps-logo.svg";
 
 interface WeatherData {
   icao: string;
@@ -29,6 +31,9 @@ interface AirportSearchResult {
 }
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+const AV8MAPS_EMBED_ENABLED =
+  String(import.meta.env.VITE_AV8MAPS_EMBED_ENABLED ?? "false").toLowerCase() === "true";
+const AV8MAPS_EMBED_URL = (import.meta.env.VITE_AV8MAPS_EMBED_URL || "").trim();
 
 function parseFlightCategory(metar: any): { category: string; color: string } {
   if (!metar) return { category: "UNKNOWN", color: "gray" };
@@ -119,6 +124,41 @@ export default function Landing() {
   const [searchIcao, setSearchIcao] = useState("KAUS");
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const av8mapsTiles = useMemo(
+    () => [
+      {
+        title: "Fly-in Camping",
+        description: "Discover aviation-friendly camping spots and overnight adventures.",
+        slug: "fly-in-camping",
+        icon: <Tent className="h-4 w-4" />,
+      },
+      {
+        title: "Fly-in Restaurants",
+        description: "Plan a meal stop with pilot-loved dining destinations.",
+        slug: "fly-in-restaurants",
+        icon: <UtensilsCrossed className="h-4 w-4" />,
+      },
+      {
+        title: "Airpark Stays",
+        description: "Find aviation lodging, airpark homes, and pilot-friendly stays.",
+        slug: "airpark-stays",
+        icon: <Home className="h-4 w-4" />,
+      },
+      {
+        title: "Seaplane Destinations",
+        description: "Explore water-accessible locations and seaplane getaways.",
+        slug: "seaplane-destinations",
+        icon: <Anchor className="h-4 w-4" />,
+      },
+      {
+        title: "Aviation Services",
+        description: "Browse FBOs, maintenance, and trip support resources.",
+        slug: "aviation-services",
+        icon: <Wrench className="h-4 w-4" />,
+      },
+    ],
+    []
+  );
 
   const { data: weather, isLoading: weatherLoading } = useQuery<WeatherData>({
     queryKey: [`/api/aviation-weather/${searchIcao}`],
@@ -431,6 +471,21 @@ export default function Landing() {
               </div>
             </CardContent>
           </Card>
+          <FeaturedPartnerToolCard
+            className="mt-6 mx-auto w-full md:w-2/3"
+            partnerKey="av8maps"
+            title="Av8Maps — Nationwide GA Destination Maps"
+            description="Choose your next flight destination with fly-in camping, restaurants, aviation-friendly stays, and more."
+            logoSrc={av8mapsLogo}
+            ctaLabel="Explore Av8Maps"
+            outboundPath="/out/av8maps"
+            placement="home_featured_partner_card"
+            source="home_featured_partner_card"
+            badgeLabel="Featured Partner Tool"
+            embedEnabled={AV8MAPS_EMBED_ENABLED}
+            embedUrl={AV8MAPS_EMBED_URL || undefined}
+            tiles={av8mapsTiles}
+          />
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[
               {

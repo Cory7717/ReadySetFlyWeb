@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { trackEvent, trackSessionPing } from "@/lib/analytics";
 import { SignupNudgeBanner } from "@/components/SignupNudgeBanner";
 import { AuthGateModal } from "@/components/AuthGateModal";
+import { ScrollToTopButton } from "@/components/scroll-to-top-button";
 import { recordAnonSession, recordAnonToolInteraction, isSoftAuthEnabled } from "@/utils/anonUsage";
 import { setAuthState } from "@/utils/authGate";
 import Home from "@/pages/home";
@@ -318,6 +319,7 @@ function AppShell() {
         </div>
         <AuthGateModal />
         <SignupNudgeBanner />
+        <ScrollToTopButton />
         <Toaster />
       </TooltipProvider>
     </ThemeProvider>

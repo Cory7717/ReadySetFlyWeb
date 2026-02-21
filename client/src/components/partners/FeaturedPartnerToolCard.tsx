@@ -144,17 +144,17 @@ export function FeaturedPartnerToolCard({
             <span>External resource · Opens in new tab</span>
           </div>
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex items-center justify-center rounded-md border bg-white/95 px-3 py-2 shadow-sm">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
+              <div className="flex items-center justify-center rounded-md border bg-white/95 px-4 py-3 shadow-sm">
                 <img
                   src={logoSrc}
                   alt={`${title} logo`}
-                  className="h-8 sm:h-10 w-auto object-contain"
+                  className="h-14 sm:h-16 w-auto object-contain"
                   loading="lazy"
                 />
               </div>
               <div className="space-y-1">
-                <CardTitle className="text-lg sm:text-xl">{title}</CardTitle>
+                <CardTitle className="text-xl sm:text-2xl leading-snug">{title}</CardTitle>
                 <CardDescription className="text-sm text-muted-foreground">
                   {description}
                 </CardDescription>
@@ -188,7 +188,7 @@ export function FeaturedPartnerToolCard({
               </div>
             ) : (
               <div className="p-4 text-sm text-muted-foreground">
-                Preview unavailable right now. Explore categories below.
+                Explore Av8Maps categories to plan your next destination.
               </div>
             )}
           </div>

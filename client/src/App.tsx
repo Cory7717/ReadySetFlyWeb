@@ -197,10 +197,10 @@ function Router() {
           <Route path="/my-listings" component={RequireAuth} />
           <Route path="/favorites" component={RequireAuth} />
           <Route path="/messages" component={RequireAuth} />
-          <Route path="/rentals" component={RequireAuth} />
-          <Route path="/marketplace" component={RequireAuth} />
+          <Route path="/rentals" component={Home} />
+          <Route path="/marketplace" component={Marketplace} />
           <Route path="/cfi/:slug/request" component={RequireAuth} />
-          <Route path="/aircraft/:id" component={RequireAuth} />
+          <Route path="/aircraft/:id" component={AircraftDetail} />
           <Route path="/pilot-tools" component={RequireAuth} />
           <Route path="/aviation-weather" component={RequireAuth} />
           <Route path="/tfr-map" component={RequireAuth} />

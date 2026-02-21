@@ -41,6 +41,7 @@ const tools = [
     title: "Live Traffic",
     description: "Global ADS-B traffic map powered by ADSBExchange.",
     href: "/live-traffic",
+    comingSoon: true,
   },
   {
     title: "NOTAMs & Active Runway",
@@ -92,13 +93,22 @@ export default function IfrTools() {
           {tools.map((tool) => (
             <Card key={tool.href} className="hover-elevate">
               <CardHeader>
-                <CardTitle>{tool.title}</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  {tool.title}
+                  {tool.comingSoon && <Badge variant="secondary">Coming soon</Badge>}
+                </CardTitle>
                 <CardDescription>{tool.description}</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button asChild variant="outline" className="w-full">
-                  <Link href={tool.href}>Open tool</Link>
-                </Button>
+                {tool.comingSoon ? (
+                  <Button variant="outline" className="w-full" disabled aria-disabled>
+                    Coming soon
+                  </Button>
+                ) : (
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href={tool.href}>Open tool</Link>
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}

@@ -20,7 +20,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
-import { format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
+import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
@@ -7363,6 +7363,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Grant or revoke CFI support access (Super Admin only)
+  app.post("/api/admin/users/:userId/cfi-grant", isAuthenticated, requireUsersAdmin, async (req: any, res) => {
+    try {
+      const adminId = req.user?.claims?.sub || req.session?.userId;
+      if (!adminId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const admin = await storage.getUser(String(adminId));
+      if (!admin || !admin.isSuperAdmin) {
+        return res.status(403).json({ error: "Super Admin required" });
+      }
+
+      const targetUser = await storage.getUser(req.params.userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const action = String(req.body?.action || "grant").toLowerCase();
+      if (action === "revoke") {
+        const updated = await storage.updateUser(req.params.userId, {
+          cfiGrantEndsAt: null,
+          cfiGrantGrantedBy: adminId,
+          cfiGrantGrantedAt: new Date(),
+        });
+        return res.json({ cfiGrantEndsAt: null, user: updated });
+      }
+
+      const durationDays = Number(req.body?.durationDays || 30);
+      const now = new Date();
+      const grantEndsAt = addDays(now, durationDays);
+      const updated = await storage.updateUser(req.params.userId, {
+        cfiGrantEndsAt: grantEndsAt,
+        cfiGrantGrantedBy: adminId,
+        cfiGrantGrantedAt: now,
+      });
+
+      res.json({ cfiGrantEndsAt: grantEndsAt.toISOString(), user: updated });
+    } catch (error) {
+      console.error("Error granting CFI access:", error);
+      res.status(500).json({ error: "Failed to grant CFI access" });
+    }
+  });
+
   const adminInviteSchema = z.object({
     email: z.string().email(),
     role: z.enum(["operations", "finance", "sales", "support", "content", "housekeeping"]),
@@ -11807,6 +11850,28 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
     }
 
+    async function requireCfiAccess(req: any, res: any, next: any) {
+      try {
+        const userId = req.user?.claims?.sub || req.session?.userId;
+        if (!userId) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        const user = await storage.getUser(userId);
+        if (!user) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+        const entitlements = getEntitlementsForUser(user);
+        if (!entitlements.canUseCfi) {
+          return res.status(403).json({ error: "CFI trial or RSF Pro membership required" });
+        }
+        req.cfiAccessUser = user;
+        next();
+      } catch (error) {
+        console.error("CFI access guard error:", error);
+        res.status(500).json({ error: "Failed to validate CFI access" });
+      }
+    }
+
     async function requireLogbookPro(req: any, res: any, next: any) {
       try {
         const userId = req.user?.claims?.sub || req.session?.userId;
@@ -11874,8 +11939,49 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  // CFI dashboard (Pro Core)
-  app.get("/api/cfi/profile", isAuthenticated, requireMembership, async (req: any, res) => {
+  // Start one-time CFI trial (30 days)
+  app.post("/api/cfi/trial/start", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const entitlements = getEntitlementsForUser(user);
+      if (entitlements.tier !== "free") {
+        return res.status(409).json({ error: "RSF Pro membership already active" });
+      }
+
+      if (user.cfiTrialRedeemed) {
+        return res.status(409).json({ error: "CFI trial already used" });
+      }
+
+      const now = new Date();
+      const currentTrialEndsAt = user.cfiTrialEndsAt ? new Date(user.cfiTrialEndsAt) : null;
+      if (currentTrialEndsAt && currentTrialEndsAt > now) {
+        return res.json({ cfiTrialEndsAt: currentTrialEndsAt.toISOString() });
+      }
+
+      const trialEndsAt = addDays(now, 30);
+      await storage.updateUser(userId, {
+        cfiTrialStartedAt: now,
+        cfiTrialEndsAt: trialEndsAt,
+        cfiTrialRedeemed: true,
+      });
+
+      res.json({ cfiTrialEndsAt: trialEndsAt.toISOString() });
+    } catch (error) {
+      console.error("Failed to start CFI trial:", error);
+      res.status(500).json({ error: "Failed to start CFI trial" });
+    }
+  });
+
+  // CFI dashboard (trial or RSF Pro)
+  app.get("/api/cfi/profile", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
@@ -11897,7 +12003,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.post("/api/cfi/profile", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.post("/api/cfi/profile", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
@@ -11929,7 +12035,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.patch("/api/cfi/profile", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.patch("/api/cfi/profile", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
@@ -11961,7 +12067,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.post("/api/cfi/profile/publish", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.post("/api/cfi/profile/publish", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
@@ -11983,7 +12089,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/cfi/credentials", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.get("/api/cfi/credentials", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
@@ -12001,7 +12107,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.post("/api/cfi/credentials", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.post("/api/cfi/credentials", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
@@ -12023,7 +12129,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.delete("/api/cfi/credentials/:id", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.delete("/api/cfi/credentials/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
@@ -12041,7 +12147,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/cfi/availability", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.get("/api/cfi/availability", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
@@ -12059,7 +12165,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.put("/api/cfi/availability", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.put("/api/cfi/availability", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
@@ -12081,7 +12187,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/cfi/booking-requests", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.get("/api/cfi/booking-requests", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
@@ -12099,7 +12205,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.patch("/api/cfi/booking-requests/:id", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.patch("/api/cfi/booking-requests/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {

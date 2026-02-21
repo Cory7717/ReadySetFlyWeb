@@ -17,6 +17,7 @@ import type { User, AircraftListing, MarketplaceListing, VerificationSubmission 
 import { formatPhoneNumber } from "@/lib/formatters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
 import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
+import { useAuth } from "@/hooks/useAuth";
 
 interface AdminUserModalProps {
   userId: string | null;
@@ -31,6 +32,7 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [selectedPromoListingId, setSelectedPromoListingId] = useState<string | null>(null);
   const [promoDuration, setPromoDuration] = useState("7");
+  const { user: adminUser } = useAuth();
   const { toast } = useToast();
 
   // Fetch user details
@@ -132,7 +134,40 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
     },
   });
 
+  const cfiGrantMutation = useMutation({
+    mutationFn: async ({ action, durationDays }: { action: "grant" | "revoke"; durationDays?: number }) => {
+      return await apiRequest("POST", `/api/admin/users/${userId}/cfi-grant`, { action, durationDays });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", userId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      toast({
+        title: "CFI access updated",
+        description: "CFI trial access has been updated for this user.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update CFI access.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!user && !userLoading) return null;
+
+  const certs = (user?.certifications || []).map((cert) => String(cert).toLowerCase());
+  const hasCfiCert = certs.some((cert) => cert.includes("cfi"));
+  const hasCfiListing = marketplaceListings.some((listing) => listing.category === "cfi");
+  const isCfiCandidate = hasCfiCert || hasCfiListing || !!user?.cfiTrialStartedAt || !!user?.cfiGrantEndsAt;
+  const now = new Date();
+  const cfiTrialEndsAt = user?.cfiTrialEndsAt ? new Date(user.cfiTrialEndsAt) : null;
+  const cfiGrantEndsAt = user?.cfiGrantEndsAt ? new Date(user.cfiGrantEndsAt) : null;
+  const cfiAccessEndsAt = [cfiTrialEndsAt, cfiGrantEndsAt]
+    .filter((value): value is Date => !!value)
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+  const cfiAccessActive = cfiAccessEndsAt ? cfiAccessEndsAt > now : false;
 
   const handleResetPassword = () => {
     if (!userId || !confirm("Are you sure you want to send a password reset email to this user?")) return;
@@ -776,6 +811,59 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                       </Button>
                     </CardContent>
                   </Card>
+
+                  {/* CFI Trial Access (Super Admin only) */}
+                  {adminUser?.isSuperAdmin && isCfiCandidate && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">CFI Trial Access</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          Grant a 30-day CFI scheduler access window for customer support purposes.
+                        </p>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center justify-between">
+                            <span>Trial used</span>
+                            <Badge variant={user.cfiTrialRedeemed ? "secondary" : "outline"}>
+                              {user.cfiTrialRedeemed ? "Yes" : "No"}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Trial ends</span>
+                            <span>{cfiTrialEndsAt ? cfiTrialEndsAt.toLocaleDateString() : "—"}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Support grant ends</span>
+                            <span>{cfiGrantEndsAt ? cfiGrantEndsAt.toLocaleDateString() : "—"}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Access active</span>
+                            <Badge variant={cfiAccessActive ? "default" : "outline"}>
+                              {cfiAccessActive ? "Active" : "Inactive"}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            onClick={() => cfiGrantMutation.mutate({ action: "grant", durationDays: 30 })}
+                            disabled={cfiGrantMutation.isPending}
+                            data-testid="button-grant-cfi-trial"
+                          >
+                            Grant 30 Days
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => cfiGrantMutation.mutate({ action: "revoke" })}
+                            disabled={cfiGrantMutation.isPending}
+                            data-testid="button-revoke-cfi-trial"
+                          >
+                            Revoke Access
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* Verification Toggles */}
                   <Card>

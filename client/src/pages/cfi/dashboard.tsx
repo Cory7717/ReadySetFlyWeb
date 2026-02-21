@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { CfiAvailabilityRule, CfiBookingRequest, CfiCredential, CfiProfile } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -56,7 +57,9 @@ type DashboardResponse = {
 export default function CfiDashboard() {
   const { user } = useAuth();
   const entitlements = (user as any)?.entitlements;
-  const isPro = entitlements?.tier && entitlements.tier !== "free";
+  const canUseCfi = !!entitlements?.canUseCfi;
+  const cfiAccessEndsAt = entitlements?.cfiAccessEndsAt;
+  const trialRedeemed = !!(user as any)?.cfiTrialRedeemed;
   const { toast } = useToast();
 
   useEffect(() => {
@@ -65,12 +68,12 @@ export default function CfiDashboard() {
 
   const { data: dashboardData, isLoading } = useQuery<DashboardResponse>({
     queryKey: ["/api/cfi/profile"],
-    enabled: !!isPro,
+    enabled: canUseCfi,
   });
 
   const { data: bookingRequests = [] } = useQuery<CfiBookingRequest[]>({
     queryKey: ["/api/cfi/booking-requests"],
-    enabled: !!isPro,
+    enabled: canUseCfi,
   });
 
   const profile = dashboardData?.profile;
@@ -98,6 +101,70 @@ export default function CfiDashboard() {
     expiresOn: "",
     notes: "",
   });
+
+  const startTrialMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/cfi/trial/start", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cfi/profile"] });
+      toast({
+        title: "CFI trial activated",
+        description: "Your 30-day CFI scheduler access is now active.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Unable to start trial",
+        description: error.message || "Please contact support if this persists.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (!canUseCfi) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-10 space-y-6 max-w-3xl">
+          <Badge variant="outline">CFI Dashboard</Badge>
+          <h1 className="text-3xl font-bold">Become a CFI on Ready Set Fly</h1>
+          <p className="text-muted-foreground">
+            Start a 30-day free trial to unlock the CFI scheduler, profile management, and booking requests.
+          </p>
+          <Card>
+            <CardHeader>
+              <CardTitle>30-Day CFI Trial</CardTitle>
+              <CardDescription>
+                One-time trial access for instructors. You can upgrade to RSF Pro anytime.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {trialRedeemed ? (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    Your one-time CFI trial has already been used. Upgrade to RSF Pro for continued access.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Button
+                  onClick={() => startTrialMutation.mutate()}
+                  disabled={startTrialMutation.isPending}
+                  data-testid="button-start-cfi-trial"
+                >
+                  {startTrialMutation.isPending ? "Activating..." : "Start 30-Day Trial"}
+                </Button>
+              )}
+              <Button asChild variant="outline">
+                <Link href="/logbook/pro">View RSF Pro plans</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!profile) return;
@@ -265,29 +332,6 @@ export default function CfiDashboard() {
     },
   });
 
-  if (!isPro) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="container mx-auto px-4 py-10">
-          <Card>
-            <CardHeader>
-              <CardTitle>RSF Pro required</CardTitle>
-              <CardDescription>CFI booking tools are included with Pro Core.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Upgrade to RSF Pro to publish a CFI profile, manage availability, and receive booking requests.
-              </p>
-              <Button asChild>
-                <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
   if (isLoading) {
     return (
       <div className="container mx-auto px-4 py-10">
@@ -308,6 +352,14 @@ export default function CfiDashboard() {
           <h1 className="text-3xl font-bold">Manage your CFI profile</h1>
           <p className="text-muted-foreground">Update your public profile, availability, and booking requests.</p>
         </div>
+        {cfiAccessEndsAt && (
+          <Alert>
+            <AlertDescription>
+              CFI access is active until{" "}
+              <strong>{new Date(cfiAccessEndsAt).toLocaleDateString()}</strong>.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Card>
           <CardHeader>

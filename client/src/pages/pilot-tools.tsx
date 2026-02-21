@@ -417,10 +417,11 @@ export default function PilotTools() {
             <CardDescription>Global ADS-B traffic map powered by ADSBExchange.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button asChild>
-              <Link href="/live-traffic">Open Live Traffic</Link>
+            <Button disabled aria-disabled>
+              Coming Soon
             </Button>
-            <Badge variant="outline">Live aircraft</Badge>
+            <Badge variant="secondary">Coming soon</Badge>
+            <Badge variant="outline">ADSBExchange</Badge>
           </CardContent>
         </Card>
 

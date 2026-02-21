@@ -55,6 +55,11 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
   const [userHasFlagged, setUserHasFlagged] = useState(false);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const [jobApplicationOpen, setJobApplicationOpen] = useState(false);
+  const canViewContact = !!user;
+
+  const requireLogin = () => {
+    setLoginPromptOpen(true);
+  };
 
   const { data: listing, isLoading } = useQuery<MarketplaceListing>({
     queryKey: ["/api/marketplace", listingId],
@@ -575,9 +580,20 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                     <Mail className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">Email</p>
-                      <a href={`mailto:${listing.contactEmail}`} className="font-medium hover:text-primary">
-                        {listing.contactEmail}
-                      </a>
+                      {canViewContact ? (
+                        <a href={`mailto:${listing.contactEmail}`} className="font-medium hover:text-primary">
+                          {listing.contactEmail}
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={requireLogin}
+                          className="font-medium text-primary hover:underline"
+                          data-testid="button-login-view-email"
+                        >
+                          Sign in to view email
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -586,13 +602,29 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                     <Phone className="h-5 w-5 text-muted-foreground" />
                     <div>
                       <p className="text-sm text-muted-foreground">Phone</p>
-                      <a href={`tel:${listing.contactPhone}`} className="font-medium hover:text-primary">
-                        {formatPhoneNumber(listing.contactPhone)}
-                      </a>
+                      {canViewContact ? (
+                        <a href={`tel:${listing.contactPhone}`} className="font-medium hover:text-primary">
+                          {formatPhoneNumber(listing.contactPhone)}
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={requireLogin}
+                          className="font-medium text-primary hover:underline"
+                          data-testid="button-login-view-phone"
+                        >
+                          Sign in to view phone
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
+              {!canViewContact && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Create an account to contact sellers, apply for jobs, or request more info.
+                </p>
+              )}
             </div>
 
             {/* Action Buttons */}
@@ -600,7 +632,13 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
               {listing.category === "job" ? (
                 <Button
                   className="flex-1"
-                  onClick={() => setJobApplicationOpen(true)}
+                  onClick={() => {
+                    if (!user) {
+                      requireLogin();
+                      return;
+                    }
+                    setJobApplicationOpen(true);
+                  }}
                   data-testid="button-apply-now"
                   size="lg"
                 >
@@ -614,7 +652,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                       className="flex-1 bg-accent text-accent-foreground hover:bg-accent"
                       onClick={() => {
                         if (!user) {
-                          setLoginPromptOpen(true);
+                          requireLogin();
                           return;
                         }
                         // Create custom subject line based on category
@@ -643,7 +681,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                       variant="outline"
                       onClick={() => {
                         if (!user) {
-                          setLoginPromptOpen(true);
+                          requireLogin();
                           return;
                         }
                         window.location.href = `tel:${listing.contactPhone}`;

@@ -27,6 +27,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 
 export default function AircraftDetail() {
@@ -37,6 +38,7 @@ export default function AircraftDetail() {
   const [endDate, setEndDate] = useState("");
   const [showBestPractices, setShowBestPractices] = useState(false);
   const [showVerificationNotice, setShowVerificationNotice] = useState(false);
+  const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const verificationNoticeKey = "rsf-verification-renter-v1";
@@ -124,11 +126,7 @@ export default function AircraftDetail() {
 
   const handleRequestBooking = () => {
     if (!isAuthenticated || !user) {
-      toast({
-        title: "Authentication required",
-        description: "Please log in to request a booking.",
-        variant: "destructive",
-      });
+      setLoginPromptOpen(true);
       return;
     }
 
@@ -394,7 +392,7 @@ export default function AircraftDetail() {
             </Card>
 
             {/* Messaging (if user has active rental) */}
-            {mockActiveRental && (
+            {isAuthenticated && mockActiveRental && (
               <RentalMessaging
                 rentalId={mockActiveRental.id}
                 userId={mockActiveRental.userId}
@@ -436,7 +434,18 @@ export default function AircraftDetail() {
                       </div>
                     </div>
                   </div>
-                  <Button variant="outline" data-testid="button-message-owner">Message Owner</Button>
+                  <Button
+                    variant="outline"
+                    data-testid="button-message-owner"
+                    onClick={() => {
+                      if (!isAuthenticated) {
+                        setLoginPromptOpen(true);
+                        return;
+                      }
+                    }}
+                  >
+                    Message Owner
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -540,7 +549,7 @@ export default function AircraftDetail() {
                   className="w-full bg-accent text-accent-foreground hover:bg-accent" 
                   size="lg" 
                   onClick={handleRequestBooking}
-                  disabled={createRentalMutation.isPending || !isAuthenticated}
+                  disabled={createRentalMutation.isPending}
                   data-testid="button-request-booking"
                 >
                   {createRentalMutation.isPending ? "Sending request..." : "Request to Book"}
@@ -566,6 +575,27 @@ export default function AircraftDetail() {
           </div>
         </div>
       </section>
+
+      {/* Login Prompt Dialog */}
+      <AlertDialog open={loginPromptOpen} onOpenChange={setLoginPromptOpen}>
+        <AlertDialogContent data-testid="dialog-login-prompt">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign in to continue</AlertDialogTitle>
+            <AlertDialogDescription>
+              You need to create an account or sign in to message owners and request rentals.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => window.location.href = apiUrl('/api/auth/google')}
+              data-testid="button-go-login"
+            >
+              Sign In / Create Account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Rental Best Practices Dialog */}
       <AlertDialog open={showBestPractices} onOpenChange={setShowBestPractices}>

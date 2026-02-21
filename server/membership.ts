@@ -156,10 +156,14 @@ export function getEntitlementsForUser(user?: User | null) {
         canCreateEvents: true,
         canCreateListings: true,
         canUseVorGuided: true,
+        canUseCfi: true,
         membershipEndsAt: undefined,
         membershipTrialEndsAt: undefined,
         membershipNextBillingAt: undefined,
         membershipInterval: undefined,
+        cfiTrialEndsAt: undefined,
+        cfiGrantEndsAt: undefined,
+        cfiAccessEndsAt: undefined,
       };
     }
   }
@@ -174,6 +178,14 @@ export function getEntitlementsForUser(user?: User | null) {
   const tier = isActive ? membership.tier : "free";
   const isPro = tier === "pro" || tier === "pro_plus";
   const isProPlus = tier === "pro_plus";
+  const cfiTrialEndsAt = user?.cfiTrialEndsAt ? new Date(user.cfiTrialEndsAt) : null;
+  const cfiGrantEndsAt = user?.cfiGrantEndsAt ? new Date(user.cfiGrantEndsAt) : null;
+  const cfiTrialActive = cfiTrialEndsAt ? cfiTrialEndsAt > now : false;
+  const cfiGrantActive = cfiGrantEndsAt ? cfiGrantEndsAt > now : false;
+  const cfiAccessEndsAt = [cfiTrialEndsAt, cfiGrantEndsAt]
+    .filter((value): value is Date => !!value)
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+  const canUseCfi = isPro || cfiTrialActive || cfiGrantActive;
 
   return {
     isGuest,
@@ -189,9 +201,13 @@ export function getEntitlementsForUser(user?: User | null) {
     canCreateEvents: isPro,
     canCreateListings: isPro,
     canUseVorGuided: isPro,
+    canUseCfi,
     membershipEndsAt: membership.endsAt ? membership.endsAt.toISOString() : undefined,
     membershipTrialEndsAt: membership.trialEndsAt ? membership.trialEndsAt.toISOString() : undefined,
     membershipNextBillingAt: membership.nextBillingAt ? membership.nextBillingAt.toISOString() : undefined,
     membershipInterval: membership.interval || undefined,
+    cfiTrialEndsAt: cfiTrialEndsAt ? cfiTrialEndsAt.toISOString() : undefined,
+    cfiGrantEndsAt: cfiGrantEndsAt ? cfiGrantEndsAt.toISOString() : undefined,
+    cfiAccessEndsAt: cfiAccessEndsAt ? cfiAccessEndsAt.toISOString() : undefined,
   };
 }

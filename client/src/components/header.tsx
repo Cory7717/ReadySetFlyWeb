@@ -32,9 +32,19 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["pilot logbook", "logbook pro", "logbook entries", "flight log"],
   },
   {
+    label: "Pilot Tools",
+    path: "/pilot-tools",
+    keywords: ["pilot tools", "aviation tools", "toolbox", "pilot utilities"],
+  },
+  {
     label: "NOTAMs",
     path: "/pilot-tools",
     keywords: ["notams", "notam", "runway advisory", "airport briefing"],
+  },
+  {
+    label: "Airport Briefing",
+    path: "/pilot-tools",
+    keywords: ["runway briefing", "airport briefing", "runways", "notams"],
   },
   {
     label: "TFR Map",
@@ -47,24 +57,104 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["ifr", "instrument", "procedures", "ifr tools"],
   },
   {
-    label: "Airport Briefing",
-    path: "/pilot-tools",
-    keywords: ["runway briefing", "airport briefing", "notams", "runways"],
-  },
-  {
     label: "Approach Plates",
     path: "/approach-plates",
     keywords: ["ifr charts", "plates", "approach", "charts"],
   },
   {
-    label: "Airport Briefing",
+    label: "GPS Sims",
+    path: "/gps-sims",
+    keywords: ["gps simulator", "g1000", "gtn", "gtx", "ifr gps"],
+  },
+  {
+    label: "EB-6 Calculator",
+    path: "/tools/eb6",
+    keywords: ["eb6", "eb-6", "e6b", "e6-b", "flight computer", "wind triangle"],
+  },
+  {
+    label: "Weight & Balance",
+    path: "/weight-balance",
+    keywords: ["weight balance", "weight and balance", "cg", "center of gravity"],
+  },
+  {
+    label: "Ownership Cost Calculator",
+    path: "/ownership-cost-calculator",
+    keywords: ["ownership cost", "operating cost", "aircraft cost"],
+  },
+  {
+    label: "Crosswind Calculator",
     path: "/pilot-tools",
-    keywords: ["runway briefing", "airport briefing", "runway advisory"],
+    keywords: ["crosswind", "headwind", "wind component", "runway wind"],
+  },
+  {
+    label: "Density Altitude Calculator",
+    path: "/pilot-tools",
+    keywords: ["density altitude", "pressure altitude", "performance", "hot and high"],
+  },
+  {
+    label: "Radio Comms Trainer",
+    path: "/radio-comms-trainer",
+    keywords: ["radio", "comms", "atc", "phraseology"],
+  },
+  {
+    label: "ADS-B Receiver Help",
+    path: "/adsb-receiver-help",
+    keywords: ["adsb receiver", "stratux", "sentry", "traffic receiver"],
+  },
+  {
+    label: "Live Traffic",
+    path: "/live-traffic",
+    keywords: ["live traffic", "adsb", "traffic map", "aircraft tracking"],
   },
   {
     label: "VOR Trainer",
     path: "/student/vor-trainer",
     keywords: ["vor", "navigation", "training", "student"],
+  },
+  {
+    label: "Six-Pack Trainer",
+    path: "/student/six-pack-trainer",
+    keywords: ["six pack", "flight instruments", "attitude", "instrument scan"],
+  },
+  {
+    label: "Student Hub",
+    path: "/student",
+    keywords: ["student", "training", "learn to fly", "student hub"],
+  },
+  {
+    label: "Student Roadmap",
+    path: "/student/roadmap",
+    keywords: ["roadmap", "training plan", "milestones"],
+  },
+  {
+    label: "Student Progress",
+    path: "/student/progress",
+    keywords: ["progress", "tracking", "stage checks"],
+  },
+  {
+    label: "Student Cost",
+    path: "/student/cost",
+    keywords: ["training cost", "cost to learn", "student cost"],
+  },
+  {
+    label: "Student Written",
+    path: "/student/written",
+    keywords: ["written test", "ground school", "knowledge test"],
+  },
+  {
+    label: "Student Syllabi",
+    path: "/student/syllabi",
+    keywords: ["syllabi", "lesson plan", "training syllabus"],
+  },
+  {
+    label: "Student Checklists",
+    path: "/student/checklists",
+    keywords: ["checklists", "preflight", "flows"],
+  },
+  {
+    label: "Student Weather",
+    path: "/student/weather",
+    keywords: ["weather basics", "student weather", "metar lesson"],
   },
   {
     label: "Flight Planner",
@@ -85,6 +175,16 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     label: "Aviation Weather",
     path: "/aviation-weather",
     keywords: ["weather", "metar", "taf", "briefing"],
+  },
+  {
+    label: "CFI Directory",
+    path: "/cfi",
+    keywords: ["cfi", "instructor", "flight instructor", "flight training"],
+  },
+  {
+    label: "Start Flying",
+    path: "/start-flying",
+    keywords: ["start flying", "getting started", "learn to fly"],
   },
 ];
 
@@ -174,7 +274,7 @@ export function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 overflow-visible">
+    <header className="sticky top-0 z-[80] w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 overflow-visible">
       <div className="container mx-auto px-3 sm:px-4 lg:px-8 min-w-0">
         <div className="flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4 min-w-0">
           {/* Logo */}
@@ -239,7 +339,7 @@ export function Header() {
             {/* Tool Search */}
             <form
               ref={searchRef}
-              className="relative w-[140px] sm:w-[180px] md:w-[220px] lg:w-[260px] flex-shrink-0 overflow-visible z-40"
+              className="relative w-[140px] sm:w-[180px] md:w-[220px] lg:w-[260px] flex-shrink-0 overflow-visible z-[90]"
               onSubmit={(event) => {
                 event.preventDefault();
                 handleToolSubmit();
@@ -276,7 +376,7 @@ export function Header() {
                 autoComplete="off"
               />
               {toolMenuOpen && toolQuery.trim().length > 0 && (
-                <div className="absolute left-0 right-0 top-full mt-1 rounded-lg border bg-background shadow-lg z-[60] overflow-hidden">
+                <div className="absolute left-0 right-0 top-full mt-1 rounded-lg border bg-background shadow-lg z-[100] overflow-hidden pointer-events-auto">
                   {toolMatches.length === 0 ? (
                     <div className="px-3 py-2 text-xs text-muted-foreground">No matches found.</div>
                   ) : (

@@ -29,7 +29,9 @@ const normalizeList = (value: unknown): string[] => {
 };
 
 export default function CfiDirectory() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const entitlements = (user as any)?.entitlements;
+  const canUseCfi = !!entitlements?.canUseCfi;
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
   const [airport, setAirport] = useState("");
@@ -70,6 +72,11 @@ export default function CfiDirectory() {
             <Button asChild>
               <Link href="/dashboard/cfi">Become a CFI on RSF</Link>
             </Button>
+            {isAuthenticated && !canUseCfi && (
+              <Button asChild variant="secondary">
+                <Link href="/dashboard/cfi">Start 30-day CFI trial</Link>
+              </Button>
+            )}
             {!isAuthenticated && (
               <Button asChild variant="outline">
                 <Link href="/register">Create a CFI account</Link>

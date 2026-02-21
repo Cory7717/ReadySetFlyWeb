@@ -145,6 +145,14 @@ export const users = pgTable("users", {
   membershipNextBillingAt: timestamp("membership_next_billing_at"),
   paypalSubscriptionId: text("paypal_subscription_id"),
   paypalPlanId: text("paypal_plan_id"),
+
+  // CFI Trial / Support Access (does not grant full RSF Pro)
+  cfiTrialStartedAt: timestamp("cfi_trial_started_at"),
+  cfiTrialEndsAt: timestamp("cfi_trial_ends_at"),
+  cfiTrialRedeemed: boolean("cfi_trial_redeemed").default(false),
+  cfiGrantEndsAt: timestamp("cfi_grant_ends_at"),
+  cfiGrantGrantedBy: varchar("cfi_grant_granted_by"),
+  cfiGrantGrantedAt: timestamp("cfi_grant_granted_at"),
   
   // Mobile app authentication (optional - for users who sign up via mobile)
   hashedPassword: text("hashed_password"), // bcrypt hash, null for Replit Auth only users
@@ -171,6 +179,10 @@ export const users = pgTable("users", {
   (t) => ({
     usersSuspendedByFk: foreignKey({
       columns: [t.suspendedBy],
+      foreignColumns: [t.id],
+    }),
+    usersCfiGrantByFk: foreignKey({
+      columns: [t.cfiGrantGrantedBy],
       foreignColumns: [t.id],
     }),
   })

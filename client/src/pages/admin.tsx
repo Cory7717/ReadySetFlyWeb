@@ -46,12 +46,22 @@ const resolveObjectUrl = (value?: string | null) => {
       if (query.includes("x-amz-") || query.includes("x-goog-") || query.includes("signature=")) {
         return `${parsed.origin}${parsed.pathname}`;
       }
+      if (parsed.pathname.includes("/uploads/")) {
+        const idx = parsed.pathname.indexOf("/uploads/");
+        if (idx >= 0) {
+          return apiUrl(`/objects/${parsed.pathname.slice(idx + 1)}`);
+        }
+      }
     } catch {
       return value.split("?")[0];
     }
     return value;
   }
   if (value.startsWith("/objects/")) return apiUrl(value);
+  if (value.includes("/uploads/")) {
+    const idx = value.indexOf("/uploads/");
+    return apiUrl(`/objects/${value.slice(idx + 1)}`);
+  }
   return value;
 };
 
@@ -6979,6 +6989,12 @@ export default function AdminDashboard() {
                             { value: 'cfi-directory', label: 'CFI Directory' },
                             { value: 'rentals', label: 'Aircraft Rentals' },
                             { value: 'marketplace', label: 'Marketplace Hub' },
+                            { value: 'aircraft-sale', label: 'Aircraft for Sale' },
+                            { value: 'jobs', label: 'Aviation Jobs' },
+                            { value: 'cfi', label: 'CFI Services' },
+                            { value: 'flight-school', label: 'Flight Schools' },
+                            { value: 'mechanic', label: 'Mechanic Services' },
+                            { value: 'charter', label: 'Charter Services' },
                             ].map((placement) => (
                               <FormField
                                 key={placement.value}

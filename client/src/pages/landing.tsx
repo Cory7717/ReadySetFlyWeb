@@ -357,6 +357,11 @@ export default function Landing() {
   
   return (
     <div className="min-h-screen">
+      <BannerAdRotation 
+        placement="home" 
+        className="container mx-auto px-4 pt-6 sm:pt-8 max-w-7xl"
+      />
+
       {/* Hero Section */}
       <div className="relative bg-gradient-to-br from-primary/20 via-background to-background">
         <div className="container mx-auto px-4 py-12 sm:py-20">
@@ -958,11 +963,6 @@ export default function Landing() {
           )}
         </div>
       </div>
-
-      <BannerAdRotation 
-        placement="home" 
-        className="container mx-auto px-4 py-8 max-w-7xl"
-      />
 
       {/* Student Pilot Hub Section */}
       <div className="bg-primary/5 py-12 sm:py-16">

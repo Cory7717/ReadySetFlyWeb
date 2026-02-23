@@ -13,7 +13,7 @@ interface ObjectUploaderProps {
   maxFileSize?: number;
   allowedFileTypes?: string[];
   enableImageEditor?: boolean;
-  onGetUploadParameters: () => Promise<{
+  onGetUploadParameters: (file?: { id?: string; name?: string; type?: string; size?: number }) => Promise<{
     method: "PUT";
     url: string;
   }>;
@@ -81,7 +81,7 @@ export function ObjectUploader({
       autoProceed: false,
     }).use(AwsS3, {
       shouldUseMultipart: false,
-      getUploadParameters: onGetUploadParameters,
+      getUploadParameters: (file) => onGetUploadParameters(file as any),
     });
 
     if (enableImageEditor) {

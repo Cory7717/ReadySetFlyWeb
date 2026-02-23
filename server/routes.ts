@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -12832,6 +12832,166 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.status(error.message?.includes("locked") ? 403 : 500).json({ 
         error: error.message || "Failed to delete logbook entry" 
       });
+    }
+  });
+
+  // Logbook Archives (Pro only)
+  app.post("/api/logbook/archives/upload", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const contentType = String(req.body?.contentType || "application/pdf");
+      if (!contentType.includes("pdf")) {
+        return res.status(400).json({ error: "Only PDF uploads are supported" });
+      }
+
+      if (process.env.AWS_S3_BUCKET) {
+        const { S3StorageService } = await import("./s3Storage");
+        const s3Service = new S3StorageService();
+        const { uploadURL, key } = await s3Service.getPresignedUploadUrlForKey({
+          prefix: "logbook-archives",
+          contentType,
+        });
+        return res.json({
+          uploadURL,
+          storageProvider: "s3",
+          storagePath: key,
+        });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const storagePath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      return res.json({
+        uploadURL,
+        storageProvider: "object",
+        storagePath,
+      });
+    } catch (error) {
+      console.error("Failed to create logbook upload URL:", error);
+      res.status(500).json({ error: "Failed to create upload URL" });
+    }
+  });
+
+  app.get("/api/logbook/archives", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const archives = await storage.getLogbookArchivesByUser(userId);
+      res.json(archives);
+    } catch (error) {
+      console.error("Failed to fetch logbook archives:", error);
+      res.status(500).json({ error: "Failed to fetch logbook archives" });
+    }
+  });
+
+  app.post("/api/logbook/archives", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const result = insertLogbookArchiveSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const payload = result.data as any;
+      if (payload.storageProvider === "object") {
+        try {
+          const objectStorageService = new ObjectStorageService();
+          await objectStorageService.trySetObjectEntityAclPolicy(payload.storagePath, {
+            owner: userId,
+            visibility: "private",
+          });
+        } catch (aclError) {
+          console.warn("Failed to set logbook archive ACL:", aclError);
+        }
+      }
+
+      const archive = await storage.createLogbookArchive({ ...payload, userId });
+      res.status(201).json(archive);
+    } catch (error: any) {
+      console.error("Failed to create logbook archive:", error);
+      res.status(500).json({ error: error.message || "Failed to create logbook archive" });
+    }
+  });
+
+  app.get("/api/logbook/archives/:id/download", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const archive = await storage.getLogbookArchiveById(req.params.id);
+      if (!archive) {
+        return res.status(404).json({ error: "Archive not found" });
+      }
+      if (archive.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${archive.fileName.replace(/\"/g, "")}"`
+      );
+
+      if (archive.storageProvider === "s3") {
+        const { S3StorageService } = await import("./s3Storage");
+        const s3Service = new S3StorageService();
+        const { stream, contentType, contentLength } = await s3Service.getObjectStream({
+          key: archive.storagePath,
+        });
+        res.setHeader("Content-Type", contentType || "application/pdf");
+        if (contentLength) res.setHeader("Content-Length", String(contentLength));
+        stream.pipe(res);
+        return;
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const objectFile = await objectStorageService.getObjectEntityFile(archive.storagePath);
+      await objectStorageService.downloadObject(objectFile, res, 0);
+    } catch (error) {
+      console.error("Failed to download logbook archive:", error);
+      res.status(500).json({ error: "Failed to download logbook archive" });
+    }
+  });
+
+  app.delete("/api/logbook/archives/:id", isAuthenticated, requireLogbookPro, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const archive = await storage.getLogbookArchiveById(req.params.id);
+      if (!archive) {
+        return res.status(404).json({ error: "Archive not found" });
+      }
+      if (archive.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      if (archive.storageProvider === "s3") {
+        try {
+          const { S3StorageService } = await import("./s3Storage");
+          const s3Service = new S3StorageService();
+          await s3Service.deleteObject(archive.storagePath);
+        } catch (deleteError) {
+          console.warn("Failed to delete S3 logbook archive:", deleteError);
+        }
+      } else {
+        try {
+          const objectStorageService = new ObjectStorageService();
+          await objectStorageService.deleteObjectEntity(archive.storagePath);
+        } catch (deleteError) {
+          console.warn("Failed to delete object archive:", deleteError);
+        }
+      }
+
+      const success = await storage.deleteLogbookArchive(req.params.id, userId);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete logbook archive:", error);
+      res.status(500).json({ error: "Failed to delete logbook archive" });
     }
   });
 

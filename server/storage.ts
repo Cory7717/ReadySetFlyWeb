@@ -65,6 +65,8 @@ import {
   type InsertLogbookEntry,
   type LogbookProSettings,
   type InsertLogbookProSettings,
+  type LogbookArchive,
+  type InsertLogbookArchive,
   type NotificationPreferences,
   type InsertNotificationPreferences,
   type CfiProfile,
@@ -131,6 +133,7 @@ import {
   contactSubmissions,
   logbookEntries,
   logbookProSettings,
+  logbookArchives,
   notificationPreferences,
   cfiProfiles,
   cfiCredentials,
@@ -497,6 +500,12 @@ export interface IStorage {
   getLogbookProSettings(userId: string): Promise<LogbookProSettings | undefined>;
   upsertLogbookProSettings(userId: string, updates: InsertLogbookProSettings): Promise<LogbookProSettings>;
   getActiveLogbookProUsers(): Promise<User[]>;
+
+  // Logbook Archives
+  createLogbookArchive(data: InsertLogbookArchive & { userId: string }): Promise<LogbookArchive>;
+  getLogbookArchivesByUser(userId: string): Promise<LogbookArchive[]>;
+  getLogbookArchiveById(id: string): Promise<LogbookArchive | undefined>;
+  deleteLogbookArchive(id: string, userId: string): Promise<boolean>;
 
   // Notification Preferences + User Notifications
   getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
@@ -3047,6 +3056,44 @@ export class DatabaseStorage implements IStorage {
 
   async getActiveLogbookProUsers(): Promise<User[]> {
     return await db.select().from(users).where(eq(users.logbookProStatus, "active"));
+  }
+
+  // Logbook Archives
+  async createLogbookArchive(data: InsertLogbookArchive & { userId: string }): Promise<LogbookArchive> {
+    const [archive] = await db
+      .insert(logbookArchives)
+      .values({
+        ...data,
+        fileName: data.fileName.trim(),
+        storageProvider: data.storageProvider ?? "object",
+        updatedAt: new Date(),
+      })
+      .returning();
+    return archive;
+  }
+
+  async getLogbookArchivesByUser(userId: string): Promise<LogbookArchive[]> {
+    return await db
+      .select()
+      .from(logbookArchives)
+      .where(eq(logbookArchives.userId, userId))
+      .orderBy(desc(logbookArchives.createdAt));
+  }
+
+  async getLogbookArchiveById(id: string): Promise<LogbookArchive | undefined> {
+    const [archive] = await db
+      .select()
+      .from(logbookArchives)
+      .where(eq(logbookArchives.id, id));
+    return archive;
+  }
+
+  async deleteLogbookArchive(id: string, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(logbookArchives)
+      .where(and(eq(logbookArchives.id, id), eq(logbookArchives.userId, userId)))
+      .returning();
+    return result.length > 0;
   }
 
   // Notification Preferences + User Notifications

@@ -1301,6 +1301,23 @@ export const logbookProSettings = pgTable("logbook_pro_settings", {
   index("idx_logbook_pro_settings_user").on(table.userId),
 ]);
 
+// Logbook archives (scanned paper logbooks)
+export const logbookArchives = pgTable("logbook_archives", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  fileSizeBytes: integer("file_size_bytes"),
+  storageProvider: text("storage_provider").notNull().default("object"),
+  storagePath: text("storage_path").notNull(),
+  pageCount: integer("page_count"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_logbook_archives_user").on(table.userId),
+  index("idx_logbook_archives_created").on(table.createdAt),
+]);
+
 // Notification Preferences (per user)
 export const notificationPreferences = pgTable("notification_preferences", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1607,6 +1624,16 @@ export const insertLogbookProSettingsSchema = createInsertSchema(logbookProSetti
   medicalExpiresAt: z.string().optional().nullable(),
   flightReviewDate: z.string().optional().nullable(),
   ipcDate: z.string().optional().nullable(),
+});
+
+export const insertLogbookArchiveSchema = createInsertSchema(logbookArchives).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  fileName: z.string().min(1),
+  storageProvider: z.enum(["object", "s3"]).default("object"),
 });
 
 export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({
@@ -2159,6 +2186,8 @@ export type LogbookEntry = typeof logbookEntries.$inferSelect;
 export type InsertLogbookEntry = z.infer<typeof insertLogbookEntrySchema>;
 export type LogbookProSettings = typeof logbookProSettings.$inferSelect;
 export type InsertLogbookProSettings = z.infer<typeof insertLogbookProSettingsSchema>;
+export type LogbookArchive = typeof logbookArchives.$inferSelect;
+export type InsertLogbookArchive = z.infer<typeof insertLogbookArchiveSchema>;
 export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
 export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
 export type CfiProfile = typeof cfiProfiles.$inferSelect;

@@ -9,14 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award, Bell } from "lucide-react";
+import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award, Bell, FileArchive } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import type { LogbookEntry, InsertLogbookEntry, Endorsement } from "@shared/schema";
+import type { LogbookEntry, InsertLogbookEntry, Endorsement, LogbookArchive } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { Switch } from "@/components/ui/switch";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
+import { ObjectUploader } from "@/components/ObjectUploader";
 
 // Helper function to calculate totals from entries
 function calculateTotals(entries: LogbookEntry[]) {
@@ -117,6 +119,18 @@ function formatDisplayDate(value?: string | Date | null) {
   return date.toLocaleDateString();
 }
 
+function formatBytes(value?: number | null) {
+  if (!value) return "â€”";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let idx = 0;
+  while (size >= 1024 && idx < units.length - 1) {
+    size /= 1024;
+    idx += 1;
+  }
+  return `${size.toFixed(size < 10 ? 1 : 0)} ${units[idx]}`;
+}
+
 export default function Logbook() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -157,6 +171,7 @@ export default function Logbook() {
   const [isEndorsementDialogOpen, setIsEndorsementDialogOpen] = useState(false);
   const [editingEndorsement, setEditingEndorsement] = useState<Endorsement | null>(null);
   const endorsementSaveDisabled = !endorsementForm.title.trim() || !endorsementForm.issuedAt;
+  const archiveUploadMeta = useRef(new Map<string, { storageProvider: string; storagePath: string; fileName: string; fileSizeBytes?: number | null }>());
 
   const { data: entries = [], isLoading } = useQuery<LogbookEntry[]>({
     queryKey: ["/api/logbook"],
@@ -174,6 +189,11 @@ export default function Logbook() {
 
   const { data: preferenceData } = useQuery<any>({
     queryKey: ["/api/notifications/preferences"],
+    enabled: isPro,
+  });
+
+  const { data: archives = [], isLoading: archivesLoading } = useQuery<LogbookArchive[]>({
+    queryKey: ["/api/logbook/archives"],
     enabled: isPro,
   });
 
@@ -207,6 +227,49 @@ export default function Logbook() {
     sessionStorage.setItem(key, "1");
     setShowUpgradePrompt(true);
   }, [isPro]);
+
+  const handleArchiveUploadParameters = async (file?: { id?: string; name?: string; type?: string; size?: number }) => {
+    const res = await apiRequest("POST", "/api/logbook/archives/upload", {
+      fileName: file?.name || "logbook.pdf",
+      contentType: file?.type || "application/pdf",
+    });
+    const data = await res.json();
+    if (file?.id) {
+      archiveUploadMeta.current.set(file.id, {
+        storageProvider: data.storageProvider,
+        storagePath: data.storagePath,
+        fileName: file.name || "logbook.pdf",
+        fileSizeBytes: file.size,
+      });
+    }
+    return { method: "PUT" as const, url: data.uploadURL };
+  };
+
+  const handleArchiveUploadComplete = async (result: any) => {
+    const successfulFiles = (result?.successful ?? []) as Array<{ id?: string }>;
+    if (successfulFiles.length === 0) {
+      toast({ title: "No uploads detected", description: "Please try again.", variant: "destructive" });
+      return;
+    }
+    let created = 0;
+    for (const file of successfulFiles) {
+      if (!file?.id) continue;
+      const meta = archiveUploadMeta.current.get(file.id);
+      if (!meta) continue;
+      await apiRequest("POST", "/api/logbook/archives", {
+        fileName: meta.fileName,
+        fileSizeBytes: meta.fileSizeBytes ?? null,
+        storageProvider: meta.storageProvider,
+        storagePath: meta.storagePath,
+      });
+      created += 1;
+    }
+    archiveUploadMeta.current.clear();
+    if (created > 0) {
+      queryClient.invalidateQueries({ queryKey: ["/api/logbook/archives"] });
+      toast({ title: "Archive uploaded", description: `${created} file(s) added.` });
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertLogbookEntry) => {
@@ -249,6 +312,20 @@ export default function Logbook() {
     },
     onError: (error: any) => {
       toast({ title: "Failed to delete entry", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteArchiveMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/logbook/archives/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/logbook/archives"] });
+      toast({ title: "Archive deleted" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to delete archive", description: error.message, variant: "destructive" });
     },
   });
 
@@ -645,6 +722,92 @@ export default function Logbook() {
           )}
         </CardContent>
       </Card>
+
+      {isPro ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <FileArchive className="h-5 w-5 text-primary" />
+              Hard-copy logbook archive
+            </CardTitle>
+            <CardDescription>Upload combined PDFs of your paper logbooks for secure backup.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-muted-foreground">
+                PDF only. Bulk uploads supported.
+              </div>
+              <ObjectUploader
+                maxNumberOfFiles={10}
+                maxFileSize={50 * 1024 * 1024}
+                allowedFileTypes={["application/pdf"]}
+                enableImageEditor={false}
+                buttonVariant="outline"
+                onGetUploadParameters={handleArchiveUploadParameters}
+                onComplete={handleArchiveUploadComplete}
+                onError={(message) => toast({ title: "Upload failed", description: message, variant: "destructive" })}
+              >
+                Upload PDFs
+              </ObjectUploader>
+            </div>
+
+            {archivesLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading archives...
+              </div>
+            ) : archives.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No archives uploaded yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {archives.map((archive) => (
+                  <div key={archive.id} className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold">{archive.fileName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatBytes(archive.fileSizeBytes)} â€¢ Uploaded {formatDisplayDate(archive.createdAt)}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={apiUrl(`/api/logbook/archives/${archive.id}/download`)} target="_blank" rel="noreferrer">
+                          Download
+                        </a>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (confirm("Delete this archive?")) deleteArchiveMutation.mutate(archive.id);
+                        }}
+                        disabled={deleteArchiveMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="mt-6 border-primary/10 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <FileArchive className="h-5 w-5 text-primary" />
+              Hard-copy logbook archive (Pro)
+            </CardTitle>
+            <CardDescription>Keep a secure PDF backup of your paper logbooks.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="default" asChild>
+              <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {isPro && (
         <Card className="mt-6">

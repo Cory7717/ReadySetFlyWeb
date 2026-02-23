@@ -9330,6 +9330,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/admin/banner-ads/:id/summary.csv", isAuthenticated, requireBannersAdmin, async (req, res) => {
+    try {
+      const ad = await storage.getBannerAd(req.params.id);
+      if (!ad) {
+        return res.status(404).json({ error: "Banner ad not found" });
+      }
+      const order = ad.orderId ? await storage.getBannerAdOrder(ad.orderId) : undefined;
+      const impressions = ad.impressions ?? 0;
+      const clicks = ad.clicks ?? 0;
+      const ctr = impressions > 0 ? ((clicks / impressions) * 100).toFixed(2) : "0.00";
+
+      const rows = [
+        [
+          "banner_id",
+          "title",
+          "sponsor_name",
+          "sponsor_email",
+          "placements",
+          "category",
+          "start_date",
+          "end_date",
+          "impressions",
+          "clicks",
+          "ctr_percent",
+          "link",
+        ],
+        [
+          ad.id,
+          ad.title,
+          order?.sponsorName ?? "",
+          order?.sponsorEmail ?? "",
+          (ad.placements || []).join("|"),
+          ad.category ?? "",
+          ad.startDate ? new Date(ad.startDate).toISOString() : "",
+          ad.endDate ? new Date(ad.endDate).toISOString() : "",
+          impressions.toString(),
+          clicks.toString(),
+          ctr,
+          ad.link ?? "",
+        ],
+      ];
+
+      const csv = rows
+        .map((row) =>
+          row
+            .map((value) => {
+              const str = String(value ?? "");
+              if (/[",\n]/.test(str)) {
+                return `"${str.replace(/"/g, '""')}"`;
+              }
+              return str;
+            })
+            .join(",")
+        )
+        .join("\n");
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="banner-summary-${ad.id}.csv"`);
+      res.status(200).send(csv);
+    } catch (error) {
+      console.error("Banner summary export error:", error);
+      res.status(500).json({ error: "Failed to export banner summary" });
+    }
+  });
+
   app.post("/api/admin/banner-ads", isAuthenticated, requireBannersAdmin, async (req, res) => {
     try {
       const payload = {

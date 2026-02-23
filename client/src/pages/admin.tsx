@@ -5693,6 +5693,17 @@ export default function AdminDashboard() {
                             <Button
                               size="sm"
                               variant="ghost"
+                              onClick={() => {
+                                const url = apiUrl(`/api/admin/banner-ads/${banner.id}/summary.csv`);
+                                window.open(url, "_blank", "noopener,noreferrer");
+                              }}
+                              data-testid={`button-download-banner-summary-${banner.id}`}
+                            >
+                              Download summary
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
                               onClick={() => toggleBannerAdMutation.mutate({ 
                                 id: banner.id, 
                                 isActive: !banner.isActive 

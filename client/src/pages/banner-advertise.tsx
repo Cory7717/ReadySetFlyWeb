@@ -117,6 +117,21 @@ export default function BannerAdvertise() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Performance Analytics Included</CardTitle>
+            <CardDescription>
+              Every sponsor receives performance metrics for transparency and ROI.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2 text-sm text-muted-foreground">
+            <span>• Impressions and clicks tracked per placement</span>
+            <span>• Click-through rate (CTR) reporting</span>
+            <span>• Date-range performance summaries</span>
+            <span>• Exportable summary report available on request or during renewals</span>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>What to Send RSF</CardTitle>
             <CardDescription>
               Provide the details below so we can build the banner ad quickly.

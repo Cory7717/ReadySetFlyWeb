@@ -42,6 +42,10 @@ const resolveObjectUrl = (value?: string | null) => {
   if (/^https?:\/\//i.test(value)) {
     try {
       const parsed = new URL(value);
+      const host = parsed.hostname.toLowerCase();
+      if (host.includes("amazonaws.com") || host.includes("s3.")) {
+        return `${parsed.origin}${parsed.pathname}`;
+      }
       const query = parsed.search.toLowerCase();
       if (query.includes("x-amz-") || query.includes("x-goog-") || query.includes("signature=")) {
         return `${parsed.origin}${parsed.pathname}`;

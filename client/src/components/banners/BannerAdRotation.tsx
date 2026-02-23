@@ -160,6 +160,10 @@ export function BannerAdRotation({
     if (/^https?:\/\//i.test(value)) {
       try {
         const parsed = new URL(value);
+        const host = parsed.hostname.toLowerCase();
+        if (host.includes("amazonaws.com") || host.includes("s3.")) {
+          return `${parsed.origin}${parsed.pathname}`;
+        }
         const query = parsed.search.toLowerCase();
         if (query.includes("x-amz-") || query.includes("x-goog-") || query.includes("signature=")) {
           return `${parsed.origin}${parsed.pathname}`;
@@ -297,7 +301,7 @@ export function BannerAdRotation({
 
             <div className="flex items-start gap-4">
               {showThumbnail && (
-                <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-xl overflow-hidden bg-muted shadow-sm flex-shrink-0">
+                <div className="h-32 w-32 sm:h-36 sm:w-36 rounded-xl overflow-hidden bg-muted shadow-sm flex-shrink-0">
                   {hasVideo ? (
                     <video
                       src={resolveObjectUrl(currentAd.videoUrl)}
@@ -389,7 +393,7 @@ export function BannerAdRotation({
                   className="h-full w-full object-cover"
                   autoPlay
                   loop
-                  muted={isVideoMuted}
+                  muted={true}
                   poster={resolveObjectUrl(currentAd.imageUrl)}
                   playsInline
                   controls={!isVideoMuted}

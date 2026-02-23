@@ -2822,12 +2822,12 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
 
-    // Require paid status, captured PayPal order ID, and approval before activation
-    if (order.paymentStatus !== 'paid') {
+    // Require paid or comped status before activation
+    if (order.paymentStatus !== 'paid' && order.paymentStatus !== 'comped') {
       throw new Error('UNPAID_ORDER');
     }
 
-    if (!order.paypalOrderId || order.paypalOrderId.trim() === '') {
+    if (order.paymentStatus === 'paid' && (!order.paypalOrderId || order.paypalOrderId.trim() === '')) {
       throw new Error('MISSING_PAYMENT_REFERENCE');
     }
 
@@ -2898,7 +2898,10 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(bannerAdOrders.approvalStatus, 'approved'),
-          eq(bannerAdOrders.paymentStatus, 'paid'),
+          or(
+            eq(bannerAdOrders.paymentStatus, 'paid'),
+            eq(bannerAdOrders.paymentStatus, 'comped')
+          ),
           eq(bannerAdOrders.expirationReminderSent, false),
           gte(bannerAdOrders.endDate, targetDateStart),
           lte(bannerAdOrders.endDate, targetDateEnd)

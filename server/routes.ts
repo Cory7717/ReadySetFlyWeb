@@ -2913,7 +2913,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (visibility === "public") {
           await s3Service.setPublicRead(rawPath);
         }
-        return res.status(200).json({ objectPath: rawPath });
+        let cleanUrl = rawPath;
+        try {
+          const parsed = new URL(rawPath);
+          cleanUrl = `${parsed.origin}${parsed.pathname}`;
+        } catch {
+          cleanUrl = rawPath.split("?")[0];
+        }
+        return res.status(200).json({ objectPath: cleanUrl });
       }
 
       const objectStorageService = new ObjectStorageService();
@@ -9220,11 +9227,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const updates: Partial<BannerAdOrder> = {};
         if (order.paymentStatus !== "paid") {
-          updates.paymentStatus = "paid";
-          updates.paypalPaymentDate = new Date();
+          updates.paymentStatus = "comped";
         }
         if (!order.paypalOrderId || order.paypalOrderId.trim() === "") {
-          updates.paypalOrderId = `ADMIN-FREE-${Date.now()}`;
+          updates.paypalOrderId = `ADMIN-COMPED-${Date.now()}`;
         }
         if (order.approvalStatus !== "approved") {
           updates.approvalStatus = "approved";
@@ -9283,9 +9289,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Banner ad order not found" });
       }
       
-      // Only allow approval if order is paid
-      if (approvalStatus === 'approved' && order.paymentStatus !== 'paid') {
-        return res.status(400).json({ error: "Cannot approve unpaid orders. Order must be paid before approval." });
+      // Only allow approval if order is paid or comped
+      if (approvalStatus === 'approved' && order.paymentStatus !== 'paid' && order.paymentStatus !== 'comped') {
+        return res.status(400).json({ error: "Cannot approve unpaid orders. Order must be paid or comped before approval." });
       }
       
       // Update approval status

@@ -151,6 +151,23 @@ export function BannerAdRotation({
   const canContact = Boolean(currentAd?.orderId);
   const hasVideo = Boolean(currentAd?.videoUrl);
   const isVideoMuted = currentAd?.videoMuted !== false;
+  const resolveObjectUrl = (value?: string | null) => {
+    if (!value) return undefined;
+    if (/^https?:\/\//i.test(value)) {
+      try {
+        const parsed = new URL(value);
+        const query = parsed.search.toLowerCase();
+        if (query.includes("x-amz-") || query.includes("x-goog-") || query.includes("signature=")) {
+          return `${parsed.origin}${parsed.pathname}`;
+        }
+      } catch {
+        return value.split("?")[0];
+      }
+      return value;
+    }
+    if (value.startsWith("/objects/")) return apiUrl(value);
+    return value;
+  };
 
   // Reset index and impression tracking when banner ads change
   useEffect(() => {
@@ -331,19 +348,19 @@ export function BannerAdRotation({
                 }}
               >
                 <video
-                  src={currentAd.videoUrl ?? undefined}
+                  src={resolveObjectUrl(currentAd.videoUrl)}
                   className="h-full w-full object-cover"
                   autoPlay={isVideoMuted}
                   loop={isVideoMuted}
                   muted={isVideoMuted}
-                  poster={currentAd.imageUrl || undefined}
+                  poster={resolveObjectUrl(currentAd.imageUrl)}
                   playsInline
                   controls={!isVideoMuted}
                 />
               </div>
             ) : currentAd.imageUrl ? (
               <img
-                src={currentAd.imageUrl}
+                src={resolveObjectUrl(currentAd.imageUrl)}
                 alt={currentAd.title}
                 className="h-full w-full object-cover"
               />

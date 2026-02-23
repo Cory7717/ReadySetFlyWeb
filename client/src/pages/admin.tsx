@@ -37,6 +37,24 @@ const resolveInvoiceUrl = (invoiceUrl?: string | null) => {
   return apiUrl(`/uploads/documents/${invoiceUrl}`);
 };
 
+const resolveObjectUrl = (value?: string | null) => {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      const query = parsed.search.toLowerCase();
+      if (query.includes("x-amz-") || query.includes("x-goog-") || query.includes("signature=")) {
+        return `${parsed.origin}${parsed.pathname}`;
+      }
+    } catch {
+      return value.split("?")[0];
+    }
+    return value;
+  }
+  if (value.startsWith("/objects/")) return apiUrl(value);
+  return value;
+};
+
 const buildBannerTrackingUrl = (
   link?: string | null,
   options?: { placement?: string | null; category?: string | null; bannerId?: string | null }
@@ -1044,7 +1062,7 @@ export default function AdminDashboard() {
       for (const file of result.successful || []) {
         if (file.uploadURL) {
           // Set ACL policy for public access
-          await fetch(apiUrl('/api/objects/set-acl'), {
+          const aclResponse = await fetch(apiUrl('/api/objects/set-acl'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -1055,7 +1073,8 @@ export default function AdminDashboard() {
           });
           
           // Update form field with the uploaded URL
-          const imageUrl = file.uploadURL.split('?')[0]; // Remove query params
+          const aclData = aclResponse.ok ? await aclResponse.json() : null;
+          const imageUrl = aclData?.objectPath || file.uploadURL.split('?')[0]; // Remove query params
           setBannerImageUrl(imageUrl);
           bannerForm.setValue('imageUrl', imageUrl, { shouldValidate: true, shouldDirty: true });
           
@@ -1080,7 +1099,7 @@ export default function AdminDashboard() {
       for (const file of result.successful || []) {
         if (file.uploadURL) {
           
-          await fetch(apiUrl('/api/objects/set-acl'), {
+          const aclResponse = await fetch(apiUrl('/api/objects/set-acl'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -1090,7 +1109,8 @@ export default function AdminDashboard() {
             }),
           });
 
-          const videoUrl = file.uploadURL.split('?')[0];
+          const aclData = aclResponse.ok ? await aclResponse.json() : null;
+          const videoUrl = aclData?.objectPath || file.uploadURL.split('?')[0];
           setBannerVideoUrl(videoUrl);
           bannerForm.setValue('videoUrl', videoUrl, { shouldValidate: true, shouldDirty: true });
 
@@ -1131,7 +1151,7 @@ export default function AdminDashboard() {
       for (const file of result.successful || []) {
         if (file.uploadURL) {
           // Set ACL policy for public access
-          await fetch(apiUrl('/api/objects/set-acl'), {
+          const aclResponse = await fetch(apiUrl('/api/objects/set-acl'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -1142,7 +1162,8 @@ export default function AdminDashboard() {
           });
           
           // Update form field with the uploaded URL
-          const imageUrl = file.uploadURL.split('?')[0]; // Remove query params
+          const aclData = aclResponse.ok ? await aclResponse.json() : null;
+          const imageUrl = aclData?.objectPath || file.uploadURL.split('?')[0]; // Remove query params
           setOrderImageUrl(imageUrl);
           orderForm.setValue('imageUrl', imageUrl, { shouldValidate: true, shouldDirty: true });
           
@@ -1167,7 +1188,7 @@ export default function AdminDashboard() {
       for (const file of result.successful || []) {
         if (file.uploadURL) {
           
-          await fetch(apiUrl('/api/objects/set-acl'), {
+          const aclResponse = await fetch(apiUrl('/api/objects/set-acl'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
@@ -1177,7 +1198,8 @@ export default function AdminDashboard() {
             }),
           });
 
-          const videoUrl = file.uploadURL.split('?')[0];
+          const aclData = aclResponse.ok ? await aclResponse.json() : null;
+          const videoUrl = aclData?.objectPath || file.uploadURL.split('?')[0];
           setOrderVideoUrl(videoUrl);
           orderForm.setValue('videoUrl', videoUrl, { shouldValidate: true, shouldDirty: true });
 
@@ -5211,7 +5233,7 @@ export default function AdminDashboard() {
               </Button>
             </CardHeader>
             <CardContent>
-              {bannerOrders.some(o => o.paymentStatus !== 'paid') && (
+              {bannerOrders.some(o => o.paymentStatus !== 'paid' && o.paymentStatus !== 'comped') && (
                 <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" data-testid="alert-unpaid-banner-orders">
                   Some banner orders are unpaid. Capture payment (PayPal) before approval and activation.
                 </div>
@@ -5251,7 +5273,7 @@ export default function AdminDashboard() {
                           {order.imageUrl && (
                             <div className="w-32 h-20 rounded overflow-hidden flex-shrink-0 bg-muted">
                               <img 
-                                src={order.imageUrl} 
+                                src={resolveObjectUrl(order.imageUrl)} 
                                 alt={order.title}
                                 className="w-full h-full object-cover"
                               />
@@ -5272,6 +5294,7 @@ export default function AdminDashboard() {
                               </Badge>
                               <Badge variant={
                                 order.paymentStatus === 'paid' ? 'default' : 
+                                order.paymentStatus === 'comped' ? 'secondary' :
                                 order.paymentStatus === 'refunded' ? 'destructive' : 
                                 'outline'
                               }>
@@ -5321,7 +5344,7 @@ export default function AdminDashboard() {
                           {/* Actions */}
                           <div className="flex items-center gap-2">
                             {/* Approve/Reject buttons - only show for paid orders that need approval */}
-                            {order.paymentStatus === 'paid' && (order.approvalStatus === 'draft' || order.approvalStatus === 'sent' || order.approvalStatus === 'pending_review') && (
+                            {(order.paymentStatus === 'paid' || order.paymentStatus === 'comped') && (order.approvalStatus === 'draft' || order.approvalStatus === 'sent' || order.approvalStatus === 'pending_review') && (
                               <>
                                 <Button
                                   size="sm"
@@ -5351,7 +5374,7 @@ export default function AdminDashboard() {
                               </>
                             )}
                             {/* Activate button - only show for paid approved orders */}
-                            {order.paymentStatus === 'paid' && order.approvalStatus === 'approved' && (
+                            {(order.paymentStatus === 'paid' || order.paymentStatus === 'comped') && order.approvalStatus === 'approved' && (
                               isOrderActivated(order.id) ? (
                                 <Badge variant="secondary" className="cursor-not-allowed" data-testid={`badge-activated-${order.id}`}>
                                   <CheckCircle className="h-3 w-3 mr-1" />
@@ -5372,12 +5395,12 @@ export default function AdminDashboard() {
                             )}
                             {isSuperAdmin &&
                               !isOrderActivated(order.id) &&
-                              (order.paymentStatus !== 'paid' || order.approvalStatus !== 'approved') && (
+                              ((order.paymentStatus !== 'paid' && order.paymentStatus !== 'comped') || order.approvalStatus !== 'approved') && (
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => {
-                                    if (confirm("Activate this order without payment? This will mark it paid and approved.")) {
+                                    if (confirm("Activate this order without payment? This will comp it and approve.")) {
                                       activateOrderMutation.mutate(order.id);
                                     }
                                   }}
@@ -5517,14 +5540,14 @@ export default function AdminDashboard() {
                             <div className="w-32 h-20 rounded overflow-hidden flex-shrink-0 bg-muted">
                               {banner.videoUrl ? (
                                 <video
-                                  src={banner.videoUrl}
+                                  src={resolveObjectUrl(banner.videoUrl)}
                                   className="w-full h-full object-cover"
                                   muted={banner.videoMuted ?? true}
                                   playsInline
                                 />
                               ) : (
                                 <img
-                                  src={banner.imageUrl}
+                                  src={resolveObjectUrl(banner.imageUrl)}
                                   alt={banner.title}
                                   className="w-full h-full object-cover"
                                 />
@@ -6866,7 +6889,7 @@ export default function AdminDashboard() {
                               </ObjectUploader>
                               {(field.value || bannerImageUrl) && (
                                 <img 
-                                  src={field.value || bannerImageUrl} 
+                                  src={resolveObjectUrl(field.value || bannerImageUrl)} 
                                   alt="Banner preview" 
                                   className="w-full h-32 object-cover rounded-md"
                                 />
@@ -6905,7 +6928,7 @@ export default function AdminDashboard() {
                               </ObjectUploader>
                               {(field.value || bannerVideoUrl) && (
                                 <video
-                                  src={field.value || bannerVideoUrl}
+                                  src={resolveObjectUrl(field.value || bannerVideoUrl)}
                                   className="w-full h-40 rounded-md object-cover"
                                   muted={bannerForm.watch("videoMuted") ?? true}
                                   controls
@@ -7276,7 +7299,7 @@ export default function AdminDashboard() {
                           </ObjectUploader>
                           {orderImageUrl && (
                             <img 
-                              src={orderImageUrl} 
+                              src={resolveObjectUrl(orderImageUrl)} 
                               alt="Banner preview" 
                               className="w-full h-32 object-cover rounded-md"
                             />
@@ -7315,7 +7338,7 @@ export default function AdminDashboard() {
                           </ObjectUploader>
                           {(field.value || orderVideoUrl) && (
                             <video
-                              src={field.value || orderVideoUrl}
+                              src={resolveObjectUrl(field.value || orderVideoUrl)}
                               className="w-full h-40 rounded-md object-cover"
                               muted={orderForm.watch("videoMuted") ?? true}
                               controls

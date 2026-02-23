@@ -930,7 +930,7 @@ export type InsertContactSubmission = z.infer<typeof insertContactSubmissionSche
 export const BANNER_APPROVAL_STATUSES = ['draft', 'sent', 'pending_review', 'approved', 'rejected'] as const;
 export type BannerApprovalStatus = typeof BANNER_APPROVAL_STATUSES[number];
 
-export const BANNER_PAYMENT_STATUSES = ['pending', 'paid', 'refunded'] as const;
+export const BANNER_PAYMENT_STATUSES = ['pending', 'paid', 'refunded', 'comped'] as const;
 export type BannerPaymentStatus = typeof BANNER_PAYMENT_STATUSES[number];
 
 // Banner Ad Orders (sponsor requests before going live)
@@ -967,7 +967,7 @@ export const bannerAdOrders = pgTable("banner_ad_orders", {
   
   // Workflow status
   approvalStatus: text("approval_status").notNull().default("draft"), // draft, sent, pending_review, approved, rejected
-  paymentStatus: text("payment_status").notNull().default("pending"), // pending, paid, refunded
+  paymentStatus: text("payment_status").notNull().default("pending"), // pending, paid, refunded, comped
   
   // PayPal payment tracking
   paypalOrderId: text("paypal_order_id"),

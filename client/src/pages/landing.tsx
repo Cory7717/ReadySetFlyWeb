@@ -359,7 +359,7 @@ export default function Landing() {
     <div className="min-h-screen">
       <BannerAdRotation 
         placement="home" 
-        className="container mx-auto px-4 pt-6 sm:pt-8 max-w-7xl"
+        className="container mx-auto px-4 pt-6 sm:pt-8 max-w-7xl mb-10 sm:mb-14"
       />
 
       {/* Hero Section */}

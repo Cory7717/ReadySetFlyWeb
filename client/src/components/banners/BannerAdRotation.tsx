@@ -150,11 +150,12 @@ export function BannerAdRotation({
   const isClickable = Boolean(currentAd?.link);
   const canContact = Boolean(currentAd?.orderId);
   const hasVideo = Boolean(currentAd?.videoUrl);
+  const hasImage = Boolean(currentAd?.imageUrl);
   const isVideoMuted = currentAd?.videoMuted !== false;
   const hasBodyCopy = Boolean(currentAd?.description?.trim());
-  const hasMedia = Boolean(currentAd?.imageUrl || currentAd?.videoUrl);
-  const showHeroMedia = !hasBodyCopy && hasMedia;
-  const showThumbnail = hasBodyCopy && hasMedia;
+  const hasMedia = hasImage || hasVideo;
+  const showHeroMedia = hasVideo || (!hasBodyCopy && hasMedia);
+  const showThumbnail = hasBodyCopy && hasImage;
   const resolveObjectUrl = (value?: string | null) => {
     if (!value) return undefined;
     if (/^https?:\/\//i.test(value)) {
@@ -292,7 +293,7 @@ export function BannerAdRotation({
         <div className="absolute inset-0 bg-[radial-gradient(90%_120%_at_0%_0%,rgba(14,165,233,0.18),transparent)]" />
         <div className="absolute inset-0 bg-[radial-gradient(110%_130%_at_100%_0%,rgba(249,115,22,0.22),transparent)]" />
 
-        <div className={`relative grid ${showHeroMedia ? "sm:grid-cols-[1.1fr_0.9fr]" : "sm:grid-cols-1"}`}>
+        <div className={`relative grid ${showHeroMedia ? "sm:grid-cols-[0.9fr_1.1fr]" : "sm:grid-cols-1"}`}>
           <div className="flex flex-col justify-between gap-3 p-5 sm:p-6">
             <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
               <span className="h-2 w-2 rounded-full bg-amber-400" />
@@ -302,22 +303,11 @@ export function BannerAdRotation({
             <div className="flex items-start gap-4">
               {showThumbnail && (
                 <div className="h-32 w-32 sm:h-36 sm:w-36 rounded-xl overflow-hidden bg-muted shadow-sm flex-shrink-0">
-                  {hasVideo ? (
-                    <video
-                      src={resolveObjectUrl(currentAd.videoUrl)}
-                      className="h-full w-full object-cover"
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                    />
-                  ) : (
-                    <img
-                      src={resolveObjectUrl(currentAd.imageUrl)}
-                      alt={currentAd.title}
-                      className="h-full w-full object-cover"
-                    />
-                  )}
+                  <img
+                    src={resolveObjectUrl(currentAd.imageUrl)}
+                    alt={currentAd.title}
+                    className="h-full w-full object-cover"
+                  />
                 </div>
               )}
               <div>
@@ -378,37 +368,37 @@ export function BannerAdRotation({
           </div>
 
           {showHeroMedia && (
-            <div className="relative min-h-[150px] sm:min-h-[180px]">
+            <div className="relative min-h-[170px] sm:min-h-[220px] md:min-h-[240px]">
               {hasVideo ? (
-              <div
-                className="h-full w-full"
-                onClick={(event) => {
-                  if (!isVideoMuted) {
-                    event.stopPropagation();
-                  }
-                }}
-              >
-                <video
-                  src={resolveObjectUrl(currentAd.videoUrl)}
+                <div
+                  className="h-full w-full"
+                  onClick={(event) => {
+                    if (!isVideoMuted) {
+                      event.stopPropagation();
+                    }
+                  }}
+                >
+                  <video
+                    src={resolveObjectUrl(currentAd.videoUrl)}
+                    className="h-full w-full object-cover"
+                    autoPlay
+                    loop
+                    muted
+                    poster={resolveObjectUrl(currentAd.imageUrl)}
+                    playsInline
+                    controls={!isVideoMuted}
+                  />
+                </div>
+              ) : hasImage ? (
+                <img
+                  src={resolveObjectUrl(currentAd.imageUrl)}
+                  alt={currentAd.title}
                   className="h-full w-full object-cover"
-                  autoPlay
-                  loop
-                  muted={true}
-                  poster={resolveObjectUrl(currentAd.imageUrl)}
-                  playsInline
-                  controls={!isVideoMuted}
                 />
-              </div>
-            ) : currentAd.imageUrl ? (
-              <img
-                src={resolveObjectUrl(currentAd.imageUrl)}
-                alt={currentAd.title}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="h-full w-full bg-[linear-gradient(140deg,rgba(14,165,233,0.18),rgba(249,115,22,0.2))]" />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/25 via-transparent to-transparent" />
+              ) : (
+                <div className="h-full w-full bg-[linear-gradient(140deg,rgba(14,165,233,0.18),rgba(249,115,22,0.2))]" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/25 via-transparent to-transparent" />
             </div>
           )}
         </div>

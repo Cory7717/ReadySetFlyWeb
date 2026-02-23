@@ -314,6 +314,7 @@ export default function AdminDashboard() {
       imageUrl: "",
       videoUrl: "",
       videoMuted: true,
+      videoOrientation: "landscape",
       link: "",
       placements: [],
       category: undefined,
@@ -337,6 +338,7 @@ export default function AdminDashboard() {
       imageUrl: "",
       videoUrl: "",
       videoMuted: true,
+      videoOrientation: "landscape",
       link: "",
       placements: [],
       category: undefined,
@@ -5459,6 +5461,7 @@ export default function AdminDashboard() {
                                     imageUrl: order.imageUrl ?? "",
                                     videoUrl: order.videoUrl ?? "",
                                     videoMuted: order.videoMuted ?? true,
+                                    videoOrientation: order.videoOrientation ?? "landscape",
                                     link: order.link ?? "",
                                     placements: order.placements ?? [],
                                     category: order.category ?? undefined,
@@ -5694,6 +5697,7 @@ export default function AdminDashboard() {
                                   imageUrl: banner.imageUrl || "",
                                   videoUrl: banner.videoUrl || "",
                                   videoMuted: banner.videoMuted ?? true,
+                                  videoOrientation: banner.videoOrientation ?? "landscape",
                                   link: banner.link ?? "",
                                   description: banner.description ?? "",
                                   placements: banner.placements || [],
@@ -6798,6 +6802,7 @@ export default function AdminDashboard() {
                     imageUrl: bannerImageUrl || data.imageUrl,
                     videoUrl: bannerVideoUrl || data.videoUrl,
                     videoMuted: data.videoMuted ?? true,
+                    videoOrientation: data.videoOrientation ?? "landscape",
                     link: data.link,
                     placements: data.placements,
                     category: data.category,
@@ -6943,7 +6948,11 @@ export default function AdminDashboard() {
                               {(field.value || bannerVideoUrl) && (
                                 <video
                                   src={resolveObjectUrl(field.value || bannerVideoUrl)}
-                                  className="w-full h-40 rounded-md object-cover"
+                                  className={`w-full h-40 rounded-md ${
+                                    (bannerForm.watch("videoOrientation") ?? "landscape") === "portrait"
+                                      ? "object-contain bg-muted"
+                                      : "object-cover"
+                                  }`}
                                   muted={bannerForm.watch("videoMuted") ?? true}
                                   controls
                                   playsInline
@@ -6970,6 +6979,34 @@ export default function AdminDashboard() {
                             />
                           </FormControl>
                           <FormLabel className="cursor-pointer font-normal">Mute video by default</FormLabel>
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={bannerForm.control}
+                      name="videoOrientation"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Video orientation</FormLabel>
+                          <FormControl>
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value || "landscape"}
+                            >
+                              <SelectTrigger data-testid="select-banner-video-orientation">
+                                <SelectValue placeholder="Select orientation" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="landscape">Landscape (16:9)</SelectItem>
+                                <SelectItem value="portrait">Portrait (9:16)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                          <FormDescription>
+                            Controls how the video fits inside the banner without changing overall size.
+                          </FormDescription>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
@@ -7190,6 +7227,7 @@ export default function AdminDashboard() {
                     imageUrl: data.imageUrl || orderImageUrl,
                     videoUrl: data.videoUrl || orderVideoUrl,
                     videoMuted: data.videoMuted ?? true,
+                    videoOrientation: data.videoOrientation ?? "landscape",
                   };
                   
                   if (editingOrder) {
@@ -7359,7 +7397,11 @@ export default function AdminDashboard() {
                           {(field.value || orderVideoUrl) && (
                             <video
                               src={resolveObjectUrl(field.value || orderVideoUrl)}
-                              className="w-full h-40 rounded-md object-cover"
+                              className={`w-full h-40 rounded-md ${
+                                (orderForm.watch("videoOrientation") ?? "landscape") === "portrait"
+                                  ? "object-contain bg-muted"
+                                  : "object-cover"
+                              }`}
                               muted={orderForm.watch("videoMuted") ?? true}
                               controls
                               playsInline
@@ -7373,11 +7415,11 @@ export default function AdminDashboard() {
                   )}
                 />
 
-                <FormField
-                  control={orderForm.control}
-                  name="videoMuted"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center gap-2 space-y-0">
+                  <FormField
+                    control={orderForm.control}
+                    name="videoMuted"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center gap-2 space-y-0">
                       <FormControl>
                         <Checkbox
                           checked={field.value ?? true}
@@ -7744,6 +7786,34 @@ export default function AdminDashboard() {
                           />
                         </FormControl>
                         <FormDescription>Uppercase letters and numbers only, no spaces</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={orderForm.control}
+                    name="videoOrientation"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Video orientation</FormLabel>
+                        <FormControl>
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value || "landscape"}
+                          >
+                            <SelectTrigger data-testid="select-order-video-orientation">
+                              <SelectValue placeholder="Select orientation" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="landscape">Landscape (16:9)</SelectItem>
+                              <SelectItem value="portrait">Portrait (9:16)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormDescription>
+                          Choose portrait when the sponsor provides a vertical video.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

@@ -2869,6 +2869,7 @@ export class DatabaseStorage implements IStorage {
       imageUrl: order.imageUrl,
       videoUrl: order.videoUrl ?? undefined,
       videoMuted: order.videoMuted ?? true,
+      videoOrientation: order.videoOrientation ?? "landscape",
       link: order.link,
       placements: order.placements,
       category: order.category,

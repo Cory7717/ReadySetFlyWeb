@@ -933,6 +933,9 @@ export type BannerApprovalStatus = typeof BANNER_APPROVAL_STATUSES[number];
 export const BANNER_PAYMENT_STATUSES = ['pending', 'paid', 'refunded', 'comped'] as const;
 export type BannerPaymentStatus = typeof BANNER_PAYMENT_STATUSES[number];
 
+export const BANNER_VIDEO_ORIENTATIONS = ['landscape', 'portrait'] as const;
+export type BannerVideoOrientation = typeof BANNER_VIDEO_ORIENTATIONS[number];
+
 // Banner Ad Orders (sponsor requests before going live)
 export const bannerAdOrders = pgTable("banner_ad_orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -948,6 +951,7 @@ export const bannerAdOrders = pgTable("banner_ad_orders", {
   imageUrl: text("image_url"), // Created by admin, uploaded to object storage
   videoUrl: text("video_url"),
   videoMuted: boolean("video_muted").default(true),
+  videoOrientation: text("video_orientation").default("landscape"),
   link: text("link").notNull(), // Sponsor's website
   
   // Placement preferences
@@ -1004,6 +1008,7 @@ export const bannerAds = pgTable("banner_ads", {
   imageUrl: text("image_url").notNull(), // Stored in object storage
   videoUrl: text("video_url"),
   videoMuted: boolean("video_muted").default(true),
+  videoOrientation: text("video_orientation").default("landscape"),
   link: text("link").notNull(), // Clickable link to sponsor's website
   
   // Placement - can show on multiple pages
@@ -1987,6 +1992,7 @@ export const insertBannerAdOrderSchema = createInsertSchema(bannerAdOrders).omit
   imageUrl: z.string().url("Image URL must be valid").optional().or(z.literal("")),
   videoUrl: z.string().url("Video URL must be valid").optional().or(z.literal("")),
   videoMuted: z.boolean().optional(),
+  videoOrientation: z.enum(BANNER_VIDEO_ORIENTATIONS).optional(),
   link: z.string().url("Please enter a valid URL (e.g., https://www.example.com)"),
   placements: z.array(z.string()).min(1, "At least one page placement is required"),
   tier: z.enum(["1month", "3months", "6months", "12months"]),
@@ -2003,6 +2009,7 @@ export const insertBannerAdSchema = createInsertSchema(bannerAds).omit({
   imageUrl: z.string().url("Image URL must be valid").min(1, "Banner image is required"),
   videoUrl: z.string().url("Video URL must be valid").optional().or(z.literal("")),
   videoMuted: z.boolean().optional(),
+  videoOrientation: z.enum(BANNER_VIDEO_ORIENTATIONS).optional(),
   link: z.string().url("Please enter a valid URL (e.g., https://www.example.com)"),
   title: z.string().min(1, "Title is required"),
 });

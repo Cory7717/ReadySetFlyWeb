@@ -389,6 +389,7 @@ export async function sendBannerAdvertiserContactEmail(data: {
   adTitle: string;
   name: string;
   email: string;
+  phone?: string | null;
   message?: string | null;
   placement?: string | null;
   category?: string | null;
@@ -438,6 +439,7 @@ export async function sendBannerAdvertiserContactEmail(data: {
         <h3>Visitor Contact</h3>
         <p><strong>Name:</strong> ${data.name}</p>
         <p><strong>Email:</strong> ${data.email}</p>
+        <p><strong>Phone:</strong> ${data.phone || "Not provided"}</p>
       </div>
       
       <div class="message-box">
@@ -446,7 +448,7 @@ export async function sendBannerAdvertiserContactEmail(data: {
       </div>
       
       <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
-        Reply to this email to respond directly to ${data.email}
+        Reply to this email to respond directly to ${data.email}. This lead originated on ReadySetFly.us.
       </p>
     </div>
     
@@ -475,6 +477,7 @@ VISITOR CONTACT
 ---------------
 Name: ${data.name}
 Email: ${data.email}
+Phone: ${data.phone || "Not provided"}
 
 MESSAGE
 -------
@@ -482,7 +485,7 @@ ${messageText}
 
 ---
 Reply to this email to respond directly to ${data.email}.
-This message was sent by Ready Set Fly on behalf of ${data.name}.
+This lead originated on ReadySetFly.us and was sent by Ready Set Fly on behalf of ${data.name}.
   `.trim();
 
   try {
@@ -496,6 +499,7 @@ This message was sent by Ready Set Fly on behalf of ${data.name}.
     });
   } catch (error) {
     console.error("Failed to send banner advertiser contact email:", error);
+    throw error;
   }
 }
 

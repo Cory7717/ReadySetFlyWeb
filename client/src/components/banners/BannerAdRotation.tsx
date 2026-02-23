@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { ExternalLink, Mail } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -38,6 +39,7 @@ interface BannerAd {
 const contactAdvertiserSchema = z.object({
   name: z.string().min(1, "Name is required").max(160),
   email: z.string().email("Valid email is required").max(255),
+  phone: z.string().max(40).optional().or(z.literal("")),
   message: z.string().max(2000).optional().or(z.literal("")),
 });
 
@@ -96,6 +98,7 @@ export function BannerAdRotation({
     defaultValues: {
       name: "",
       email: "",
+      phone: "",
       message: "",
     },
   });
@@ -108,6 +111,7 @@ export function BannerAdRotation({
       return apiRequest("POST", `/api/banner-ads/${contactAd.id}/contact`, {
         name: data.name.trim(),
         email: data.email.trim(),
+        phone: data.phone?.trim() || undefined,
         message: data.message?.trim() || undefined,
         placement,
         category,
@@ -134,6 +138,7 @@ export function BannerAdRotation({
       contactForm.reset({
         name: fullName || "",
         email: user?.email || "",
+        phone: "",
         message: "",
       });
     },
@@ -205,6 +210,7 @@ export function BannerAdRotation({
     contactForm.reset({
       name: fullName || "",
       email: user?.email || "",
+      phone: "",
       message: "",
     });
   }, [contactDialogOpen, user?.firstName, user?.lastName, user?.email]);
@@ -449,6 +455,19 @@ export function BannerAdRotation({
                     <FormLabel>Email</FormLabel>
                     <FormControl>
                       <Input type="email" placeholder="alex@example.com" {...field} data-testid="input-contact-advertiser-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={contactForm.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone (optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="(555) 123-4567" {...field} data-testid="input-contact-advertiser-phone" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

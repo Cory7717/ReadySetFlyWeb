@@ -9447,6 +9447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const contactSchema = z.object({
         name: z.string().trim().min(1, "Name is required").max(160),
         email: z.string().trim().email("Valid email is required").max(255),
+        phone: z.string().trim().max(40).optional(),
         message: z.string().trim().max(2000).optional(),
         placement: z.string().trim().max(120).optional(),
         category: z.string().trim().max(120).optional(),
@@ -9480,6 +9481,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         adTitle: ad.title,
         name: parsed.data.name,
         email: parsed.data.email,
+        phone: parsed.data.phone,
         message: parsed.data.message,
         placement: parsed.data.placement,
         category: parsed.data.category,

@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -113,6 +113,25 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
     clearTimeout(timeout);
   }
 }
+
+type FlightCategory = "VFR" | "MVFR" | "IFR" | "LIFR" | "UNKNOWN";
+const computeFlightCategory = (metar: any): FlightCategory => {
+  const declared = String(metar?.fltCat || metar?.flightCategory || "").toUpperCase();
+  if (declared === "VFR" || declared === "MVFR" || declared === "IFR" || declared === "LIFR") {
+    return declared as FlightCategory;
+  }
+  const raw = metar?.rawOb || metar?.raw || "";
+  if (!raw) return "UNKNOWN";
+  const visMatch = raw.match(/\s(\d{1,2})SM/);
+  const visibility = visMatch ? parseInt(visMatch[1], 10) : 10;
+  const ceilingMatch = raw.match(/(BKN|OVC)(\d{3})/);
+  const ceiling = ceilingMatch ? parseInt(ceilingMatch[2], 10) * 100 : 10000;
+
+  if (ceiling >= 3000 && visibility > 5) return "VFR";
+  if (ceiling >= 1000 && visibility >= 3) return "MVFR";
+  if (ceiling >= 500 && visibility >= 1) return "IFR";
+  return "LIFR";
+};
 
 type CloudFrameCache = {
   fetchedAt: number;
@@ -11008,6 +11027,105 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  // Airport favorites + alerts (auth required)
+  app.get("/api/airports/favorites", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const favorites = await storage.getAirportFavorites(userId);
+      res.json(favorites);
+    } catch (error) {
+      console.error("Failed to fetch airport favorites:", error);
+      res.status(500).json({ error: "Failed to fetch airport favorites" });
+    }
+  });
+
+  app.get("/api/airports/favorites/check/:icao", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const icao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(icao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+      const isFavorited = await storage.checkAirportFavorite(userId, icao);
+      res.json({ isFavorited });
+    } catch (error) {
+      console.error("Failed to check airport favorite:", error);
+      res.status(500).json({ error: "Failed to check airport favorite" });
+    }
+  });
+
+  app.post("/api/airports/favorites", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const result = insertAirportFavoriteSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const favorite = await storage.addAirportFavorite(userId, result.data as any);
+      res.status(201).json(favorite);
+    } catch (error: any) {
+      console.error("Failed to add airport favorite:", error);
+      res.status(500).json({ error: error.message || "Failed to add airport favorite" });
+    }
+  });
+
+  app.delete("/api/airports/favorites/:icao", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const icao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(icao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+      const success = await storage.removeAirportFavorite(userId, icao);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to remove airport favorite:", error);
+      res.status(500).json({ error: "Failed to remove airport favorite" });
+    }
+  });
+
+  app.patch("/api/airports/favorites/:icao/alerts", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const icao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(icao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+      const result = z
+        .object({
+          alertIfr: z.boolean().optional(),
+          alertMvfr: z.boolean().optional(),
+        })
+        .safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updated = await storage.updateAirportFavoriteAlerts(userId, icao, result.data);
+      if (!updated) {
+        return res.status(404).json({ error: "Airport favorite not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update airport alerts:", error);
+      res.status(500).json({ error: "Failed to update airport alerts" });
+    }
+  });
+
   app.get("/api/airports/:icao/runways", async (req, res) => {
     try {
       const requestedIcao = normalizeIcao(req.params.icao || "");
@@ -13313,6 +13431,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           const nightCurrencyDueAt = lastNightLandingDate ? addDays(lastNightLandingDate, 90) : null;
           const instrumentDueAt = lastInstrumentDate ? addMonths(lastInstrumentDate, 6) : null;
           const flightReviewDueAt = settings?.flightReviewDate ? addMonths(new Date(settings.flightReviewDate), 24) : null;
+          const lastLogbookEntryDate = getLatestDate(entries, () => true);
+          const logbookReminderDays = Number(process.env.LOGBOOK_ACTIVITY_REMINDER_DAYS ?? 7);
 
           const candidates: Array<{ type: string; title: string; message: string; dueAt: Date | null }> = [
             {
@@ -13352,6 +13472,88 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               dueAt: settings?.ipcDate ? new Date(settings.ipcDate) : null,
             },
           ];
+
+          if (lastLogbookEntryDate) {
+            const daysSince = Math.round((startOfDay(today).getTime() - startOfDay(lastLogbookEntryDate).getTime()) / msPerDay);
+            if (daysSince >= logbookReminderDays) {
+              const reminderType = "logbook_checkin";
+              const referenceDate = startOfDay(today);
+              const existingReminder = await storage.getUserNotificationByTypeAndDate(user.id, reminderType, referenceDate);
+              if (!existingReminder) {
+                const channels: string[] = [];
+                const shouldInApp = preferences.inAppEnabled !== false;
+                const shouldEmail = preferences.emailEnabled !== false && !!user.email;
+                const shouldPush = preferences.pushEnabled !== false;
+
+                if (shouldEmail) {
+                  try {
+                    const html = getLogbookProAlertEmailHtml({
+                      firstName: user.firstName || user.email?.split("@")[0] || "Pilot",
+                      title: "Logbook check-in",
+                      message: "It looks like you haven’t logged a flight recently. Log your latest flight to keep currency accurate.",
+                      dueDate: referenceDate,
+                    });
+                    const text = getLogbookProAlertEmailText({
+                      firstName: user.firstName || user.email?.split("@")[0] || "Pilot",
+                      title: "Logbook check-in",
+                      message: "It looks like you haven’t logged a flight recently. Log your latest flight to keep currency accurate.",
+                      dueDate: referenceDate,
+                    });
+                    await client.emails.send({
+                      from: fromEmail,
+                      to: user.email!,
+                      subject: "RSF Pro: Logbook check-in",
+                      html,
+                      text,
+                    });
+                    channels.push("email");
+                    emailsSent += 1;
+                  } catch (emailError: any) {
+                    errors.push(`Email failed for ${user.email}: ${emailError.message}`);
+                  }
+                }
+
+                if (shouldPush) {
+                  try {
+                    const tokens = await storage.getPushTokensByUser(user.id);
+                    if (tokens.length > 0) {
+                      await fetch("https://exp.host/--/api/v2/push/send", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(
+                          tokens.map((token) => ({
+                            to: token.token,
+                            title: "RSF Logbook",
+                            body: "Log your latest flight to keep currency accurate.",
+                            data: { type: reminderType },
+                          }))
+                        ),
+                      });
+                      channels.push("push");
+                      pushesSent += tokens.length;
+                    }
+                  } catch (pushError: any) {
+                    errors.push(`Push failed for user ${user.id}: ${pushError.message}`);
+                  }
+                }
+
+                const notification = await storage.createUserNotification({
+                  userId: user.id,
+                  type: reminderType,
+                  title: "Logbook check-in",
+                  message: "Log your latest flight to keep currency accurate.",
+                  referenceDate,
+                  channels,
+                  isRead: !shouldInApp,
+                  readAt: shouldInApp ? null : new Date(),
+                  meta: { lastEntry: lastLogbookEntryDate.toISOString() },
+                } as any);
+                if (notification) {
+                  notificationsCreated += 1;
+                }
+              }
+            }
+          }
 
           for (const candidate of candidates) {
             if (!candidate.dueAt) continue;
@@ -13449,6 +13651,134 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error: any) {
       console.error("Logbook pro alerts cron error:", error);
       res.status(500).json({ error: "Failed to send logbook pro alerts" });
+    }
+  });
+
+  // Cron endpoint: Airport IFR/MVFR alerts (favorites)
+  app.post("/api/cron/weather-alerts", async (req, res) => {
+    try {
+      const cronSecret = req.headers["x-cron-secret"];
+      const expectedSecret = process.env.CRON_SECRET || process.env.SESSION_SECRET;
+      if (!cronSecret || cronSecret !== expectedSecret) {
+        console.warn("Unauthorized weather alert cron attempt from IP:", req.ip);
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const favorites = await storage.getAirportFavoritesWithAlerts();
+      const uniqueIcaos = Array.from(new Set(favorites.map((fav) => fav.icao)));
+
+      const observations = new Map<string, { category: FlightCategory; raw?: string | null }>();
+      for (const icao of uniqueIcaos) {
+        const metarResult = await fetchMetar(icao);
+        const metar = metarResult?.decoded ?? metarResult?.data ?? metarResult;
+        const category = computeFlightCategory(metar);
+        observations.set(icao, { category, raw: metarResult?.raw ?? metar?.rawOb ?? null });
+      }
+
+      let processed = 0;
+      let notificationsCreated = 0;
+      let pushesSent = 0;
+      const errors: string[] = [];
+      const now = new Date();
+
+      const isIfrCategory = (category: FlightCategory) => category === "IFR" || category === "LIFR";
+      const isMvfrCategory = (category: FlightCategory) =>
+        category === "MVFR" || category === "IFR" || category === "LIFR";
+
+      for (const favorite of favorites) {
+        processed += 1;
+        const observation = observations.get(favorite.icao);
+        const category = observation?.category ?? "UNKNOWN";
+        const previousCategory = (favorite.lastObservedCategory as FlightCategory | null) ?? null;
+
+        const prevInAlert = previousCategory
+          ? (favorite.alertIfr && isIfrCategory(previousCategory)) ||
+            (favorite.alertMvfr && isMvfrCategory(previousCategory))
+          : false;
+        const currInAlert = (favorite.alertIfr && isIfrCategory(category)) ||
+          (favorite.alertMvfr && isMvfrCategory(category));
+
+        await storage.updateAirportFavoriteObservation(favorite.id, {
+          lastObservedCategory: category,
+          lastObservedAt: now,
+        });
+
+        if (!currInAlert) continue;
+        if (prevInAlert) continue;
+
+        const channelPrefs = await storage.getNotificationPreferences(favorite.userId);
+        const preferences = channelPrefs || { emailEnabled: true, pushEnabled: true, inAppEnabled: true, alertDaysBefore: 30 };
+
+        const ifrTriggered = favorite.alertIfr && isIfrCategory(category);
+        const alertKind = ifrTriggered ? "ifr" : "mvfr";
+        const type = `weather_${alertKind}_${favorite.icao}`;
+        const locationLabel = favorite.name
+          ? `${favorite.name} (${favorite.icao})`
+          : favorite.icao;
+        const title = `${category} alert for ${favorite.icao}`;
+        const message = `${locationLabel} is currently ${category}.`;
+
+        const channels: string[] = [];
+        if (preferences.pushEnabled !== false) {
+          try {
+            const tokens = await storage.getPushTokensByUser(favorite.userId);
+            if (tokens.length > 0) {
+              await fetch("https://exp.host/--/api/v2/push/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(
+                  tokens.map((token) => ({
+                    to: token.token,
+                    title: "RSF Weather Alert",
+                    body: `${favorite.icao}: ${category}`,
+                    data: { type, icao: favorite.icao, category },
+                  }))
+                ),
+              });
+              channels.push("push");
+              pushesSent += tokens.length;
+            }
+          } catch (pushError: any) {
+            errors.push(`Push failed for user ${favorite.userId}: ${pushError.message}`);
+          }
+        }
+
+        const shouldInApp = preferences.inAppEnabled !== false;
+        const notification = await storage.createUserNotification({
+          userId: favorite.userId,
+          type,
+          title,
+          message,
+          referenceDate: now,
+          channels,
+          isRead: !shouldInApp,
+          readAt: shouldInApp ? null : now,
+          meta: {
+            icao: favorite.icao,
+            category,
+            raw: observation?.raw ?? null,
+          },
+        } as any);
+
+        if (notification) {
+          notificationsCreated += 1;
+        }
+
+        await storage.updateAirportFavoriteObservation(favorite.id, {
+          lastAlertCategory: category,
+          lastAlertAt: now,
+        });
+      }
+
+      res.json({
+        favoritesProcessed: processed,
+        notificationsCreated,
+        pushesSent,
+        errors,
+      });
+    } catch (error: any) {
+      console.error("Weather alert cron error:", error);
+      res.status(500).json({ error: "Failed to send weather alerts" });
     }
   });
     

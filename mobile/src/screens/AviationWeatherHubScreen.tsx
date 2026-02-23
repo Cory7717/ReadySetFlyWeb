@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
+import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
@@ -20,7 +21,7 @@ const tabs = [
   { id: 'turbulence', label: 'Turbulence' },
 ];
 
-type AirportMeta = { lat?: number; lon?: number };
+type AirportMeta = { lat?: number; lon?: number; name?: string | null; city?: string | null; state?: string | null };
 
 type NotamResponse = {
   notams?: Array<{ id: string; text: string }>;
@@ -36,6 +37,16 @@ type HazardSummaryItem = {
   dueTo?: string;
   validFrom?: string;
   validTo?: string;
+};
+
+type AirportFavorite = {
+  id: string;
+  icao: string;
+  name?: string | null;
+  city?: string | null;
+  state?: string | null;
+  alertIfr?: boolean | null;
+  alertMvfr?: boolean | null;
 };
 
 const pickHazardValue = (value: any) => {
@@ -75,6 +86,8 @@ export default function AviationWeatherHubScreen() {
   const [searchIcao, setSearchIcao] = useState('KAUS');
   const [activeTab, setActiveTab] = useState('overview');
   const [windsAltitude, setWindsAltitude] = useState('12000');
+  const { isAuthenticated } = useIsAuthenticated();
+  const queryClient = useQueryClient();
 
   const normalizedIcao = useMemo(() => icaoInput.trim().toUpperCase(), [icaoInput]);
   const canSearch = ICAO_REGEX.test(normalizedIcao);
@@ -82,6 +95,48 @@ export default function AviationWeatherHubScreen() {
   const submitIcao = () => {
     if (!canSearch) return;
     setSearchIcao(normalizedIcao);
+  };
+
+  const refreshFavorites = () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/airports/favorites'] });
+  };
+
+  const toggleFavorite = async () => {
+    if (!isAuthenticated) {
+      Alert.alert('Sign in required', 'Create a free account to save airports and alerts.');
+      return;
+    }
+    try {
+      if (currentFavorite) {
+        await api.delete(`/api/airports/favorites/${searchIcao}`);
+        Alert.alert('Removed', `${searchIcao} removed from favorites.`);
+      } else {
+        await api.post('/api/airports/favorites', {
+          icao: searchIcao,
+          name: airportQuery.data?.name ?? null,
+          city: airportQuery.data?.city ?? null,
+          state: airportQuery.data?.state ?? null,
+          alertIfr: false,
+          alertMvfr: false,
+        });
+        Alert.alert('Saved', `${searchIcao} added to favorites.`);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.error || 'Unable to update favorites.');
+    } finally {
+      refreshFavorites();
+    }
+  };
+
+  const updateAlerts = async (updates: { alertIfr?: boolean; alertMvfr?: boolean }) => {
+    if (!isAuthenticated || !currentFavorite) return;
+    try {
+      await api.patch(`/api/airports/favorites/${searchIcao}/alerts`, updates);
+    } catch (error: any) {
+      Alert.alert('Error', error?.response?.data?.error || 'Unable to update alerts.');
+    } finally {
+      refreshFavorites();
+    }
   };
 
   const airportQuery = useQuery<AirportMeta>({
@@ -92,6 +147,18 @@ export default function AviationWeatherHubScreen() {
     },
     enabled: Boolean(searchIcao),
   });
+
+  const favoritesQuery = useQuery<AirportFavorite[]>({
+    queryKey: ['/api/airports/favorites'],
+    queryFn: async () => {
+      const res = await api.get('/api/airports/favorites');
+      return res.data;
+    },
+    enabled: isAuthenticated,
+  });
+
+  const favorites = favoritesQuery.data ?? [];
+  const currentFavorite = favorites.find((favorite) => favorite.icao === searchIcao);
 
   const metarQuery = useQuery({
     queryKey: ['/api/aviation/metar', searchIcao],
@@ -203,6 +270,81 @@ export default function AviationWeatherHubScreen() {
       {!canSearch && icaoInput.trim().length > 0 && (
         <Text style={styles.helperText}>Enter a valid 3-4 character ICAO code.</Text>
       )}
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Favorite airports & alerts</Text>
+        <View style={styles.summaryRow}>
+          <View>
+            <Text style={styles.summaryLabel}>{searchIcao}</Text>
+            <Text style={styles.helperText}>
+              {airportQuery.data?.name
+                ? `${airportQuery.data?.name}${airportQuery.data?.city ? ` · ${airportQuery.data?.city}` : ''}${airportQuery.data?.state ? `, ${airportQuery.data?.state}` : ''}`
+                : 'Save this airport for quick access and alerts.'}
+            </Text>
+          </View>
+          <TouchableOpacity style={[styles.secondaryButton, currentFavorite && styles.secondaryButtonActive]} onPress={toggleFavorite}>
+            <Text style={[styles.secondaryButtonText, currentFavorite && styles.secondaryButtonTextActive]}>
+              {currentFavorite ? 'Saved' : 'Save'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {!isAuthenticated && (
+          <Text style={styles.helperText}>Sign in to save airports and receive alerts.</Text>
+        )}
+
+        {currentFavorite && (
+          <View style={styles.alertRow}>
+            <View style={styles.alertItem}>
+              <View>
+                <Text style={styles.listTitle}>IFR/LIFR alerts</Text>
+                <Text style={styles.helperText}>Notify when conditions drop to IFR.</Text>
+              </View>
+              <Switch
+                value={Boolean(currentFavorite.alertIfr)}
+                onValueChange={(value) => updateAlerts({ alertIfr: value })}
+              />
+            </View>
+            <View style={styles.alertItem}>
+              <View>
+                <Text style={styles.listTitle}>MVFR alerts</Text>
+                <Text style={styles.helperText}>Notify when conditions drop to MVFR or worse.</Text>
+              </View>
+              <Switch
+                value={Boolean(currentFavorite.alertMvfr)}
+                onValueChange={(value) => updateAlerts({ alertMvfr: value })}
+              />
+            </View>
+          </View>
+        )}
+
+        {favorites.length > 0 && (
+          <View style={styles.favoriteRow}>
+            {favorites.map((favorite) => (
+              <TouchableOpacity
+                key={favorite.id}
+                style={[
+                  styles.favoriteChip,
+                  favorite.icao === searchIcao && styles.favoriteChipActive,
+                ]}
+                onPress={() => {
+                  setSearchIcao(favorite.icao);
+                  setIcaoInput(favorite.icao);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.favoriteChipText,
+                    favorite.icao === searchIcao && styles.favoriteChipTextActive,
+                  ]}
+                >
+                  {favorite.icao}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabRow}>
         {tabs.map((tab) => (
@@ -459,6 +601,20 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#fff', fontWeight: '600' },
   buttonDisabled: { opacity: 0.5 },
   helperText: { fontSize: 12, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
+  secondaryButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  secondaryButtonActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  secondaryButtonText: { color: colors.textMuted, fontWeight: '600', fontSize: 12 },
+  secondaryButtonTextActive: { color: colors.primary },
   tabRow: { paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   tabButton: {
     paddingVertical: 8,
@@ -480,6 +636,29 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     ...shadow.card,
   },
+  alertRow: { gap: spacing.sm, marginTop: spacing.sm },
+  alertItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  favoriteRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  favoriteChip: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  favoriteChipActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  favoriteChipText: { fontSize: 12, color: colors.textMuted },
+  favoriteChipTextActive: { color: colors.primary, fontWeight: '600' },
   sectionTitle: { ...typography.h3, marginBottom: spacing.sm },
   summaryRow: { marginBottom: spacing.sm },
   summaryLabel: { fontSize: 12, color: colors.textMuted },

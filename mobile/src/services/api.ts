@@ -246,6 +246,19 @@ export const apiEndpoints = {
     toggle: (data: { listingType: string; listingId: string }): ApiResponse<{ action: string }> =>
       api.post('/api/favorites', data),
   },
+
+  // Airport favorites + alerts
+  airportFavorites: {
+    getAll: (): ApiResponse<any[]> => api.get('/api/airports/favorites'),
+    check: (icao: string): ApiResponse<{ isFavorited: boolean }> =>
+      api.get(`/api/airports/favorites/check/${icao}`),
+    add: (data: { icao: string; name?: string | null; city?: string | null; state?: string | null; alertIfr?: boolean; alertMvfr?: boolean }): ApiResponse<any> =>
+      api.post('/api/airports/favorites', data),
+    remove: (icao: string): ApiResponse<{ success: boolean }> =>
+      api.delete(`/api/airports/favorites/${icao}`),
+    updateAlerts: (icao: string, data: { alertIfr?: boolean; alertMvfr?: boolean }): ApiResponse<any> =>
+      api.patch(`/api/airports/favorites/${icao}/alerts`, data),
+  },
 };
 
 export default api;

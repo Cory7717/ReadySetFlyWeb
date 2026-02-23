@@ -14,6 +14,8 @@ import {
   type InsertReview,
   type Favorite,
   type InsertFavorite,
+  type AirportFavorite,
+  type InsertAirportFavorite,
   type Transaction,
   type AnalyticsEvent,
   type InsertAnalyticsEvent,
@@ -103,6 +105,7 @@ import {
   messages,
   reviews,
   favorites,
+  airportFavorites,
   transactions,
   analyticsEvents,
   paypalOrderConsumptions,
@@ -274,6 +277,27 @@ export interface IStorage {
   removeFavorite(userId: string, listingType: "marketplace" | "aircraft", listingId: string): Promise<boolean>;
   checkIfFavorited(userId: string, listingType: "marketplace" | "aircraft", listingId: string): Promise<boolean>;
   getUserFavorites(userId: string): Promise<{ marketplace: MarketplaceListing[]; aircraft: AircraftListing[] }>;
+
+  // Airport Favorites + Alerts
+  addAirportFavorite(userId: string, payload: Omit<InsertAirportFavorite, "userId">): Promise<AirportFavorite>;
+  removeAirportFavorite(userId: string, icao: string): Promise<boolean>;
+  checkAirportFavorite(userId: string, icao: string): Promise<boolean>;
+  getAirportFavorites(userId: string): Promise<AirportFavorite[]>;
+  updateAirportFavoriteAlerts(
+    userId: string,
+    icao: string,
+    updates: { alertIfr?: boolean; alertMvfr?: boolean }
+  ): Promise<AirportFavorite | null>;
+  updateAirportFavoriteObservation(
+    favoriteId: string,
+    updates: {
+      lastObservedCategory?: string | null;
+      lastObservedAt?: Date | null;
+      lastAlertCategory?: string | null;
+      lastAlertAt?: Date | null;
+    }
+  ): Promise<void>;
+  getAirportFavoritesWithAlerts(): Promise<AirportFavorite[]>;
 
   // Transactions
   getTransactionsByUser(userId: string): Promise<Transaction[]>;
@@ -1807,6 +1831,113 @@ export class DatabaseStorage implements IStorage {
       marketplace: marketplaceListingsList,
       aircraft: aircraftListingsList,
     };
+  }
+
+  // Airport Favorites + Alerts
+  async addAirportFavorite(userId: string, payload: Omit<InsertAirportFavorite, "userId">): Promise<AirportFavorite> {
+    const icao = payload.icao.trim().toUpperCase();
+    const existing = await db
+      .select()
+      .from(airportFavorites)
+      .where(and(eq(airportFavorites.userId, userId), eq(airportFavorites.icao, icao)))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(airportFavorites)
+        .set({
+          name: payload.name ?? existing[0].name,
+          city: payload.city ?? existing[0].city,
+          state: payload.state ?? existing[0].state,
+          alertIfr: payload.alertIfr ?? existing[0].alertIfr,
+          alertMvfr: payload.alertMvfr ?? existing[0].alertMvfr,
+          updatedAt: new Date(),
+        })
+        .where(eq(airportFavorites.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+
+    const [favorite] = await db
+      .insert(airportFavorites)
+      .values({
+        userId,
+        icao,
+        name: payload.name ?? null,
+        city: payload.city ?? null,
+        state: payload.state ?? null,
+        alertIfr: payload.alertIfr ?? false,
+        alertMvfr: payload.alertMvfr ?? false,
+      })
+      .returning();
+    return favorite;
+  }
+
+  async removeAirportFavorite(userId: string, icao: string): Promise<boolean> {
+    const result = await db
+      .delete(airportFavorites)
+      .where(and(eq(airportFavorites.userId, userId), eq(airportFavorites.icao, icao.toUpperCase())))
+      .returning();
+    return result.length > 0;
+  }
+
+  async checkAirportFavorite(userId: string, icao: string): Promise<boolean> {
+    const result = await db
+      .select()
+      .from(airportFavorites)
+      .where(and(eq(airportFavorites.userId, userId), eq(airportFavorites.icao, icao.toUpperCase())))
+      .limit(1);
+    return result.length > 0;
+  }
+
+  async getAirportFavorites(userId: string): Promise<AirportFavorite[]> {
+    return await db
+      .select()
+      .from(airportFavorites)
+      .where(eq(airportFavorites.userId, userId))
+      .orderBy(desc(airportFavorites.createdAt));
+  }
+
+  async updateAirportFavoriteAlerts(
+    userId: string,
+    icao: string,
+    updates: { alertIfr?: boolean; alertMvfr?: boolean }
+  ): Promise<AirportFavorite | null> {
+    const [favorite] = await db
+      .update(airportFavorites)
+      .set({
+        alertIfr: updates.alertIfr,
+        alertMvfr: updates.alertMvfr,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(airportFavorites.userId, userId), eq(airportFavorites.icao, icao.toUpperCase())))
+      .returning();
+    return favorite ?? null;
+  }
+
+  async updateAirportFavoriteObservation(
+    favoriteId: string,
+    updates: {
+      lastObservedCategory?: string | null;
+      lastObservedAt?: Date | null;
+      lastAlertCategory?: string | null;
+      lastAlertAt?: Date | null;
+    }
+  ): Promise<void> {
+    await db
+      .update(airportFavorites)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(airportFavorites.id, favoriteId));
+  }
+
+  async getAirportFavoritesWithAlerts(): Promise<AirportFavorite[]> {
+    return await db
+      .select()
+      .from(airportFavorites)
+      .where(or(eq(airportFavorites.alertIfr, true), eq(airportFavorites.alertMvfr, true)));
   }
 
   // Transactions

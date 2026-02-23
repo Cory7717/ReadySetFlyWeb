@@ -554,6 +554,28 @@ export const favorites = pgTable("favorites", {
   uniqueUserListing: uniqueIndex("idx_favorites_user_listing_unique").on(table.userId, table.listingType, table.listingId),
 }));
 
+// Airport favorites (user-saved airports + alert preferences)
+export const airportFavorites = pgTable("airport_favorites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  icao: text("icao").notNull(),
+  name: text("name"),
+  city: text("city"),
+  state: text("state"),
+  alertIfr: boolean("alert_ifr").default(false),
+  alertMvfr: boolean("alert_mvfr").default(false),
+  lastObservedCategory: text("last_observed_category"),
+  lastObservedAt: timestamp("last_observed_at"),
+  lastAlertCategory: text("last_alert_category"),
+  lastAlertAt: timestamp("last_alert_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_airport_favorites_user").on(table.userId),
+  index("idx_airport_favorites_icao").on(table.icao),
+  uniqueIndex("uniq_airport_favorites_user_icao").on(table.userId, table.icao),
+]);
+
 // Transactions (financial tracking)
 export const transactions = pgTable("transactions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1773,6 +1795,19 @@ export const insertFavoriteSchema = createInsertSchema(favorites).omit({
   listingType: z.enum(["marketplace", "aircraft"]),
 });
 
+export const insertAirportFavoriteSchema = createInsertSchema(airportFavorites).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+  lastObservedCategory: true,
+  lastObservedAt: true,
+  lastAlertCategory: true,
+  lastAlertAt: true,
+}).extend({
+  icao: z.string().min(3).max(4).transform((value) => value.trim().toUpperCase()),
+});
+
 export const insertCrmLeadSchema = createInsertSchema(crmLeads).omit({
   id: true,
   createdAt: true,
@@ -2051,6 +2086,8 @@ export type InsertReview = z.infer<typeof insertReviewSchema>;
 
 export type Favorite = typeof favorites.$inferSelect;
 export type InsertFavorite = z.infer<typeof insertFavoriteSchema>;
+export type AirportFavorite = typeof airportFavorites.$inferSelect;
+export type InsertAirportFavorite = z.infer<typeof insertAirportFavoriteSchema>;
 
 export type Transaction = typeof transactions.$inferSelect;
 

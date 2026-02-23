@@ -8,8 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { runWithAuth } from "@/utils/authGate";
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 const WINDS_ALOFT_LEVELS = [3000, 6000, 9000, 12000, 18000, 24000, 30000, 34000, 39000];
@@ -20,6 +25,16 @@ type HazardSummaryItem = {
   dueTo?: string;
   validFrom?: string;
   validTo?: string;
+};
+
+type AirportFavorite = {
+  id: string;
+  icao: string;
+  name?: string | null;
+  city?: string | null;
+  state?: string | null;
+  alertIfr?: boolean | null;
+  alertMvfr?: boolean | null;
 };
 
 const pickHazardValue = (value: any) => {
@@ -60,6 +75,8 @@ export default function AviationWeatherHub() {
   const [activeTab, setActiveTab] = useState("overview");
   const [windsAltitude, setWindsAltitude] = useState("12000");
   const trackedTabs = useRef(new Set<string>());
+  const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (trackedTabs.current.has(activeTab)) return;
@@ -86,6 +103,42 @@ export default function AviationWeatherHub() {
     setSearchIcao(normalizedIcao);
   };
 
+  const refreshFavorites = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/airports/favorites"] });
+  };
+
+  const handleToggleFavorite = () => {
+    runWithAuth("save_airport_favorite", async () => {
+      try {
+        if (currentFavorite) {
+          await apiRequest("DELETE", `/api/airports/favorites/${searchIcao}`);
+          toast({ title: "Removed from favorites", description: `${searchIcao} removed.` });
+        } else {
+          const airport = airportQuery.data;
+          await apiRequest("POST", "/api/airports/favorites", {
+            icao: searchIcao,
+            name: airport?.name ?? null,
+            city: airport?.city ?? null,
+            state: airport?.state ?? null,
+            alertIfr: false,
+            alertMvfr: false,
+          });
+          toast({ title: "Airport saved", description: `${searchIcao} added to favorites.` });
+        }
+      } finally {
+        refreshFavorites();
+      }
+    });
+  };
+
+  const handleUpdateAlerts = (updates: { alertIfr?: boolean; alertMvfr?: boolean }) => {
+    runWithAuth("update_airport_alerts", async () => {
+      if (!currentFavorite) return;
+      await apiRequest("PATCH", `/api/airports/favorites/${searchIcao}/alerts`, updates);
+      refreshFavorites();
+    });
+  };
+
   const airportQuery = useQuery({
     queryKey: ["/api/airports", searchIcao],
     queryFn: async () => {
@@ -96,6 +149,24 @@ export default function AviationWeatherHub() {
     enabled: Boolean(searchIcao),
     staleTime: 1000 * 60 * 60,
   });
+
+  const favoritesQuery = useQuery<AirportFavorite[]>({
+    queryKey: ["/api/airports/favorites"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/airports/favorites"), { credentials: "include" });
+      if (res.status === 401) return [];
+      if (!res.ok) throw new Error("Failed to fetch airport favorites");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const favorites = favoritesQuery.data ?? [];
+  const currentFavorite = useMemo(
+    () => favorites.find((favorite) => favorite.icao === searchIcao),
+    [favorites, searchIcao]
+  );
 
   const metarQuery = useQuery({
     queryKey: ["/api/aviation/metar", searchIcao],
@@ -240,6 +311,76 @@ export default function AviationWeatherHub() {
               )}
             </div>
             <Button onClick={submitIcao} disabled={!canSearch}>Load Weather</Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Favorite airports & alerts</CardTitle>
+            <CardDescription>Save airports and toggle IFR/MVFR push alerts.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="text-sm font-semibold">{searchIcao}</div>
+                <div className="text-xs text-muted-foreground">
+                  {airportQuery.data?.name
+                    ? `${airportQuery.data?.name}${airportQuery.data?.city ? ` · ${airportQuery.data?.city}` : ""}${airportQuery.data?.state ? `, ${airportQuery.data?.state}` : ""}`
+                    : "Save this airport for quick access and alerts."}
+                </div>
+              </div>
+              <Button variant={currentFavorite ? "outline" : "default"} onClick={handleToggleFavorite}>
+                {currentFavorite ? "Remove favorite" : "Save airport"}
+              </Button>
+            </div>
+
+            {!isAuthenticated && (
+              <div className="text-xs text-muted-foreground">
+                Sign in to save airports and receive IFR/MVFR alerts.
+              </div>
+            )}
+
+            {currentFavorite && (
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <div className="text-sm font-semibold">IFR/LIFR alerts</div>
+                    <div className="text-xs text-muted-foreground">Notify when conditions drop to IFR.</div>
+                  </div>
+                  <Switch
+                    checked={Boolean(currentFavorite.alertIfr)}
+                    onCheckedChange={(checked) => handleUpdateAlerts({ alertIfr: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div>
+                    <div className="text-sm font-semibold">MVFR alerts</div>
+                    <div className="text-xs text-muted-foreground">Notify when conditions drop to MVFR or worse.</div>
+                  </div>
+                  <Switch
+                    checked={Boolean(currentFavorite.alertMvfr)}
+                    onCheckedChange={(checked) => handleUpdateAlerts({ alertMvfr: checked })}
+                  />
+                </div>
+              </div>
+            )}
+
+            {favorites.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {favorites.map((favorite) => (
+                  <Button
+                    key={favorite.id}
+                    variant={favorite.icao === searchIcao ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      setSearchIcao(favorite.icao);
+                      setIcaoInput(favorite.icao);
+                    }}
+                  >
+                    {favorite.icao}
+                  </Button>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

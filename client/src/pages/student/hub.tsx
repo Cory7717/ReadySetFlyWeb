@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { trackEvent } from "@/lib/analytics";
 import { NextStepCTA } from "@/components/student/NextStepCTA";
+import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 
 const tools = [
   { title: "Can I Become a Pilot?", description: "Quick wizard to map your path.", href: "/student/wizard" },
@@ -51,6 +52,11 @@ export default function StudentHub() {
           </div>
         </div>
       </section>
+
+      <BannerAdRotation
+        placement="student-hub"
+        className="container mx-auto px-4 py-8"
+      />
 
       <section className="container mx-auto px-4 py-10">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

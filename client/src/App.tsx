@@ -41,6 +41,7 @@ import DeleteAccount from "@/pages/delete-account";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import VerifyEmail from "@/pages/verify-email";
+import BannerAdPaymentRedirect from "@/pages/banner-ad-payment";
 import Logbook from "@/pages/logbook";
 import PilotTools from "@/pages/pilot-tools";
 import AviationWeatherHub from "@/pages/aviation-weather";
@@ -161,6 +162,7 @@ function Router() {
       <Route path="/admin/invite" component={RequireAuth} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
+      <Route path="/banner-ad-payment" component={BannerAdPaymentRedirect} />
       <Route path="/cfi" component={CfiDirectory} />
       <Route path="/cfi/terms" component={CfiTerms} />
       <Route path="/cfi/student-terms" component={CfiStudentTerms} />

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, CloudSun, Plane, Wind, Gauge, Scale } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -317,6 +318,11 @@ export default function PilotTools() {
             Aviation weather, NOTAMs, and airport information
           </p>
         </div>
+
+        <BannerAdRotation
+          placement="pilot-tools"
+          className="mt-2"
+        />
 
         <Card className="border-slate-200 bg-slate-50">
           <CardHeader>

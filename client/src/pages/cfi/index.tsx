@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
@@ -92,6 +93,11 @@ export default function CfiDirectory() {
             </p>
           )}
         </div>
+
+        <BannerAdRotation
+          placement="cfi-directory"
+          className="mt-2"
+        />
 
         <Card>
           <CardHeader>

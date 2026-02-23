@@ -2896,6 +2896,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Set ACL policy for uploaded objects (used by admin banner uploads and listings)
+  app.post('/api/objects/set-acl', isAuthenticated, async (req: any, res) => {
+    try {
+      const rawPath = typeof req.body?.path === "string" ? req.body.path.trim() : "";
+      if (!rawPath) {
+        return res.status(400).json({ error: "path is required" });
+      }
+
+      const access = typeof req.body?.access === "string" ? req.body.access.toLowerCase() : "private";
+      const visibility = access === "publicread" || access === "public" ? "public" : "private";
+
+      if (process.env.AWS_S3_BUCKET) {
+        const { S3StorageService } = await import('./s3Storage.js');
+        const s3Service = new S3StorageService();
+        if (visibility === "public") {
+          await s3Service.setPublicRead(rawPath);
+        }
+        return res.status(200).json({ objectPath: rawPath });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(rawPath, {
+        owner: req.user.claims.sub,
+        visibility,
+      });
+      return res.status(200).json({ objectPath });
+    } catch (error) {
+      console.error('Error setting object ACL:', error);
+      return res.status(500).json({ error: 'Failed to set object ACL' });
+    }
+  });
+
   // Set ACL policy for uploaded listing images
   app.put('/api/listing-images', isAuthenticated, async (req: any, res) => {
     try {

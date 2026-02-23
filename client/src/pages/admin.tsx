@@ -1025,10 +1025,13 @@ export default function AdminDashboard() {
 
   // Banner image upload handlers
   const handleBannerGetUploadParameters = async () => {
-    const response = await fetch('/api/objects/upload', {
+    const response = await fetch(apiUrl('/api/objects/upload'), {
       method: 'POST',
       credentials: 'include',
     });
+    if (!response.ok) {
+      throw new Error("Failed to get upload URL");
+    }
     const data = await response.json();
     return {
       method: 'PUT' as const,
@@ -1041,15 +1044,12 @@ export default function AdminDashboard() {
       for (const file of result.successful || []) {
         if (file.uploadURL) {
           // Set ACL policy for public access
-          const parsedUrl = new URL(file.uploadURL);
-          const objectPath = parsedUrl.pathname.slice(1); // Remove leading slash
-          
-          await fetch('/api/objects/set-acl', {
+          await fetch(apiUrl('/api/objects/set-acl'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({
-              path: objectPath,
+              path: file.uploadURL,
               access: 'publicRead', // Banner images need to be publicly accessible
             }),
           });
@@ -1079,15 +1079,13 @@ export default function AdminDashboard() {
     try {
       for (const file of result.successful || []) {
         if (file.uploadURL) {
-          const parsedUrl = new URL(file.uploadURL);
-          const objectPath = parsedUrl.pathname.slice(1);
-
-          await fetch('/api/objects/set-acl', {
+          
+          await fetch(apiUrl('/api/objects/set-acl'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({
-              path: objectPath,
+              path: file.uploadURL,
               access: 'publicRead',
             }),
           });
@@ -1114,10 +1112,13 @@ export default function AdminDashboard() {
 
   // Order image upload handlers
   const handleOrderGetUploadParameters = async () => {
-    const response = await fetch('/api/objects/upload', {
+    const response = await fetch(apiUrl('/api/objects/upload'), {
       method: 'POST',
       credentials: 'include',
     });
+    if (!response.ok) {
+      throw new Error("Failed to get upload URL");
+    }
     const data = await response.json();
     return {
       method: 'PUT' as const,
@@ -1130,15 +1131,12 @@ export default function AdminDashboard() {
       for (const file of result.successful || []) {
         if (file.uploadURL) {
           // Set ACL policy for public access
-          const parsedUrl = new URL(file.uploadURL);
-          const objectPath = parsedUrl.pathname.slice(1); // Remove leading slash
-          
-          await fetch('/api/objects/set-acl', {
+          await fetch(apiUrl('/api/objects/set-acl'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({
-              path: objectPath,
+              path: file.uploadURL,
               access: 'publicRead', // Order banner images need to be publicly accessible
             }),
           });
@@ -1168,15 +1166,13 @@ export default function AdminDashboard() {
     try {
       for (const file of result.successful || []) {
         if (file.uploadURL) {
-          const parsedUrl = new URL(file.uploadURL);
-          const objectPath = parsedUrl.pathname.slice(1);
-
-          await fetch('/api/objects/set-acl', {
+          
+          await fetch(apiUrl('/api/objects/set-acl'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({
-              path: objectPath,
+              path: file.uploadURL,
               access: 'publicRead',
             }),
           });
@@ -6954,9 +6950,12 @@ export default function AdminDashboard() {
                           <FormLabel>Display On</FormLabel>
                           <div className="grid grid-cols-2 gap-2">
                             {[
-                              { value: 'home', label: 'Homepage' },
-                              { value: 'rentals', label: 'Aircraft Rentals' },
-                              { value: 'marketplace', label: 'Marketplace Hub' },
+                            { value: 'home', label: 'Homepage' },
+                            { value: 'student-hub', label: 'Student Hub' },
+                            { value: 'pilot-tools', label: 'Pilot Tools' },
+                            { value: 'cfi-directory', label: 'CFI Directory' },
+                            { value: 'rentals', label: 'Aircraft Rentals' },
+                            { value: 'marketplace', label: 'Marketplace Hub' },
                             ].map((placement) => (
                               <FormField
                                 key={placement.value}
@@ -7362,6 +7361,9 @@ export default function AdminDashboard() {
                       <div className="grid grid-cols-2 gap-2">
                         {[
                           { value: 'home', label: 'Homepage (Landing Page)' },
+                          { value: 'student-hub', label: 'Student Hub' },
+                          { value: 'pilot-tools', label: 'Pilot Tools' },
+                          { value: 'cfi-directory', label: 'CFI Directory (Non-marketplace)' },
                           { value: 'rentals', label: 'Aircraft Rentals Page' },
                           { value: 'marketplace', label: 'Marketplace Hub' },
                           { value: 'aircraft-sale', label: 'Aircraft for Sale' },

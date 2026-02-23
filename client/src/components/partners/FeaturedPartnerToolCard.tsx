@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiUrl } from "@/lib/api";
+import { apiRequest } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +106,10 @@ export function FeaturedPartnerToolCard({
           placement,
           source: normalizedSource,
         });
+        apiRequest("POST", `/api/partner-tools/${partnerKey}/impression`, {
+          placement,
+          source: normalizedSource,
+        }).catch(() => {});
       },
       { threshold: IMPRESSION_THRESHOLD }
     );
@@ -128,6 +133,11 @@ export function FeaturedPartnerToolCard({
       placement,
       source: normalizedSource,
     });
+    apiRequest("POST", `/api/partner-tools/${partnerKey}/click`, {
+      placement,
+      source: normalizedSource,
+      context: "cta",
+    }).catch(() => {});
   };
 
   const handleEmbedInteraction = (context: string, content?: string) => {
@@ -234,7 +244,15 @@ export function FeaturedPartnerToolCard({
                         target="_blank"
                         rel="noreferrer noopener"
                         className="group rounded-lg border bg-background p-4 transition hover:border-primary/40 hover:shadow-sm"
-                        onClick={() => handleEmbedInteraction("tile", tile.slug)}
+                        onClick={() => {
+                          handleEmbedInteraction("tile", tile.slug);
+                          apiRequest("POST", `/api/partner-tools/${partnerKey}/click`, {
+                            placement,
+                            source: normalizedSource,
+                            context: "tile",
+                            content: tile.slug,
+                          }).catch(() => {});
+                        }}
                       >
                         <div className="flex items-start gap-3">
                           <div className="mt-1 text-primary">{tile.icon}</div>

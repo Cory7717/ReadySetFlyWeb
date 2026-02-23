@@ -283,6 +283,16 @@ export function BannerAdRotation({
 
   return (
     <div className={`w-full ${className}`}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 text-sm">
+        <div className="text-muted-foreground">
+          Want information on becoming a sponsored business?
+        </div>
+        <Button asChild size="sm" variant="secondary" data-testid="button-banner-ad-info-public">
+          <a href="/banner-advertise" target="_blank" rel="noreferrer">
+            Click here
+          </a>
+        </Button>
+      </div>
       <Card
         className={`group relative overflow-hidden border-0 bg-gradient-to-br from-amber-50 via-white to-sky-50 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.45)] transition-all duration-500 ${
           isClickable ? "cursor-pointer hover:-translate-y-0.5" : "cursor-default"

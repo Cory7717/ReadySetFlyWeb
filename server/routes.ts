@@ -9494,6 +9494,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/banner-ads/inquiry", async (req, res) => {
+    try {
+      const inquirySchema = z.object({
+        firstName: z.string().trim().min(1, "First name is required").max(80),
+        lastName: z.string().trim().min(1, "Last name is required").max(80),
+        email: z.string().trim().email("Valid email is required").max(255),
+        phone: z.string().trim().max(40).optional(),
+        company: z.string().trim().max(160).optional(),
+        website: z.string().trim().max(240).optional(),
+        placements: z.array(z.string().trim().max(120)).optional(),
+        desiredTier: z.string().trim().max(60).optional(),
+        timeframe: z.string().trim().max(120).optional(),
+        budget: z.string().trim().max(120).optional(),
+        message: z.string().trim().max(2000).optional(),
+      });
+
+      const parsed = inquirySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid inquiry data", details: parsed.error.errors });
+      }
+
+      const placements = parsed.data.placements?.length ? parsed.data.placements.join(", ") : "Not specified";
+      const lines = [
+        `Banner Ad Inquiry`,
+        ``,
+        `Contact`,
+        `Name: ${parsed.data.firstName} ${parsed.data.lastName}`,
+        `Email: ${parsed.data.email}`,
+        `Phone: ${parsed.data.phone || "Not provided"}`,
+        ``,
+        `Business`,
+        `Company: ${parsed.data.company || "Not provided"}`,
+        `Website: ${parsed.data.website || "Not provided"}`,
+        ``,
+        `Campaign`,
+        `Preferred placements: ${placements}`,
+        `Desired tier: ${parsed.data.desiredTier || "Not specified"}`,
+        `Timeframe: ${parsed.data.timeframe || "Not specified"}`,
+        `Budget: ${parsed.data.budget || "Not specified"}`,
+        ``,
+        `Notes`,
+        `${parsed.data.message || "No additional notes."}`,
+      ];
+
+      const subjectCompany = parsed.data.company || `${parsed.data.firstName} ${parsed.data.lastName}`;
+      await sendContactFormEmail({
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+        email: parsed.data.email,
+        subject: `Banner Ad Inquiry - ${subjectCompany}`,
+        message: lines.join("\n"),
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Banner ad inquiry error:", error);
+      res.status(500).json({ error: "Failed to submit banner inquiry" });
+    }
+  });
+
   // Extract invoice data using OpenAI Vision API
   app.post("/api/admin/extract-invoice-data", isAuthenticated, isAdmin, upload.single('invoice'), async (req, res) => {
     const fs = await import('fs/promises');

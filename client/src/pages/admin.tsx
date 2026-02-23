@@ -5225,6 +5225,22 @@ export default function AdminDashboard() {
 
         {/* Banner Ads Tab */}
         <TabsContent value="banners" className="space-y-6">
+          <Card>
+            <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold">Want information on becoming a sponsored business?</p>
+                <p className="text-sm text-muted-foreground">
+                  View pricing, placement options, and submit your sponsor inquiry.
+                </p>
+              </div>
+              <Button asChild variant="secondary" data-testid="button-banner-ad-info">
+                <a href="/banner-advertise" target="_blank" rel="noreferrer">
+                  Click here
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+
           {/* Banner Ad Orders Section */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-4">

@@ -626,6 +626,17 @@ export const partnerRedirects = pgTable("partner_redirects", {
   index("idx_partner_redirects_created").on(table.createdAt),
 ]);
 
+// Partner Tool Metrics (featured partner cards)
+export const partnerToolMetrics = pgTable("partner_tool_metrics", {
+  partner: text("partner").primaryKey(),
+  impressions: integer("impressions").default(0),
+  clicks: integer("clicks").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_partner_tool_metrics_partner").on(table.partner),
+]);
+
 // NOTAMs (FAA SWIM ingestion)
 export const notams = pgTable("notams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2129,6 +2140,7 @@ export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
 
 export type PartnerRedirect = typeof partnerRedirects.$inferSelect;
+export type PartnerToolMetric = typeof partnerToolMetrics.$inferSelect;
 export type InsertPartnerRedirect = z.infer<typeof insertPartnerRedirectSchema>;
 
 export type Notam = typeof notams.$inferSelect;

@@ -7965,6 +7965,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.redirect(302, partner.redirectUrl);
   });
 
+  app.post("/api/partner-tools/:partner/impression", async (req, res) => {
+    try {
+      const partnerKey = String(req.params.partner || "").trim().toLowerCase();
+      if (!partnerKey || !partners[partnerKey]) {
+        return res.status(400).json({ error: "invalid_partner" });
+      }
+      await storage.incrementPartnerToolImpressions(partnerKey);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Partner tool impression error:", error);
+      res.status(500).json({ error: "Failed to record impression" });
+    }
+  });
+
+  app.post("/api/partner-tools/:partner/click", async (req, res) => {
+    try {
+      const partnerKey = String(req.params.partner || "").trim().toLowerCase();
+      if (!partnerKey || !partners[partnerKey]) {
+        return res.status(400).json({ error: "invalid_partner" });
+      }
+      await storage.incrementPartnerToolClicks(partnerKey);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Partner tool click error:", error);
+      res.status(500).json({ error: "Failed to record click" });
+    }
+  });
+
   // Admin Analytics
   app.get("/api/admin/analytics", isAuthenticated, requireAnalyticsAdmin, async (req, res) => {
     try {
@@ -9392,6 +9420,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Banner summary export error:", error);
       res.status(500).json({ error: "Failed to export banner summary" });
+    }
+  });
+
+  app.get("/api/admin/partner-tools/metrics", isAuthenticated, requireBannersAdmin, async (req, res) => {
+    try {
+      const metrics = await storage.getPartnerToolMetrics();
+      res.json(metrics);
+    } catch (error) {
+      console.error("Partner tool metrics error:", error);
+      res.status(500).json({ error: "Failed to fetch partner tool metrics" });
     }
   });
 

@@ -20,7 +20,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric } from "@shared/schema";
+import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric, type PartnerToolMetric } from "@shared/schema";
 import { ADMIN_ROLE_LABELS, ADMIN_ROLE_PERMISSIONS, type AdminRole, type AdminPermission } from "@shared/config/adminAccess";
 import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
 import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
@@ -558,6 +558,11 @@ export default function AdminDashboard() {
   // Banner ads query
   const { data: bannerAds = [], isLoading: bannerAdsLoading } = useQuery<BannerAd[]>({
     queryKey: ["/api/admin/banner-ads"],
+    enabled: activeTab === "banners",
+  });
+
+  const { data: partnerToolMetrics = [] } = useQuery<PartnerToolMetric[]>({
+    queryKey: ["/api/admin/partner-tools/metrics"],
     enabled: activeTab === "banners",
   });
 
@@ -5758,6 +5763,52 @@ export default function AdminDashboard() {
                       </CardContent>
                     </Card>
                   ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Partner Tools Analytics</CardTitle>
+              <CardDescription>
+                Engagement metrics for featured partner tools (impressions, clicks, CTR).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {partnerToolMetrics.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No partner metrics recorded yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="py-2 pr-4 font-medium">Partner</th>
+                        <th className="py-2 pr-4 font-medium">Impressions</th>
+                        <th className="py-2 pr-4 font-medium">Clicks</th>
+                        <th className="py-2 pr-4 font-medium">CTR</th>
+                        <th className="py-2 pr-4 font-medium">Updated</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {partnerToolMetrics.map((metric) => {
+                        const impressions = metric.impressions ?? 0;
+                        const clicks = metric.clicks ?? 0;
+                        const ctr = impressions > 0 ? ((clicks / impressions) * 100).toFixed(2) : "0.00";
+                        return (
+                          <tr key={metric.partner} className="border-b last:border-0">
+                            <td className="py-2 pr-4 font-semibold">{metric.partner}</td>
+                            <td className="py-2 pr-4">{impressions}</td>
+                            <td className="py-2 pr-4">{clicks}</td>
+                            <td className="py-2 pr-4">{ctr}%</td>
+                            <td className="py-2 pr-4">
+                              {metric.updatedAt ? new Date(metric.updatedAt).toLocaleString() : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </CardContent>

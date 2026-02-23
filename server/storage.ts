@@ -61,6 +61,7 @@ import {
   type InsertPromoCodeUsage,
   type AdminInvite,
   type InsertAdminInvite,
+  type PartnerToolMetric,
   type LogbookEntry,
   type InsertLogbookEntry,
   type LogbookProSettings,
@@ -151,6 +152,7 @@ import {
   aircraftProfiles,
   approachPlates,
   adminInvites,
+  partnerToolMetrics,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray, isNull, arrayOverlaps } from "drizzle-orm";
@@ -465,6 +467,11 @@ export interface IStorage {
   deleteBannerAd(id: string): Promise<boolean>;
   incrementBannerImpressions(id: string): Promise<void>;
   incrementBannerClicks(id: string): Promise<void>;
+
+  // Partner Tool Metrics
+  getPartnerToolMetrics(): Promise<PartnerToolMetric[]>;
+  incrementPartnerToolImpressions(partner: string): Promise<void>;
+  incrementPartnerToolClicks(partner: string): Promise<void>;
   
   // Job Applications
   createJobApplication(application: InsertJobApplication): Promise<JobApplication>;
@@ -2983,6 +2990,36 @@ export class DatabaseStorage implements IStorage {
       .update(bannerAds)
       .set({ clicks: sql`${bannerAds.clicks} + 1` })
       .where(eq(bannerAds.id, id));
+  }
+
+  async getPartnerToolMetrics(): Promise<PartnerToolMetric[]> {
+    return await db.select().from(partnerToolMetrics).orderBy(desc(partnerToolMetrics.updatedAt));
+  }
+
+  async incrementPartnerToolImpressions(partner: string): Promise<void> {
+    await db
+      .insert(partnerToolMetrics)
+      .values({ partner, impressions: 1, clicks: 0 })
+      .onConflictDoUpdate({
+        target: partnerToolMetrics.partner,
+        set: {
+          impressions: sql`${partnerToolMetrics.impressions} + 1`,
+          updatedAt: sql`now()`,
+        },
+      });
+  }
+
+  async incrementPartnerToolClicks(partner: string): Promise<void> {
+    await db
+      .insert(partnerToolMetrics)
+      .values({ partner, impressions: 0, clicks: 1 })
+      .onConflictDoUpdate({
+        target: partnerToolMetrics.partner,
+        set: {
+          clicks: sql`${partnerToolMetrics.clicks} + 1`,
+          updatedAt: sql`now()`,
+        },
+      });
   }
 
   // Job Applications

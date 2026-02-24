@@ -9877,7 +9877,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.post("/api/events", isAuthenticated, requireMembership, async (req: any, res) => {
+  app.post("/api/events", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
       if (!userId) {

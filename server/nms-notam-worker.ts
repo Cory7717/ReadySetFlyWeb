@@ -22,7 +22,7 @@ const NMS_CLASSIFICATIONS = (process.env.NMS_CLASSIFICATIONS || "DOMESTIC,INTERN
   .split(",")
   .map((value) => value.trim())
   .filter(Boolean);
-const NMS_INITIAL_LOAD_ON_START = String(process.env.NMS_INITIAL_LOAD_ON_START ?? "true").toLowerCase() !== "false";
+const NMS_INITIAL_LOAD_ON_START = String(process.env.NMS_INITIAL_LOAD_ON_START ?? "false").toLowerCase() === "true";
 const NMS_POLL_INTERVAL_MINUTES = Number(process.env.NMS_POLL_INTERVAL_MINUTES || 15);
 const NMS_SOURCE = "nms_api";
 const MAX_DELTA_LOOKBACK_DAYS = 5;
@@ -420,13 +420,27 @@ async function runDeltaSync() {
 }
 
 async function runInitialLoadIfNeeded() {
-  if (!NMS_INITIAL_LOAD_ON_START) return;
+  if (!NMS_INITIAL_LOAD_ON_START) {
+    logEvent({ phase: "initial_load_skipped", reason: "disabled" });
+    return;
+  }
   const completed = await getStateValue("initialLoadCompleted");
   if (completed === "true") return;
   try {
     await runInitialLoad();
   } catch (error: any) {
     logEvent({ phase: "initial_load_error", error: error?.message || String(error) });
+  }
+}
+
+async function runInitialLoadJob() {
+  logEvent({ phase: "initial_load_job_started" });
+  try {
+    await runInitialLoad();
+    logEvent({ phase: "initial_load_job_complete" });
+  } catch (error: any) {
+    logEvent({ phase: "initial_load_job_error", error: error?.message || String(error) });
+    throw error;
   }
 }
 
@@ -452,4 +466,10 @@ export function startNmsNotamWorker() {
     classifications: NMS_CLASSIFICATIONS,
   });
   return true;
+}
+
+if (process.argv.includes("--initial-load")) {
+  void runInitialLoadJob()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
 }

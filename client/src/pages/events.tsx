@@ -111,9 +111,7 @@ export default function EventsPage() {
     trackEvent("events_view", { page: "/events" });
   }, []);
 
-  const entitlements = (user as any)?.entitlements;
-  const canCreateEvents =
-    entitlements?.canCreateEvents ?? (user?.logbookProStatus === "active");
+  const canCreateEvents = isAuthenticated;
 
   const { data, isLoading } = useQuery({
     queryKey: ["aviation-events"],
@@ -290,15 +288,15 @@ export default function EventsPage() {
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold">Upcoming Aviation Events</h1>
           <p className="text-muted-foreground max-w-3xl">
-            Share fly-ins, airshows, safety seminars, and training nights. RSF Pro members can post
-            events that auto-expire after the end date.
+            Share fly-ins, airshows, safety seminars, and training nights. Events require a free RSF account to reduce
+            spam and keep the calendar aviation-focused.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button asChild variant="outline">
               <Link href="/">Back to Home</Link>
             </Button>
             <Badge variant="outline">US-only</Badge>
-            <Badge variant="secondary">RSF Pro posting</Badge>
+            <Badge variant="secondary">Free account required</Badge>
           </div>
         </div>
       </section>
@@ -383,7 +381,7 @@ export default function EventsPage() {
             <CardHeader>
               <CardTitle>Post an event</CardTitle>
               <CardDescription>
-                Event posting is included with RSF Pro. Please post only aviation-related community events.
+                Event posting is free with an RSF account. We require an account to prevent spam and fraud.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -394,14 +392,7 @@ export default function EventsPage() {
                     <Link href="/register">Create free account</Link>
                   </Button>
                 </div>
-              ) : !canCreateEvents ? (
-                <div className="space-y-4 text-sm text-muted-foreground">
-                  <p>Upgrade to RSF Pro to post community events.</p>
-                  <Button asChild>
-                    <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
-                  </Button>
-                </div>
-              ) : (
+              ) : canCreateEvents ? (
                 <form className="space-y-4" onSubmit={handleSubmit}>
                   <div className="space-y-2">
                     <label className="text-sm font-semibold">Event title</label>
@@ -535,7 +526,7 @@ export default function EventsPage() {
                     {mutation.isPending ? "Posting..." : "Post event"}
                   </Button>
                 </form>
-              )}
+              ) : null}
             </CardContent>
           </Card>
         </div>

@@ -198,7 +198,7 @@ export function getEntitlementsForUser(user?: User | null) {
     canUseScenarioScoring: isPro,
     canUseAdvancedTrends: isProPlus,
     canUseGpsSims: isPro,
-    canCreateEvents: isPro,
+    canCreateEvents: !isGuest,
     canCreateListings: isPro,
     canUseVorGuided: isPro,
     canUseCfi,

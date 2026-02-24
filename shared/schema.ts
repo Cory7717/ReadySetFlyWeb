@@ -1527,6 +1527,66 @@ export const cfiStudentFiles = pgTable("cfi_student_files", {
   index("idx_cfi_student_files_student").on(table.studentId),
 ]);
 
+export const cfiStudentMilestones = pgTable("cfi_student_milestones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: varchar("student_id").notNull().references(() => cfiStudents.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("not_started"),
+  dueDate: date("due_date"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_cfi_student_milestones_student").on(table.studentId),
+]);
+
+export const cfiStudentEndorsements = pgTable("cfi_student_endorsements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: varchar("student_id").notNull().references(() => cfiStudents.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  endorsementType: text("endorsement_type"),
+  templateText: text("template_text"),
+  issuedAt: date("issued_at"),
+  instructorName: text("instructor_name"),
+  instructorCertificate: text("instructor_certificate"),
+  aircraftType: text("aircraft_type"),
+  notes: text("notes"),
+  status: text("status").notNull().default("draft"),
+  signedByName: text("signed_by_name"),
+  signatureDataUrl: text("signature_data_url"),
+  signedAt: timestamp("signed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_cfi_student_endorsements_student").on(table.studentId),
+]);
+
+export const cfiConversations = pgTable("cfi_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cfiProfileId: varchar("cfi_profile_id").notNull().references(() => cfiProfiles.id, { onDelete: "cascade" }),
+  studentId: varchar("student_id").notNull().references(() => cfiStudents.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_cfi_conversations_pair").on(table.cfiProfileId, table.studentId),
+  index("idx_cfi_conversations_profile").on(table.cfiProfileId),
+  index("idx_cfi_conversations_student").on(table.studentId),
+]);
+
+export const cfiMessages = pgTable("cfi_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => cfiConversations.id, { onDelete: "cascade" }),
+  senderUserId: varchar("sender_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  body: text("body").notNull(),
+  isRead: boolean("is_read").default(false),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_cfi_messages_conversation").on(table.conversationId),
+  index("idx_cfi_messages_sender").on(table.senderUserId),
+]);
+
 export const cfiLegalAcceptances = pgTable("cfi_legal_acceptances", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -1848,6 +1908,41 @@ export const insertCfiStudentFileSchema = createInsertSchema(cfiStudentFiles).om
   studentId: true,
   uploadedByUserId: true,
   createdAt: true,
+});
+
+export const insertCfiStudentMilestoneSchema = createInsertSchema(cfiStudentMilestones).omit({
+  id: true,
+  studentId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  dueDate: z.string().optional().nullable(),
+  completedAt: z.string().optional().nullable(),
+});
+
+export const insertCfiStudentEndorsementSchema = createInsertSchema(cfiStudentEndorsements).omit({
+  id: true,
+  studentId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  issuedAt: z.string().optional().nullable(),
+});
+
+export const insertCfiConversationSchema = createInsertSchema(cfiConversations).omit({
+  id: true,
+  cfiProfileId: true,
+  studentId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCfiMessageSchema = createInsertSchema(cfiMessages).omit({
+  id: true,
+  conversationId: true,
+  senderUserId: true,
+  createdAt: true,
+  readAt: true,
 });
 
 export const insertCfiLegalAcceptanceSchema = createInsertSchema(cfiLegalAcceptances).omit({
@@ -2394,6 +2489,14 @@ export type CfiLesson = typeof cfiLessons.$inferSelect;
 export type InsertCfiLesson = z.infer<typeof insertCfiLessonSchema>;
 export type CfiStudentFile = typeof cfiStudentFiles.$inferSelect;
 export type InsertCfiStudentFile = z.infer<typeof insertCfiStudentFileSchema>;
+export type CfiStudentMilestone = typeof cfiStudentMilestones.$inferSelect;
+export type InsertCfiStudentMilestone = z.infer<typeof insertCfiStudentMilestoneSchema>;
+export type CfiStudentEndorsement = typeof cfiStudentEndorsements.$inferSelect;
+export type InsertCfiStudentEndorsement = z.infer<typeof insertCfiStudentEndorsementSchema>;
+export type CfiConversation = typeof cfiConversations.$inferSelect;
+export type InsertCfiConversation = z.infer<typeof insertCfiConversationSchema>;
+export type CfiMessage = typeof cfiMessages.$inferSelect;
+export type InsertCfiMessage = z.infer<typeof insertCfiMessageSchema>;
 export type CfiLegalAcceptance = typeof cfiLegalAcceptances.$inferSelect;
 export type InsertCfiLegalAcceptance = z.infer<typeof insertCfiLegalAcceptanceSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;

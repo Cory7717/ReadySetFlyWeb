@@ -15,10 +15,10 @@ import OpenAI from "openai";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
-import { and, asc, desc, eq, gte, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, cfiStudents, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -13091,7 +13091,61 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         ...member,
         user: memberMap.get(member.userId) || null,
       }));
-      res.json({ school, members: enrichedMembers, role: adminMembership.role });
+      const metrics = {
+        instructors: enrichedMembers.filter((member) => member.status === "active").length,
+        students: 0,
+        lessons: 0,
+        upcomingLessons: 0,
+        completedLessons: 0,
+        milestonesCompleted: 0,
+      };
+
+      const profileRows = await db
+        .select({ id: cfiProfiles.id })
+        .from(cfiProfiles)
+        .where(eq(cfiProfiles.schoolId, school.id));
+      const profileIds = profileRows.map((row) => row.id);
+
+      if (profileIds.length > 0) {
+        const [studentCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(cfiStudents)
+          .where(inArray(cfiStudents.cfiProfileId, profileIds));
+        metrics.students = studentCount?.count ?? 0;
+
+        const [lessonCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(cfiLessons)
+          .where(inArray(cfiLessons.cfiProfileId, profileIds));
+        metrics.lessons = lessonCount?.count ?? 0;
+
+        const [upcomingCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(cfiLessons)
+          .where(and(inArray(cfiLessons.cfiProfileId, profileIds), gte(cfiLessons.scheduledAt, new Date())));
+        metrics.upcomingLessons = upcomingCount?.count ?? 0;
+
+        const [completedCount] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(cfiLessons)
+          .where(and(inArray(cfiLessons.cfiProfileId, profileIds), eq(cfiLessons.status, "complete")));
+        metrics.completedLessons = completedCount?.count ?? 0;
+
+        const studentRows = await db
+          .select({ id: cfiStudents.id })
+          .from(cfiStudents)
+          .where(inArray(cfiStudents.cfiProfileId, profileIds));
+        const studentIds = studentRows.map((row) => row.id);
+        if (studentIds.length > 0) {
+          const [milestoneCount] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(cfiStudentMilestones)
+            .where(and(inArray(cfiStudentMilestones.studentId, studentIds), eq(cfiStudentMilestones.status, "complete")));
+          metrics.milestonesCompleted = milestoneCount?.count ?? 0;
+        }
+      }
+
+      res.json({ school, members: enrichedMembers, role: adminMembership.role, metrics });
     } catch (error) {
       console.error("Failed to load CFI school dashboard:", error);
       res.status(500).json({ error: "Failed to load school dashboard" });
@@ -13307,6 +13361,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         notes: payload.data.notes || null,
         status: "active",
       } as any);
+      await storage.createCfiConversation({
+        cfiProfileId: profile.id,
+        studentId: created.id,
+      } as any);
       res.status(201).json(created);
     } catch (error) {
       console.error("Failed to add CFI student:", error);
@@ -13508,6 +13566,22 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         cfiProfileId: profile.id,
         studentId: student.id,
       });
+      if (created.scheduledAt) {
+        const scheduledAt = new Date(created.scheduledAt as any);
+        await storage.createUserNotification({
+          userId: student.studentUserId,
+          type: "cfi_lesson_scheduled",
+          title: "Lesson scheduled",
+          message: `New lesson scheduled for ${format(scheduledAt, "PPpp")}: ${created.title}.`,
+          channels: ["in_app"],
+          referenceDate: null,
+          meta: {
+            lessonId: created.id,
+            cfiProfileId: profile.id,
+            scheduledAt: scheduledAt.toISOString(),
+          },
+        });
+      }
       res.status(201).json(created);
     } catch (error) {
       console.error("Failed to create lesson:", error);
@@ -13525,6 +13599,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!profile) {
         return res.status(404).json({ error: "CFI profile not found" });
       }
+      const existingLesson = await storage.getCfiLessonById(req.params.id);
+      if (!existingLesson || existingLesson.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Lesson not found" });
+      }
       const result = insertCfiLessonSchema.partial().safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
@@ -13540,9 +13618,37 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       } else if (updates.completedAt) {
         updates.completedAt = new Date(updates.completedAt);
       }
+      const previousScheduledAt = existingLesson.scheduledAt ? new Date(existingLesson.scheduledAt as any) : null;
+      const nextScheduledAt =
+        updates.scheduledAt === undefined
+          ? previousScheduledAt
+          : updates.scheduledAt
+            ? new Date(updates.scheduledAt as any)
+            : null;
       const updated = await storage.updateCfiLesson(req.params.id, profile.id, updates);
       if (!updated) {
         return res.status(404).json({ error: "Lesson not found" });
+      }
+      if (
+        nextScheduledAt &&
+        (!previousScheduledAt || previousScheduledAt.getTime() !== nextScheduledAt.getTime())
+      ) {
+        const student = await storage.getCfiStudentById(existingLesson.studentId);
+        if (student) {
+          await storage.createUserNotification({
+            userId: student.studentUserId,
+            type: "cfi_lesson_scheduled",
+            title: "Lesson updated",
+            message: `Lesson rescheduled for ${format(nextScheduledAt, "PPpp")}: ${updated.title}.`,
+            channels: ["in_app"],
+            referenceDate: null,
+            meta: {
+              lessonId: updated.id,
+              cfiProfileId: profile.id,
+              scheduledAt: nextScheduledAt.toISOString(),
+            },
+          });
+        }
       }
       res.json(updated);
     } catch (error) {
@@ -13589,6 +13695,385 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to load student files:", error);
       res.status(500).json({ error: "Failed to load files" });
+    }
+  });
+
+  // CFI student milestones
+  app.get("/api/cfi/students/:id/milestones", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) return res.status(404).json({ error: "CFI profile not found" });
+      const student = await storage.getCfiStudentById(req.params.id);
+      if (!student || student.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      const milestones = await storage.getCfiStudentMilestones(student.id);
+      res.json(milestones);
+    } catch (error) {
+      console.error("Failed to load student milestones:", error);
+      res.status(500).json({ error: "Failed to load milestones" });
+    }
+  });
+
+  app.post("/api/cfi/students/:id/milestones", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) return res.status(404).json({ error: "CFI profile not found" });
+      const student = await storage.getCfiStudentById(req.params.id);
+      if (!student || student.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      const result = insertCfiStudentMilestoneSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json({ error: result.error.format() });
+      const payload = result.data as any;
+      if (payload.dueDate === "") payload.dueDate = null;
+      if (payload.completedAt === "") payload.completedAt = null;
+      if (payload.dueDate) payload.dueDate = new Date(payload.dueDate);
+      if (payload.completedAt) payload.completedAt = new Date(payload.completedAt);
+      const created = await storage.createCfiStudentMilestone({
+        ...payload,
+        studentId: student.id,
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create milestone:", error);
+      res.status(500).json({ error: "Failed to create milestone" });
+    }
+  });
+
+  app.patch("/api/cfi/milestones/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const result = insertCfiStudentMilestoneSchema.partial().safeParse(req.body);
+      if (!result.success) return res.status(400).json({ error: result.error.format() });
+      const milestone = await storage.getCfiStudentMilestoneById(req.params.id as any);
+      if (!milestone) return res.status(404).json({ error: "Milestone not found" });
+      const student = await storage.getCfiStudentById(milestone.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile || student.cfiProfileId !== profile.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const updates = result.data as any;
+      if (updates.dueDate === "") updates.dueDate = null;
+      if (updates.completedAt === "") updates.completedAt = null;
+      if (updates.dueDate) updates.dueDate = new Date(updates.dueDate);
+      if (updates.completedAt) updates.completedAt = new Date(updates.completedAt);
+      const updated = await storage.updateCfiStudentMilestone(req.params.id, student.id, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update milestone:", error);
+      res.status(500).json({ error: "Failed to update milestone" });
+    }
+  });
+
+  app.delete("/api/cfi/milestones/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const milestone = await storage.getCfiStudentMilestoneById(req.params.id as any);
+      if (!milestone) return res.status(404).json({ error: "Milestone not found" });
+      const student = await storage.getCfiStudentById(milestone.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile || student.cfiProfileId !== profile.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const success = await storage.deleteCfiStudentMilestone(req.params.id, student.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete milestone:", error);
+      res.status(500).json({ error: "Failed to delete milestone" });
+    }
+  });
+
+  // CFI student endorsements
+  app.get("/api/cfi/students/:id/endorsements", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) return res.status(404).json({ error: "CFI profile not found" });
+      const student = await storage.getCfiStudentById(req.params.id);
+      if (!student || student.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      const endorsements = await storage.getCfiStudentEndorsements(student.id);
+      res.json(endorsements);
+    } catch (error) {
+      console.error("Failed to load endorsements:", error);
+      res.status(500).json({ error: "Failed to load endorsements" });
+    }
+  });
+
+  app.post("/api/cfi/students/:id/endorsements", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) return res.status(404).json({ error: "CFI profile not found" });
+      const student = await storage.getCfiStudentById(req.params.id);
+      if (!student || student.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      const result = insertCfiStudentEndorsementSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json({ error: result.error.format() });
+      const payload = result.data as any;
+      if (payload.issuedAt === "") payload.issuedAt = null;
+      if (payload.issuedAt) payload.issuedAt = new Date(payload.issuedAt);
+      const created = await storage.createCfiStudentEndorsement({
+        ...payload,
+        studentId: student.id,
+        status: payload.status || "draft",
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create endorsement:", error);
+      res.status(500).json({ error: "Failed to create endorsement" });
+    }
+  });
+
+  app.patch("/api/cfi/endorsements/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const endorsement = await storage.getCfiStudentEndorsementById(req.params.id);
+      if (!endorsement) return res.status(404).json({ error: "Endorsement not found" });
+      const student = await storage.getCfiStudentById(endorsement.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile || student.cfiProfileId !== profile.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const result = insertCfiStudentEndorsementSchema.partial().safeParse(req.body);
+      if (!result.success) return res.status(400).json({ error: result.error.format() });
+      const updates = result.data as any;
+      if (updates.issuedAt === "") updates.issuedAt = null;
+      if (updates.issuedAt) updates.issuedAt = new Date(updates.issuedAt);
+      const updated = await storage.updateCfiStudentEndorsement(req.params.id, student.id, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update endorsement:", error);
+      res.status(500).json({ error: "Failed to update endorsement" });
+    }
+  });
+
+  app.post("/api/cfi/endorsements/:id/sign", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const endorsement = await storage.getCfiStudentEndorsementById(req.params.id);
+      if (!endorsement) return res.status(404).json({ error: "Endorsement not found" });
+      const student = await storage.getCfiStudentById(endorsement.studentId);
+      if (!student) return res.status(404).json({ error: "Student not found" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile || student.cfiProfileId !== profile.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const payload = z
+        .object({
+          signedByName: z.string().min(1),
+          signatureDataUrl: z.string().min(1),
+        })
+        .safeParse(req.body);
+      if (!payload.success) return res.status(400).json({ error: payload.error.format() });
+      const updated = await storage.updateCfiStudentEndorsement(req.params.id, student.id, {
+        signedByName: payload.data.signedByName,
+        signatureDataUrl: payload.data.signatureDataUrl,
+        signedAt: new Date(),
+        status: "signed",
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to sign endorsement:", error);
+      res.status(500).json({ error: "Failed to sign endorsement" });
+    }
+  });
+
+  // CFI messaging
+  app.get("/api/cfi/messages/threads", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) return res.status(404).json({ error: "CFI profile not found" });
+      const threads = await db
+        .select({
+          conversation: cfiConversations,
+          student: cfiStudents,
+          user: {
+            id: users.id,
+            email: users.email,
+            firstName: users.firstName,
+            lastName: users.lastName,
+          },
+        })
+        .from(cfiConversations)
+        .innerJoin(cfiStudents, eq(cfiStudents.id, cfiConversations.studentId))
+        .innerJoin(users, eq(users.id, cfiStudents.studentUserId))
+        .where(eq(cfiConversations.cfiProfileId, profile.id))
+        .orderBy(desc(cfiConversations.updatedAt));
+      res.json(
+        threads.map((row) => ({
+          ...row.conversation,
+          student: row.student,
+          user: row.user,
+        }))
+      );
+    } catch (error) {
+      console.error("Failed to load message threads:", error);
+      res.status(500).json({ error: "Failed to load threads" });
+    }
+  });
+
+  app.get("/api/cfi/messages/:conversationId", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) return res.status(404).json({ error: "CFI profile not found" });
+      const conversation = await storage.getCfiConversationById(req.params.conversationId);
+      if (!conversation || conversation.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const messages = await storage.getCfiMessages(conversation.id);
+      res.json(messages);
+    } catch (error) {
+      console.error("Failed to load messages:", error);
+      res.status(500).json({ error: "Failed to load messages" });
+    }
+  });
+
+  app.post("/api/cfi/messages/:conversationId", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) return res.status(404).json({ error: "CFI profile not found" });
+      const conversation = await storage.getCfiConversationById(req.params.conversationId);
+      if (!conversation || conversation.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const result = insertCfiMessageSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json({ error: result.error.format() });
+      const created = await storage.createCfiMessage({
+        conversationId: conversation.id,
+        senderUserId: userId,
+        body: result.data.body,
+        isRead: false,
+      } as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  // Student training extras
+  app.get("/api/student/training/milestones", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) return res.json([]);
+      const milestones = await storage.getCfiStudentMilestones(student.id);
+      res.json(milestones);
+    } catch (error) {
+      console.error("Failed to load student milestones:", error);
+      res.status(500).json({ error: "Failed to load milestones" });
+    }
+  });
+
+  app.get("/api/student/training/endorsements", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) return res.json([]);
+      const endorsements = await storage.getCfiStudentEndorsements(student.id);
+      res.json(endorsements);
+    } catch (error) {
+      console.error("Failed to load student endorsements:", error);
+      res.status(500).json({ error: "Failed to load endorsements" });
+    }
+  });
+
+  app.get("/api/student/messages/threads", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) return res.json([]);
+      const threads = await db
+        .select({
+          conversation: cfiConversations,
+          cfiProfile: {
+            id: cfiProfiles.id,
+            displayName: cfiProfiles.displayName,
+            airportHome: cfiProfiles.airportHome,
+          },
+        })
+        .from(cfiConversations)
+        .innerJoin(cfiProfiles, eq(cfiProfiles.id, cfiConversations.cfiProfileId))
+        .where(eq(cfiConversations.studentId, student.id))
+        .orderBy(desc(cfiConversations.updatedAt));
+      res.json(
+        threads.map((row) => ({
+          ...row.conversation,
+          cfiProfile: row.cfiProfile,
+        }))
+      );
+    } catch (error) {
+      console.error("Failed to load student threads:", error);
+      res.status(500).json({ error: "Failed to load threads" });
+    }
+  });
+
+  app.get("/api/student/messages/:conversationId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) return res.status(404).json({ error: "Student training profile not found" });
+      const conversation = await storage.getCfiConversationById(req.params.conversationId);
+      if (!conversation || conversation.studentId !== student.id) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const messages = await storage.getCfiMessages(conversation.id);
+      res.json(messages);
+    } catch (error) {
+      console.error("Failed to load student messages:", error);
+      res.status(500).json({ error: "Failed to load messages" });
+    }
+  });
+
+  app.post("/api/student/messages/:conversationId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) return res.status(404).json({ error: "Student training profile not found" });
+      const conversation = await storage.getCfiConversationById(req.params.conversationId);
+      if (!conversation || conversation.studentId !== student.id) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      const result = insertCfiMessageSchema.safeParse(req.body);
+      if (!result.success) return res.status(400).json({ error: result.error.format() });
+      const created = await storage.createCfiMessage({
+        conversationId: conversation.id,
+        senderUserId: userId,
+        body: result.data.body,
+        isRead: false,
+      } as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to send student message:", error);
+      res.status(500).json({ error: "Failed to send message" });
     }
   });
 

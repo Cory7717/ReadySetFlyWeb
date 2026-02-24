@@ -9,7 +9,15 @@ import { trackEvent } from "@/lib/analytics";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
-import type { CfiLesson, CfiProfile, CfiStudent, CfiStudentFile } from "@shared/schema";
+import type {
+  CfiLesson,
+  CfiMessage,
+  CfiProfile,
+  CfiStudent,
+  CfiStudentEndorsement,
+  CfiStudentFile,
+  CfiStudentMilestone,
+} from "@shared/schema";
 
 type TrainingPayload = {
   student: CfiStudent | null;
@@ -25,6 +33,13 @@ const formatDateTime = (value?: string | null) => {
   return date.toLocaleString();
 };
 
+const formatDate = (value?: string | Date | null) => {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleDateString();
+};
+
 export default function StudentTraining() {
   const queryClient = useQueryClient();
   const uploadMeta = useRef(
@@ -34,6 +49,7 @@ export default function StudentTraining() {
     >()
   );
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [messageDraft, setMessageDraft] = useState("");
 
   useEffect(() => {
     trackEvent("student_training_view");
@@ -44,6 +60,45 @@ export default function StudentTraining() {
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/student/training");
       if (!res.ok) throw new Error("Failed to load training data");
+      return res.json();
+    },
+  });
+
+  const { data: milestones = [] } = useQuery<CfiStudentMilestone[]>({
+    queryKey: ["/api/student/training/milestones"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/student/training/milestones");
+      if (!res.ok) throw new Error("Failed to load milestones");
+      return res.json();
+    },
+  });
+
+  const { data: endorsements = [] } = useQuery<CfiStudentEndorsement[]>({
+    queryKey: ["/api/student/training/endorsements"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/student/training/endorsements");
+      if (!res.ok) throw new Error("Failed to load endorsements");
+      return res.json();
+    },
+  });
+
+  const { data: threads = [] } = useQuery<{ id: string }[]>({
+    queryKey: ["/api/student/messages/threads"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/student/messages/threads");
+      if (!res.ok) throw new Error("Failed to load threads");
+      return res.json();
+    },
+  });
+
+  const activeThread = threads[0] || null;
+
+  const { data: messages = [] } = useQuery<CfiMessage[]>({
+    queryKey: ["/api/student/messages", activeThread?.id],
+    enabled: !!activeThread?.id,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/student/messages/${activeThread?.id}`);
+      if (!res.ok) throw new Error("Failed to load messages");
       return res.json();
     },
   });
@@ -134,6 +189,26 @@ export default function StudentTraining() {
     },
     onError: (error: any) => {
       toast({ title: "Unable to delete file", description: error?.message, variant: "destructive" });
+    },
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeThread?.id) throw new Error("Conversation not ready");
+      const res = await apiRequest("POST", `/api/student/messages/${activeThread.id}`, {
+        body: messageDraft.trim(),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || "Failed to send message");
+      return payload;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/student/messages", activeThread?.id] });
+      setMessageDraft("");
+      trackEvent("student_message_sent");
+    },
+    onError: (error: any) => {
+      toast({ title: "Unable to send message", description: error?.message, variant: "destructive" });
     },
   });
 
@@ -228,6 +303,113 @@ export default function StudentTraining() {
                 </Button>
               </div>
             ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Progress milestones</CardTitle>
+          <CardDescription>Track your ACS progress and training checkpoints.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {milestones.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No milestones shared yet.</div>
+          ) : (
+            milestones.map((milestone) => (
+              <div key={milestone.id} className="rounded-lg border p-3 space-y-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold">{milestone.title}</div>
+                  <div className="text-xs text-muted-foreground">{milestone.status}</div>
+                </div>
+                {milestone.description && (
+                  <div className="text-xs text-muted-foreground">{milestone.description}</div>
+                )}
+                <div className="text-xs text-muted-foreground">
+                  Due {formatDate(milestone.dueDate as any)}
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Endorsements</CardTitle>
+          <CardDescription>Review endorsements and sign-offs from your instructor.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {endorsements.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No endorsements yet.</div>
+          ) : (
+            endorsements.map((endorsement) => (
+              <div key={endorsement.id} className="rounded-lg border p-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold">{endorsement.title}</div>
+                  <div className="text-xs text-muted-foreground">{endorsement.status}</div>
+                </div>
+                {endorsement.endorsementType && (
+                  <div className="text-xs text-muted-foreground">{endorsement.endorsementType}</div>
+                )}
+                {endorsement.templateText && (
+                  <div className="rounded-md bg-muted/60 p-2 text-xs whitespace-pre-wrap">
+                    {endorsement.templateText}
+                  </div>
+                )}
+                {endorsement.signatureDataUrl && (
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground">
+                      Signed by {endorsement.signedByName || "CFI"}{" "}
+                      {endorsement.signedAt ? `on ${new Date(endorsement.signedAt as any).toLocaleString()}` : ""}
+                    </div>
+                    <img
+                      src={endorsement.signatureDataUrl}
+                      alt="Signature"
+                      className="h-20 rounded border bg-white p-2"
+                    />
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Messages with your CFI</CardTitle>
+          <CardDescription>Keep communication tied to your training plan.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!activeThread ? (
+            <div className="text-sm text-muted-foreground">Messaging will appear once your CFI is connected.</div>
+          ) : (
+            <>
+              <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border p-3">
+                {messages.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No messages yet.</div>
+                ) : (
+                  messages.map((message) => (
+                    <div key={message.id} className="rounded-lg bg-muted px-3 py-2 text-sm">
+                      {message.body}
+                    </div>
+                  ))
+                )}
+              </div>
+              <Textarea
+                value={messageDraft}
+                onChange={(event) => setMessageDraft(event.target.value)}
+                rows={3}
+                placeholder="Share an update or ask a question"
+              />
+              <Button
+                onClick={() => sendMessageMutation.mutate()}
+                disabled={sendMessageMutation.isPending || !messageDraft.trim()}
+              >
+                Send message
+              </Button>
+            </>
           )}
         </CardContent>
       </Card>

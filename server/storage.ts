@@ -90,6 +90,14 @@ import {
   type InsertCfiLesson,
   type CfiStudentFile,
   type InsertCfiStudentFile,
+  type CfiStudentMilestone,
+  type InsertCfiStudentMilestone,
+  type CfiStudentEndorsement,
+  type InsertCfiStudentEndorsement,
+  type CfiConversation,
+  type InsertCfiConversation,
+  type CfiMessage,
+  type InsertCfiMessage,
   type CfiLegalAcceptance,
   type InsertCfiLegalAcceptance,
   type UserSettings,
@@ -158,6 +166,10 @@ import {
   cfiLessonTemplates,
   cfiLessons,
   cfiStudentFiles,
+  cfiStudentMilestones,
+  cfiStudentEndorsements,
+  cfiConversations,
+  cfiMessages,
   cfiLegalAcceptances,
   userSettings,
   pushTokens,
@@ -586,6 +598,24 @@ export interface IStorage {
   getCfiStudentFileById(id: string): Promise<CfiStudentFile | undefined>;
   createCfiStudentFile(file: InsertCfiStudentFile & { studentId: string; uploadedByUserId: string }): Promise<CfiStudentFile>;
   deleteCfiStudentFile(id: string, studentId: string): Promise<boolean>;
+  getCfiStudentMilestones(studentId: string): Promise<CfiStudentMilestone[]>;
+  getCfiStudentMilestoneById(id: string): Promise<CfiStudentMilestone | undefined>;
+  createCfiStudentMilestone(milestone: InsertCfiStudentMilestone & { studentId: string }): Promise<CfiStudentMilestone>;
+  updateCfiStudentMilestone(id: string, studentId: string, updates: Partial<CfiStudentMilestone>): Promise<CfiStudentMilestone | undefined>;
+  deleteCfiStudentMilestone(id: string, studentId: string): Promise<boolean>;
+  getCfiStudentEndorsements(studentId: string): Promise<CfiStudentEndorsement[]>;
+  getCfiStudentEndorsementById(id: string): Promise<CfiStudentEndorsement | undefined>;
+  createCfiStudentEndorsement(endorsement: InsertCfiStudentEndorsement & { studentId: string }): Promise<CfiStudentEndorsement>;
+  updateCfiStudentEndorsement(id: string, studentId: string, updates: Partial<CfiStudentEndorsement>): Promise<CfiStudentEndorsement | undefined>;
+  deleteCfiStudentEndorsement(id: string, studentId: string): Promise<boolean>;
+  getCfiConversationById(id: string): Promise<CfiConversation | undefined>;
+  getCfiConversation(profileId: string, studentId: string): Promise<CfiConversation | undefined>;
+  getCfiConversationsByProfile(profileId: string): Promise<CfiConversation[]>;
+  getCfiConversationsByStudent(studentId: string): Promise<CfiConversation[]>;
+  createCfiConversation(conversation: InsertCfiConversation & { cfiProfileId: string; studentId: string }): Promise<CfiConversation>;
+  updateCfiConversation(id: string, updates: Partial<CfiConversation>): Promise<CfiConversation | undefined>;
+  getCfiMessages(conversationId: string): Promise<CfiMessage[]>;
+  createCfiMessage(message: InsertCfiMessage & { conversationId: string; senderUserId: string }): Promise<CfiMessage>;
   createCfiLegalAcceptance(acceptance: InsertCfiLegalAcceptance & { userId: string }): Promise<CfiLegalAcceptance>;
   getCfiLatestLegalAcceptance(userId: string, acceptanceType: string): Promise<CfiLegalAcceptance | undefined>;
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
@@ -3600,6 +3630,157 @@ export class DatabaseStorage implements IStorage {
       .delete(cfiStudentFiles)
       .where(and(eq(cfiStudentFiles.id, id), eq(cfiStudentFiles.studentId, studentId)));
     return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getCfiStudentMilestones(studentId: string): Promise<CfiStudentMilestone[]> {
+    return await db
+      .select()
+      .from(cfiStudentMilestones)
+      .where(eq(cfiStudentMilestones.studentId, studentId))
+      .orderBy(desc(cfiStudentMilestones.createdAt));
+  }
+
+  async getCfiStudentMilestoneById(id: string): Promise<CfiStudentMilestone | undefined> {
+    const [milestone] = await db.select().from(cfiStudentMilestones).where(eq(cfiStudentMilestones.id, id));
+    return milestone;
+  }
+
+  async createCfiStudentMilestone(
+    milestone: InsertCfiStudentMilestone & { studentId: string }
+  ): Promise<CfiStudentMilestone> {
+    const [created] = await db.insert(cfiStudentMilestones).values(milestone).returning();
+    return created;
+  }
+
+  async updateCfiStudentMilestone(
+    id: string,
+    studentId: string,
+    updates: Partial<CfiStudentMilestone>
+  ): Promise<CfiStudentMilestone | undefined> {
+    const [updated] = await db
+      .update(cfiStudentMilestones)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(cfiStudentMilestones.id, id), eq(cfiStudentMilestones.studentId, studentId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteCfiStudentMilestone(id: string, studentId: string): Promise<boolean> {
+    const result = await db
+      .delete(cfiStudentMilestones)
+      .where(and(eq(cfiStudentMilestones.id, id), eq(cfiStudentMilestones.studentId, studentId)));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getCfiStudentEndorsements(studentId: string): Promise<CfiStudentEndorsement[]> {
+    return await db
+      .select()
+      .from(cfiStudentEndorsements)
+      .where(eq(cfiStudentEndorsements.studentId, studentId))
+      .orderBy(desc(cfiStudentEndorsements.createdAt));
+  }
+
+  async getCfiStudentEndorsementById(id: string): Promise<CfiStudentEndorsement | undefined> {
+    const [endorsement] = await db.select().from(cfiStudentEndorsements).where(eq(cfiStudentEndorsements.id, id));
+    return endorsement;
+  }
+
+  async createCfiStudentEndorsement(
+    endorsement: InsertCfiStudentEndorsement & { studentId: string }
+  ): Promise<CfiStudentEndorsement> {
+    const [created] = await db.insert(cfiStudentEndorsements).values(endorsement).returning();
+    return created;
+  }
+
+  async updateCfiStudentEndorsement(
+    id: string,
+    studentId: string,
+    updates: Partial<CfiStudentEndorsement>
+  ): Promise<CfiStudentEndorsement | undefined> {
+    const [updated] = await db
+      .update(cfiStudentEndorsements)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(cfiStudentEndorsements.id, id), eq(cfiStudentEndorsements.studentId, studentId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteCfiStudentEndorsement(id: string, studentId: string): Promise<boolean> {
+    const result = await db
+      .delete(cfiStudentEndorsements)
+      .where(and(eq(cfiStudentEndorsements.id, id), eq(cfiStudentEndorsements.studentId, studentId)));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getCfiConversationById(id: string): Promise<CfiConversation | undefined> {
+    const [conversation] = await db.select().from(cfiConversations).where(eq(cfiConversations.id, id));
+    return conversation;
+  }
+
+  async getCfiConversation(profileId: string, studentId: string): Promise<CfiConversation | undefined> {
+    const [conversation] = await db
+      .select()
+      .from(cfiConversations)
+      .where(and(eq(cfiConversations.cfiProfileId, profileId), eq(cfiConversations.studentId, studentId)));
+    return conversation;
+  }
+
+  async getCfiConversationsByProfile(profileId: string): Promise<CfiConversation[]> {
+    return await db
+      .select()
+      .from(cfiConversations)
+      .where(eq(cfiConversations.cfiProfileId, profileId))
+      .orderBy(desc(cfiConversations.updatedAt));
+  }
+
+  async getCfiConversationsByStudent(studentId: string): Promise<CfiConversation[]> {
+    return await db
+      .select()
+      .from(cfiConversations)
+      .where(eq(cfiConversations.studentId, studentId))
+      .orderBy(desc(cfiConversations.updatedAt));
+  }
+
+  async createCfiConversation(
+    conversation: InsertCfiConversation & { cfiProfileId: string; studentId: string }
+  ): Promise<CfiConversation> {
+    const [created] = await db
+      .insert(cfiConversations)
+      .values(conversation)
+      .onConflictDoUpdate({
+        target: [cfiConversations.cfiProfileId, cfiConversations.studentId],
+        set: { updatedAt: new Date() },
+      })
+      .returning();
+    return created;
+  }
+
+  async updateCfiConversation(id: string, updates: Partial<CfiConversation>): Promise<CfiConversation | undefined> {
+    const [updated] = await db
+      .update(cfiConversations)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(cfiConversations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getCfiMessages(conversationId: string): Promise<CfiMessage[]> {
+    return await db
+      .select()
+      .from(cfiMessages)
+      .where(eq(cfiMessages.conversationId, conversationId))
+      .orderBy(asc(cfiMessages.createdAt));
+  }
+
+  async createCfiMessage(
+    message: InsertCfiMessage & { conversationId: string; senderUserId: string }
+  ): Promise<CfiMessage> {
+    const [created] = await db.insert(cfiMessages).values(message).returning();
+    await db
+      .update(cfiConversations)
+      .set({ updatedAt: new Date() })
+      .where(eq(cfiConversations.id, message.conversationId));
+    return created;
   }
 
   async createCfiLegalAcceptance(

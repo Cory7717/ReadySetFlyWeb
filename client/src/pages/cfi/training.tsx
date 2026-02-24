@@ -11,7 +11,16 @@ import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
-import type { CfiLesson, CfiLessonTemplate, CfiStudent, CfiStudentFile } from "@shared/schema";
+import { SignatureDialog } from "@/components/cfi/SignatureDialog";
+import type {
+  CfiLesson,
+  CfiLessonTemplate,
+  CfiStudent,
+  CfiStudentEndorsement,
+  CfiStudentFile,
+  CfiStudentMilestone,
+  CfiMessage,
+} from "@shared/schema";
 import { endorsementTemplates } from "@shared/endorsement-templates";
 
 type StudentWithUser = CfiStudent & {
@@ -24,8 +33,24 @@ type StudentWithUser = CfiStudent & {
   };
 };
 
+type ThreadWithStudent = {
+  id: string;
+  cfiProfileId: string;
+  studentId: string;
+  updatedAt?: string | null;
+  student: CfiStudent;
+  user?: {
+    id: string;
+    email?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+  };
+};
+
 const LESSON_TYPES = ["flight", "ground", "sim", "brief"];
 const LESSON_STATUSES = ["planned", "in_progress", "complete"];
+const MILESTONE_STATUSES = ["not_started", "in_progress", "complete"];
+const ENDORSEMENT_STATUSES = ["draft", "issued", "signed"];
 
 const toTaskLines = (value: any) => {
   if (Array.isArray(value)) return value.join("\n");
@@ -33,8 +58,16 @@ const toTaskLines = (value: any) => {
   return "";
 };
 
+const formatDate = (value?: string | Date | null) => {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleDateString();
+};
+
 export default function CfiTrainingCenter() {
-  const { entitlements } = useAuth();
+  const { user } = useAuth();
+  const entitlements = (user as any)?.entitlements;
   const canUseCfi = !!entitlements?.canUseCfi;
   const queryClient = useQueryClient();
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -61,6 +94,29 @@ export default function CfiTrainingCenter() {
     tasks: "",
     scheduledAt: "",
   });
+
+  const [milestoneForm, setMilestoneForm] = useState({
+    title: "",
+    description: "",
+    status: "not_started",
+    dueDate: "",
+  });
+
+  const [endorsementForm, setEndorsementForm] = useState({
+    templateId: "custom",
+    title: "",
+    endorsementType: "",
+    templateText: "",
+    issuedAt: "",
+    instructorName: "",
+    instructorCertificate: "",
+    aircraftType: "",
+    notes: "",
+    status: "draft",
+  });
+
+  const [messageDraft, setMessageDraft] = useState("");
+  const [signatureTarget, setSignatureTarget] = useState<CfiStudentEndorsement | null>(null);
 
   useEffect(() => {
     trackEvent("cfi_training_view");
@@ -106,6 +162,51 @@ export default function CfiTrainingCenter() {
     },
   });
 
+  const { data: milestones = [] } = useQuery<CfiStudentMilestone[]>({
+    queryKey: ["/api/cfi/students", selectedStudentId, "milestones"],
+    enabled: canUseCfi && !!selectedStudentId,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/cfi/students/${selectedStudentId}/milestones`);
+      if (!res.ok) throw new Error("Failed to load milestones");
+      return res.json();
+    },
+  });
+
+  const { data: endorsements = [] } = useQuery<CfiStudentEndorsement[]>({
+    queryKey: ["/api/cfi/students", selectedStudentId, "endorsements"],
+    enabled: canUseCfi && !!selectedStudentId,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/cfi/students/${selectedStudentId}/endorsements`);
+      if (!res.ok) throw new Error("Failed to load endorsements");
+      return res.json();
+    },
+  });
+
+  const { data: threads = [] } = useQuery<ThreadWithStudent[]>({
+    queryKey: ["/api/cfi/messages/threads"],
+    enabled: canUseCfi,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/cfi/messages/threads");
+      if (!res.ok) throw new Error("Failed to load message threads");
+      return res.json();
+    },
+  });
+
+  const activeThread = useMemo(
+    () => threads.find((thread) => thread.studentId === selectedStudentId) || null,
+    [threads, selectedStudentId]
+  );
+
+  const { data: messages = [] } = useQuery<CfiMessage[]>({
+    queryKey: ["/api/cfi/messages", activeThread?.id],
+    enabled: canUseCfi && !!activeThread?.id,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/cfi/messages/${activeThread?.id}`);
+      if (!res.ok) throw new Error("Failed to load messages");
+      return res.json();
+    },
+  });
+
   useEffect(() => {
     if (!selectedStudentId && students.length > 0) {
       setSelectedStudentId(students[0].id);
@@ -116,6 +217,11 @@ export default function CfiTrainingCenter() {
     () => students.find((student) => student.id === selectedStudentId) || null,
     [students, selectedStudentId]
   );
+
+  const completedMilestones = milestones.filter((milestone) => milestone.status === "complete").length;
+  const milestoneProgress = milestones.length
+    ? Math.round((completedMilestones / milestones.length) * 100)
+    : 0;
 
   useEffect(() => {
     if (lessonForm.templateId === "custom") return;
@@ -133,6 +239,18 @@ export default function CfiTrainingCenter() {
       lessonType: nextType,
     }));
   }, [lessonForm.templateId, templates]);
+
+  useEffect(() => {
+    if (endorsementForm.templateId === "custom") return;
+    const template = endorsementTemplates.find((item) => item.id === endorsementForm.templateId);
+    if (!template) return;
+    setEndorsementForm((prev) => ({
+      ...prev,
+      title: prev.title || template.title,
+      endorsementType: prev.endorsementType || template.reference,
+      templateText: prev.templateText || template.template,
+    }));
+  }, [endorsementForm.templateId]);
 
   const addStudentMutation = useMutation({
     mutationFn: async () => {
@@ -250,6 +368,168 @@ export default function CfiTrainingCenter() {
     },
     onError: (error: any) => {
       toast({ title: "Unable to delete lesson", description: error?.message, variant: "destructive" });
+    },
+  });
+
+  const createMilestoneMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedStudentId) throw new Error("Select a student first");
+      const res = await apiRequest("POST", `/api/cfi/students/${selectedStudentId}/milestones`, {
+        title: milestoneForm.title.trim(),
+        description: milestoneForm.description || null,
+        status: milestoneForm.status,
+        dueDate: milestoneForm.dueDate || null,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to add milestone");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cfi/students", selectedStudentId, "milestones"] });
+      setMilestoneForm({ title: "", description: "", status: "not_started", dueDate: "" });
+      toast({ title: "Milestone added" });
+      trackEvent("cfi_milestone_created");
+    },
+    onError: (error: any) => {
+      toast({ title: "Unable to add milestone", description: error?.message, variant: "destructive" });
+    },
+  });
+
+  const updateMilestoneMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<CfiStudentMilestone> }) => {
+      const res = await apiRequest("PATCH", `/api/cfi/milestones/${id}`, updates);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to update milestone");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cfi/students", selectedStudentId, "milestones"] });
+      trackEvent("cfi_milestone_updated");
+    },
+    onError: (error: any) => {
+      toast({ title: "Unable to update milestone", description: error?.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMilestoneMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/cfi/milestones/${id}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to delete milestone");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cfi/students", selectedStudentId, "milestones"] });
+      toast({ title: "Milestone removed" });
+      trackEvent("cfi_milestone_deleted");
+    },
+    onError: (error: any) => {
+      toast({ title: "Unable to delete milestone", description: error?.message, variant: "destructive" });
+    },
+  });
+
+  const createEndorsementMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedStudentId) throw new Error("Select a student first");
+      const res = await apiRequest("POST", `/api/cfi/students/${selectedStudentId}/endorsements`, {
+        title: endorsementForm.title.trim(),
+        endorsementType: endorsementForm.endorsementType || null,
+        templateText: endorsementForm.templateText || null,
+        issuedAt: endorsementForm.issuedAt || null,
+        instructorName: endorsementForm.instructorName || null,
+        instructorCertificate: endorsementForm.instructorCertificate || null,
+        aircraftType: endorsementForm.aircraftType || null,
+        notes: endorsementForm.notes || null,
+        status: endorsementForm.status || "draft",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to create endorsement");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cfi/students", selectedStudentId, "endorsements"] });
+      setEndorsementForm({
+        templateId: "custom",
+        title: "",
+        endorsementType: "",
+        templateText: "",
+        issuedAt: "",
+        instructorName: "",
+        instructorCertificate: "",
+        aircraftType: "",
+        notes: "",
+        status: "draft",
+      });
+      toast({ title: "Endorsement created" });
+      trackEvent("cfi_endorsement_created");
+    },
+    onError: (error: any) => {
+      toast({ title: "Unable to create endorsement", description: error?.message, variant: "destructive" });
+    },
+  });
+
+  const updateEndorsementMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<CfiStudentEndorsement> }) => {
+      const res = await apiRequest("PATCH", `/api/cfi/endorsements/${id}`, updates);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to update endorsement");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cfi/students", selectedStudentId, "endorsements"] });
+      trackEvent("cfi_endorsement_updated");
+    },
+    onError: (error: any) => {
+      toast({ title: "Unable to update endorsement", description: error?.message, variant: "destructive" });
+    },
+  });
+
+  const signEndorsementMutation = useMutation({
+    mutationFn: async ({
+      id,
+      signatureDataUrl,
+      signedByName,
+    }: {
+      id: string;
+      signatureDataUrl: string;
+      signedByName: string;
+    }) => {
+      const res = await apiRequest("POST", `/api/cfi/endorsements/${id}/sign`, {
+        signatureDataUrl,
+        signedByName,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to sign endorsement");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cfi/students", selectedStudentId, "endorsements"] });
+      setSignatureTarget(null);
+      toast({ title: "Endorsement signed" });
+      trackEvent("cfi_endorsement_signed");
+    },
+    onError: (error: any) => {
+      toast({ title: "Unable to sign endorsement", description: error?.message, variant: "destructive" });
+    },
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeThread?.id) throw new Error("Select a student first");
+      const res = await apiRequest("POST", `/api/cfi/messages/${activeThread.id}`, {
+        body: messageDraft.trim(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to send message");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cfi/messages", activeThread?.id] });
+      setMessageDraft("");
+      trackEvent("cfi_message_sent");
+    },
+    onError: (error: any) => {
+      toast({ title: "Unable to send message", description: error?.message, variant: "destructive" });
     },
   });
 
@@ -567,6 +847,369 @@ export default function CfiTrainingCenter() {
 
         <Card>
           <CardHeader>
+            <CardTitle>Progress milestones</CardTitle>
+            <CardDescription>Track ACS items and stage gates for the selected student.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!selectedStudent ? (
+              <div className="text-sm text-muted-foreground">Select a student to manage milestones.</div>
+            ) : (
+              <>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input
+                    placeholder="Milestone title"
+                    value={milestoneForm.title}
+                    onChange={(event) => setMilestoneForm({ ...milestoneForm, title: event.target.value })}
+                  />
+                  <Select
+                    value={milestoneForm.status}
+                    onValueChange={(value) => setMilestoneForm({ ...milestoneForm, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MILESTONE_STATUSES.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="date"
+                    value={milestoneForm.dueDate}
+                    onChange={(event) => setMilestoneForm({ ...milestoneForm, dueDate: event.target.value })}
+                  />
+                  <Input
+                    placeholder="ACS area or reference (optional)"
+                    value={milestoneForm.description}
+                    onChange={(event) => setMilestoneForm({ ...milestoneForm, description: event.target.value })}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    onClick={() => createMilestoneMutation.mutate()}
+                    disabled={createMilestoneMutation.isPending || !milestoneForm.title.trim()}
+                  >
+                    {createMilestoneMutation.isPending ? "Adding..." : "Add milestone"}
+                  </Button>
+                  <div className="text-xs text-muted-foreground">
+                    Progress: {completedMilestones}/{milestones.length} complete ({milestoneProgress}%)
+                  </div>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted/60">
+                  <div
+                    className="h-2 rounded-full bg-primary transition-all"
+                    style={{ width: `${milestoneProgress}%` }}
+                  />
+                </div>
+
+                {milestones.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No milestones yet.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {milestones.map((milestone) => (
+                      <div key={milestone.id} className="rounded-lg border p-3 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">{milestone.title}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {milestone.status} - due {formatDate(milestone.dueDate as any)}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={milestone.status || "not_started"}
+                              onValueChange={(value) =>
+                                updateMilestoneMutation.mutate({
+                                  id: milestone.id,
+                                  updates: {
+                                    status: value,
+                                    completedAt: value === "complete" ? new Date().toISOString() : null,
+                                  } as any,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="h-8 w-[160px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {MILESTONE_STATUSES.map((status) => (
+                                  <SelectItem key={status} value={status}>
+                                    {status}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => deleteMilestoneMutation.mutate(milestone.id)}
+                              disabled={deleteMilestoneMutation.isPending}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                        {milestone.description && (
+                          <div className="text-xs text-muted-foreground">{milestone.description}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Endorsements & sign-offs</CardTitle>
+            <CardDescription>Create endorsements and capture signatures for this student.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!selectedStudent ? (
+              <div className="text-sm text-muted-foreground">Select a student to manage endorsements.</div>
+            ) : (
+              <>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Select
+                    value={endorsementForm.templateId}
+                    onValueChange={(value) => {
+                      if (value === "custom") {
+                        setEndorsementForm((prev) => ({
+                          ...prev,
+                          templateId: value,
+                          title: "",
+                          endorsementType: "",
+                          templateText: "",
+                        }));
+                        return;
+                      }
+                      setEndorsementForm((prev) => ({ ...prev, templateId: value }));
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Template (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="custom">Custom endorsement</SelectItem>
+                      {endorsementTemplates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    placeholder="Endorsement title"
+                    value={endorsementForm.title}
+                    onChange={(event) => setEndorsementForm({ ...endorsementForm, title: event.target.value })}
+                  />
+                  <Input
+                    placeholder="Endorsement type / ref (optional)"
+                    value={endorsementForm.endorsementType}
+                    onChange={(event) => setEndorsementForm({ ...endorsementForm, endorsementType: event.target.value })}
+                  />
+                  <Input
+                    type="date"
+                    value={endorsementForm.issuedAt}
+                    onChange={(event) => setEndorsementForm({ ...endorsementForm, issuedAt: event.target.value })}
+                  />
+                  <Input
+                    placeholder="Instructor name"
+                    value={endorsementForm.instructorName}
+                    onChange={(event) => setEndorsementForm({ ...endorsementForm, instructorName: event.target.value })}
+                  />
+                  <Input
+                    placeholder="Instructor certificate"
+                    value={endorsementForm.instructorCertificate}
+                    onChange={(event) => setEndorsementForm({ ...endorsementForm, instructorCertificate: event.target.value })}
+                  />
+                  <Input
+                    placeholder="Aircraft type (optional)"
+                    value={endorsementForm.aircraftType}
+                    onChange={(event) => setEndorsementForm({ ...endorsementForm, aircraftType: event.target.value })}
+                  />
+                  <Select
+                    value={endorsementForm.status}
+                    onValueChange={(value) => setEndorsementForm({ ...endorsementForm, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ENDORSEMENT_STATUSES.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Textarea
+                  placeholder="Endorsement text (optional)"
+                  value={endorsementForm.templateText}
+                  onChange={(event) => setEndorsementForm({ ...endorsementForm, templateText: event.target.value })}
+                  rows={4}
+                />
+                <Textarea
+                  placeholder="Notes (optional)"
+                  value={endorsementForm.notes}
+                  onChange={(event) => setEndorsementForm({ ...endorsementForm, notes: event.target.value })}
+                  rows={3}
+                />
+                <Button
+                  onClick={() => createEndorsementMutation.mutate()}
+                  disabled={createEndorsementMutation.isPending || !endorsementForm.title.trim()}
+                >
+                  {createEndorsementMutation.isPending ? "Saving..." : "Create endorsement"}
+                </Button>
+
+                {endorsements.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No endorsements created yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {endorsements.map((endorsement) => (
+                      <div key={endorsement.id} className="rounded-lg border p-3 space-y-2">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">{endorsement.title}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {endorsement.status} - issued {formatDate(endorsement.issuedAt as any)}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {endorsement.status !== "signed" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  updateEndorsementMutation.mutate({
+                                    id: endorsement.id,
+                                    updates: {
+                                      status: "issued",
+                                      issuedAt: endorsement.issuedAt || new Date().toISOString().slice(0, 10),
+                                    } as any,
+                                  })
+                                }
+                              >
+                                Mark issued
+                              </Button>
+                            )}
+                            {endorsement.status !== "signed" && (
+                              <Button size="sm" onClick={() => setSignatureTarget(endorsement)}>
+                                Sign
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        {endorsement.endorsementType && (
+                          <div className="text-xs text-muted-foreground">{endorsement.endorsementType}</div>
+                        )}
+                        {endorsement.templateText && (
+                          <div className="rounded-md bg-muted/60 p-2 text-xs whitespace-pre-wrap">
+                            {endorsement.templateText}
+                          </div>
+                        )}
+                        {endorsement.notes && (
+                          <div className="text-xs text-muted-foreground">{endorsement.notes}</div>
+                        )}
+                        {endorsement.signatureDataUrl && (
+                          <div className="space-y-2">
+                            <div className="text-xs text-muted-foreground">
+                              Signed by {endorsement.signedByName || "CFI"}{" "}
+                              {endorsement.signedAt ? `on ${new Date(endorsement.signedAt as any).toLocaleString()}` : ""}
+                            </div>
+                            <img
+                              src={endorsement.signatureDataUrl}
+                              alt="Signature"
+                              className="h-20 rounded border bg-white p-2"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Messages</CardTitle>
+            <CardDescription>Coordinate directly with your student inside RSF.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!selectedStudent ? (
+              <div className="text-sm text-muted-foreground">Select a student to view messages.</div>
+            ) : !activeThread ? (
+              <div className="text-sm text-muted-foreground">Message thread not ready yet.</div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+                <div className="space-y-2">
+                  {threads.map((thread) => {
+                    const name = [thread.user?.firstName, thread.user?.lastName].filter(Boolean).join(" ");
+                    const isActive = thread.studentId === selectedStudentId;
+                    return (
+                      <button
+                        key={thread.id}
+                        type="button"
+                        onClick={() => setSelectedStudentId(thread.studentId)}
+                        className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${
+                          isActive ? "border-primary/60 bg-primary/5" : "hover:bg-muted/40"
+                        }`}
+                      >
+                        <div className="font-medium">{name || thread.user?.email || "Student"}</div>
+                        <div className="text-xs text-muted-foreground">{thread.student?.status || "active"}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="space-y-3">
+                  <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border p-3">
+                    {messages.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">No messages yet.</div>
+                    ) : (
+                      messages.map((message) => {
+                        const isMe = message.senderUserId === user?.id;
+                        return (
+                          <div
+                            key={message.id}
+                            className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                              isMe ? "ml-auto bg-primary text-primary-foreground" : "bg-muted"
+                            }`}
+                          >
+                            {message.body}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  <Textarea
+                    value={messageDraft}
+                    onChange={(event) => setMessageDraft(event.target.value)}
+                    rows={3}
+                    placeholder="Write a quick update or question"
+                  />
+                  <Button
+                    onClick={() => sendMessageMutation.mutate()}
+                    disabled={sendMessageMutation.isPending || !messageDraft.trim()}
+                  >
+                    Send message
+                  </Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <CardTitle>Student documents</CardTitle>
             <CardDescription>Shared training files for the selected student.</CardDescription>
           </CardHeader>
@@ -630,6 +1273,24 @@ export default function CfiTrainingCenter() {
             ))}
           </CardContent>
         </Card>
+
+        <SignatureDialog
+          open={!!signatureTarget}
+          onOpenChange={(open) => {
+            if (!open) setSignatureTarget(null);
+          }}
+          onSign={(signatureDataUrl, signedByName) => {
+            if (!signatureTarget) return;
+            signEndorsementMutation.mutate({
+              id: signatureTarget.id,
+              signatureDataUrl,
+              signedByName,
+            });
+          }}
+          isPending={signEndorsementMutation.isPending}
+          title="Sign endorsement"
+          description="Capture a signature to finalize this endorsement."
+        />
       </div>
     </div>
   );

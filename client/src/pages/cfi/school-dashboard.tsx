@@ -25,6 +25,14 @@ type SchoolDashboardResponse = {
   school: CfiSchool;
   members: SchoolMember[];
   role: string;
+  metrics?: {
+    instructors: number;
+    students: number;
+    lessons: number;
+    upcomingLessons: number;
+    completedLessons: number;
+    milestonesCompleted: number;
+  };
 } | null;
 
 const toOptional = (value: string) => (value.trim() ? value.trim() : null);
@@ -170,6 +178,7 @@ export default function CfiSchoolDashboard() {
 
   const members = dashboard?.members || [];
   const canManage = dashboard?.role === "owner" || dashboard?.role === "admin";
+  const metrics = dashboard?.metrics;
 
   return (
     <div className="min-h-screen bg-background">
@@ -181,6 +190,43 @@ export default function CfiSchoolDashboard() {
             Create your school profile, invite instructors, and centralize training operations.
           </p>
         </div>
+
+        {dashboard?.school && (
+          <Card>
+            <CardHeader>
+              <CardTitle>School metrics</CardTitle>
+              <CardDescription>Snapshot of current training activity.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Instructors</div>
+                  <div className="text-2xl font-semibold">{metrics?.instructors ?? members.length}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Active students</div>
+                  <div className="text-2xl font-semibold">{metrics?.students ?? 0}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Total lessons</div>
+                  <div className="text-2xl font-semibold">{metrics?.lessons ?? 0}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Upcoming lessons</div>
+                  <div className="text-2xl font-semibold">{metrics?.upcomingLessons ?? 0}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Completed lessons</div>
+                  <div className="text-2xl font-semibold">{metrics?.completedLessons ?? 0}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Milestones completed</div>
+                  <div className="text-2xl font-semibold">{metrics?.milestonesCompleted ?? 0}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

@@ -8,11 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ObjectUploader } from "@/components/ObjectUploader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import type { UploadResult } from "@uppy/core";
 
 const LEGAL_VERSION = "2025-01";
 
@@ -46,6 +49,18 @@ const normalizeTimeValue = (value?: string | null) => {
 };
 
 const toOptional = (value: string) => (value.trim() ? value.trim() : null);
+const resolveHeadshotUrl = (value?: string | null) => {
+  if (!value) return undefined;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith("/objects/")) return apiUrl(value);
+  if (value.includes("/uploads/")) {
+    const idx = value.indexOf("/uploads/");
+    if (idx >= 0) {
+      return apiUrl(`/objects/${value.slice(idx + 1)}`);
+    }
+  }
+  return value;
+};
 
 type DashboardResponse = {
   profile: CfiProfile;
@@ -82,6 +97,7 @@ export default function CfiDashboard() {
     slug: "",
     headline: "",
     bio: "",
+    headshotUrl: "",
     locationCity: "",
     locationState: "",
     airportHome: "",
@@ -173,6 +189,7 @@ export default function CfiDashboard() {
       slug: profile.slug || "",
       headline: profile.headline || "",
       bio: profile.bio || "",
+      headshotUrl: profile.headshotUrl || "",
       locationCity: profile.locationCity || "",
       locationState: profile.locationState || "",
       airportHome: profile.airportHome || "",
@@ -204,6 +221,7 @@ export default function CfiDashboard() {
         slug: formState.slug,
         headline: toOptional(formState.headline),
         bio: toOptional(formState.bio),
+        headshotUrl: toOptional(formState.headshotUrl),
         locationCity: toOptional(formState.locationCity),
         locationState: toOptional(formState.locationState),
         airportHome: toOptional(formState.airportHome),
@@ -229,6 +247,51 @@ export default function CfiDashboard() {
       toast({ title: "Failed to save profile", description: error.message, variant: "destructive" });
     },
   });
+
+  const handleHeadshotGetUploadParameters = async () => {
+    const response = await fetch(apiUrl("/api/objects/upload"), {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error("Failed to get upload URL");
+    }
+    const data = await response.json();
+    return { method: "PUT" as const, url: data.uploadURL };
+  };
+
+  const handleHeadshotUploadComplete = async (
+    result: UploadResult<Record<string, unknown>, Record<string, unknown>>
+  ) => {
+    try {
+      for (const file of result.successful || []) {
+        if (!file.uploadURL) continue;
+        const aclResponse = await fetch(apiUrl("/api/objects/set-acl"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            path: file.uploadURL,
+            access: "publicRead",
+          }),
+        });
+        const aclData = aclResponse.ok ? await aclResponse.json() : null;
+        const imageUrl = aclData?.objectPath || file.uploadURL.split("?")[0];
+        setFormState((prev) => ({ ...prev, headshotUrl: imageUrl }));
+        toast({
+          title: "Headshot uploaded",
+          description: "Your instructor photo is ready to use.",
+        });
+      }
+    } catch (error) {
+      console.error("Headshot upload failed:", error);
+      toast({
+        title: "Upload failed",
+        description: "Please try uploading the image again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const saveAvailabilityMutation = useMutation({
     mutationFn: async () => {
@@ -367,6 +430,57 @@ export default function CfiDashboard() {
             <CardDescription>Keep your profile current for students searching the directory.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-4">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="h-20 w-20 rounded-full bg-muted overflow-hidden flex items-center justify-center">
+                    {formState.headshotUrl ? (
+                      <img
+                        src={resolveHeadshotUrl(formState.headshotUrl)}
+                        alt="Instructor headshot"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No photo</span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Instructor headshot</p>
+                    <p className="text-xs text-muted-foreground">
+                      Add a clear photo so students can verify your identity.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <ObjectUploader
+                    maxNumberOfFiles={1}
+                    allowedFileTypes={["image/*"]}
+                    maxFileSize={5 * 1024 * 1024}
+                    onGetUploadParameters={handleHeadshotGetUploadParameters}
+                    onComplete={handleHeadshotUploadComplete}
+                    onError={(message) => {
+                      toast({
+                        title: "Upload failed",
+                        description: message,
+                        variant: "destructive",
+                      });
+                    }}
+                    buttonVariant="secondary"
+                  >
+                    Upload headshot
+                  </ObjectUploader>
+                  {formState.headshotUrl && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setFormState((prev) => ({ ...prev, headshotUrl: "" }))}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Display name</label>

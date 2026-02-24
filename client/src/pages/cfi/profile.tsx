@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent } from "@/lib/analytics";
+import { apiUrl } from "@/lib/api";
 
 const normalizeList = (value: unknown): string[] => {
   if (Array.isArray(value)) {
@@ -24,6 +25,19 @@ const normalizeList = (value: unknown): string[] => {
 const formatRate = (value?: number | null) => {
   if (!value && value !== 0) return "Rate on request";
   return `$${Math.round(value / 100)}/hr`;
+};
+
+const resolveHeadshotUrl = (value?: string | null) => {
+  if (!value) return undefined;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith("/objects/")) return apiUrl(value);
+  if (value.includes("/uploads/")) {
+    const idx = value.indexOf("/uploads/");
+    if (idx >= 0) {
+      return apiUrl(`/objects/${value.slice(idx + 1)}`);
+    }
+  }
+  return value;
 };
 
 export default function CfiProfilePage() {
@@ -81,18 +95,29 @@ export default function CfiProfilePage() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-10 space-y-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-2">
-            <Badge variant="outline">CFI Profile</Badge>
-            <h1 className="text-3xl font-bold">{profile.displayName}</h1>
-            <p className="text-muted-foreground max-w-2xl">{profile.headline || "Certified Flight Instructor"}</p>
-            <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-              {(profile.locationCity || profile.locationState) && (
-                <span>
-                  {profile.locationCity || ""}{profile.locationCity && profile.locationState ? ", " : ""}
-                  {profile.locationState || ""}
-                </span>
-              )}
-              {profile.airportHome && <span>Home airport: {profile.airportHome}</span>}
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+            {profile.headshotUrl && (
+              <div className="h-20 w-20 rounded-full overflow-hidden border">
+                <img
+                  src={resolveHeadshotUrl(profile.headshotUrl)}
+                  alt={`${profile.displayName} headshot`}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Badge variant="outline">CFI Profile</Badge>
+              <h1 className="text-3xl font-bold">{profile.displayName}</h1>
+              <p className="text-muted-foreground max-w-2xl">{profile.headline || "Certified Flight Instructor"}</p>
+              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                {(profile.locationCity || profile.locationState) && (
+                  <span>
+                    {profile.locationCity || ""}{profile.locationCity && profile.locationState ? ", " : ""}
+                    {profile.locationState || ""}
+                  </span>
+                )}
+                {profile.airportHome && <span>Home airport: {profile.airportHome}</span>}
+              </div>
             </div>
           </div>
           <div className="flex flex-col gap-2">

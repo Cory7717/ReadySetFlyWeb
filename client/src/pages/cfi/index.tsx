@@ -16,6 +16,19 @@ const formatRate = (value?: number | null) => {
   return `$${Math.round(value / 100)}/hr`;
 };
 
+const resolveHeadshotUrl = (value?: string | null) => {
+  if (!value) return undefined;
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith("/objects/")) return apiUrl(value);
+  if (value.includes("/uploads/")) {
+    const idx = value.indexOf("/uploads/");
+    if (idx >= 0) {
+      return apiUrl(`/objects/${value.slice(idx + 1)}`);
+    }
+  }
+  return value;
+};
+
 const normalizeList = (value: unknown): string[] => {
   if (Array.isArray(value)) {
     return value.map((item) => String(item)).filter(Boolean);
@@ -179,8 +192,25 @@ export default function CfiDirectory() {
             return (
               <Card key={profile.id} className="hover-elevate">
                 <CardHeader>
-                  <CardTitle>{profile.displayName}</CardTitle>
-                  <CardDescription>{profile.headline || "CFI on Ready Set Fly"}</CardDescription>
+                  <div className="flex items-center gap-3">
+                    {profile.headshotUrl ? (
+                      <div className="h-12 w-12 rounded-full overflow-hidden border">
+                        <img
+                          src={resolveHeadshotUrl(profile.headshotUrl)}
+                          alt={`${profile.displayName} headshot`}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                        CFI
+                      </div>
+                    )}
+                    <div>
+                      <CardTitle>{profile.displayName}</CardTitle>
+                      <CardDescription>{profile.headline || "CFI on Ready Set Fly"}</CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">

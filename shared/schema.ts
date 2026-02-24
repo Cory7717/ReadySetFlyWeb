@@ -1364,6 +1364,7 @@ export const cfiProfiles = pgTable("cfi_profiles", {
   displayName: text("display_name").notNull(),
   headline: text("headline"),
   bio: text("bio"),
+  headshotUrl: text("headshot_url"),
   locationCity: text("location_city"),
   locationState: text("location_state"),
   airportHome: text("airport_home"),

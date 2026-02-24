@@ -67,6 +67,7 @@ import CfiProfile from "@/pages/cfi/profile";
 import CfiRequest from "@/pages/cfi/request";
 import CfiDashboard from "@/pages/cfi/dashboard";
 import CfiSchoolDashboard from "@/pages/cfi/school-dashboard";
+import CfiTrainingCenter from "@/pages/cfi/training";
 import CfiTerms from "@/pages/cfi/terms";
 import CfiStudentTerms from "@/pages/cfi/student-terms";
 
@@ -75,6 +76,7 @@ const StudentWizard = lazy(() => import("@/pages/student/wizard"));
 const StudentRoadmap = lazy(() => import("@/pages/student/roadmap"));
 const StudentCost = lazy(() => import("@/pages/student/cost"));
 const StudentProgress = lazy(() => import("@/pages/student/progress"));
+const StudentTraining = lazy(() => import("@/pages/student/training"));
 const StudentWritten = lazy(() => import("@/pages/student/written"));
 const StudentSyllabi = lazy(() => import("@/pages/student/syllabi"));
 const StudentVorTrainer = lazy(() => import("@/pages/student/vor-trainer"));
@@ -180,6 +182,7 @@ function Router() {
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/dashboard/cfi" component={CfiDashboard} />
           <Route path="/dashboard/cfi-school" component={CfiSchoolDashboard} />
+          <Route path="/dashboard/cfi-training" component={CfiTrainingCenter} />
           <Route path="/profile" component={Profile} />
           <Route path="/my-listings" component={MyListings} />
           <Route path="/favorites" component={Favorites} />
@@ -225,6 +228,7 @@ function Router() {
           <Route path="/student/roadmap" component={() => <StudentPageLoader component={StudentRoadmap} />} />
           <Route path="/student/cost" component={() => <StudentPageLoader component={StudentCost} />} />
           <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
+          <Route path="/student/training" component={() => <StudentPageLoader component={StudentTraining} />} />
           <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
           <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
           <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />
@@ -240,6 +244,7 @@ function Router() {
           {/* Show "Sign In Required" page for unauthenticated users trying to access protected routes */}
           <Route path="/dashboard" component={RequireAuth} />
           <Route path="/dashboard/cfi" component={RequireAuth} />
+          <Route path="/dashboard/cfi-training" component={RequireAuth} />
           <Route path="/profile" component={RequireAuth} />
           <Route path="/my-listings" component={RequireAuth} />
           <Route path="/favorites" component={RequireAuth} />
@@ -284,6 +289,7 @@ function Router() {
           <Route path="/student/roadmap" component={() => <StudentPageLoader component={StudentRoadmap} />} />
           <Route path="/student/cost" component={() => <StudentPageLoader component={StudentCost} />} />
           <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
+          <Route path="/student/training" component={RequireAuth} />
           <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
           <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
           <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />

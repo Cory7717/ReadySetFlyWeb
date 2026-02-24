@@ -1462,6 +1462,71 @@ export const cfiBookingRequests = pgTable("cfi_booking_requests", {
   index("idx_cfi_booking_student").on(table.studentUserId),
 ]);
 
+// CFI Training - Student roster
+export const cfiStudents = pgTable("cfi_students", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cfiProfileId: varchar("cfi_profile_id").notNull().references(() => cfiProfiles.id, { onDelete: "cascade" }),
+  studentUserId: varchar("student_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("active"),
+  startDate: date("start_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_cfi_students").on(table.cfiProfileId, table.studentUserId),
+  index("idx_cfi_students_profile").on(table.cfiProfileId),
+  index("idx_cfi_students_student").on(table.studentUserId),
+]);
+
+export const cfiLessonTemplates = pgTable("cfi_lesson_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cfiProfileId: varchar("cfi_profile_id").notNull().references(() => cfiProfiles.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  lessonType: text("lesson_type").default("flight"),
+  objective: text("objective"),
+  tasks: jsonb("tasks").default(sql`'[]'::jsonb`),
+  estimatedMinutes: integer("estimated_minutes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_cfi_lesson_templates_profile").on(table.cfiProfileId),
+]);
+
+export const cfiLessons = pgTable("cfi_lessons", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cfiProfileId: varchar("cfi_profile_id").notNull().references(() => cfiProfiles.id, { onDelete: "cascade" }),
+  studentId: varchar("student_id").notNull().references(() => cfiStudents.id, { onDelete: "cascade" }),
+  templateId: varchar("template_id").references(() => cfiLessonTemplates.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  lessonType: text("lesson_type"),
+  objective: text("objective"),
+  tasks: jsonb("tasks").default(sql`'[]'::jsonb`),
+  status: text("status").notNull().default("planned"),
+  scheduledAt: timestamp("scheduled_at"),
+  completedAt: timestamp("completed_at"),
+  instructorNotes: text("instructor_notes"),
+  studentNotes: text("student_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_cfi_lessons_student").on(table.studentId),
+  index("idx_cfi_lessons_profile").on(table.cfiProfileId),
+]);
+
+export const cfiStudentFiles = pgTable("cfi_student_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  studentId: varchar("student_id").notNull().references(() => cfiStudents.id, { onDelete: "cascade" }),
+  uploadedByUserId: varchar("uploaded_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  fileSizeBytes: integer("file_size_bytes"),
+  storageProvider: text("storage_provider").notNull().default("object"),
+  storagePath: text("storage_path").notNull(),
+  mimeType: text("mime_type"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_cfi_student_files_student").on(table.studentId),
+]);
+
 export const cfiLegalAcceptances = pgTable("cfi_legal_acceptances", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -1741,6 +1806,48 @@ export const insertCfiBookingRequestSchema = createInsertSchema(cfiBookingReques
   studentUserId: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertCfiStudentSchema = createInsertSchema(cfiStudents).omit({
+  id: true,
+  cfiProfileId: true,
+  studentUserId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  startDate: z.string().optional().nullable(),
+});
+
+export const insertCfiLessonTemplateSchema = createInsertSchema(cfiLessonTemplates)
+  .omit({
+    id: true,
+    cfiProfileId: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    tasks: z.array(z.string()).optional(),
+  });
+
+export const insertCfiLessonSchema = createInsertSchema(cfiLessons)
+  .omit({
+    id: true,
+    cfiProfileId: true,
+    studentId: true,
+    createdAt: true,
+    updatedAt: true,
+  })
+  .extend({
+    tasks: z.array(z.string()).optional(),
+    scheduledAt: z.string().optional().nullable(),
+    completedAt: z.string().optional().nullable(),
+  });
+
+export const insertCfiStudentFileSchema = createInsertSchema(cfiStudentFiles).omit({
+  id: true,
+  studentId: true,
+  uploadedByUserId: true,
+  createdAt: true,
 });
 
 export const insertCfiLegalAcceptanceSchema = createInsertSchema(cfiLegalAcceptances).omit({
@@ -2279,6 +2386,14 @@ export type CfiAvailabilityRule = typeof cfiAvailabilityRules.$inferSelect;
 export type InsertCfiAvailabilityRule = z.infer<typeof insertCfiAvailabilityRuleSchema>;
 export type CfiBookingRequest = typeof cfiBookingRequests.$inferSelect;
 export type InsertCfiBookingRequest = z.infer<typeof insertCfiBookingRequestSchema>;
+export type CfiStudent = typeof cfiStudents.$inferSelect;
+export type InsertCfiStudent = z.infer<typeof insertCfiStudentSchema>;
+export type CfiLessonTemplate = typeof cfiLessonTemplates.$inferSelect;
+export type InsertCfiLessonTemplate = z.infer<typeof insertCfiLessonTemplateSchema>;
+export type CfiLesson = typeof cfiLessons.$inferSelect;
+export type InsertCfiLesson = z.infer<typeof insertCfiLessonSchema>;
+export type CfiStudentFile = typeof cfiStudentFiles.$inferSelect;
+export type InsertCfiStudentFile = z.infer<typeof insertCfiStudentFileSchema>;
 export type CfiLegalAcceptance = typeof cfiLegalAcceptances.$inferSelect;
 export type InsertCfiLegalAcceptance = z.infer<typeof insertCfiLegalAcceptanceSchema>;
 export type UserSettings = typeof userSettings.$inferSelect;

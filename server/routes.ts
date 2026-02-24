@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, inArray, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, cfiStudents, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -13193,7 +13193,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!targetUser) {
         return res.status(404).json({ error: "User not found for email" });
       }
-      const result = insertCfiSchoolMemberSchema.safeParse({ role, status: "active" });
+      const result = insertCfiSchoolMemberSchema.safeParse({
+        userId: targetUser.id,
+        role,
+        status: "active",
+      });
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
       }
@@ -13229,6 +13233,614 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to remove CFI school member:", error);
       res.status(500).json({ error: "Failed to remove school member" });
+    }
+  });
+
+  // CFI Training Center - student roster
+  app.get("/api/cfi/students", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const rows = await db
+        .select({
+          student: cfiStudents,
+          user: {
+            id: users.id,
+            email: users.email,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+          },
+        })
+        .from(cfiStudents)
+        .innerJoin(users, eq(users.id, cfiStudents.studentUserId))
+        .where(eq(cfiStudents.cfiProfileId, profile.id))
+        .orderBy(desc(cfiStudents.createdAt));
+
+      const formatted = rows.map((row) => ({
+        ...row.student,
+        user: row.user,
+      }));
+      res.json(formatted);
+    } catch (error) {
+      console.error("Failed to load CFI students:", error);
+      res.status(500).json({ error: "Failed to load students" });
+    }
+  });
+
+  app.post("/api/cfi/students", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const payload = z.object({
+        email: z.string().email(),
+        startDate: z.string().optional().nullable(),
+        notes: z.string().optional().nullable(),
+      }).safeParse(req.body);
+      if (!payload.success) {
+        return res.status(400).json({ error: payload.error.format() });
+      }
+      const studentUser = await storage.getUserByEmail(payload.data.email);
+      if (!studentUser) {
+        return res.status(404).json({ error: "No RSF account found for this email" });
+      }
+      const existing = await storage.getCfiStudentByProfileAndUser(profile.id, studentUser.id);
+      if (existing) {
+        return res.status(200).json(existing);
+      }
+      const created = await storage.createCfiStudent({
+        cfiProfileId: profile.id,
+        studentUserId: studentUser.id,
+        startDate: payload.data.startDate ? new Date(payload.data.startDate) : null,
+        notes: payload.data.notes || null,
+        status: "active",
+      } as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to add CFI student:", error);
+      res.status(500).json({ error: "Failed to add student" });
+    }
+  });
+
+  app.patch("/api/cfi/students/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const result = insertCfiStudentSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updates = result.data as any;
+      if (updates.startDate === "") {
+        updates.startDate = null;
+      } else if (updates.startDate) {
+        updates.startDate = new Date(updates.startDate);
+      }
+      const updated = await storage.updateCfiStudent(req.params.id, profile.id, updates);
+      if (!updated) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update CFI student:", error);
+      res.status(500).json({ error: "Failed to update student" });
+    }
+  });
+
+  app.delete("/api/cfi/students/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const success = await storage.deleteCfiStudent(req.params.id, profile.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete CFI student:", error);
+      res.status(500).json({ error: "Failed to delete student" });
+    }
+  });
+
+  // CFI lesson templates
+  app.get("/api/cfi/lesson-templates", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const templates = await storage.getCfiLessonTemplates(profile.id);
+      res.json(templates);
+    } catch (error) {
+      console.error("Failed to load lesson templates:", error);
+      res.status(500).json({ error: "Failed to load templates" });
+    }
+  });
+
+  app.post("/api/cfi/lesson-templates", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const result = insertCfiLessonTemplateSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const payload = result.data as any;
+      const created = await storage.createCfiLessonTemplate({
+        ...payload,
+        cfiProfileId: profile.id,
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create lesson template:", error);
+      res.status(500).json({ error: "Failed to create template" });
+    }
+  });
+
+  app.patch("/api/cfi/lesson-templates/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const result = insertCfiLessonTemplateSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updated = await storage.updateCfiLessonTemplate(req.params.id, profile.id, result.data as any);
+      if (!updated) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update lesson template:", error);
+      res.status(500).json({ error: "Failed to update template" });
+    }
+  });
+
+  app.delete("/api/cfi/lesson-templates/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const success = await storage.deleteCfiLessonTemplate(req.params.id, profile.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete lesson template:", error);
+      res.status(500).json({ error: "Failed to delete template" });
+    }
+  });
+
+  // CFI lessons per student
+  app.get("/api/cfi/students/:id/lessons", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const student = await storage.getCfiStudentById(req.params.id);
+      if (!student || student.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      const lessons = await storage.getCfiLessonsByStudent(student.id);
+      res.json(lessons);
+    } catch (error) {
+      console.error("Failed to load student lessons:", error);
+      res.status(500).json({ error: "Failed to load lessons" });
+    }
+  });
+
+  app.post("/api/cfi/students/:id/lessons", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const student = await storage.getCfiStudentById(req.params.id);
+      if (!student || student.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      const result = insertCfiLessonSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const payload = result.data as any;
+      if (payload.scheduledAt === "") {
+        payload.scheduledAt = null;
+      } else if (payload.scheduledAt) {
+        payload.scheduledAt = new Date(payload.scheduledAt);
+      }
+      if (payload.completedAt === "") {
+        payload.completedAt = null;
+      } else if (payload.completedAt) {
+        payload.completedAt = new Date(payload.completedAt);
+      }
+      const created = await storage.createCfiLesson({
+        ...payload,
+        cfiProfileId: profile.id,
+        studentId: student.id,
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create lesson:", error);
+      res.status(500).json({ error: "Failed to create lesson" });
+    }
+  });
+
+  app.patch("/api/cfi/lessons/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const result = insertCfiLessonSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updates = result.data as any;
+      if (updates.scheduledAt === "") {
+        updates.scheduledAt = null;
+      } else if (updates.scheduledAt) {
+        updates.scheduledAt = new Date(updates.scheduledAt);
+      }
+      if (updates.completedAt === "") {
+        updates.completedAt = null;
+      } else if (updates.completedAt) {
+        updates.completedAt = new Date(updates.completedAt);
+      }
+      const updated = await storage.updateCfiLesson(req.params.id, profile.id, updates);
+      if (!updated) {
+        return res.status(404).json({ error: "Lesson not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update lesson:", error);
+      res.status(500).json({ error: "Failed to update lesson" });
+    }
+  });
+
+  app.delete("/api/cfi/lessons/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const success = await storage.deleteCfiLesson(req.params.id, profile.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete lesson:", error);
+      res.status(500).json({ error: "Failed to delete lesson" });
+    }
+  });
+
+  // CFI student files (read-only from CFI side)
+  app.get("/api/cfi/students/:id/files", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const student = await storage.getCfiStudentById(req.params.id);
+      if (!student || student.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+      const files = await storage.getCfiStudentFiles(student.id);
+      res.json(files);
+    } catch (error) {
+      console.error("Failed to load student files:", error);
+      res.status(500).json({ error: "Failed to load files" });
+    }
+  });
+
+  app.get("/api/cfi/students/files/:id/download", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const file = await storage.getCfiStudentFileById(req.params.id);
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      const student = await storage.getCfiStudentById(file.studentId);
+      if (!student || student.cfiProfileId !== profile.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      res.setHeader("Content-Disposition", `attachment; filename="${file.fileName.replace(/\"/g, "")}"`);
+
+      if (file.storageProvider === "s3") {
+        const { S3StorageService } = await import("./s3Storage");
+        const s3Service = new S3StorageService();
+        const { stream, contentType, contentLength } = await s3Service.getObjectStream({
+          key: file.storagePath,
+        });
+        res.setHeader("Content-Type", contentType || file.mimeType || "application/octet-stream");
+        if (contentLength) res.setHeader("Content-Length", String(contentLength));
+        stream.pipe(res);
+        return;
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const objectFile = await objectStorageService.getObjectEntityFile(file.storagePath);
+      await objectStorageService.downloadObject(objectFile, res, 0);
+    } catch (error) {
+      console.error("Failed to download student file:", error);
+      res.status(500).json({ error: "Failed to download file" });
+    }
+  });
+
+  // Student training workspace
+  app.get("/api/student/training", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) {
+        return res.json({ student: null, cfiProfile: null, lessons: [], files: [] });
+      }
+      const [cfiProfile, lessons, files] = await Promise.all([
+        storage.getCfiProfileById(student.cfiProfileId),
+        storage.getCfiLessonsByStudent(student.id),
+        storage.getCfiStudentFiles(student.id),
+      ]);
+      res.json({ student, cfiProfile, lessons, files });
+    } catch (error) {
+      console.error("Failed to load student training data:", error);
+      res.status(500).json({ error: "Failed to load training data" });
+    }
+  });
+
+  app.patch("/api/student/training/lessons/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) {
+        return res.status(404).json({ error: "Student training profile not found" });
+      }
+      const lesson = await storage.getCfiLessonById(req.params.id);
+      if (!lesson || lesson.studentId !== student.id) {
+        return res.status(404).json({ error: "Lesson not found" });
+      }
+      const updates = z.object({
+        studentNotes: z.string().optional().nullable(),
+      }).safeParse(req.body);
+      if (!updates.success) {
+        return res.status(400).json({ error: updates.error.format() });
+      }
+      const updated = await storage.updateCfiLesson(req.params.id, lesson.cfiProfileId, {
+        studentNotes: updates.data.studentNotes || null,
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update student lesson notes:", error);
+      res.status(500).json({ error: "Failed to update lesson" });
+    }
+  });
+
+  app.post("/api/student/training/files/upload", isAuthenticated, async (req: any, res) => {
+    try {
+      const contentType = String(req.body?.contentType || "application/pdf");
+      if (process.env.AWS_S3_BUCKET) {
+        const { S3StorageService } = await import("./s3Storage");
+        const s3Service = new S3StorageService();
+        const { uploadURL, key } = await s3Service.getPresignedUploadUrlForKey({
+          prefix: "cfi-student-files",
+          contentType,
+        });
+        return res.json({
+          uploadURL,
+          storageProvider: "s3",
+          storagePath: key,
+        });
+      }
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const storagePath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      return res.json({
+        uploadURL,
+        storageProvider: "object",
+        storagePath,
+      });
+    } catch (error) {
+      console.error("Failed to create training file upload URL:", error);
+      res.status(500).json({ error: "Failed to create upload URL" });
+    }
+  });
+
+  app.post("/api/student/training/files", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) {
+        return res.status(404).json({ error: "Student training profile not found" });
+      }
+      const result = insertCfiStudentFileSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const payload = result.data as any;
+      if (payload.storageProvider === "object") {
+        try {
+          const objectStorageService = new ObjectStorageService();
+          await objectStorageService.trySetObjectEntityAclPolicy(payload.storagePath, {
+            owner: userId,
+            visibility: "private",
+          });
+        } catch (aclError) {
+          console.warn("Failed to set student file ACL:", aclError);
+        }
+      }
+      const created = await storage.createCfiStudentFile({
+        ...payload,
+        studentId: student.id,
+        uploadedByUserId: userId,
+      } as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to save training file:", error);
+      res.status(500).json({ error: "Failed to save training file" });
+    }
+  });
+
+  app.get("/api/student/training/files", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) {
+        return res.json([]);
+      }
+      const files = await storage.getCfiStudentFiles(student.id);
+      res.json(files);
+    } catch (error) {
+      console.error("Failed to load training files:", error);
+      res.status(500).json({ error: "Failed to load files" });
+    }
+  });
+
+  app.get("/api/student/training/files/:id/download", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) {
+        return res.status(404).json({ error: "Student training profile not found" });
+      }
+      const file = await storage.getCfiStudentFileById(req.params.id);
+      if (!file || file.studentId !== student.id) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      res.setHeader("Content-Disposition", `attachment; filename="${file.fileName.replace(/\"/g, "")}"`);
+
+      if (file.storageProvider === "s3") {
+        const { S3StorageService } = await import("./s3Storage");
+        const s3Service = new S3StorageService();
+        const { stream, contentType, contentLength } = await s3Service.getObjectStream({
+          key: file.storagePath,
+        });
+        res.setHeader("Content-Type", contentType || file.mimeType || "application/octet-stream");
+        if (contentLength) res.setHeader("Content-Length", String(contentLength));
+        stream.pipe(res);
+        return;
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const objectFile = await objectStorageService.getObjectEntityFile(file.storagePath);
+      await objectStorageService.downloadObject(objectFile, res, 0);
+    } catch (error) {
+      console.error("Failed to download training file:", error);
+      res.status(500).json({ error: "Failed to download file" });
+    }
+  });
+
+  app.delete("/api/student/training/files/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const student = await storage.getCfiStudentByStudentUser(userId);
+      if (!student) {
+        return res.status(404).json({ error: "Student training profile not found" });
+      }
+      const file = await storage.getCfiStudentFileById(req.params.id);
+      if (!file || file.studentId !== student.id) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      if (file.storageProvider === "s3") {
+        try {
+          const { S3StorageService } = await import("./s3Storage");
+          const s3Service = new S3StorageService();
+          await s3Service.deleteObject(file.storagePath);
+        } catch (deleteError) {
+          console.warn("Failed to delete S3 training file:", deleteError);
+        }
+      }
+
+      const success = await storage.deleteCfiStudentFile(file.id, student.id);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to delete training file:", error);
+      res.status(500).json({ error: "Failed to delete file" });
     }
   });
 

@@ -82,6 +82,14 @@ import {
   type InsertCfiAvailabilityRule,
   type CfiBookingRequest,
   type InsertCfiBookingRequest,
+  type CfiStudent,
+  type InsertCfiStudent,
+  type CfiLessonTemplate,
+  type InsertCfiLessonTemplate,
+  type CfiLesson,
+  type InsertCfiLesson,
+  type CfiStudentFile,
+  type InsertCfiStudentFile,
   type CfiLegalAcceptance,
   type InsertCfiLegalAcceptance,
   type UserSettings,
@@ -146,6 +154,10 @@ import {
   cfiCredentials,
   cfiAvailabilityRules,
   cfiBookingRequests,
+  cfiStudents,
+  cfiLessonTemplates,
+  cfiLessons,
+  cfiStudentFiles,
   cfiLegalAcceptances,
   userSettings,
   pushTokens,
@@ -554,6 +566,26 @@ export interface IStorage {
   getCfiBookingRequestsForCfi(profileId: string): Promise<CfiBookingRequest[]>;
   getCfiBookingRequestsForStudent(userId: string): Promise<CfiBookingRequest[]>;
   updateCfiBookingRequest(id: string, updates: Partial<CfiBookingRequest>): Promise<CfiBookingRequest | undefined>;
+  getCfiStudentsByProfile(profileId: string): Promise<CfiStudent[]>;
+  getCfiStudentById(id: string): Promise<CfiStudent | undefined>;
+  getCfiStudentByProfileAndUser(profileId: string, studentUserId: string): Promise<CfiStudent | undefined>;
+  getCfiStudentByStudentUser(userId: string): Promise<CfiStudent | undefined>;
+  createCfiStudent(student: InsertCfiStudent & { cfiProfileId: string; studentUserId: string }): Promise<CfiStudent>;
+  updateCfiStudent(id: string, profileId: string, updates: Partial<CfiStudent>): Promise<CfiStudent | undefined>;
+  deleteCfiStudent(id: string, profileId: string): Promise<boolean>;
+  getCfiLessonTemplates(profileId: string): Promise<CfiLessonTemplate[]>;
+  createCfiLessonTemplate(template: InsertCfiLessonTemplate & { cfiProfileId: string }): Promise<CfiLessonTemplate>;
+  updateCfiLessonTemplate(id: string, profileId: string, updates: Partial<CfiLessonTemplate>): Promise<CfiLessonTemplate | undefined>;
+  deleteCfiLessonTemplate(id: string, profileId: string): Promise<boolean>;
+  getCfiLessonsByStudent(studentId: string): Promise<CfiLesson[]>;
+  getCfiLessonById(id: string): Promise<CfiLesson | undefined>;
+  createCfiLesson(lesson: InsertCfiLesson & { cfiProfileId: string; studentId: string }): Promise<CfiLesson>;
+  updateCfiLesson(id: string, profileId: string, updates: Partial<CfiLesson>): Promise<CfiLesson | undefined>;
+  deleteCfiLesson(id: string, profileId: string): Promise<boolean>;
+  getCfiStudentFiles(studentId: string): Promise<CfiStudentFile[]>;
+  getCfiStudentFileById(id: string): Promise<CfiStudentFile | undefined>;
+  createCfiStudentFile(file: InsertCfiStudentFile & { studentId: string; uploadedByUserId: string }): Promise<CfiStudentFile>;
+  deleteCfiStudentFile(id: string, studentId: string): Promise<boolean>;
   createCfiLegalAcceptance(acceptance: InsertCfiLegalAcceptance & { userId: string }): Promise<CfiLegalAcceptance>;
   getCfiLatestLegalAcceptance(userId: string, acceptanceType: string): Promise<CfiLegalAcceptance | undefined>;
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
@@ -3417,6 +3449,157 @@ export class DatabaseStorage implements IStorage {
       .where(eq(cfiBookingRequests.id, id))
       .returning();
     return updated;
+  }
+
+  async getCfiStudentsByProfile(profileId: string): Promise<CfiStudent[]> {
+    return await db
+      .select()
+      .from(cfiStudents)
+      .where(eq(cfiStudents.cfiProfileId, profileId))
+      .orderBy(desc(cfiStudents.createdAt));
+  }
+
+  async getCfiStudentById(id: string): Promise<CfiStudent | undefined> {
+    const [student] = await db.select().from(cfiStudents).where(eq(cfiStudents.id, id));
+    return student;
+  }
+
+  async getCfiStudentByProfileAndUser(profileId: string, studentUserId: string): Promise<CfiStudent | undefined> {
+    const [student] = await db
+      .select()
+      .from(cfiStudents)
+      .where(and(eq(cfiStudents.cfiProfileId, profileId), eq(cfiStudents.studentUserId, studentUserId)));
+    return student;
+  }
+
+  async getCfiStudentByStudentUser(userId: string): Promise<CfiStudent | undefined> {
+    const [student] = await db
+      .select()
+      .from(cfiStudents)
+      .where(and(eq(cfiStudents.studentUserId, userId), eq(cfiStudents.status, "active")))
+      .orderBy(desc(cfiStudents.createdAt));
+    return student;
+  }
+
+  async createCfiStudent(
+    student: InsertCfiStudent & { cfiProfileId: string; studentUserId: string }
+  ): Promise<CfiStudent> {
+    const [created] = await db.insert(cfiStudents).values(student).returning();
+    return created;
+  }
+
+  async updateCfiStudent(id: string, profileId: string, updates: Partial<CfiStudent>): Promise<CfiStudent | undefined> {
+    const [updated] = await db
+      .update(cfiStudents)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(cfiStudents.id, id), eq(cfiStudents.cfiProfileId, profileId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteCfiStudent(id: string, profileId: string): Promise<boolean> {
+    const result = await db
+      .delete(cfiStudents)
+      .where(and(eq(cfiStudents.id, id), eq(cfiStudents.cfiProfileId, profileId)));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getCfiLessonTemplates(profileId: string): Promise<CfiLessonTemplate[]> {
+    return await db
+      .select()
+      .from(cfiLessonTemplates)
+      .where(eq(cfiLessonTemplates.cfiProfileId, profileId))
+      .orderBy(desc(cfiLessonTemplates.createdAt));
+  }
+
+  async createCfiLessonTemplate(
+    template: InsertCfiLessonTemplate & { cfiProfileId: string }
+  ): Promise<CfiLessonTemplate> {
+    const [created] = await db.insert(cfiLessonTemplates).values(template).returning();
+    return created;
+  }
+
+  async updateCfiLessonTemplate(
+    id: string,
+    profileId: string,
+    updates: Partial<CfiLessonTemplate>
+  ): Promise<CfiLessonTemplate | undefined> {
+    const [updated] = await db
+      .update(cfiLessonTemplates)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(cfiLessonTemplates.id, id), eq(cfiLessonTemplates.cfiProfileId, profileId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteCfiLessonTemplate(id: string, profileId: string): Promise<boolean> {
+    const result = await db
+      .delete(cfiLessonTemplates)
+      .where(and(eq(cfiLessonTemplates.id, id), eq(cfiLessonTemplates.cfiProfileId, profileId)));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getCfiLessonsByStudent(studentId: string): Promise<CfiLesson[]> {
+    return await db
+      .select()
+      .from(cfiLessons)
+      .where(eq(cfiLessons.studentId, studentId))
+      .orderBy(desc(cfiLessons.createdAt));
+  }
+
+  async getCfiLessonById(id: string): Promise<CfiLesson | undefined> {
+    const [lesson] = await db.select().from(cfiLessons).where(eq(cfiLessons.id, id));
+    return lesson;
+  }
+
+  async createCfiLesson(
+    lesson: InsertCfiLesson & { cfiProfileId: string; studentId: string }
+  ): Promise<CfiLesson> {
+    const [created] = await db.insert(cfiLessons).values(lesson).returning();
+    return created;
+  }
+
+  async updateCfiLesson(id: string, profileId: string, updates: Partial<CfiLesson>): Promise<CfiLesson | undefined> {
+    const [updated] = await db
+      .update(cfiLessons)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(and(eq(cfiLessons.id, id), eq(cfiLessons.cfiProfileId, profileId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteCfiLesson(id: string, profileId: string): Promise<boolean> {
+    const result = await db
+      .delete(cfiLessons)
+      .where(and(eq(cfiLessons.id, id), eq(cfiLessons.cfiProfileId, profileId)));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  async getCfiStudentFiles(studentId: string): Promise<CfiStudentFile[]> {
+    return await db
+      .select()
+      .from(cfiStudentFiles)
+      .where(eq(cfiStudentFiles.studentId, studentId))
+      .orderBy(desc(cfiStudentFiles.createdAt));
+  }
+
+  async getCfiStudentFileById(id: string): Promise<CfiStudentFile | undefined> {
+    const [file] = await db.select().from(cfiStudentFiles).where(eq(cfiStudentFiles.id, id));
+    return file;
+  }
+
+  async createCfiStudentFile(
+    file: InsertCfiStudentFile & { studentId: string; uploadedByUserId: string }
+  ): Promise<CfiStudentFile> {
+    const [created] = await db.insert(cfiStudentFiles).values(file).returning();
+    return created;
+  }
+
+  async deleteCfiStudentFile(id: string, studentId: string): Promise<boolean> {
+    const result = await db
+      .delete(cfiStudentFiles)
+      .where(and(eq(cfiStudentFiles.id, id), eq(cfiStudentFiles.studentId, studentId)));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   async createCfiLegalAcceptance(

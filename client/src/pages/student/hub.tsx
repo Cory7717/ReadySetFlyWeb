@@ -12,6 +12,7 @@ const tools = [
   { title: "Student Pilot Roadmap", description: "Step-by-step training milestones.", href: "/student/roadmap" },
   { title: "Training Cost Calculator", description: "Estimate total training costs.", href: "/student/cost" },
   { title: "Progress Tracker", description: "Track hours, solos, and milestones.", href: "/student/progress" },
+  { title: "Training Workspace", description: "Track lessons and upload training docs.", href: "/student/training" },
   { title: "Written Test Prep Tracker", description: "Organize study topics.", href: "/student/written" },
   { title: "VOR Trainer", description: "Radials, OBS, flags, and intercept drills.", href: "/student/vor-trainer" },
   { title: "6-Pack Panel Trainer", description: "Learn the classic flight instruments with an interactive panel.", href: "/student/six-pack-trainer" },

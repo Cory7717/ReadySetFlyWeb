@@ -426,6 +426,9 @@ export default function CfiDashboard() {
             <Button asChild variant="outline" size="sm">
               <Link href="/dashboard/cfi-school">School dashboard</Link>
             </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/dashboard/cfi-training">Training center</Link>
+            </Button>
           </div>
         </div>
         {cfiAccessEndsAt && (

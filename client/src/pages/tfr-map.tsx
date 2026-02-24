@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
+import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import type { FeatureCollection } from "geojson";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -19,6 +18,48 @@ import { trackEvent } from "@/lib/analytics";
 type TfrFeatureCollection = FeatureCollection & {
   updatedAt?: string;
   stale?: boolean;
+};
+
+type TfrGeoJsonLayerProps = {
+  data: FeatureCollection;
+  selectedId: string | null;
+  onSelect: (feature: any) => void;
+};
+
+const TfrGeoJsonLayer = ({ data, selectedId, onSelect }: TfrGeoJsonLayerProps) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!data?.features?.length) return undefined;
+    const layer = L.geoJSON(data, {
+      style: (feature: any) => {
+        const featureId = feature?.properties?.notamId;
+        const isSelected = selectedId && featureId === selectedId;
+        return {
+          color: isSelected ? "#0ea5e9" : "#f97316",
+          weight: isSelected ? 3 : 2,
+          fillColor: isSelected ? "#0ea5e9" : "#f97316",
+          fillOpacity: isSelected ? 0.35 : 0.25,
+        };
+      },
+      onEachFeature: (feature, layerInstance) => {
+        const notamId = (feature as any)?.properties?.notamId;
+        if (notamId) {
+          layerInstance.bindTooltip(String(notamId), { sticky: true });
+        }
+        layerInstance.on({
+          click: () => onSelect(feature),
+        });
+      },
+    });
+
+    layer.addTo(map);
+    return () => {
+      layer.remove();
+    };
+  }, [data, map, onSelect, selectedId]);
+
+  return null;
 };
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
@@ -124,17 +165,6 @@ export default function TfrMap() {
         mapRef.current.fitBounds(featureBounds.pad(0.2));
       }
     }
-  };
-
-  const featureStyle = (feature: any) => {
-    const featureId = feature?.properties?.notamId;
-    const isSelected = selectedId && featureId === selectedId;
-    return {
-      color: isSelected ? "#0ea5e9" : "#f97316",
-      weight: isSelected ? 3 : 2,
-      fillColor: isSelected ? "#0ea5e9" : "#f97316",
-      fillOpacity: isSelected ? 0.35 : 0.25,
-    };
   };
 
   useEffect(() => {
@@ -253,19 +283,7 @@ export default function TfrMap() {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
-                  <GeoJSON
-                    data={geoJson}
-                    style={featureStyle}
-                    onEachFeature={(feature, layer) => {
-                      const notamId = (feature as any)?.properties?.notamId;
-                      if (notamId) {
-                        layer.bindTooltip(String(notamId), { sticky: true });
-                      }
-                      layer.on({
-                        click: () => handleFeatureClick(feature),
-                      });
-                    }}
-                  />
+                  <TfrGeoJsonLayer data={geoJson} selectedId={selectedId} onSelect={handleFeatureClick} />
                 </MapContainer>
               </div>
             </CardContent>

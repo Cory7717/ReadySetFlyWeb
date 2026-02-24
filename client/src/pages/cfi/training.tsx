@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { trackEvent } from "@/lib/analytics";
 import { apiRequest, apiUrl } from "@/lib/queryClient";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import type { CfiLesson, CfiLessonTemplate, CfiStudent, CfiStudentFile } from "@shared/schema";
 import { endorsementTemplates } from "@shared/endorsement-templates";

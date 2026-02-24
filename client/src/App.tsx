@@ -66,6 +66,7 @@ import CfiDirectory from "@/pages/cfi";
 import CfiProfile from "@/pages/cfi/profile";
 import CfiRequest from "@/pages/cfi/request";
 import CfiDashboard from "@/pages/cfi/dashboard";
+import CfiSchoolDashboard from "@/pages/cfi/school-dashboard";
 import CfiTerms from "@/pages/cfi/terms";
 import CfiStudentTerms from "@/pages/cfi/student-terms";
 
@@ -178,6 +179,7 @@ function Router() {
         <>
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/dashboard/cfi" component={CfiDashboard} />
+          <Route path="/dashboard/cfi-school" component={CfiSchoolDashboard} />
           <Route path="/profile" component={Profile} />
           <Route path="/my-listings" component={MyListings} />
           <Route path="/favorites" component={Favorites} />

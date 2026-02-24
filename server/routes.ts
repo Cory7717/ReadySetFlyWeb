@@ -15,10 +15,10 @@ import OpenAI from "openai";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
-import { and, asc, desc, eq, gte, isNull, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, or } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -13035,6 +13035,200 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.status(error.message?.includes("locked") ? 403 : 500).json({ 
         error: error.message || "Failed to delete logbook entry" 
       });
+    }
+  });
+
+  const SCHOOL_ADMIN_ROLES = new Set(["owner", "admin"]);
+
+  app.get("/api/cfi/schools", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const schools = await storage.listCfiSchoolsForUser(userId);
+      res.json(schools);
+    } catch (error) {
+      console.error("Failed to list CFI schools:", error);
+      res.status(500).json({ error: "Failed to load CFI schools" });
+    }
+  });
+
+  app.get("/api/cfi/school", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const memberships = await storage.listCfiSchoolMembershipsForUser(userId);
+      const adminMembership = memberships.find(
+        (member) => member.status === "active" && SCHOOL_ADMIN_ROLES.has(member.role)
+      );
+      if (!adminMembership) {
+        return res.json(null);
+      }
+      const school = await storage.getCfiSchoolById(adminMembership.schoolId);
+      if (!school) {
+        return res.json(null);
+      }
+      const members = await storage.listCfiSchoolMembers(school.id);
+      const memberUserIds = members.map((member) => member.userId);
+      const memberUsers =
+        memberUserIds.length > 0
+          ? await db
+              .select({
+                id: users.id,
+                email: users.email,
+                firstName: users.firstName,
+                lastName: users.lastName,
+                profileImageUrl: users.profileImageUrl,
+              })
+              .from(users)
+              .where(inArray(users.id, memberUserIds))
+          : [];
+      const memberMap = new Map(memberUsers.map((user) => [user.id, user]));
+      const enrichedMembers = members.map((member) => ({
+        ...member,
+        user: memberMap.get(member.userId) || null,
+      }));
+      res.json({ school, members: enrichedMembers, role: adminMembership.role });
+    } catch (error) {
+      console.error("Failed to load CFI school dashboard:", error);
+      res.status(500).json({ error: "Failed to load school dashboard" });
+    }
+  });
+
+  app.post("/api/cfi/school", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const existing = await storage.getCfiSchoolByOwner(userId);
+      if (existing) {
+        return res.status(409).json({ error: "School already exists for this owner" });
+      }
+      const payload = { ...req.body };
+      if (payload.slug) {
+        payload.slug = normalizeCfiSlug(payload.slug);
+      }
+      const result = insertCfiSchoolSchema.safeParse(payload);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      if (result.data.slug) {
+        const slugOwner = await storage.getCfiSchoolBySlug(result.data.slug);
+        if (slugOwner) {
+          return res.status(409).json({ error: "School slug already in use" });
+        }
+      }
+      const school = await storage.createCfiSchool({ ...result.data, ownerUserId: userId } as any);
+      await storage.addCfiSchoolMember({
+        schoolId: school.id,
+        userId,
+        role: "owner",
+        status: "active",
+      } as any);
+      res.status(201).json(school);
+    } catch (error) {
+      console.error("Failed to create CFI school:", error);
+      res.status(500).json({ error: "Failed to create CFI school" });
+    }
+  });
+
+  app.patch("/api/cfi/school", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const schoolId = typeof req.body?.schoolId === "string" ? req.body.schoolId : undefined;
+      if (!schoolId) {
+        return res.status(400).json({ error: "schoolId is required" });
+      }
+      const membership = await storage.getCfiSchoolMembership(schoolId, userId);
+      if (!membership || !SCHOOL_ADMIN_ROLES.has(membership.role)) {
+        return res.status(403).json({ error: "Insufficient permissions" });
+      }
+      const payload = { ...req.body };
+      delete payload.schoolId;
+      if (payload.slug) {
+        payload.slug = normalizeCfiSlug(payload.slug);
+      }
+      const result = insertCfiSchoolSchema.partial().safeParse(payload);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      if (result.data.slug) {
+        const slugOwner = await storage.getCfiSchoolBySlug(result.data.slug);
+        if (slugOwner && slugOwner.id !== schoolId) {
+          return res.status(409).json({ error: "School slug already in use" });
+        }
+      }
+      const updated = await storage.updateCfiSchool(schoolId, result.data as any);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update CFI school:", error);
+      res.status(500).json({ error: "Failed to update CFI school" });
+    }
+  });
+
+  app.post("/api/cfi/school/members", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const schoolId = typeof req.body?.schoolId === "string" ? req.body.schoolId : undefined;
+      const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      const role = typeof req.body?.role === "string" ? req.body.role : "instructor";
+      if (!schoolId || !email) {
+        return res.status(400).json({ error: "schoolId and email are required" });
+      }
+      const membership = await storage.getCfiSchoolMembership(schoolId, userId);
+      if (!membership || !SCHOOL_ADMIN_ROLES.has(membership.role)) {
+        return res.status(403).json({ error: "Insufficient permissions" });
+      }
+      const targetUser = await storage.getUserByEmail(email);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found for email" });
+      }
+      const result = insertCfiSchoolMemberSchema.safeParse({ role, status: "active" });
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const member = await storage.addCfiSchoolMember({
+        schoolId,
+        userId: targetUser.id,
+        role: result.data.role,
+        status: result.data.status,
+      } as any);
+      res.status(201).json(member);
+    } catch (error) {
+      console.error("Failed to add CFI school member:", error);
+      res.status(500).json({ error: "Failed to add school member" });
+    }
+  });
+
+  app.delete("/api/cfi/school/members/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const schoolId = typeof req.query?.schoolId === "string" ? req.query.schoolId : undefined;
+      if (!schoolId) {
+        return res.status(400).json({ error: "schoolId is required" });
+      }
+      const membership = await storage.getCfiSchoolMembership(schoolId, userId);
+      if (!membership || !SCHOOL_ADMIN_ROLES.has(membership.role)) {
+        return res.status(403).json({ error: "Insufficient permissions" });
+      }
+      const success = await storage.removeCfiSchoolMember(req.params.id, schoolId);
+      res.json({ success });
+    } catch (error) {
+      console.error("Failed to remove CFI school member:", error);
+      res.status(500).json({ error: "Failed to remove school member" });
     }
   });
 

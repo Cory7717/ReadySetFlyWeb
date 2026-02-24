@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { CfiAvailabilityRule, CfiBookingRequest, CfiCredential, CfiProfile } from "@shared/schema";
+import type { CfiAvailabilityRule, CfiBookingRequest, CfiCredential, CfiProfile, CfiSchool } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
@@ -91,6 +91,11 @@ export default function CfiDashboard() {
     enabled: canUseCfi,
   });
 
+  const { data: schools = [] } = useQuery<CfiSchool[]>({
+    queryKey: ["/api/cfi/schools"],
+    enabled: canUseCfi,
+  });
+
   const profile = dashboardData?.profile;
   const [formState, setFormState] = useState({
     displayName: "",
@@ -98,6 +103,7 @@ export default function CfiDashboard() {
     headline: "",
     bio: "",
     headshotUrl: "",
+    schoolId: "",
     locationCity: "",
     locationState: "",
     airportHome: "",
@@ -190,6 +196,7 @@ export default function CfiDashboard() {
       headline: profile.headline || "",
       bio: profile.bio || "",
       headshotUrl: profile.headshotUrl || "",
+      schoolId: profile.schoolId || "",
       locationCity: profile.locationCity || "",
       locationState: profile.locationState || "",
       airportHome: profile.airportHome || "",
@@ -222,6 +229,7 @@ export default function CfiDashboard() {
         headline: toOptional(formState.headline),
         bio: toOptional(formState.bio),
         headshotUrl: toOptional(formState.headshotUrl),
+        schoolId: formState.schoolId ? formState.schoolId : null,
         locationCity: toOptional(formState.locationCity),
         locationState: toOptional(formState.locationState),
         airportHome: toOptional(formState.airportHome),
@@ -414,6 +422,11 @@ export default function CfiDashboard() {
           <Badge variant="outline">CFI Dashboard</Badge>
           <h1 className="text-3xl font-bold">Manage your CFI profile</h1>
           <p className="text-muted-foreground">Update your public profile, availability, and booking requests.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/dashboard/cfi-school">School dashboard</Link>
+            </Button>
+          </div>
         </div>
         {cfiAccessEndsAt && (
           <Alert>
@@ -534,6 +547,27 @@ export default function CfiDashboard() {
                   value={formState.airportHome}
                   onChange={(event) => setFormState({ ...formState, airportHome: event.target.value })}
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">School affiliation</label>
+                <Select
+                  value={formState.schoolId || "independent"}
+                  onValueChange={(value) =>
+                    setFormState({ ...formState, schoolId: value === "independent" ? "" : value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Independent CFI" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="independent">Independent CFI</SelectItem>
+                    {schools.map((school) => (
+                      <SelectItem key={school.id} value={school.id}>
+                        {school.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Hourly rate (USD)</label>

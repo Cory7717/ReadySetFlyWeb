@@ -1356,10 +1356,45 @@ export const notificationPreferences = pgTable("notification_preferences", {
   index("idx_notification_preferences_user").on(table.userId),
 ]);
 
+export const cfiSchools = pgTable("cfi_schools", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerUserId: varchar("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  locationCity: text("location_city"),
+  locationState: text("location_state"),
+  airportHome: text("airport_home"),
+  website: text("website"),
+  phone: text("phone"),
+  logoUrl: text("logo_url"),
+  isPublished: boolean("is_published").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_cfi_schools_slug").on(table.slug),
+  index("idx_cfi_schools_owner").on(table.ownerUserId),
+]);
+
+export const cfiSchoolMembers = pgTable("cfi_school_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  schoolId: varchar("school_id").notNull().references(() => cfiSchools.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("instructor"),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_cfi_school_members").on(table.schoolId, table.userId),
+  index("idx_cfi_school_members_school").on(table.schoolId),
+  index("idx_cfi_school_members_user").on(table.userId),
+]);
+
 // CFI Profiles (public instructor directory)
 export const cfiProfiles = pgTable("cfi_profiles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  schoolId: varchar("school_id").references(() => cfiSchools.id, { onDelete: "set null" }),
   slug: text("slug").notNull(),
   displayName: text("display_name").notNull(),
   headline: text("headline"),
@@ -1381,6 +1416,7 @@ export const cfiProfiles = pgTable("cfi_profiles", {
   uniqueIndex("uniq_cfi_profiles_user").on(table.userId),
   uniqueIndex("uniq_cfi_profiles_slug").on(table.slug),
   index("idx_cfi_profiles_slug").on(table.slug),
+  index("idx_cfi_profiles_school").on(table.schoolId),
 ]);
 
 export const cfiCredentials = pgTable("cfi_credentials", {
@@ -1670,6 +1706,20 @@ export const insertNotificationPreferencesSchema = createInsertSchema(notificati
 export const insertCfiProfileSchema = createInsertSchema(cfiProfiles).omit({
   id: true,
   userId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCfiSchoolSchema = createInsertSchema(cfiSchools).omit({
+  id: true,
+  ownerUserId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertCfiSchoolMemberSchema = createInsertSchema(cfiSchoolMembers).omit({
+  id: true,
+  schoolId: true,
   createdAt: true,
   updatedAt: true,
 });
@@ -2219,6 +2269,10 @@ export type NotificationPreferences = typeof notificationPreferences.$inferSelec
 export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
 export type CfiProfile = typeof cfiProfiles.$inferSelect;
 export type InsertCfiProfile = z.infer<typeof insertCfiProfileSchema>;
+export type CfiSchool = typeof cfiSchools.$inferSelect;
+export type InsertCfiSchool = z.infer<typeof insertCfiSchoolSchema>;
+export type CfiSchoolMember = typeof cfiSchoolMembers.$inferSelect;
+export type InsertCfiSchoolMember = z.infer<typeof insertCfiSchoolMemberSchema>;
 export type CfiCredential = typeof cfiCredentials.$inferSelect;
 export type InsertCfiCredential = z.infer<typeof insertCfiCredentialSchema>;
 export type CfiAvailabilityRule = typeof cfiAvailabilityRules.$inferSelect;

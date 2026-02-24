@@ -72,6 +72,10 @@ import {
   type InsertNotificationPreferences,
   type CfiProfile,
   type InsertCfiProfile,
+  type CfiSchool,
+  type InsertCfiSchool,
+  type CfiSchoolMember,
+  type InsertCfiSchoolMember,
   type CfiCredential,
   type InsertCfiCredential,
   type CfiAvailabilityRule,
@@ -137,6 +141,8 @@ import {
   logbookArchives,
   notificationPreferences,
   cfiProfiles,
+  cfiSchools,
+  cfiSchoolMembers,
   cfiCredentials,
   cfiAvailabilityRules,
   cfiBookingRequests,
@@ -524,6 +530,17 @@ export interface IStorage {
   listPublishedCfiProfiles(filters?: { q?: string; state?: string; airport?: string }): Promise<CfiProfile[]>;
   createCfiProfile(profile: InsertCfiProfile & { userId: string }): Promise<CfiProfile>;
   updateCfiProfile(id: string, userId: string, updates: Partial<CfiProfile>): Promise<CfiProfile | undefined>;
+  getCfiSchoolByOwner(userId: string): Promise<CfiSchool | undefined>;
+  getCfiSchoolBySlug(slug: string): Promise<CfiSchool | undefined>;
+  getCfiSchoolById(id: string): Promise<CfiSchool | undefined>;
+  getCfiSchoolMembership(schoolId: string, userId: string): Promise<CfiSchoolMember | undefined>;
+  listCfiSchoolsForUser(userId: string): Promise<CfiSchool[]>;
+  listCfiSchoolMembershipsForUser(userId: string): Promise<CfiSchoolMember[]>;
+  listCfiSchoolMembers(schoolId: string): Promise<CfiSchoolMember[]>;
+  createCfiSchool(school: InsertCfiSchool & { ownerUserId: string }): Promise<CfiSchool>;
+  updateCfiSchool(id: string, updates: Partial<CfiSchool>): Promise<CfiSchool | undefined>;
+  addCfiSchoolMember(member: InsertCfiSchoolMember & { schoolId: string; userId: string }): Promise<CfiSchoolMember>;
+  removeCfiSchoolMember(id: string, schoolId: string): Promise<boolean>;
   getCfiCredentials(profileId: string): Promise<CfiCredential[]>;
   createCfiCredential(credential: InsertCfiCredential & { cfiProfileId: string }): Promise<CfiCredential>;
   deleteCfiCredential(id: string, profileId: string): Promise<boolean>;
@@ -3218,6 +3235,91 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(cfiProfiles.id, id), eq(cfiProfiles.userId, userId)))
       .returning();
     return updated;
+  }
+
+  async getCfiSchoolByOwner(userId: string): Promise<CfiSchool | undefined> {
+    const [school] = await db.select().from(cfiSchools).where(eq(cfiSchools.ownerUserId, userId));
+    return school;
+  }
+
+  async getCfiSchoolBySlug(slug: string): Promise<CfiSchool | undefined> {
+    const [school] = await db.select().from(cfiSchools).where(eq(cfiSchools.slug, slug));
+    return school;
+  }
+
+  async getCfiSchoolById(id: string): Promise<CfiSchool | undefined> {
+    const [school] = await db.select().from(cfiSchools).where(eq(cfiSchools.id, id));
+    return school;
+  }
+
+  async getCfiSchoolMembership(schoolId: string, userId: string): Promise<CfiSchoolMember | undefined> {
+    const [member] = await db
+      .select()
+      .from(cfiSchoolMembers)
+      .where(and(eq(cfiSchoolMembers.schoolId, schoolId), eq(cfiSchoolMembers.userId, userId)));
+    return member;
+  }
+
+  async listCfiSchoolsForUser(userId: string): Promise<CfiSchool[]> {
+    return await db
+      .select({ school: cfiSchools })
+      .from(cfiSchoolMembers)
+      .innerJoin(cfiSchools, eq(cfiSchools.id, cfiSchoolMembers.schoolId))
+      .where(and(eq(cfiSchoolMembers.userId, userId), eq(cfiSchoolMembers.status, "active")))
+      .then((rows) => rows.map((row) => row.school));
+  }
+
+  async listCfiSchoolMembershipsForUser(userId: string): Promise<CfiSchoolMember[]> {
+    return await db
+      .select()
+      .from(cfiSchoolMembers)
+      .where(eq(cfiSchoolMembers.userId, userId))
+      .orderBy(desc(cfiSchoolMembers.createdAt));
+  }
+
+  async listCfiSchoolMembers(schoolId: string): Promise<CfiSchoolMember[]> {
+    return await db
+      .select()
+      .from(cfiSchoolMembers)
+      .where(eq(cfiSchoolMembers.schoolId, schoolId))
+      .orderBy(desc(cfiSchoolMembers.createdAt));
+  }
+
+  async createCfiSchool(school: InsertCfiSchool & { ownerUserId: string }): Promise<CfiSchool> {
+    const [created] = await db.insert(cfiSchools).values(school).returning();
+    return created;
+  }
+
+  async updateCfiSchool(id: string, updates: Partial<CfiSchool>): Promise<CfiSchool | undefined> {
+    const [updated] = await db
+      .update(cfiSchools)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(cfiSchools.id, id))
+      .returning();
+    return updated;
+  }
+
+  async addCfiSchoolMember(member: InsertCfiSchoolMember & { schoolId: string; userId: string }): Promise<CfiSchoolMember> {
+    const [created] = await db
+      .insert(cfiSchoolMembers)
+      .values(member)
+      .onConflictDoUpdate({
+        target: [cfiSchoolMembers.schoolId, cfiSchoolMembers.userId],
+        set: {
+          role: member.role,
+          status: member.status,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return created;
+  }
+
+  async removeCfiSchoolMember(id: string, schoolId: string): Promise<boolean> {
+    const result = await db
+      .delete(cfiSchoolMembers)
+      .where(and(eq(cfiSchoolMembers.id, id), eq(cfiSchoolMembers.schoolId, schoolId)));
+    return result.rowCount ? result.rowCount > 0 : false;
   }
 
   async getCfiCredentials(profileId: string): Promise<CfiCredential[]> {

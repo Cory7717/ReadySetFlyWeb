@@ -192,9 +192,24 @@ async function fetchNms(path: string, params?: Record<string, string | undefined
 }
 
 async function fetchContentFromUrl(url: string) {
-  const response = await fetchWithTimeout(url, {}, 30000);
+  const urlObj = new URL(url);
+  const base = new URL(NMS_BASE_URL);
+  const sameOrigin = urlObj.origin === base.origin;
+  const headers: Record<string, string> = {};
+
+  if (sameOrigin) {
+    const token = await getAccessToken();
+    headers.Authorization = `Bearer ${token}`;
+    headers.nmsResponseFormat = NMS_RESPONSE_FORMAT;
+  }
+
+  const response = await fetchWithTimeout(url, { headers }, 30000);
+  if ((response.status === 401 || response.status === 403) && sameOrigin) {
+    accessToken = null;
+    accessTokenExpiresAt = 0;
+  }
   if (!response.ok) {
-    throw new Error(`NMS content fetch failed (${response.status})`);
+    throw new Error(`NMS content fetch failed (${response.status}) ${urlObj.pathname}`);
   }
   const buffer = Buffer.from(await response.arrayBuffer());
   return parseGeojsonBuffer(buffer, response.headers.get("content-type"));

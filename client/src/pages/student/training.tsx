@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { trackEvent } from "@/lib/analytics";
-import { apiRequest, apiUrl } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import type { CfiLesson, CfiProfile, CfiStudent, CfiStudentFile } from "@shared/schema";
 

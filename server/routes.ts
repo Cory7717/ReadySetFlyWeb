@@ -15,7 +15,7 @@ import OpenAI from "openai";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
-import { and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
 import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
@@ -12000,13 +12000,31 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         | null = null;
 
       const buildPayload = async () => {
+        const arcgisResult = await fetchArcGisTfrs(bbox || undefined);
+        arcgisMeta = {
+          attempted: true,
+          ok: Boolean(arcgisResult?.data),
+          error: arcgisResult?.error,
+          attempts: arcgisResult?.attempts,
+        };
+        if (arcgisResult?.data) return arcgisResult.data;
+
         const nowDate = new Date();
         const rows = await db
           .select()
           .from(notamsTable)
-          .where(or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, nowDate)))
+          .where(
+            and(
+              or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, nowDate)),
+              or(
+                ilike(notamsTable.notamId, "FDC%"),
+                ilike(notamsTable.text, "%TFR%"),
+                ilike(notamsTable.text, "%TEMPORARY FLIGHT RESTRICTION%")
+              )
+            )
+          )
           .orderBy(desc(notamsTable.effectiveAt), desc(notamsTable.createdAt))
-          .limit(500);
+          .limit(2000);
 
         const features = rows
           .filter((row) => row.text && isTfrNotam(row.text, row.notamId))
@@ -12039,17 +12057,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             };
           })
           .filter(Boolean);
-
-        if (!features.length) {
-          const arcgisResult = await fetchArcGisTfrs(bbox || undefined);
-          arcgisMeta = {
-            attempted: true,
-            ok: Boolean(arcgisResult?.data),
-            error: arcgisResult?.error,
-            attempts: arcgisResult?.attempts,
-          };
-          if (arcgisResult?.data) return arcgisResult.data;
-        }
 
         return {
           type: "FeatureCollection",

@@ -14,6 +14,7 @@ import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useEffect, useMemo, useRef, useState } from "react";
 import av8mapsLogo from "@assets/Av8Maps.JPG";
+import { membershipPlanOptions, membershipTierInfo } from "@shared/membership-plans";
 
 interface WeatherData {
   icao: string;
@@ -254,6 +255,8 @@ export default function Landing() {
   const conditionsTitle = `${airportTitleBase}${
     airportDescriptor ? ` - ${airportDescriptor}` : ""
   } - Current Conditions`;
+  const proMonthly = membershipPlanOptions.pro.find((plan) => plan.interval === "monthly")?.price;
+  const proPlusMonthly = membershipPlanOptions.pro_plus.find((plan) => plan.interval === "monthly")?.price;
 
   const submitIcao = () => {
     const normalized = icaoInput.trim().toUpperCase();
@@ -414,6 +417,95 @@ export default function Landing() {
             </div>
           </div>
       </div>
+      </div>
+
+      {/* Membership Matrix */}
+      <div className="py-10 sm:py-14 bg-muted/20">
+        <div className="container mx-auto px-4">
+          <div className="text-center space-y-3">
+            <Badge variant="outline" className="mx-auto text-xs">RSF Memberships</Badge>
+            <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
+            <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto">
+              See exactly what you get when you upgrade. Free tools stay open; Pro adds saves and alerts; Pro+ unlocks operational intelligence.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-3">
+            <Card className="border-primary/10">
+              <CardHeader>
+                <CardTitle className="text-lg">RSF Free</CardTitle>
+                <CardDescription>Open tools, no credit card required.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-3xl font-bold">$0<span className="text-sm text-muted-foreground">/mo</span></div>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
+                    Run all calculators and planning tools.
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
+                    View live NOTAMs, TFRs, and weather.
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
+                    Create aviation events with a free RSF account (anti-spam).
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+
+            <Card className="border-primary/30 shadow-sm">
+              <CardHeader>
+                <Badge className="w-fit">Most Popular</Badge>
+                <CardTitle className="text-lg">{membershipTierInfo.pro.title}</CardTitle>
+                <CardDescription>{membershipTierInfo.pro.subtitle}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-3xl font-bold">
+                  ${proMonthly?.toFixed(2) ?? "14.99"}
+                  <span className="text-sm text-muted-foreground">/mo</span>
+                </div>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {membershipTierInfo.pro.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                <Button asChild className="w-full">
+                  <Link href="/logbook/pro">Upgrade to Pro</Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="border-primary/20">
+              <CardHeader>
+                <Badge variant="secondary" className="w-fit">Power Pilot</Badge>
+                <CardTitle className="text-lg">{membershipTierInfo.pro_plus.title}</CardTitle>
+                <CardDescription>{membershipTierInfo.pro_plus.subtitle}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-3xl font-bold">
+                  ${proPlusMonthly?.toFixed(2) ?? "24.99"}
+                  <span className="text-sm text-muted-foreground">/mo</span>
+                </div>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {membershipTierInfo.pro_plus.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                <Button asChild variant="outline" className="w-full">
+                  <Link href="/logbook/pro">Upgrade to Pro+</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
 
       {/* Choose your starting point */}

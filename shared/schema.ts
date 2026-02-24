@@ -637,6 +637,13 @@ export const partnerToolMetrics = pgTable("partner_tool_metrics", {
   index("idx_partner_tool_metrics_partner").on(table.partner),
 ]);
 
+// NMS sync state (tracks lastUpdatedDate + initial load)
+export const nmsSyncState = pgTable("nms_sync_state", {
+  key: text("key").primaryKey(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // NOTAMs (FAA SWIM ingestion)
 export const notams = pgTable("notams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

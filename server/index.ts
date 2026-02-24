@@ -98,6 +98,21 @@ app.use((req, res, next) => {
     log(`serving on port ${port}`);
     const shouldStartSwim = process.env.SWIM_RUN_MODE !== "worker";
     const swimRunInApi = String(process.env.SWIM_RUN_IN_API ?? "").toLowerCase();
+    const nmsEnabled = String(process.env.NMS_ENABLED ?? "").toLowerCase() === "true";
+
+    if (nmsEnabled) {
+      try {
+        const { startNmsNotamWorker } = await import("./nms-notam-worker");
+        const started = startNmsNotamWorker();
+        if (started) {
+          log("NMS NOTAM worker running inside API process");
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`NMS NOTAM worker failed to start: ${message}`);
+      }
+    }
+
     if (!shouldStartSwim || swimRunInApi === "false") return;
 
     const startInProcess = swimRunInApi === "true" || !isProd;

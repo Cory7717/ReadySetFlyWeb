@@ -12015,6 +12015,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           .from(notamsTable)
           .where(
             and(
+              eq(notamsTable.source, "nms_api"),
               or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, nowDate)),
               or(
                 ilike(notamsTable.notamId, "FDC%"),
@@ -12024,11 +12025,31 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             )
           )
           .orderBy(desc(notamsTable.effectiveAt), desc(notamsTable.createdAt))
-          .limit(2000);
+          .limit(3000);
 
         const features = rows
           .filter((row) => row.text && isTfrNotam(row.text, row.notamId))
           .map((row) => {
+            const rawGeometry = (row.raw as any)?.geometry;
+            if (rawGeometry && rawGeometry.type && rawGeometry.coordinates) {
+              return {
+                type: "Feature",
+                geometry: rawGeometry,
+                properties: {
+                  notamId: row.notamId,
+                  icao: row.icao,
+                  location,
+                  reason,
+                  tfrType,
+                  altitude,
+                  effectiveAt: row.effectiveAt ? row.effectiveAt.toISOString() : null,
+                  expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+                  text: row.text,
+                  source: row.source,
+                },
+              };
+            }
+
             const points = parseTfrPolygon(row.text || "");
             if (!points || points.length < 3) return null;
 

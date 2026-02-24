@@ -54,6 +54,107 @@ const bearingDeg = (from: AirportPoint, to: AirportPoint) => {
   return normalizeDegrees(toDegrees(Math.atan2(y, x)));
 };
 
+const EPSILON = 1e-9;
+
+const pointInPolygon = (point: { lat: number; lon: number }, ring: [number, number][]) => {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const intersect =
+      yi > point.lat !== yj > point.lat &&
+      point.lon < ((xj - xi) * (point.lat - yi)) / (yj - yi + EPSILON) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+};
+
+const segmentCross = (a: [number, number], b: [number, number], c: [number, number], d: [number, number]) => {
+  const cross = (p1: [number, number], p2: [number, number], p3: [number, number]) =>
+    (p2[0] - p1[0]) * (p3[1] - p1[1]) - (p2[1] - p1[1]) * (p3[0] - p1[0]);
+  const onSegment = (p1: [number, number], p2: [number, number], p: [number, number]) =>
+    Math.min(p1[0], p2[0]) - EPSILON <= p[0] &&
+    p[0] <= Math.max(p1[0], p2[0]) + EPSILON &&
+    Math.min(p1[1], p2[1]) - EPSILON <= p[1] &&
+    p[1] <= Math.max(p1[1], p2[1]) + EPSILON;
+
+  const d1 = cross(a, b, c);
+  const d2 = cross(a, b, d);
+  const d3 = cross(c, d, a);
+  const d4 = cross(c, d, b);
+
+  if (Math.abs(d1) < EPSILON && onSegment(a, b, c)) return true;
+  if (Math.abs(d2) < EPSILON && onSegment(a, b, d)) return true;
+  if (Math.abs(d3) < EPSILON && onSegment(c, d, a)) return true;
+  if (Math.abs(d4) < EPSILON && onSegment(c, d, b)) return true;
+
+  return d1 * d2 < 0 && d3 * d4 < 0;
+};
+
+const extractPolygonRings = (geometry: any): [number, number][][] => {
+  if (!geometry) return [];
+  if (geometry.type === "Polygon") {
+    const ring = geometry.coordinates?.[0];
+    return Array.isArray(ring) ? [ring] : [];
+  }
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates || [])
+      .map((poly: any) => poly?.[0])
+      .filter((ring: any) => Array.isArray(ring));
+  }
+  return [];
+};
+
+const buildPolygonBounds = (ring: [number, number][]) => {
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  ring.forEach(([lon, lat]) => {
+    if (lon < minLon) minLon = lon;
+    if (lon > maxLon) maxLon = lon;
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+  });
+  if (!Number.isFinite(minLon) || !Number.isFinite(minLat)) return null;
+  return { minLon, maxLon, minLat, maxLat };
+};
+
+const bboxIntersects = (
+  a: { west: number; east: number; south: number; north: number },
+  b: { minLon: number; maxLon: number; minLat: number; maxLat: number }
+) => {
+  return !(a.east < b.minLon || a.west > b.maxLon || a.north < b.minLat || a.south > b.maxLat);
+};
+
+const routeIntersectsRing = (
+  route: AirportPoint[],
+  ring: [number, number][],
+  routeBbox: { west: number; east: number; south: number; north: number }
+) => {
+  if (ring.length < 3 || route.length < 2) return false;
+  const bounds = buildPolygonBounds(ring);
+  if (!bounds || !bboxIntersects(routeBbox, bounds)) return false;
+
+  for (const point of route) {
+    if (pointInPolygon({ lat: point.lat, lon: point.lon }, ring)) return true;
+  }
+
+  for (let i = 0; i < route.length - 1; i += 1) {
+    const start: [number, number] = [route[i].lon, route[i].lat];
+    const end: [number, number] = [route[i + 1].lon, route[i + 1].lat];
+    for (let j = 0; j < ring.length; j += 1) {
+      const a = ring[j];
+      const b = ring[(j + 1) % ring.length];
+      if (segmentCross(start, end, a, b)) return true;
+    }
+  }
+
+  return false;
+};
+
 type AircraftProfile = {
   id: string;
   name: string;
@@ -964,6 +1065,9 @@ export default function FlightPlanner() {
   const routeBboxParam = routeBbox
     ? `${routeBbox.south},${routeBbox.west},${routeBbox.north},${routeBbox.east}`
     : null;
+  const tfrBboxParam = routeBbox
+    ? `${routeBbox.west},${routeBbox.south},${routeBbox.east},${routeBbox.north}`
+    : null;
 
   const legs = useMemo(() => buildLegs(routePoints), [routePoints]);
   const totalDistance = useMemo(() => sumDistance(legs), [legs]);
@@ -976,6 +1080,55 @@ export default function FlightPlanner() {
   const totalFuel = tripFuel + reserveFuel;
   const eteMinutes = eteHours ? Math.round(eteHours * 60) : 0;
   const canAutoArrival = Boolean(form.plannedDepartureAt && eteMinutes);
+
+  const tfrRouteQuery = useQuery({
+    queryKey: ["/api/tfrs", "route", tfrBboxParam],
+    queryFn: async () => {
+      if (!tfrBboxParam) return { features: [] };
+      const res = await fetch(apiUrl(`/api/tfrs?bbox=${encodeURIComponent(tfrBboxParam)}`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch TFRs");
+      return res.json();
+    },
+    enabled: Boolean(tfrBboxParam && routePoints.length > 1),
+    staleTime: 1000 * 60 * 15,
+  });
+
+  const tfrConflicts = useMemo(() => {
+    if (!routeBbox || routePoints.length < 2) return [];
+    const features = tfrRouteQuery.data?.features ?? [];
+    if (!Array.isArray(features) || features.length === 0) return [];
+    return features.filter((feature: any) => {
+      const rings = extractPolygonRings(feature?.geometry);
+      if (!rings.length) return false;
+      return rings.some((ring) => routeIntersectsRing(routePoints, ring, routeBbox));
+    });
+  }, [routeBbox, routePoints, tfrRouteQuery.data?.features]);
+
+  const tfrConflictIds = useMemo(() => {
+    return tfrConflicts
+      .map((feature: any) => feature?.properties?.notamId)
+      .filter(Boolean)
+      .map((value: string) => String(value));
+  }, [tfrConflicts]);
+
+  const tfrConflictRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (routePoints.length < 2) return;
+    if (tfrConflictIds.length === 0) {
+      tfrConflictRef.current = null;
+      return;
+    }
+    const key = [...tfrConflictIds].sort().join("|");
+    if (tfrConflictRef.current === key) return;
+    tfrConflictRef.current = key;
+    trackEvent("planner_tfr_conflict", {
+      count: tfrConflictIds.length,
+      tfrIds: tfrConflictIds.slice(0, 6),
+    });
+  }, [tfrConflictIds, routePoints.length]);
 
   const altitudeRisks = useMemo(() => {
     if (!Number.isFinite(plannedAltitudeFt) || plannedAltitudeFt <= 0) return [];
@@ -2494,6 +2647,39 @@ export default function FlightPlanner() {
             {forecastNotice && (
               <Alert>
                 <AlertDescription>{forecastNotice}</AlertDescription>
+              </Alert>
+            )}
+            {tfrRouteQuery.error && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  TFR overlay is unavailable right now. Recheck before departure and verify with official sources.
+                </AlertDescription>
+              </Alert>
+            )}
+            {tfrConflicts.length > 0 && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  <div className="font-semibold">TFRs intersect your planned route</div>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    Update waypoints to avoid restricted airspace before flight.
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {tfrConflicts.slice(0, 4).map((feature: any) => {
+                      const id = feature?.properties?.notamId || "TFR";
+                      const title = feature?.properties?.title || feature?.properties?.reason || "";
+                      return (
+                        <Badge key={`${id}-${title}`} variant="outline">
+                          {title ? `${id} • ${title}` : id}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-2">
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/tfr-map">Open TFR map</Link>
+                    </Button>
+                  </div>
+                </AlertDescription>
               </Alert>
             )}
             {densityAltitudeTrigger && (

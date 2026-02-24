@@ -1401,7 +1401,10 @@ const notamCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
 const TFR_EMPTY_CACHE_TTL_MS = 5 * 60 * 1000;
 const tfrCache = new Map<string, { data: any; expiresAt: number }>();
+const SUA_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const suaCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_ARCGIS_PROXY_URL = (process.env.TFR_ARCGIS_PROXY_URL || "").trim();
+const SUA_ARCGIS_URL = (process.env.SUA_ARCGIS_URL || "https://coast.noaa.gov/arcgis/rest/services/Hosted/MilitarySpecialUseAirspace/FeatureServer/0/query").trim();
 const NOTAM_SOURCE = (process.env.NOTAM_SOURCE || "http").trim().toLowerCase();
 const NOTAM_HTTP_BASE_URL = (process.env.NOTAM_HTTP_BASE_URL || "").trim();
 const SWIM_NOTAM_QUERY_BASE_URL = (process.env.SWIM_NOTAM_QUERY_BASE_URL || "").trim();
@@ -1720,7 +1723,34 @@ function parseArcGisDate(value: any) {
   return null;
 }
 
-function normalizeArcGisFeature(feature: any) {
+function parseArcGisCompactDate(value: any) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (/^\d{12}$/.test(raw)) {
+    const year = Number(raw.slice(0, 4));
+    const month = Number(raw.slice(4, 6));
+    const day = Number(raw.slice(6, 8));
+    const hour = Number(raw.slice(8, 10));
+    const minute = Number(raw.slice(10, 12));
+    if ([year, month, day, hour, minute].every(Number.isFinite)) {
+      return new Date(Date.UTC(year, month - 1, day, hour, minute)).toISOString();
+    }
+  }
+  if (/^\d{14}$/.test(raw)) {
+    const year = Number(raw.slice(0, 4));
+    const month = Number(raw.slice(4, 6));
+    const day = Number(raw.slice(6, 8));
+    const hour = Number(raw.slice(8, 10));
+    const minute = Number(raw.slice(10, 12));
+    const second = Number(raw.slice(12, 14));
+    if ([year, month, day, hour, minute, second].every(Number.isFinite)) {
+      return new Date(Date.UTC(year, month - 1, day, hour, minute, second)).toISOString();
+    }
+  }
+  return parseArcGisDate(raw);
+}
+
+function normalizeArcGisTfrFeature(feature: any) {
   if (!feature?.geometry) return null;
   const props = feature?.properties || {};
   const notamId =
@@ -1731,22 +1761,32 @@ function normalizeArcGisFeature(feature: any) {
     props.TFR_ID ||
     props.NAME ||
     props.OBJECTID;
+  const notamKey = props.NOTAM_KEY || props.NOTAMKEY || props.NOTAM_ID || props.NOTAM || null;
+  const title = props.TITLE || props.NAME || props.EVENT || null;
+  const legal = props.LEGAL || props.LEGALTYPE || props.CATEGORY || null;
   const location = props.LOCATION || props.AREA || props.NAME || props.EVENT || props.CITY || null;
   const reason = props.REASON || props.EVENT || props.TYPE || props.PURPOSE || null;
   const altitudeParts = [props.LOWER_ALT, props.UPPER_ALT].filter(Boolean);
   const altitude = altitudeParts.length ? altitudeParts.join(" - ") : props.ALTITUDE || props.ALT || null;
   const effectiveAt = parseArcGisDate(props.START || props.START_DATE || props.EFFECTIVE || props.BEGIN);
   const expiresAt = parseArcGisDate(props.END || props.END_DATE || props.EXPIRES || props.ENDDATE);
+  const lastUpdatedAt = parseArcGisCompactDate(
+    props.LAST_MODIFICATION_DATETIME || props.LASTUPDATED || props.LAST_MODIFIED || props.EDITED
+  );
 
   return {
     ...feature,
     properties: {
       notamId: notamId ? String(notamId) : "TFR",
+      notamKey: notamKey ? String(notamKey) : null,
+      title,
+      legal,
       location,
       reason,
       altitude,
       effectiveAt,
       expiresAt,
+      lastUpdatedAt,
       source: "faa-arcgis",
       raw: props,
     },
@@ -1807,7 +1847,7 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
         attempts.push({ url: baseUrl, ok: false, error: lastError });
         continue;
       }
-      const features = payload.features.map(normalizeArcGisFeature).filter(Boolean);
+      const features = payload.features.map(normalizeArcGisTfrFeature).filter(Boolean);
       return {
         data: {
           type: "FeatureCollection",
@@ -1830,6 +1870,177 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
 function extractLineValue(text: string, label: string) {
   const match = text.match(new RegExp(`${label}\\s*:\\s*([^\\n\\r]+)`, "i"));
   return match ? match[1].trim() : null;
+}
+
+function extractNotamKeyBase(value?: string | null) {
+  if (!value) return null;
+  const text = String(value).toUpperCase();
+  const match = text.match(/[A-Z]?\d{1,5}\/\d{2,4}/);
+  return match ? match[0] : null;
+}
+
+function getNotamRowKeyBases(row: any) {
+  const bases = new Set<string>();
+  const idBase = extractNotamKeyBase(row?.notamId);
+  const textBase = extractNotamKeyBase(row?.text);
+  if (idBase) bases.add(idBase);
+  if (textBase) bases.add(textBase);
+  return Array.from(bases);
+}
+
+async function enrichArcGisTfrFeatures(features: any[]) {
+  if (!features.length) return features;
+  const keyBases = new Set<string>();
+  for (const feature of features) {
+    const raw = feature?.properties?.raw || {};
+    const base =
+      extractNotamKeyBase(feature?.properties?.notamKey) ||
+      extractNotamKeyBase(raw?.NOTAM_KEY) ||
+      extractNotamKeyBase(raw?.NOTAM) ||
+      extractNotamKeyBase(feature?.properties?.title);
+    if (base) keyBases.add(base);
+  }
+
+  const baseList = Array.from(keyBases).slice(0, 200);
+  if (!baseList.length) return features;
+
+  const keyFilters = baseList.map((key) => or(ilike(notamsTable.notamId, `%${key}%`), ilike(notamsTable.text, `%${key}%`)));
+  const keyFilter = keyFilters.length === 1 ? keyFilters[0] : or(...keyFilters);
+  if (!keyFilter) return features;
+
+  const nowDate = new Date();
+  const rows = await db
+    .select()
+    .from(notamsTable)
+    .where(
+      and(
+        eq(notamsTable.source, "nms_api"),
+        or(isNull(notamsTable.expiresAt), gte(notamsTable.expiresAt, nowDate)),
+        keyFilter
+      )
+    )
+    .limit(5000);
+
+  if (!rows.length) return features;
+
+  const rowByBase = new Map<string, any>();
+  for (const row of rows) {
+    const bases = getNotamRowKeyBases(row);
+    for (const base of bases) {
+      const existing = rowByBase.get(base);
+      if (!existing || (row.effectiveAt && existing.effectiveAt && row.effectiveAt > existing.effectiveAt)) {
+        rowByBase.set(base, row);
+      }
+    }
+  }
+
+  return features.map((feature) => {
+    const raw = feature?.properties?.raw || {};
+    const base =
+      extractNotamKeyBase(feature?.properties?.notamKey) ||
+      extractNotamKeyBase(raw?.NOTAM_KEY) ||
+      extractNotamKeyBase(raw?.NOTAM) ||
+      extractNotamKeyBase(feature?.properties?.title);
+    if (!base) return feature;
+    const row = rowByBase.get(base);
+    if (!row) return feature;
+
+    const text = row.text || "";
+    const location = extractLineValue(text, "Location") || feature?.properties?.location || null;
+    const reason = extractLineValue(text, "Reason for NOTAM") || feature?.properties?.reason || null;
+    const tfrType = extractLineValue(text, "Type") || feature?.properties?.tfrType || null;
+    const altitude = extractLineValue(text, "Altitude") || feature?.properties?.altitude || null;
+
+    return {
+      ...feature,
+      properties: {
+        ...feature.properties,
+        notamId: row.notamId || feature?.properties?.notamId,
+        location,
+        reason,
+        tfrType,
+        altitude,
+        effectiveAt: row.effectiveAt ? row.effectiveAt.toISOString() : feature?.properties?.effectiveAt,
+        expiresAt: row.expiresAt ? row.expiresAt.toISOString() : feature?.properties?.expiresAt,
+        text,
+        sourceDetail: row.source || "nms_api",
+      },
+    };
+  });
+}
+
+function normalizeSUAFeature(feature: any) {
+  if (!feature?.geometry) return null;
+  const props = feature?.properties || {};
+  const name = props.FEATURENAME || props.FEATURE_NAME || props.NAME || props.AIRSPACE || props.AIRSPACENAME || null;
+  const type = props.SPECIALUSEAIRSPACETYPE || props.TYPE || props.CATEGORY || props.AIRSPACETYPE || null;
+  const floor = props.FLOOR || props.FLOORVALUE || props.LOWERALTITUDE || props.LOWER_ALT || props.ALTLOWER || null;
+  const ceiling = props.CEILING || props.CEILINGVALUE || props.UPPERALTITUDE || props.UPPER_ALT || props.ALTUPPER || null;
+  const agency = props.SCHEDULINGAGENCY || props.AGENCY || null;
+  const region = props.REGION || props.COPAREA || null;
+
+  return {
+    ...feature,
+    properties: {
+      name,
+      type,
+      floor,
+      ceiling,
+      agency,
+      region,
+      source: "sua-arcgis",
+      raw: props,
+    },
+  };
+}
+
+async function fetchArcGisSUA(bbox?: { minLon: number; minLat: number; maxLon: number; maxLat: number }) {
+  const geometry = bbox
+    ? `${bbox.minLon},${bbox.minLat},${bbox.maxLon},${bbox.maxLat}`
+    : "-180,-90,180,90";
+
+  const params = new URLSearchParams({
+    where: "1=1",
+    outFields: "*",
+    returnGeometry: "true",
+    geometry,
+    geometryType: "esriGeometryEnvelope",
+    spatialRel: "esriSpatialRelIntersects",
+    inSR: "4326",
+    outSR: "4326",
+    f: "geojson",
+  });
+
+  const url = `${SUA_ARCGIS_URL}?${params.toString()}`;
+  const response = await fetchWithTimeout(
+    url,
+    {
+      headers: {
+        "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+        "Referer": "https://www.faa.gov",
+        "Origin": "https://www.faa.gov",
+      },
+    },
+    10000
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`SUA ArcGIS request failed (${response.status}) ${errorText.slice(0, 200)}`);
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (!payload?.features || !Array.isArray(payload.features)) {
+    throw new Error("SUA ArcGIS response missing features");
+  }
+
+  const features = payload.features.map(normalizeSUAFeature).filter(Boolean);
+  return {
+    type: "FeatureCollection",
+    features,
+    updatedAt: new Date().toISOString(),
+    source: "sua-arcgis",
+  };
 }
 
 function isTfrNotam(text: string, notamId: string) {
@@ -12008,7 +12219,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           error: arcgisResult?.error,
           attempts: arcgisResult?.attempts,
         };
-        if (arcgisResult?.data) return arcgisResult.data;
+        if (arcgisResult?.data) {
+          const enrichedFeatures = await enrichArcGisTfrFeatures(arcgisResult.data.features || []);
+          return {
+            ...arcgisResult.data,
+            features: enrichedFeatures,
+          };
+        }
 
         const nowDate = new Date();
         const rows = await db
@@ -12188,6 +12405,39 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(200).json({ ...cached.data, stale: true });
       }
       res.status(502).json({ error: "Failed to fetch TFRs", stale: false });
+    }
+  });
+
+  app.get("/api/airspace/sua", async (req, res) => {
+    try {
+      const bbox = parseBboxParam(req.query?.bbox);
+      const cacheKey = bbox
+        ? `BBOX:${bbox.minLon},${bbox.minLat},${bbox.maxLon},${bbox.maxLat}`
+        : "ALL";
+      const cached = suaCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return res.json(cached.data);
+      }
+
+      const payload = await fetchArcGisSUA(bbox || undefined);
+      suaCache.set(cacheKey, { data: payload, expiresAt: Date.now() + SUA_CACHE_TTL_MS });
+
+      console.log(
+        JSON.stringify({
+          event: "sua_fetch",
+          count: payload?.features?.length || 0,
+          bbox: bbox ? cacheKey.replace("BBOX:", "") : null,
+        })
+      );
+
+      return res.json(payload);
+    } catch (error: any) {
+      console.error("SUA fetch failed:", error);
+      const cached = suaCache.get("ALL");
+      if (cached?.data) {
+        return res.status(200).json({ ...cached.data, stale: true });
+      }
+      return res.status(502).json({ error: "Failed to load special use airspace", stale: false });
     }
   });
 

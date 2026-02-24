@@ -11,11 +11,17 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { AlertTriangle, Navigation, Search } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 
 type TfrFeatureCollection = FeatureCollection & {
+  updatedAt?: string;
+  stale?: boolean;
+};
+
+type SuaFeatureCollection = FeatureCollection & {
   updatedAt?: string;
   stale?: boolean;
 };
@@ -62,6 +68,50 @@ const TfrGeoJsonLayer = ({ data, selectedId, onSelect }: TfrGeoJsonLayerProps) =
   return null;
 };
 
+type SuaGeoJsonLayerProps = {
+  data: FeatureCollection;
+};
+
+const SuaGeoJsonLayer = ({ data }: SuaGeoJsonLayerProps) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!data?.features?.length) return undefined;
+    const layer = L.geoJSON(data, {
+      style: (feature: any) => {
+        const rawType = String(feature?.properties?.type || feature?.properties?.raw?.SPECIALUSEAIRSPACETYPE || "").toLowerCase();
+        const type = rawType.replace(/[^a-z]/g, "");
+        let color = "#0f766e";
+        if (type.includes("restricted")) color = "#ef4444";
+        if (type.includes("prohibited")) color = "#b91c1c";
+        if (type.includes("warning")) color = "#f59e0b";
+        if (type.includes("alert")) color = "#facc15";
+        if (type.includes("moa")) color = "#2563eb";
+        if (type.includes("danger")) color = "#f97316";
+        return {
+          color,
+          weight: 1,
+          dashArray: "4 3",
+          fillColor: color,
+          fillOpacity: 0.08,
+        };
+      },
+      onEachFeature: (feature, layerInstance) => {
+        const name = feature?.properties?.name || feature?.properties?.raw?.FEATURENAME || "SUA";
+        const type = feature?.properties?.type || feature?.properties?.raw?.SPECIALUSEAIRSPACETYPE || "";
+        layerInstance.bindTooltip(`${name}${type ? ` (${type})` : ""}`, { sticky: true });
+      },
+    });
+
+    layer.addTo(map);
+    return () => {
+      layer.remove();
+    };
+  }, [data, map]);
+
+  return null;
+};
+
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 
 export default function TfrMap() {
@@ -74,6 +124,7 @@ export default function TfrMap() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeBbox, setActiveBbox] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showSUA, setShowSUA] = useState(false);
   const mapRef = useRef<L.Map | null>(null);
 
   const normalizedIcao = icaoFilter.trim().toUpperCase();
@@ -94,7 +145,23 @@ export default function TfrMap() {
     refetchIntervalInBackground: true,
   });
 
+  const { data: suaData, error: suaError } = useQuery<SuaFeatureCollection>({
+    queryKey: ["/api/airspace/sua", activeBbox],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (activeBbox) params.set("bbox", activeBbox);
+      const url = params.toString() ? `/api/airspace/sua?${params}` : "/api/airspace/sua";
+      const res = await fetch(apiUrl(url), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch special use airspace");
+      return res.json();
+    },
+    enabled: showSUA,
+    staleTime: 1000 * 60 * 60 * 6,
+    refetchOnWindowFocus: false,
+  });
+
   const features = data?.features ?? [];
+  const suaFeatures = suaData?.features ?? [];
   const filtered = useMemo(() => {
     if (!query.trim()) return features;
     const needle = query.trim().toLowerCase();
@@ -179,6 +246,11 @@ export default function TfrMap() {
     return () => window.clearTimeout(timer);
   }, [isFullscreen]);
 
+  const suaGeoJson: FeatureCollection = {
+    type: "FeatureCollection",
+    features: suaFeatures,
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 space-y-6">
@@ -232,6 +304,10 @@ export default function TfrMap() {
               </Button>
             )}
             <Badge variant="outline">NOTAMs powered by FAA SWIM</Badge>
+            <div className="flex items-center gap-2 pl-1">
+              <Switch checked={showSUA} onCheckedChange={(checked) => setShowSUA(checked)} />
+              <span className="text-sm text-muted-foreground">Show special-use airspace (MOA / Restricted)</span>
+            </div>
           </CardContent>
         </Card>
 
@@ -244,6 +320,12 @@ export default function TfrMap() {
         {error && (
           <Alert variant="destructive">
             <AlertDescription>Unable to load TFR data. Try again shortly.</AlertDescription>
+          </Alert>
+        )}
+
+        {suaError && (
+          <Alert variant="destructive">
+            <AlertDescription>Unable to load special-use airspace. Try again shortly.</AlertDescription>
           </Alert>
         )}
 
@@ -284,8 +366,14 @@ export default function TfrMap() {
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   <TfrGeoJsonLayer data={geoJson} selectedId={selectedId} onSelect={handleFeatureClick} />
+                  {showSUA && <SuaGeoJsonLayer data={suaGeoJson} />}
                 </MapContainer>
               </div>
+              {showSUA && (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Special-use airspace boundaries are static; activation times vary. Always verify with official sources before flight.
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -298,6 +386,15 @@ export default function TfrMap() {
               {selectedFeature && (
                 <div className="rounded-lg border p-3 text-sm space-y-1 bg-muted/30">
                   <div className="font-semibold">{selectedFeature.properties?.notamId}</div>
+                  {selectedFeature.properties?.title && (
+                    <div className="text-muted-foreground">{selectedFeature.properties.title}</div>
+                  )}
+                  {selectedFeature.properties?.legal && (
+                    <div className="text-xs text-muted-foreground">Legal: {selectedFeature.properties.legal}</div>
+                  )}
+                  {selectedFeature.properties?.notamKey && (
+                    <div className="text-xs text-muted-foreground">NOTAM Key: {selectedFeature.properties.notamKey}</div>
+                  )}
                   {selectedFeature.properties?.location && (
                     <div className="text-muted-foreground">{selectedFeature.properties.location}</div>
                   )}
@@ -313,6 +410,15 @@ export default function TfrMap() {
                   {selectedFeature.properties?.expiresAt && (
                     <div className="text-xs text-muted-foreground">Expires: {selectedFeature.properties.expiresAt}</div>
                   )}
+                  {selectedFeature.properties?.lastUpdatedAt && (
+                    <div className="text-xs text-muted-foreground">Last updated: {selectedFeature.properties.lastUpdatedAt}</div>
+                  )}
+                  {selectedFeature.properties?.text && (
+                    <details className="text-xs text-muted-foreground pt-1">
+                      <summary className="cursor-pointer">View full NOTAM text</summary>
+                      <div className="mt-2 whitespace-pre-wrap">{selectedFeature.properties.text}</div>
+                    </details>
+                  )}
                 </div>
               )}
               {filtered.length === 0 && (
@@ -325,6 +431,9 @@ export default function TfrMap() {
                   onClick={() => handleFeatureClick(feature)}
                 >
                   <div className="font-semibold">{feature.properties?.notamId}</div>
+                  {feature.properties?.title && (
+                    <div className="text-muted-foreground">{feature.properties.title}</div>
+                  )}
                   {feature.properties?.location && (
                     <div className="text-muted-foreground">{feature.properties.location}</div>
                   )}

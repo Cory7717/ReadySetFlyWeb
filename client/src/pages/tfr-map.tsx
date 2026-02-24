@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import type { FeatureCollection } from "geojson";
@@ -112,6 +112,24 @@ const SuaGeoJsonLayer = ({ data }: SuaGeoJsonLayerProps) => {
   return null;
 };
 
+const MapBoundsTracker = ({ enabled, onBoundsChange }: { enabled: boolean; onBoundsChange: (bounds: L.LatLngBounds) => void }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!enabled) return;
+    const handler = () => {
+      onBoundsChange(map.getBounds());
+    };
+    handler();
+    map.on("moveend", handler);
+    return () => {
+      map.off("moveend", handler);
+    };
+  }, [enabled, map, onBoundsChange]);
+
+  return null;
+};
+
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 
 export default function TfrMap() {
@@ -125,6 +143,7 @@ export default function TfrMap() {
   const [activeBbox, setActiveBbox] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSUA, setShowSUA] = useState(false);
+  const [suaBbox, setSuaBbox] = useState<string | null>(null);
   const mapRef = useRef<L.Map | null>(null);
 
   const normalizedIcao = icaoFilter.trim().toUpperCase();
@@ -145,17 +164,22 @@ export default function TfrMap() {
     refetchIntervalInBackground: true,
   });
 
-  const { data: suaData, error: suaError } = useQuery<SuaFeatureCollection>({
-    queryKey: ["/api/airspace/sua", activeBbox],
+  const {
+    data: suaData,
+    isLoading: suaLoading,
+    error: suaError,
+    refetch: refetchSua,
+  } = useQuery<SuaFeatureCollection>({
+    queryKey: ["/api/airspace/sua", suaBbox],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (activeBbox) params.set("bbox", activeBbox);
+      if (suaBbox) params.set("bbox", suaBbox);
       const url = params.toString() ? `/api/airspace/sua?${params}` : "/api/airspace/sua";
       const res = await fetch(apiUrl(url), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch special use airspace");
       return res.json();
     },
-    enabled: showSUA,
+    enabled: showSUA && Boolean(suaBbox),
     staleTime: 1000 * 60 * 60 * 6,
     refetchOnWindowFocus: false,
   });
@@ -201,6 +225,9 @@ export default function TfrMap() {
   const handleRefresh = () => {
     trackEvent("tfr_map_refresh");
     refetch();
+    if (showSUA) {
+      refetchSua();
+    }
   };
 
   const handleSearchArea = () => {
@@ -245,6 +272,22 @@ export default function TfrMap() {
     }, 150);
     return () => window.clearTimeout(timer);
   }, [isFullscreen]);
+
+  useEffect(() => {
+    if (!showSUA) {
+      setSuaBbox(null);
+    }
+  }, [showSUA]);
+
+  const handleSuaBounds = useCallback((bounds: L.LatLngBounds) => {
+    const bbox = [
+      bounds.getWest().toFixed(5),
+      bounds.getSouth().toFixed(5),
+      bounds.getEast().toFixed(5),
+      bounds.getNorth().toFixed(5),
+    ].join(",");
+    setSuaBbox(bbox);
+  }, []);
 
   const suaGeoJson: FeatureCollection = {
     type: "FeatureCollection",
@@ -308,6 +351,11 @@ export default function TfrMap() {
               <Switch checked={showSUA} onCheckedChange={(checked) => setShowSUA(checked)} />
               <span className="text-sm text-muted-foreground">Show special-use airspace (MOA / Restricted)</span>
             </div>
+            {showSUA && (
+              <Badge variant="secondary">
+                {suaLoading ? "Loading SUA..." : `${suaFeatures.length} areas`}
+              </Badge>
+            )}
           </CardContent>
         </Card>
 
@@ -367,6 +415,7 @@ export default function TfrMap() {
                   />
                   <TfrGeoJsonLayer data={geoJson} selectedId={selectedId} onSelect={handleFeatureClick} />
                   {showSUA && <SuaGeoJsonLayer data={suaGeoJson} />}
+                  <MapBoundsTracker enabled={showSUA} onBoundsChange={handleSuaBounds} />
                 </MapContainer>
               </div>
               {showSUA && (

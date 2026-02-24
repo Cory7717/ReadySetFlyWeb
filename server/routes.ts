@@ -1872,6 +1872,31 @@ function extractLineValue(text: string, label: string) {
   return match ? match[1].trim() : null;
 }
 
+function extractAltitudeFromNotam(text: string) {
+  if (!text) return null;
+  const line =
+    extractLineValue(text, "Altitude") ||
+    extractLineValue(text, "Altitudes") ||
+    extractLineValue(text, "Altitude(s)") ||
+    extractLineValue(text, "Altitude(s)") ||
+    extractLineValue(text, "Vertical Limits") ||
+    extractLineValue(text, "Vertical Limits") ||
+    extractLineValue(text, "Vertical Limits (MSL)") ||
+    extractLineValue(text, "Vertical Limits (MSL)");
+  if (line) return line;
+
+  const sfcMatch = text.match(/\b(SFC|SURFACE|GROUND)\b\s*(?:-|TO)\s*(FL?\s?\d{2,3}|\d{3,5}\s*(?:FT|MSL|AGL)?)/i);
+  if (sfcMatch) return sfcMatch[0].replace(/\s+/g, " ");
+
+  const altitudeMatch = text.match(/\b(\d{3,5})\s*(?:FT|MSL|AGL)\b/i);
+  if (altitudeMatch) return altitudeMatch[0].replace(/\s+/g, " ");
+
+  const flMatch = text.match(/\bFL\s?\d{2,3}\b/i);
+  if (flMatch) return flMatch[0].replace(/\s+/g, " ");
+
+  return null;
+}
+
 function extractNotamKeyBase(value?: string | null) {
   if (!value) return null;
   const text = String(value).toUpperCase();
@@ -1949,7 +1974,7 @@ async function enrichArcGisTfrFeatures(features: any[]) {
     const location = extractLineValue(text, "Location") || feature?.properties?.location || null;
     const reason = extractLineValue(text, "Reason for NOTAM") || feature?.properties?.reason || null;
     const tfrType = extractLineValue(text, "Type") || feature?.properties?.tfrType || null;
-    const altitude = extractLineValue(text, "Altitude") || feature?.properties?.altitude || null;
+            const altitude = extractAltitudeFromNotam(text) || feature?.properties?.altitude || null;
 
     return {
       ...feature,
@@ -12274,7 +12299,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             const reason = extractLineValue(row.text, "Reason for NOTAM");
             const location = extractLineValue(row.text, "Location");
             const tfrType = extractLineValue(row.text, "Type");
-            const altitude = extractLineValue(row.text, "Altitude");
+            const altitude = extractAltitudeFromNotam(row.text);
 
             return {
               type: "Feature",

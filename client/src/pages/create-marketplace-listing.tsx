@@ -193,6 +193,7 @@ export default function CreateMarketplaceListing() {
   // Watch category to render category-specific fields
   const selectedCategory = form.watch("category");
   const selectedTier = form.watch("details.tier");
+  const shouldContainImage = selectedCategory === "flight-school";
   
   // Calculate max images based on category and tier
   const getMaxImages = (category: string, tier?: string) => {
@@ -948,14 +949,18 @@ export default function CreateMarketplaceListing() {
                   {imageFiles.map((url, index) => (
                     <div
                       key={index}
-                      className="relative aspect-square rounded-md border overflow-hidden group select-none"
+                      className="relative aspect-square rounded-md border overflow-hidden group select-none bg-white"
                       draggable
                       onDragStart={() => handleDragStart(index)}
                       onDragOver={handleDragOver}
                       onDrop={() => handleDrop(index)}
                       title="Drag to reorder"
                     >
-                      <img src={url} alt={`Upload ${index + 1}`} className="w-full h-full object-cover" />
+                      <img
+                        src={url}
+                        alt={`Upload ${index + 1}`}
+                        className={`w-full h-full ${shouldContainImage ? "object-contain" : "object-cover"}`}
+                      />
                       <Button
                         type="button"
                         variant="destructive"

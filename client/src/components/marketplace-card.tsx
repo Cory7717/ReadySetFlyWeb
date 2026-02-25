@@ -49,6 +49,7 @@ export function MarketplaceCard({
   viewCount = 0,
 }: MarketplaceCardProps) {
   const resolvedImage = resolveImageUrl(image);
+  const shouldContainImage = category === "flight-school";
   return (
     <Card className="overflow-hidden hover-elevate transition-all duration-200 hover:scale-[1.02]" data-testid={`card-marketplace-${id}`}>
       {isExample && (
@@ -57,11 +58,11 @@ export function MarketplaceCard({
         </div>
       )}
       {resolvedImage ? (
-        <div className="relative aspect-[3/2] overflow-hidden">
+        <div className="relative aspect-[3/2] overflow-hidden bg-white">
           <img
             src={resolvedImage}
             alt={title}
-            className="w-full h-full object-cover"
+            className={`w-full h-full ${shouldContainImage ? "object-contain" : "object-cover"}`}
           />
           {isExample && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

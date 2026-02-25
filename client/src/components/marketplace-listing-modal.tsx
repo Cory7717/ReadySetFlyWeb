@@ -276,11 +276,13 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                   <CarouselContent>
                     {listing.images.map((img, idx) => (
                       <CarouselItem key={idx}>
-                        <div className="aspect-video rounded-xl overflow-hidden bg-muted">
+                        <div className="aspect-video rounded-xl overflow-hidden bg-white">
                           <img
                             src={resolveImageUrl(img)}
                             alt={`${listing.title} - Image ${idx + 1}`}
-                            className="w-full h-full object-cover"
+                            className={`w-full h-full ${
+                              listing.category === "flight-school" ? "object-contain" : "object-cover"
+                            }`}
                           />
                         </div>
                       </CarouselItem>

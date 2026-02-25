@@ -45,6 +45,7 @@ import BannerAdPaymentRedirect from "@/pages/banner-ad-payment";
 import BannerAdvertise from "@/pages/banner-advertise";
 import Logbook from "@/pages/logbook";
 import PilotTools from "@/pages/pilot-tools";
+import ToolHub from "@/pages/tool-hub";
 import AviationWeatherHub from "@/pages/aviation-weather";
 import TfrMap from "@/pages/tfr-map";
 import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
@@ -114,6 +115,7 @@ function AnalyticsTracker() {
     trackSessionPing(path);
     const normalized = path.startsWith("/") ? path : `/${path}`;
     const toolPrefixes = [
+      "/tool-hub",
       "/pilot-tools",
       "/aviation-weather",
       "/tfr-map",
@@ -168,6 +170,7 @@ function Router() {
       <Route path="/terms-of-service" component={TermsOfService} />
       <Route path="/banner-ad-payment" component={BannerAdPaymentRedirect} />
       <Route path="/banner-advertise" component={BannerAdvertise} />
+      <Route path="/tool-hub" component={ToolHub} />
       <Route path="/cfi" component={CfiDirectory} />
       <Route path="/cfi/terms" component={CfiTerms} />
       <Route path="/cfi/student-terms" component={CfiStudentTerms} />
@@ -192,6 +195,7 @@ function Router() {
           <Route path="/cfi/:slug/request" component={CfiRequest} />
           <Route path="/aircraft/:id" component={AircraftDetail} />
           <Route path="/pilot-tools" component={PilotTools} />
+          <Route path="/tool-hub" component={ToolHub} />
           <Route path="/aviation-weather" component={AviationWeatherHub} />
           <Route path="/tfr-map" component={TfrMap} />
           <Route path="/approach-plates" component={ApproachPlates} />
@@ -254,6 +258,7 @@ function Router() {
           <Route path="/cfi/:slug/request" component={RequireAuth} />
           <Route path="/aircraft/:id" component={AircraftDetail} />
           <Route path="/pilot-tools" component={PilotTools} />
+          <Route path="/tool-hub" component={ToolHub} />
           <Route path="/aviation-weather" component={AviationWeatherHub} />
           <Route path="/tfr-map" component={TfrMap} />
           <Route path="/approach-plates" component={ApproachPlates} />

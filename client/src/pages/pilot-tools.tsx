@@ -474,6 +474,19 @@ export default function PilotTools() {
           </CardContent>
         </Card>
 
+        <div id="calculators" className="space-y-2 pt-2">
+          <Separator />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold">Pilot Calculators</h2>
+              <p className="text-sm text-muted-foreground">
+                Crosswind, density altitude, e6b, weight & balance, and cost planning.
+              </p>
+            </div>
+            <Badge variant="outline">Free tools</Badge>
+          </div>
+        </div>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -624,6 +637,22 @@ export default function PilotTools() {
           <CardContent className="flex flex-wrap items-center gap-3">
             <Button asChild>
               <Link href="/weight-balance">Open Weight & Balance</Link>
+            </Button>
+            <Badge variant="outline">Planning tool</Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gauge className="h-5 w-5" />
+              Ownership Cost Calculator
+            </CardTitle>
+            <CardDescription>Estimate monthly and annual ownership costs.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <Button asChild>
+              <Link href="/ownership-cost-calculator">Open Ownership Cost</Link>
             </Button>
             <Badge variant="outline">Planning tool</Badge>
           </CardContent>

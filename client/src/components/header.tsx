@@ -37,6 +37,11 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["pilot tools", "aviation tools", "toolbox", "pilot utilities"],
   },
   {
+    label: "Tool Hub",
+    path: "/tool-hub",
+    keywords: ["tool hub", "tools hub", "pilot tools hub", "all tools"],
+  },
+  {
     label: "NOTAMs",
     path: "/pilot-tools",
     keywords: ["notams", "notam", "runway advisory", "airport briefing"],
@@ -85,6 +90,11 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     label: "Crosswind Calculator",
     path: "/pilot-tools",
     keywords: ["crosswind", "headwind", "wind component", "runway wind"],
+  },
+  {
+    label: "Calculators",
+    path: "/pilot-tools#calculators",
+    keywords: ["calculators", "pilot calculators", "crosswind", "density altitude", "e6b", "weight balance"],
   },
   {
     label: "Density Altitude Calculator",
@@ -199,6 +209,7 @@ export function Header() {
 
   const isPlanner = location.startsWith("/flight-planner");
   const isTraining = location.startsWith("/student") || location.startsWith("/start-flying");
+  const isTools = location.startsWith("/tool-hub") || location.startsWith("/pilot-tools") || location.startsWith("/ifr-tools");
   const isFaq = location === "/faq";
 
   const displayName = user?.firstName && user?.lastName
@@ -303,6 +314,16 @@ export function Header() {
                   className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isTraining ? "bg-background shadow-sm" : ""}`}
                 >
                   Training
+                </Button>
+              </Link>
+              <Link href="/tool-hub" data-testid="link-tools">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isTools ? "bg-background shadow-sm" : ""}`}
+                  onClick={() => trackEvent("nav_click", { label: "tools", target: "/tool-hub" })}
+                >
+                  Tools
                 </Button>
               </Link>
               <Link href="/faq" data-testid="link-faq">

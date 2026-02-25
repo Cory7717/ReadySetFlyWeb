@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
-import { BookOpen, CalendarDays, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench } from "lucide-react";
+import { BookOpen, CalendarDays, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -419,6 +419,120 @@ export default function Landing() {
       </div>
       </div>
 
+      {/* Tool Hub Spotlight */}
+      <div className="py-10 sm:py-12 bg-muted/10">
+        <div className="container mx-auto px-4">
+          <div className="text-center space-y-2">
+            <Badge variant="outline" className="mx-auto text-xs">Tool Hub</Badge>
+            <h2 className="text-2xl sm:text-3xl font-semibold">Find the right tool fast</h2>
+            <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto">
+              Plan first, then verify airspace, and train with confidence. All tools are organized in one hub.
+            </p>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Plane className="h-5 w-5 text-primary" />
+                  Flight Planner
+                </CardTitle>
+                <CardDescription>Routes, fuel, time, and route analysis.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild className="w-full">
+                  <Link
+                    href="/flight-planner"
+                    onClick={() => trackEvent("cta_click", { label: "tool_hub_flight_planner", target: "/flight-planner" })}
+                  >
+                    Open Flight Planner
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calculator className="h-5 w-5" />
+                  Pilot Calculators
+                </CardTitle>
+                <CardDescription>E6B, crosswind, density altitude, W&B, cost.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild variant="outline" className="w-full">
+                  <Link
+                    href="/pilot-tools#calculators"
+                    onClick={() => trackEvent("cta_click", { label: "tool_hub_calculators", target: "/pilot-tools#calculators" })}
+                  >
+                    Open Calculators
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5" />
+                  Student Tools
+                </CardTitle>
+                <CardDescription>Roadmaps, costs, study tools, and progress.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button asChild variant="outline" className="w-full">
+                  <Link
+                    href="/student"
+                    onClick={() => trackEvent("cta_click", { label: "tool_hub_student", target: "/student" })}
+                  >
+                    Open Student Hub
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5" />
+                  IFR + Airspace
+                </CardTitle>
+                <CardDescription>IFR tools plus TFR and NOTAM awareness.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button asChild variant="outline" className="w-full">
+                  <Link
+                    href="/ifr-tools"
+                    onClick={() => trackEvent("cta_click", { label: "tool_hub_ifr", target: "/ifr-tools" })}
+                  >
+                    Open IFR Tools
+                  </Link>
+                </Button>
+                <Button asChild variant="secondary" className="w-full">
+                  <Link
+                    href="/tfr-map"
+                    onClick={() => trackEvent("cta_click", { label: "tool_hub_tfr", target: "/tfr-map" })}
+                  >
+                    Open TFR Map
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="mt-5 flex justify-center">
+            <Button asChild variant="secondary">
+              <Link
+                href="/tool-hub"
+                onClick={() => trackEvent("cta_click", { label: "tool_hub_primary", target: "/tool-hub" })}
+              >
+                Open the Tool Hub
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
       {/* Membership Matrix */}
       <div className="py-10 sm:py-14 bg-muted/20">
         <div className="container mx-auto px-4">
@@ -524,6 +638,8 @@ export default function Landing() {
               { label: "VOR/Knob Trainer", href: "/student/vor-trainer", slug: "vor-knob" },
               { label: "Six-Pack Panel", href: "/student/six-pack-trainer", slug: "six-pack" },
               { label: "IFR Tools", href: "/ifr-tools", slug: "ifr-tools" },
+              { label: "TFR Map", href: "/tfr-map", slug: "tfr-map" },
+              { label: "NOTAM Briefing", href: "/pilot-tools#airport-briefing", slug: "notam-briefing" },
             ].map((tool) => (
               <Button key={tool.slug} size="sm" variant="outline" asChild>
                 <Link

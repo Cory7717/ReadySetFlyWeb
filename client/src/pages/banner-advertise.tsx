@@ -210,6 +210,7 @@ export default function BannerAdvertise() {
             <span>• Destination URL (where pilots should click)</span>
             <span>• Preferred placements and start date</span>
             <span>• Optional image or video (landscape or portrait)</span>
+            <span>• Videos should be 15 seconds or less for best rotation visibility</span>
           </CardContent>
         </Card>
 

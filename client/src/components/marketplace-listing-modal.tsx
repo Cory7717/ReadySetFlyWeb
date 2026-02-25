@@ -280,9 +280,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                           <img
                             src={resolveImageUrl(img)}
                             alt={`${listing.title} - Image ${idx + 1}`}
-                            className={`w-full h-full ${
-                              listing.category === "flight-school" ? "object-contain" : "object-cover"
-                            }`}
+                            className="w-full h-full object-contain"
                           />
                         </div>
                       </CarouselItem>

@@ -193,7 +193,6 @@ export default function CreateMarketplaceListing() {
   // Watch category to render category-specific fields
   const selectedCategory = form.watch("category");
   const selectedTier = form.watch("details.tier");
-  const shouldContainImage = selectedCategory === "flight-school";
   
   // Calculate max images based on category and tier
   const getMaxImages = (category: string, tier?: string) => {
@@ -959,7 +958,7 @@ export default function CreateMarketplaceListing() {
                       <img
                         src={url}
                         alt={`Upload ${index + 1}`}
-                        className={`w-full h-full ${shouldContainImage ? "object-contain" : "object-cover"}`}
+                        className="w-full h-full object-contain"
                       />
                       <Button
                         type="button"

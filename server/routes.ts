@@ -9710,6 +9710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fieldsToUpdate = [
         'title',
         'description',
+        'adCopy',
         'imageUrl',
         'videoUrl',
         'videoMuted',
@@ -9848,6 +9849,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timeframe: z.string().trim().max(120).optional(),
         budget: z.string().trim().max(120).optional(),
         message: z.string().trim().max(2000).optional(),
+        agreementAccepted: z.literal(true, {
+          errorMap: () => ({ message: "Agreement acceptance is required" }),
+        }),
+        agreementName: z.string().trim().min(1, "Signature name is required").max(160),
+        agreementTitle: z.string().trim().max(160).optional(),
+        agreementVersion: z.string().trim().max(200).optional(),
       });
 
       const parsed = inquirySchema.safeParse(req.body);
@@ -9856,6 +9863,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const placements = parsed.data.placements?.length ? parsed.data.placements.join(", ") : "Not specified";
+      const agreementVersion = parsed.data.agreementVersion || "RSF Banner Advertising Agreement";
+      const agreementSignedAt = new Date();
+      const agreementDateLabel = agreementSignedAt.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+
       const lines = [
         `Banner Ad Inquiry`,
         ``,
@@ -9874,18 +9889,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         `Timeframe: ${parsed.data.timeframe || "Not specified"}`,
         `Budget: ${parsed.data.budget || "Not specified"}`,
         ``,
+        `Agreement`,
+        `Accepted: Yes`,
+        `Signature name: ${parsed.data.agreementName}`,
+        `Signature title: ${parsed.data.agreementTitle || "Not provided"}`,
+        `Signature date: ${agreementDateLabel}`,
+        `Agreement version: ${agreementVersion}`,
+        ``,
         `Notes`,
         `${parsed.data.message || "No additional notes."}`,
       ];
 
       const subjectCompany = parsed.data.company || `${parsed.data.firstName} ${parsed.data.lastName}`;
-      await sendContactFormEmail({
+      const ip = req.ip || req.connection.remoteAddress || "unknown";
+      const userAgent = req.get("user-agent") || undefined;
+      const messageBody = lines.join("\n");
+
+      const submission = await storage.createContactSubmission({
         firstName: parsed.data.firstName,
         lastName: parsed.data.lastName,
         email: parsed.data.email,
         subject: `Banner Ad Inquiry - ${subjectCompany}`,
-        message: lines.join("\n"),
+        message: messageBody,
+        ipAddress: ip,
+        userAgent,
       });
+
+      sendContactFormEmail({
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+        email: parsed.data.email,
+        subject: `Banner Ad Inquiry - ${subjectCompany}`,
+        message: messageBody,
+      })
+        .then(async () => {
+          await storage.updateContactSubmissionEmailStatus(submission.id, true);
+        })
+        .catch((error) => {
+          console.error(`Failed to send banner ad inquiry email for submission ${submission.id}:`, error);
+        });
 
       res.json({ success: true });
     } catch (error) {

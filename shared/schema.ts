@@ -966,6 +966,7 @@ export const bannerAdOrders = pgTable("banner_ad_orders", {
   // Creative content (admin creates based on sponsor specs)
   title: text("title").notNull(),
   description: text("description"), // Tagline
+  adCopy: text("ad_copy"), // Longer description/body copy
   imageUrl: text("image_url"), // Created by admin, uploaded to object storage
   videoUrl: text("video_url"),
   videoMuted: boolean("video_muted").default(true),
@@ -1023,6 +1024,7 @@ export const bannerAds = pgTable("banner_ads", {
   // Content (copied from approved order)
   title: text("title").notNull(),
   description: text("description"), // Optional tagline/description
+  adCopy: text("ad_copy"), // Longer description/body copy
   imageUrl: text("image_url").notNull(), // Stored in object storage
   videoUrl: text("video_url"),
   videoMuted: boolean("video_muted").default(true),
@@ -2260,6 +2262,8 @@ export const insertBannerAdOrderSchema = createInsertSchema(bannerAdOrders).omit
   sponsorName: z.string().min(1, "Sponsor name is required"),
   sponsorEmail: z.string().email("Valid email is required"),
   title: z.string().min(1, "Title is required"),
+  description: z.string().max(240).optional().or(z.literal("")),
+  adCopy: z.string().max(800).optional().or(z.literal("")),
   imageUrl: z.string().url("Image URL must be valid").optional().or(z.literal("")),
   videoUrl: z.string().url("Video URL must be valid").optional().or(z.literal("")),
   videoMuted: z.boolean().optional(),
@@ -2283,6 +2287,8 @@ export const insertBannerAdSchema = createInsertSchema(bannerAds).omit({
   videoOrientation: z.enum(BANNER_VIDEO_ORIENTATIONS).optional(),
   link: z.string().url("Please enter a valid URL (e.g., https://www.example.com)"),
   title: z.string().min(1, "Title is required"),
+  description: z.string().max(240).optional().or(z.literal("")),
+  adCopy: z.string().max(800).optional().or(z.literal("")),
 });
 
 export const insertJobApplicationSchema = createInsertSchema(jobApplications).omit({

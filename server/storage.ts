@@ -2952,6 +2952,7 @@ export class DatabaseStorage implements IStorage {
       orderId: order.id,
       title: order.title,
       description: order.description,
+      adCopy: order.adCopy,
       imageUrl: order.imageUrl,
       videoUrl: order.videoUrl ?? undefined,
       videoMuted: order.videoMuted ?? true,

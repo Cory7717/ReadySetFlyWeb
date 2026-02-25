@@ -27,6 +27,59 @@ const placements = [
   { value: "charter", label: "Charter Services" },
 ];
 
+const AGREEMENT_VERSION = "RSF Banner Advertising Agreement v1";
+
+const agreementSections = [
+  {
+    title: "Parties & Effective Date",
+    body: "This Banner Advertising Agreement is between Austin Ready Set Fly, LLC (RSF) and the Advertiser. The effective date is the date of signature below.",
+  },
+  {
+    title: "1. Purpose",
+    body: "Ready Set Fly (RSF) operates a pilot workflow and aviation tools platform. Advertisers may place banner advertisements promoting aviation-related products or services on the platform under the terms below.",
+  },
+  {
+    title: "2. Advertising Placement",
+    body: "RSF will display the advertiser’s banner within designated areas. RSF retains sole discretion over placement location, banner size/layout, and design adjustments needed to preserve user experience and platform integrity.",
+  },
+  {
+    title: "3. Term & Compensation",
+    body: "The campaign runs for the agreed term (default three months if not specified). Promotional placements may be complimentary. Paid placements follow the agreed monthly rate and payment schedule. Term length, start/end dates, and renewal terms are confirmed on the final order or invoice.",
+  },
+  {
+    title: "4. Advertiser Responsibilities",
+    body: "Advertiser will provide compliant creative assets, ensure accuracy, and maintain any required licenses or approvals. RSF may reject or remove ads that violate standards or applicable law.",
+  },
+  {
+    title: "5. Creative & Content Approval",
+    body: "RSF reserves the right to review and approve all ad materials prior to publication and may assist with formatting when requested.",
+  },
+  {
+    title: "6. Analytics & Lead Tracking",
+    body: "RSF provides impressions, clicks/CTR, and engagement metrics. Inquiries submitted through RSF will be routed to the advertiser with RSF attribution. RSF does not guarantee minimum impressions, clicks, or conversions.",
+  },
+  {
+    title: "7. No Endorsement",
+    body: "Advertising placement does not constitute RSF endorsement. RSF is not responsible for advertiser products, services, or transactions with users.",
+  },
+  {
+    title: "8. Termination",
+    body: "Either party may terminate with notice or immediately for material breach, reputational risk, regulatory issue, or legal concern. Refunds for partial billing periods are not guaranteed unless agreed in writing.",
+  },
+  {
+    title: "9. Limitation of Liability",
+    body: "RSF is not liable for indirect, incidental, or consequential damages arising from the agreement. Advertiser agrees to indemnify RSF for claims arising from advertiser content or services.",
+  },
+  {
+    title: "10. Governing Law",
+    body: "This agreement is governed by the laws of the State of Texas.",
+  },
+  {
+    title: "11. Entire Agreement",
+    body: "This agreement supersedes prior discussions and may only be amended in writing signed by both parties.",
+  },
+];
+
 const bannerInquirySchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
@@ -39,6 +92,12 @@ const bannerInquirySchema = z.object({
   timeframe: z.string().max(120).optional().or(z.literal("")),
   budget: z.string().max(120).optional().or(z.literal("")),
   message: z.string().max(2000).optional().or(z.literal("")),
+  agreementAccepted: z.boolean().refine((value) => value === true, {
+    message: "You must accept the agreement to continue.",
+  }),
+  agreementName: z.string().min(1, "Signature name is required").max(160),
+  agreementTitle: z.string().max(160).optional().or(z.literal("")),
+  agreementVersion: z.string().optional().or(z.literal("")),
 });
 
 type BannerInquiryForm = z.infer<typeof bannerInquirySchema>;
@@ -61,13 +120,20 @@ export default function BannerAdvertise() {
       timeframe: "",
       budget: "",
       message: "",
+      agreementAccepted: false,
+      agreementName: "",
+      agreementTitle: "",
+      agreementVersion: AGREEMENT_VERSION,
     },
   });
 
   const handleSubmit = async (data: BannerInquiryForm) => {
     setIsSubmitting(true);
     try {
-      await apiRequest("POST", "/api/banner-ads/inquiry", data);
+      await apiRequest("POST", "/api/banner-ads/inquiry", {
+        ...data,
+        agreementVersion: AGREEMENT_VERSION,
+      });
       toast({
         title: "Inquiry sent",
         description: "Thanks! Our team will follow up soon.",
@@ -336,6 +402,78 @@ export default function BannerAdvertise() {
                     </FormItem>
                   )}
                 />
+
+                <div className="rounded-xl border bg-white p-4 space-y-4">
+                  <div>
+                    <h3 className="text-base font-semibold">Banner Advertising Agreement</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Review the agreement below and sign electronically to submit your inquiry.
+                    </p>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto rounded-lg border bg-muted/30 p-4 text-sm leading-relaxed space-y-4">
+                    {agreementSections.map((section) => (
+                      <div key={section.title} className="space-y-1">
+                        <div className="font-semibold">{section.title}</div>
+                        <p className="text-muted-foreground">{section.body}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="agreementAccepted"
+                    render={({ field }) => (
+                      <FormItem className="flex items-start gap-2 space-y-0">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={(checked) => field.onChange(checked === true)}
+                          />
+                        </FormControl>
+                        <div className="space-y-1">
+                          <FormLabel className="text-sm leading-snug">
+                            I agree to the {AGREEMENT_VERSION}.
+                          </FormLabel>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="agreementName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Signature name</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Legal name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="agreementTitle"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Title / Role (optional)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Owner, Marketing Lead, etc." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    Signature date: {new Date().toLocaleDateString("en-US")}
+                  </p>
+                </div>
 
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Sending..." : "Send inquiry"}

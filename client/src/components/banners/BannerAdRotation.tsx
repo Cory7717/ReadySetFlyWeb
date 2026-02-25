@@ -1,6 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { ExternalLink, Mail } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -22,6 +21,7 @@ interface BannerAd {
   orderId?: string | null;
   title: string;
   description?: string;
+  adCopy?: string;
   imageUrl: string;
   videoUrl?: string | null;
   videoMuted?: boolean | null;
@@ -160,7 +160,9 @@ export function BannerAdRotation({
   const videoOrientation = (currentAd?.videoOrientation ?? "landscape").toLowerCase();
   const isPortraitVideo = videoOrientation === "portrait";
   const isVideoMuted = currentAd?.videoMuted !== false;
-  const hasBodyCopy = Boolean(currentAd?.description?.trim());
+  const hasTagline = Boolean(currentAd?.description?.trim());
+  const hasAdCopy = Boolean(currentAd?.adCopy?.trim());
+  const hasBodyCopy = hasTagline || hasAdCopy;
   const hasMedia = hasImage || hasVideo;
   const showHeroMedia = hasVideo || (!hasBodyCopy && hasMedia);
   const showThumbnail = hasBodyCopy && hasImage;
@@ -313,7 +315,7 @@ export function BannerAdRotation({
         <div className="absolute inset-0 bg-[radial-gradient(110%_130%_at_100%_0%,rgba(249,115,22,0.22),transparent)]" />
 
         <div className={`relative grid ${showHeroMedia ? "sm:grid-cols-[1.1fr_0.9fr]" : "sm:grid-cols-1"}`}>
-          <div className="flex flex-col justify-between gap-3 p-5 sm:p-6">
+          <div className="flex flex-col justify-between gap-3 p-5 sm:p-6 min-h-[200px] sm:min-h-[220px]">
             <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
               <span className="h-2 w-2 rounded-full bg-amber-400" />
               Sponsored
@@ -333,9 +335,14 @@ export function BannerAdRotation({
                 <h3 className="font-display text-lg sm:text-xl text-foreground line-clamp-2">
                   {currentAd.title}
                 </h3>
-                {currentAd.description && (
-                  <p className="mt-2 text-sm text-muted-foreground line-clamp-3">
+                {hasTagline && (
+                  <p className="mt-2 text-sm text-muted-foreground line-clamp-1">
                     {currentAd.description}
+                  </p>
+                )}
+                {hasAdCopy && (
+                  <p className={`text-sm text-muted-foreground line-clamp-2 ${hasTagline ? "mt-1" : "mt-2"}`}>
+                    {currentAd.adCopy}
                   </p>
                 )}
               </div>
@@ -387,7 +394,7 @@ export function BannerAdRotation({
           </div>
 
           {showHeroMedia && (
-            <div className="relative min-h-[150px] sm:min-h-[180px]">
+            <div className="relative h-[200px] sm:h-[220px]">
               {hasVideo ? (
                 <div
                   className={`h-full w-full ${isPortraitVideo ? "bg-slate-900/10 flex items-center justify-center" : ""}`}

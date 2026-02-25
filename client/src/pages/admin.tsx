@@ -311,6 +311,7 @@ export default function AdminDashboard() {
     defaultValues: {
       title: "",
       description: "",
+      adCopy: "",
       imageUrl: "",
       videoUrl: "",
       videoMuted: true,
@@ -335,6 +336,7 @@ export default function AdminDashboard() {
       sponsorCompany: "",
       title: "",
       description: "",
+      adCopy: "",
       imageUrl: "",
       videoUrl: "",
       videoMuted: true,
@@ -5352,7 +5354,12 @@ export default function AdminDashboard() {
                               </p>
                               {order.description && (
                                 <p>
-                                  <span className="font-medium">Description:</span> {order.description}
+                                  <span className="font-medium">Tagline:</span> {order.description}
+                                </p>
+                              )}
+                              {order.adCopy && (
+                                <p>
+                                  <span className="font-medium">Description:</span> {order.adCopy}
                                 </p>
                               )}
                               <div className="flex items-center gap-4 flex-wrap">
@@ -5479,6 +5486,7 @@ export default function AdminDashboard() {
                                     sponsorCompany: order.sponsorCompany ?? "",
                                     title: order.title,
                                     description: order.description ?? "",
+                                    adCopy: order.adCopy ?? "",
                                     imageUrl: order.imageUrl ?? "",
                                     videoUrl: order.videoUrl ?? "",
                                     videoMuted: order.videoMuted ?? true,
@@ -5613,6 +5621,16 @@ export default function AdminDashboard() {
                             </div>
                             
                             <div className="text-sm text-muted-foreground space-y-1">
+                              {banner.description && (
+                                <p>
+                                  <span className="font-medium">Tagline:</span> {banner.description}
+                                </p>
+                              )}
+                              {banner.adCopy && (
+                                <p>
+                                  <span className="font-medium">Description:</span> {banner.adCopy}
+                                </p>
+                              )}
                               {banner.link && (
                                 <p className="truncate">
                                   <span className="font-medium">Link URL:</span> {banner.link}
@@ -5732,6 +5750,7 @@ export default function AdminDashboard() {
                                   videoOrientation: banner.videoOrientation ?? "landscape",
                                   link: banner.link ?? "",
                                   description: banner.description ?? "",
+                                  adCopy: banner.adCopy ?? "",
                                   placements: banner.placements || [],
                                   category: banner.category || undefined,
                                   listingId: banner.listingId || undefined,
@@ -6877,6 +6896,7 @@ export default function AdminDashboard() {
                   const payload = {
                     title: data.title,
                     description: data.description,
+                    adCopy: data.adCopy,
                     imageUrl: bannerImageUrl || data.imageUrl,
                     videoUrl: bannerVideoUrl || data.videoUrl,
                     videoMuted: data.videoMuted ?? true,
@@ -6940,9 +6960,29 @@ export default function AdminDashboard() {
                       name="description"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Description/Tagline (Optional)</FormLabel>
+                          <FormLabel>Tagline (Optional)</FormLabel>
                           <FormControl>
                             <Input placeholder="Fly with confidence" {...field} value={field.value ?? ""} data-testid="input-banner-description" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={bannerForm.control}
+                      name="adCopy"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Ad Description (Optional)</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Add 1–2 sentences about the offer or service..."
+                              className="min-h-[110px]"
+                              {...field}
+                              value={field.value ?? ""}
+                              data-testid="textarea-banner-ad-copy"
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -7389,9 +7429,29 @@ export default function AdminDashboard() {
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Description/Tagline (Optional)</FormLabel>
+                      <FormLabel>Tagline (Optional)</FormLabel>
                       <FormControl>
                         <Input placeholder="Fly with confidence" {...field} value={field.value ?? ""} data-testid="input-order-description" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={orderForm.control}
+                  name="adCopy"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ad Description (Optional)</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Add 1–2 sentences about the offer or service..."
+                          className="min-h-[110px]"
+                          {...field}
+                          value={field.value ?? ""}
+                          data-testid="textarea-order-ad-copy"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -1401,9 +1401,16 @@ const notamCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
 const TFR_EMPTY_CACHE_TTL_MS = 5 * 60 * 1000;
 const tfrCache = new Map<string, { data: any; expiresAt: number }>();
+const TFR_STALE_MAX_AGE_MINUTES = Number(process.env.TFR_STALE_MAX_AGE_MINUTES || 12 * 60);
+const TFR_STALE_MAX_AGE_MS = Math.max(30, TFR_STALE_MAX_AGE_MINUTES) * 60 * 1000;
+let tfrLastSuccess: { data: any; fetchedAt: number } | null = null;
 const SUA_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const suaCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_ARCGIS_PROXY_URL = (process.env.TFR_ARCGIS_PROXY_URL || "").trim();
+const TFR_ARCGIS_URLS_ENV = (process.env.TFR_ARCGIS_URLS || "").trim();
+const TFR_ARCGIS_URLS = TFR_ARCGIS_URLS_ENV
+  ? TFR_ARCGIS_URLS_ENV.split(",").map((entry) => entry.trim()).filter(Boolean)
+  : [];
 const SUA_ARCGIS_URL = (process.env.SUA_ARCGIS_URL || "https://coast.noaa.gov/arcgis/rest/services/Hosted/MilitarySpecialUseAirspace/FeatureServer/0/query").trim();
 const NOTAM_SOURCE = (process.env.NOTAM_SOURCE || "http").trim().toLowerCase();
 const NOTAM_HTTP_BASE_URL = (process.env.NOTAM_HTTP_BASE_URL || "").trim();
@@ -1415,13 +1422,13 @@ const TFMS_CACHE_TTL_SECONDS = Number(process.env.TFMS_CACHE_TTL_SECONDS || 300)
 const TFMS_CACHE_TTL_MS = Math.max(30, TFMS_CACHE_TTL_SECONDS) * 1000;
 const tfmsProvider = TFMS_PROVIDER === "db" ? createDbTfmsProvider() : createStubTfmsProvider();
 const tfmsCache = new Map<string, { expiresAt: number; value: any }>();
-const FAA_TFR_ARCGIS_URLS = TFR_ARCGIS_PROXY_URL
-  ? [TFR_ARCGIS_PROXY_URL]
-  : [
-      "https://services1.arcgis.com/n4Ot9Qz0t5espY4s/arcgis/rest/services/FAA_TFRs/FeatureServer/0/query",
-      "https://gis.faa.gov/arcgis/rest/services/TFMS/TFR/MapServer/0/query",
-      "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query",
-    ];
+const FAA_TFR_ARCGIS_URLS = [
+  ...(TFR_ARCGIS_PROXY_URL ? [TFR_ARCGIS_PROXY_URL] : []),
+  ...TFR_ARCGIS_URLS,
+  "https://services1.arcgis.com/n4Ot9Qz0t5espY4s/arcgis/rest/services/FAA_TFRs/FeatureServer/0/query",
+  "https://gis.faa.gov/arcgis/rest/services/TFMS/TFR/MapServer/0/query",
+  "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query",
+].filter((value, index, arr) => value && arr.indexOf(value) === index);
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
 
 const getTfmsCache = <T,>(key: string): T | null => {
@@ -1823,6 +1830,7 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
         {
           headers: {
             "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+            "Accept": "application/json",
             "Referer": "https://tfr.faa.gov",
             "Origin": "https://tfr.faa.gov",
           },
@@ -1848,12 +1856,18 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
         continue;
       }
       const features = payload.features.map(normalizeArcGisTfrFeature).filter(Boolean);
+      const data = {
+        type: "FeatureCollection",
+        features,
+        updatedAt: new Date().toISOString(),
+        source: "faa-arcgis",
+      };
+      if (features.length) {
+        tfrLastSuccess = { data, fetchedAt: Date.now() };
+      }
       return {
         data: {
-          type: "FeatureCollection",
-          features,
-          updatedAt: new Date().toISOString(),
-          source: "faa-arcgis",
+          ...data,
         },
         attempts,
       };
@@ -12279,7 +12293,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         | null = null;
 
       const buildPayload = async () => {
-        const arcgisResult = await fetchArcGisTfrs(bbox || undefined);
+        const arcgisResult = await fetchArcGisTfrs();
         arcgisMeta = {
           attempted: true,
           ok: Boolean(arcgisResult?.data),
@@ -12289,8 +12303,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         if (arcgisResult?.data) {
           const enrichedFeatures = await enrichArcGisTfrFeatures(arcgisResult.data.features || []);
           return {
-            ...arcgisResult.data,
-            features: enrichedFeatures,
+            payload: {
+              ...arcgisResult.data,
+              features: enrichedFeatures,
+            },
+            staleHint: false,
           };
         }
 
@@ -12316,6 +12333,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           .filter((row) => row.text && isTfrNotam(row.text, row.notamId))
           .map((row) => {
             const rawGeometry = (row.raw as any)?.geometry;
+            const reason = extractLineValue(row.text, "Reason for NOTAM");
+            const location = extractLineValue(row.text, "Location");
+            const tfrType = extractLineValue(row.text, "Type");
+            const altitude = extractAltitudeFromNotam(row.text);
             if (rawGeometry && rawGeometry.type && rawGeometry.coordinates) {
               return {
                 type: "Feature",
@@ -12338,11 +12359,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             const points = parseTfrPolygon(row.text || "");
             if (!points || points.length < 3) return null;
 
-            const reason = extractLineValue(row.text, "Reason for NOTAM");
-            const location = extractLineValue(row.text, "Location");
-            const tfrType = extractLineValue(row.text, "Type");
-            const altitude = extractAltitudeFromNotam(row.text);
-
             return {
               type: "Feature",
               geometry: {
@@ -12364,11 +12380,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           })
           .filter(Boolean);
 
+        if (!features.length && tfrLastSuccess && Date.now() - tfrLastSuccess.fetchedAt < TFR_STALE_MAX_AGE_MS) {
+          return {
+            payload: {
+              ...tfrLastSuccess.data,
+              source: "faa-arcgis-stale",
+            },
+            staleHint: true,
+          };
+        }
+
         return {
-          type: "FeatureCollection",
-          features,
-          updatedAt: new Date().toISOString(),
-          source: "notam-cache",
+          payload: {
+            type: "FeatureCollection",
+            features,
+            updatedAt: new Date().toISOString(),
+            source: "notam-cache",
+          },
+          staleHint: false,
         };
       };
 
@@ -12377,8 +12406,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       if (!payload) {
         try {
-          payload = await buildPayload();
-          const ttl = payload?.features?.length ? TFR_CACHE_TTL_MS : TFR_EMPTY_CACHE_TTL_MS;
+          const result = await buildPayload();
+          payload = result.payload;
+          stale = result.staleHint;
+          const ttl =
+            stale || !payload?.features?.length ? TFR_EMPTY_CACHE_TTL_MS : TFR_CACHE_TTL_MS;
           tfrCache.set(cacheKey, { data: payload, expiresAt: Date.now() + ttl });
         } catch (error) {
           console.error("TFR fetch failed:", error);
@@ -12393,6 +12425,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const icaoFilter = String(req.query?.icao || "").toUpperCase();
       const altIcao = icaoFilter.length === 4 && icaoFilter.startsWith("K") ? icaoFilter.slice(1) : null;
+
+      if (payload?.source === "faa-arcgis-stale") {
+        stale = true;
+      }
 
       let filteredFeatures = (payload.features || []).filter((feature: any) => {
         if (!icaoFilter) return true;

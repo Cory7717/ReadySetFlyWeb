@@ -24,6 +24,9 @@ const NMS_CLASSIFICATIONS = (process.env.NMS_CLASSIFICATIONS || "DOMESTIC,INTERN
   .filter(Boolean);
 const NMS_INITIAL_LOAD_ON_START = String(process.env.NMS_INITIAL_LOAD_ON_START ?? "false").toLowerCase() === "true";
 const NMS_POLL_INTERVAL_MINUTES = Number(process.env.NMS_POLL_INTERVAL_MINUTES || 15);
+const NMS_CLASSIFICATION_DELAY_MS = Number(process.env.NMS_CLASSIFICATION_DELAY_MS || 1200);
+const NMS_REQUEST_MAX_RETRIES = Number(process.env.NMS_REQUEST_MAX_RETRIES || 3);
+const NMS_RETRY_BASE_DELAY_MS = Number(process.env.NMS_RETRY_BASE_DELAY_MS || 2000);
 const NMS_SOURCE = "nms_api";
 const MAX_DELTA_LOOKBACK_HOURS = Number(process.env.NMS_MAX_DELTA_LOOKBACK_HOURS || 24);
 const UPSERT_BATCH_SIZE = 500;
@@ -139,6 +142,51 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 2
   }
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function parseRetryAfterMs(value?: string | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const seconds = Number(trimmed);
+  if (Number.isFinite(seconds)) {
+    return Math.max(0, seconds * 1000);
+  }
+  const dateMs = Date.parse(trimmed);
+  if (!Number.isNaN(dateMs)) {
+    return Math.max(0, dateMs - Date.now());
+  }
+  return null;
+}
+
+async function fetchWithRetry(url: string, options: RequestInit, timeoutMs = 20000) {
+  let attempt = 0;
+  let lastResponse: Response | null = null;
+  while (attempt < Math.max(1, NMS_REQUEST_MAX_RETRIES)) {
+    attempt += 1;
+    const response = await fetchWithTimeout(url, options, timeoutMs);
+    lastResponse = response;
+    if (response.status !== 429) {
+      return response;
+    }
+
+    const retryAfter = parseRetryAfterMs(response.headers.get("retry-after"));
+    const delay = retryAfter ?? NMS_RETRY_BASE_DELAY_MS * attempt;
+    logEvent({
+      phase: "rate_limit_wait",
+      status: response.status,
+      attempt,
+      waitMs: delay,
+      url,
+    });
+    if (attempt >= NMS_REQUEST_MAX_RETRIES) {
+      return response;
+    }
+    await sleep(delay);
+  }
+  return lastResponse ?? fetchWithTimeout(url, options, timeoutMs);
+}
+
 async function getAccessToken() {
   const now = Date.now();
   if (accessToken && now < accessTokenExpiresAt - 30_000) return accessToken;
@@ -149,7 +197,7 @@ async function getAccessToken() {
   }
 
   const authHeader = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-  const response = await fetchWithTimeout(
+  const response = await fetchWithRetry(
     NMS_AUTH_URL,
     {
       method: "POST",
@@ -178,7 +226,7 @@ async function getAccessToken() {
 async function fetchNms(path: string, params?: Record<string, string | undefined>) {
   const token = await getAccessToken();
   const url = buildUrl(path, params);
-  const response = await fetchWithTimeout(url, {
+  const response = await fetchWithRetry(url, {
     headers: {
       Authorization: `Bearer ${token}`,
       nmsResponseFormat: NMS_RESPONSE_FORMAT,
@@ -203,7 +251,7 @@ async function fetchContentFromUrl(url: string) {
     headers.nmsResponseFormat = NMS_RESPONSE_FORMAT;
   }
 
-  const response = await fetchWithTimeout(url, { headers }, 30000);
+  const response = await fetchWithRetry(url, { headers }, 30000);
   if ((response.status === 401 || response.status === 403) && sameOrigin) {
     accessToken = null;
     accessTokenExpiresAt = 0;
@@ -352,6 +400,9 @@ async function runInitialLoad() {
       count: mapped.length,
       durationMs: Date.now() - started,
     });
+    if (NMS_CLASSIFICATION_DELAY_MS > 0) {
+      await sleep(NMS_CLASSIFICATION_DELAY_MS);
+    }
   }
 
   if (latestUpdated) {
@@ -399,6 +450,9 @@ async function runDeltaSync() {
         count: mapped.length,
         durationMs: Date.now() - started,
       });
+      if (NMS_CLASSIFICATION_DELAY_MS > 0) {
+        await sleep(NMS_CLASSIFICATION_DELAY_MS);
+      }
     }
 
     if (latestUpdated) {

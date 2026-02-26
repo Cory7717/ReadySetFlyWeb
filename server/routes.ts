@@ -7890,18 +7890,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const requesterId = req.user?.claims?.sub || req.session?.userId;
       const requestedUserId = typeof req.body?.userId === "string" ? req.body.userId.trim() : "";
       const requestedEmail = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+      const allowEmailOnly = Boolean(req.body?.allowEmailOnly);
       const durationDays = Math.min(Math.max(Number(req.body?.durationDays) || 30, 1), 90);
 
       let targetUserId = requestedUserId || "";
       let targetEmail = requestedEmail || "";
 
+      let fallbackToAdmin = false;
       if (!targetUserId && targetEmail) {
         const byEmail = await storage.getUserByEmail(targetEmail);
         if (!byEmail) {
-          return res.status(404).json({ error: "User not found for the provided email" });
+          if (!allowEmailOnly) {
+            return res.status(404).json({ error: "User not found for the provided email" });
+          }
+          fallbackToAdmin = true;
+        } else {
+          targetUserId = byEmail.id;
+          targetEmail = byEmail.email || targetEmail;
         }
-        targetUserId = byEmail.id;
-        targetEmail = byEmail.email || targetEmail;
       }
 
       if (targetUserId) {
@@ -7915,6 +7921,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const finalUserId = targetUserId || requesterId;
+      if (!targetUserId && targetEmail) {
+        fallbackToAdmin = true;
+      }
 
       const token = jwt.sign({
         type: 'admin-free-marketplace-listing',
@@ -7927,7 +7936,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         issuedAt: Date.now(),
       }, process.env.SESSION_SECRET || 'dev-secret', { expiresIn: '2h' });
 
-      res.json({ token, durationDays, userId: finalUserId, email: targetEmail || undefined });
+      res.json({
+        token,
+        durationDays,
+        userId: finalUserId,
+        email: targetEmail || undefined,
+        fallbackToAdmin,
+      });
     } catch (error: any) {
       console.error('Failed to issue admin free listing token:', error);
       res.status(500).json({ error: error.message || 'Failed to issue token' });

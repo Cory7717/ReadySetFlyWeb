@@ -216,6 +216,7 @@ export default function AdminDashboard() {
   const [adminFreeListingEmail, setAdminFreeListingEmail] = useState("");
   const [adminFreeListingUserId, setAdminFreeListingUserId] = useState("");
   const [adminFreeListingDurationDays, setAdminFreeListingDurationDays] = useState("90");
+  const [adminFreeListingAllowEmailOnly, setAdminFreeListingAllowEmailOnly] = useState(false);
   
   // Promo alerts state
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
@@ -936,11 +937,11 @@ export default function AdminDashboard() {
   });
 
   const adminFreeListingTokenMutation = useMutation({
-    mutationFn: async (payload?: { userId?: string; email?: string; durationDays?: number }) => {
+    mutationFn: async (payload?: { userId?: string; email?: string; durationDays?: number; allowEmailOnly?: boolean }) => {
       const response = await apiRequest("POST", "/api/admin/marketplace/free-listing-token", payload || {});
       return response.json();
     },
-    onSuccess: (data: { token: string; durationDays: number; userId?: string; email?: string }) => {
+    onSuccess: (data: { token: string; durationDays: number; userId?: string; email?: string; fallbackToAdmin?: boolean }) => {
       localStorage.setItem(
         'adminFreeListingGrant',
         JSON.stringify({
@@ -948,15 +949,19 @@ export default function AdminDashboard() {
           durationDays: data.durationDays,
           targetUserId: data.userId,
           targetEmail: data.email,
+          fallbackToAdmin: data.fallbackToAdmin,
         })
       );
       setAdminFreeListingDialogOpen(false);
       setAdminFreeListingEmail("");
       setAdminFreeListingUserId("");
       setAdminFreeListingDurationDays("90");
+      setAdminFreeListingAllowEmailOnly(false);
       toast({
         title: "Admin free listing enabled",
-        description: `Grant ready for ${data.durationDays}-day listing. Complete the form to publish.`,
+        description: data.fallbackToAdmin
+          ? `No user found. Listing will be created under your admin account (contact email set).`
+          : `Grant ready for ${data.durationDays}-day listing. Complete the form to publish.`,
       });
       window.location.href = "/create-marketplace-listing?adminFree=1";
     },
@@ -6730,6 +6735,16 @@ export default function AdminDashboard() {
                 Provide this if you prefer user ID instead of email.
               </p>
             </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                checked={adminFreeListingAllowEmailOnly}
+                onCheckedChange={(checked) => setAdminFreeListingAllowEmailOnly(Boolean(checked))}
+                data-testid="checkbox-admin-free-email-only"
+              />
+              <div className="text-xs text-muted-foreground">
+                Advertiser does not have an account yet (create listing under your admin account and use the contact email above).
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="admin-free-duration">Duration (days)</Label>
               <Input
@@ -6784,6 +6799,7 @@ export default function AdminDashboard() {
                   email: email || undefined,
                   userId: userId || undefined,
                   durationDays: Number.isFinite(durationDays) ? durationDays : 90,
+                  allowEmailOnly: adminFreeListingAllowEmailOnly || undefined,
                 });
               }}
               disabled={adminFreeListingTokenMutation.isPending}

@@ -679,10 +679,10 @@ export default function CreateMarketplaceListing() {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Admin free listing enabled</AlertTitle>
             <AlertDescription>
-              {adminFreeContext.targetEmail
-                ? `Listing will be created for ${adminFreeContext.targetEmail}. `
-                : adminFreeContext.targetUserId
+              {adminFreeContext.targetUserId
                 ? `Listing will be created for user ID ${adminFreeContext.targetUserId}. `
+                : adminFreeContext.targetEmail
+                ? `Listing will be created under your admin account. Contact email set to ${adminFreeContext.targetEmail}. `
                 : "Listing will be created under your admin account. "}
               {adminFreeContext.durationDays
                 ? `Free period: ${adminFreeContext.durationDays} days.`

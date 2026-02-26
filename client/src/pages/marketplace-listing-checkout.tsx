@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useLocation, useRoute, useRouter } from 'wouter';
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
 
   // Fetch PayPal config
   useEffect(() => {
-    fetch('/api/paypal/config')
+    fetch(apiUrl('/api/paypal/config'))
       .then(res => res.json())
       .then(config => setPaypalConfig(config))
       .catch(err => {
@@ -103,8 +104,8 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
           createOrder: async () => {
             // Different endpoint for upgrade vs new listing
             const endpoint = isUpgradeMode 
-              ? '/api/paypal/create-order-upgrade'
-              : '/api/paypal/create-order-listing';
+              ? apiUrl('/api/paypal/create-order-upgrade')
+              : apiUrl('/api/paypal/create-order-listing');
             
             const body = isUpgradeMode 
               ? {
@@ -133,7 +134,7 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
             setIsProcessing(true);
             try {
               // Capture the payment
-              const captureResponse = await fetch(`/api/paypal/capture-order/${data.orderID}`, {
+              const captureResponse = await fetch(apiUrl(`/api/paypal/capture-order/${data.orderID}`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -422,7 +423,7 @@ export default function MarketplaceListingCheckout() {
       setFeeQuoteLoading(true);
       setFeeQuoteError("");
       try {
-        const response = await fetch("/api/marketplace/listing-fee-quote", {
+        const response = await fetch(apiUrl("/api/marketplace/listing-fee-quote"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -651,7 +652,7 @@ export default function MarketplaceListingCheckout() {
         throw new Error("Pricing details not available");
       }
       
-      const response = await fetch(`/api/promo-codes/validate`, {
+      const response = await fetch(apiUrl(`/api/promo-codes/validate`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

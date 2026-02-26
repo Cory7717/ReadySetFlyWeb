@@ -167,6 +167,11 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["weather basics", "student weather", "metar lesson"],
   },
   {
+    label: "Aviation Abbreviations",
+    path: "/student/abbreviations",
+    keywords: ["abbreviations", "acronyms", "aviation terms", "student study"],
+  },
+  {
     label: "Flight Planner",
     path: "/flight-planner",
     keywords: ["flight plan", "plan flight", "route"],
@@ -287,14 +292,14 @@ export function Header() {
   return (
     <header className="sticky top-0 z-[80] w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 overflow-visible">
       <div className="container mx-auto px-3 sm:px-4 lg:px-8 min-w-0">
-        <div className="flex h-14 sm:h-16 items-center justify-between gap-2 sm:gap-4 min-w-0">
+        <div className="flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-2 sm:gap-4 py-2 sm:py-0 min-w-0">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-1 sm:gap-2 hover-elevate active-elevate-2 rounded-md px-1 sm:px-2 py-1 flex-shrink-0" data-testid="link-home">
+          <Link href="/" className="flex items-center gap-1 sm:gap-2 hover-elevate active-elevate-2 rounded-md px-1 sm:px-2 py-1 flex-shrink-0 order-1" data-testid="link-home">
             <img src={logoImage} alt="Ready Set Fly" className="h-8 w-8 sm:h-[2.6rem] sm:w-[2.6rem]" />
             <span className="font-display text-sm sm:text-xl font-bold hidden min-[400px]:inline">Ready Set Fly</span>
           </Link>
 
-          <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 w-full order-3 sm:order-2 sm:flex-1">
             {/* Main Navigation Tabs - Compact on mobile */}
             <nav className="flex w-full sm:flex-1 items-center gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 min-w-0 overflow-x-auto whitespace-nowrap" role="navigation" aria-label="Main navigation">
               <Link href="/flight-planner" data-testid="link-plan-flight">
@@ -360,7 +365,7 @@ export function Header() {
             {/* Tool Search */}
             <form
               ref={searchRef}
-              className="relative w-full sm:w-[180px] md:w-[220px] lg:w-[260px] flex-shrink-0 overflow-visible z-[90] sm:order-none"
+              className="relative w-full sm:w-[180px] md:w-[220px] lg:w-[260px] flex-shrink-0 overflow-visible z-[90] sm:order-none mt-1 sm:mt-0"
               onSubmit={(event) => {
                 event.preventDefault();
                 handleToolSubmit();
@@ -422,7 +427,7 @@ export function Header() {
           </div>
 
           {/* Right side actions */}
-          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 relative z-20">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 relative z-20 order-2 sm:order-3 ml-auto">
             {user && (
               <Link href="/notifications" className="hidden sm:flex" data-testid="link-notifications">
                 <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications" aria-label="Notifications">

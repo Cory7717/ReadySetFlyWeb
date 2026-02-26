@@ -35,6 +35,8 @@ const baseFormSchema = insertMarketplaceListingSchema.omit({ userId: true }).ext
   zipCode: z.string().optional(),
   contactEmail: z.string().email("Valid email required").min(1, "Contact email is required"),
   contactPhone: z.string().optional(),
+  instagramUrl: z.string().max(240).optional().or(z.literal("")),
+  facebookUrl: z.string().max(240).optional().or(z.literal("")),
   price: z.string().optional(),
   tier: z.enum(["basic", "standard", "premium"]).optional(),
 });
@@ -107,6 +109,25 @@ const categories = [
   { value: "job", label: "Aviation Jobs" },
 ];
 
+const normalizeSocialUrl = (value: string | undefined, network: "instagram" | "facebook") => {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const withoutAt = trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
+  if (/^https?:\/\//i.test(withoutAt)) return withoutAt;
+
+  const cleaned = withoutAt.replace(/^\/\//, "");
+  const lower = cleaned.toLowerCase();
+  if (lower.includes("instagram.com") || lower.includes("facebook.com")) {
+    return `https://${cleaned}`;
+  }
+
+  const base = network === "instagram"
+    ? "https://instagram.com/"
+    : "https://facebook.com/";
+  return `${base}${cleaned}`;
+};
+
 export default function CreateMarketplaceListing() {
   const [, navigate] = useLocation();
   const { toast} = useToast();
@@ -153,6 +174,8 @@ export default function CreateMarketplaceListing() {
       location: "",
       contactEmail: user?.email || "",
       contactPhone: "",
+      instagramUrl: "",
+      facebookUrl: "",
       price: "",
       tier: "basic",
       details: {},
@@ -205,6 +228,8 @@ export default function CreateMarketplaceListing() {
         zipCode: existingListing.zipCode || undefined,
         contactEmail: existingListing.contactEmail || undefined,
         contactPhone: existingListing.contactPhone || undefined,
+        instagramUrl: (existingListing as any).instagramUrl || undefined,
+        facebookUrl: (existingListing as any).facebookUrl || undefined,
         price: existingListing.price || undefined,
         tier: (existingListing.tier as "basic" | "standard" | "premium") || "basic",
         details: existingListing.details || {},
@@ -620,6 +645,9 @@ export default function CreateMarketplaceListing() {
       return;
     }
 
+    const normalizedInstagram = normalizeSocialUrl(data.instagramUrl, "instagram");
+    const normalizedFacebook = normalizeSocialUrl(data.facebookUrl, "facebook");
+
     // If editing an existing listing, update it directly (no payment required for edits)
     if (isEditMode && listingId) {
       if (import.meta.env.DEV) {
@@ -627,6 +655,8 @@ export default function CreateMarketplaceListing() {
       }
       createListingMutation.mutate({
         ...data,
+        instagramUrl: normalizedInstagram,
+        facebookUrl: normalizedFacebook,
         price: data.price || undefined,
         images: imageFiles.length > 0 ? imageFiles : [],
       });
@@ -636,6 +666,8 @@ export default function CreateMarketplaceListing() {
     // New listings always go through checkout to ensure payment/promo validation
     const listingPayload = {
       ...data,
+      instagramUrl: normalizedInstagram,
+      facebookUrl: normalizedFacebook,
       price: data.price || undefined,
       images: imageFiles.length > 0 ? imageFiles : [],
       promoCode: promoCodeValid ? promoCode : undefined,
@@ -931,6 +963,45 @@ export default function CreateMarketplaceListing() {
                   </FormItem>
                 )}
               />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="instagramUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Instagram (Optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="@yourhandle or instagram.com/yourhandle"
+                          {...field}
+                          data-testid="input-contact-instagram"
+                        />
+                      </FormControl>
+                      <FormDescription>We will link this from your listing.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="facebookUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Facebook (Optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="facebook.com/yourpage"
+                          {...field}
+                          data-testid="input-contact-facebook"
+                        />
+                      </FormControl>
+                      <FormDescription>We will link this from your listing.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </CardContent>
           </Card>
 

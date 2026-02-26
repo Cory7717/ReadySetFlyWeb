@@ -9877,6 +9877,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'imageUrl',
         'videoUrl',
         'videoMuted',
+        'instagramUrl',
+        'facebookUrl',
         'link',
         'placements',
         'category',

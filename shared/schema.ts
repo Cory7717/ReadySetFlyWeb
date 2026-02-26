@@ -327,6 +327,8 @@ export const marketplaceListings = pgTable("marketplace_listings", {
   
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
+  instagramUrl: text("instagram_url"),
+  facebookUrl: text("facebook_url"),
   
   // Category-specific data (stored as JSON)
   details: jsonb("details"), // Contains category-specific fields
@@ -1030,6 +1032,8 @@ export const bannerAds = pgTable("banner_ads", {
   videoMuted: boolean("video_muted").default(true),
   videoOrientation: text("video_orientation").default("landscape"),
   link: text("link").notNull(), // Clickable link to sponsor's website
+  instagramUrl: text("instagram_url"),
+  facebookUrl: text("facebook_url"),
   
   // Placement - can show on multiple pages
   placements: text("placements").array().notNull().default(sql`ARRAY[]::text[]`), // Array of: homepage, marketplace, rentals, etc.
@@ -1269,6 +1273,8 @@ export const insertMarketplaceListingSchema = createInsertSchema(marketplaceList
   images: z.array(z.string()).max(15),
   price: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
   monthlyFee: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  instagramUrl: z.string().max(240).optional().or(z.literal("")),
+  facebookUrl: z.string().max(240).optional().or(z.literal("")),
   latitude: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
   longitude: z.string().regex(/^-?\d+(\.\d+)?$/).optional(),
 });
@@ -2289,6 +2295,8 @@ export const insertBannerAdSchema = createInsertSchema(bannerAds).omit({
   title: z.string().min(1, "Title is required"),
   description: z.string().max(240).optional().or(z.literal("")),
   adCopy: z.string().max(800).optional().or(z.literal("")),
+  instagramUrl: z.string().max(240).optional().or(z.literal("")),
+  facebookUrl: z.string().max(240).optional().or(z.literal("")),
 });
 
 export const insertJobApplicationSchema = createInsertSchema(jobApplications).omit({

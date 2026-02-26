@@ -91,6 +91,23 @@ const buildBannerTrackingUrl = (
   }
 };
 
+const normalizeSocialUrl = (value: string | undefined, network: "instagram" | "facebook") => {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const withoutAt = trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
+  if (/^https?:\/\//i.test(withoutAt)) return withoutAt;
+  const cleaned = withoutAt.replace(/^\/\//, "");
+  const lower = cleaned.toLowerCase();
+  if (lower.includes("instagram.com") || lower.includes("facebook.com")) {
+    return `https://${cleaned}`;
+  }
+  const base = network === "instagram"
+    ? "https://instagram.com/"
+    : "https://facebook.com/";
+  return `${base}${cleaned}`;
+};
+
 type HkSettings = {
   checkoutMinutes: number;
   stayoverMinutes: number;
@@ -322,6 +339,8 @@ export default function AdminDashboard() {
       videoMuted: true,
       videoOrientation: "landscape",
       link: "",
+      instagramUrl: "",
+      facebookUrl: "",
       placements: [],
       category: undefined,
       listingId: undefined,
@@ -5656,6 +5675,16 @@ export default function AdminDashboard() {
                                   <span className="font-medium">Link URL:</span> {banner.link}
                                 </p>
                               )}
+                              {banner.instagramUrl && (
+                                <p className="truncate">
+                                  <span className="font-medium">Instagram:</span> {banner.instagramUrl}
+                                </p>
+                              )}
+                              {banner.facebookUrl && (
+                                <p className="truncate">
+                                  <span className="font-medium">Facebook:</span> {banner.facebookUrl}
+                                </p>
+                              )}
                               {banner.link && (
                                 <div className="flex items-center gap-2 flex-wrap text-xs">
                                   <span className="font-medium">Tracking:</span>
@@ -5769,6 +5798,8 @@ export default function AdminDashboard() {
                                   videoMuted: banner.videoMuted ?? true,
                                   videoOrientation: banner.videoOrientation ?? "landscape",
                                   link: banner.link ?? "",
+                                  instagramUrl: banner.instagramUrl ?? "",
+                                  facebookUrl: banner.facebookUrl ?? "",
                                   description: banner.description ?? "",
                                   adCopy: banner.adCopy ?? "",
                                   placements: banner.placements || [],
@@ -7023,6 +7054,8 @@ export default function AdminDashboard() {
             <Form {...bannerForm}>
               <form 
                 onSubmit={bannerForm.handleSubmit((data) => {
+                  const normalizedInstagram = normalizeSocialUrl(data.instagramUrl, "instagram");
+                  const normalizedFacebook = normalizeSocialUrl(data.facebookUrl, "facebook");
                   // Use bannerImageUrl state if available (from upload), otherwise use form data
                   const payload = {
                     title: data.title,
@@ -7033,6 +7066,8 @@ export default function AdminDashboard() {
                     videoMuted: data.videoMuted ?? true,
                     videoOrientation: data.videoOrientation ?? "landscape",
                     link: data.link,
+                    instagramUrl: normalizedInstagram,
+                    facebookUrl: normalizedFacebook,
                     placements: data.placements,
                     category: data.category,
                     startDate: data.startDate,
@@ -7133,6 +7168,45 @@ export default function AdminDashboard() {
                         </FormItem>
                       )}
                     />
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={bannerForm.control}
+                        name="instagramUrl"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Instagram (Optional)</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="@yourhandle or instagram.com/yourhandle"
+                                {...field}
+                                value={field.value ?? ""}
+                                data-testid="input-banner-instagram"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={bannerForm.control}
+                        name="facebookUrl"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Facebook (Optional)</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="facebook.com/yourpage"
+                                {...field}
+                                value={field.value ?? ""}
+                                data-testid="input-banner-facebook"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                     
                     <FormField
                       control={bannerForm.control}

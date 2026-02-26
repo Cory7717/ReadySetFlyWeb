@@ -14,6 +14,7 @@ const tools = [
   { title: "Progress Tracker", description: "Track hours, solos, and milestones.", href: "/student/progress" },
   { title: "Training Workspace", description: "Track lessons and upload training docs.", href: "/student/training" },
   { title: "Written Test Prep Tracker", description: "Organize study topics.", href: "/student/written" },
+  { title: "Aviation Abbreviations", description: "RSF glossary and quiz mode for common acronyms.", href: "/student/abbreviations" },
   { title: "VOR Trainer", description: "Radials, OBS, flags, and intercept drills.", href: "/student/vor-trainer" },
   { title: "6-Pack Panel Trainer", description: "Learn the classic flight instruments with an interactive panel.", href: "/student/six-pack-trainer" },
   { title: "RSF GPS Simulators", description: "IFR GPS workflows for top avionics stacks.", href: "/gps-sims" },

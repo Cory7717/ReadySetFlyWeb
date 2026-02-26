@@ -79,6 +79,7 @@ const StudentCost = lazy(() => import("@/pages/student/cost"));
 const StudentProgress = lazy(() => import("@/pages/student/progress"));
 const StudentTraining = lazy(() => import("@/pages/student/training"));
 const StudentWritten = lazy(() => import("@/pages/student/written"));
+const StudentAbbreviations = lazy(() => import("@/pages/student/abbreviations"));
 const StudentSyllabi = lazy(() => import("@/pages/student/syllabi"));
 const StudentVorTrainer = lazy(() => import("@/pages/student/vor-trainer"));
 const StudentSixPackTrainer = lazy(() => import("@/pages/student/six-pack-trainer"));
@@ -234,6 +235,7 @@ function Router() {
           <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
           <Route path="/student/training" component={() => <StudentPageLoader component={StudentTraining} />} />
           <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
+          <Route path="/student/abbreviations" component={() => <StudentPageLoader component={StudentAbbreviations} />} />
           <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
           <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />
           <Route path="/student/six-pack-trainer" component={() => <StudentPageLoader component={StudentSixPackTrainer} />} />
@@ -296,6 +298,7 @@ function Router() {
           <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
           <Route path="/student/training" component={RequireAuth} />
           <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
+          <Route path="/student/abbreviations" component={() => <StudentPageLoader component={StudentAbbreviations} />} />
           <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
           <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />
           <Route path="/student/six-pack-trainer" component={() => <StudentPageLoader component={StudentSixPackTrainer} />} />

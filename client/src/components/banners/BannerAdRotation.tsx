@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import { ExternalLink, Mail } from "lucide-react";
+import { ExternalLink, Mail, Instagram, Facebook } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,6 +27,8 @@ interface BannerAd {
   videoMuted?: boolean | null;
   videoOrientation?: string | null;
   link: string;
+  instagramUrl?: string | null;
+  facebookUrl?: string | null;
   placements: string[];
   category?: string;
   isActive: boolean;
@@ -51,6 +53,22 @@ interface BannerAdRotationProps {
   rotationIntervalMs?: number;
   className?: string;
 }
+
+const resolveSocialUrl = (value?: string | null, network?: "instagram" | "facebook") => {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const withoutAt = trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
+  if (/^https?:\/\//i.test(withoutAt)) return withoutAt;
+  const cleaned = withoutAt.replace(/^\/\//, "");
+  const lower = cleaned.toLowerCase();
+  if (lower.includes("instagram.com") || lower.includes("facebook.com")) {
+    return `https://${cleaned}`;
+  }
+  if (network === "instagram") return `https://instagram.com/${cleaned}`;
+  if (network === "facebook") return `https://facebook.com/${cleaned}`;
+  return `https://${cleaned}`;
+};
 
 export function BannerAdRotation({ 
   placement, 
@@ -166,6 +184,9 @@ export function BannerAdRotation({
   const hasMedia = hasImage || hasVideo;
   const showHeroMedia = hasVideo || hasImage;
   const showThumbnail = hasBodyCopy && hasImage;
+  const instagramUrl = resolveSocialUrl(currentAd?.instagramUrl, "instagram");
+  const facebookUrl = resolveSocialUrl(currentAd?.facebookUrl, "facebook");
+  const hasSocialLinks = Boolean(instagramUrl || facebookUrl);
   const resolveObjectUrl = (value?: string | null) => {
     if (!value) return undefined;
     if (/^https?:\/\//i.test(value)) {
@@ -374,6 +395,36 @@ export function BannerAdRotation({
                   <Mail className="h-3.5 w-3.5" />
                   Contact advertiser
                 </Button>
+              )}
+              {hasSocialLinks && (
+                <div className="flex items-center gap-2">
+                  {instagramUrl && (
+                    <a
+                      href={instagramUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                      data-testid="link-banner-instagram"
+                    >
+                      <Instagram className="h-3.5 w-3.5" />
+                      Instagram
+                    </a>
+                  )}
+                  {facebookUrl && (
+                    <a
+                      href={facebookUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                      data-testid="link-banner-facebook"
+                    >
+                      <Facebook className="h-3.5 w-3.5" />
+                      Facebook
+                    </a>
+                  )}
+                </div>
               )}
             </div>
 

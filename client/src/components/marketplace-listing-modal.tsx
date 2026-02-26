@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2, Star, Edit, Flag, Eye } from "lucide-react";
+import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2, Star, Edit, Flag, Eye, Instagram, Facebook } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -48,6 +48,22 @@ const categoryLabels: Record<string, string> = {
   "flight-school": "Flight School",
   "mechanic": "A&P Mechanic",
   "job": "Job Opening",
+};
+
+const resolveSocialUrl = (value?: string | null, network?: "instagram" | "facebook") => {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const withoutAt = trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
+  if (/^https?:\/\//i.test(withoutAt)) return withoutAt;
+  const cleaned = withoutAt.replace(/^\/\//, "");
+  const lower = cleaned.toLowerCase();
+  if (lower.includes("instagram.com") || lower.includes("facebook.com")) {
+    return `https://${cleaned}`;
+  }
+  if (network === "instagram") return `https://instagram.com/${cleaned}`;
+  if (network === "facebook") return `https://facebook.com/${cleaned}`;
+  return `https://${cleaned}`;
 };
 
 const contactSellerSchema = z.object({
@@ -272,6 +288,8 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
   if (!listing && !isLoading) return null;
 
   const Icon = listing ? categoryIcons[listing.category] : Plane;
+  const instagramUrl = listing ? resolveSocialUrl(listing.instagramUrl, "instagram") : undefined;
+  const facebookUrl = listing ? resolveSocialUrl(listing.facebookUrl, "facebook") : undefined;
 
   return (
     <>
@@ -685,6 +703,51 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                           data-testid="button-login-view-phone"
                         >
                           Sign in to view phone
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {(instagramUrl || facebookUrl) && (
+                  <div className="flex items-center gap-3">
+                    <div className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Social</p>
+                      {canViewContact ? (
+                        <div className="flex items-center gap-3">
+                          {instagramUrl && (
+                            <a
+                              href={instagramUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                              data-testid="link-listing-instagram"
+                            >
+                              <Instagram className="h-4 w-4" />
+                              Instagram
+                            </a>
+                          )}
+                          {facebookUrl && (
+                            <a
+                              href={facebookUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                              data-testid="link-listing-facebook"
+                            >
+                              <Facebook className="h-4 w-4" />
+                              Facebook
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={requireLogin}
+                          className="font-medium text-primary hover:underline"
+                          data-testid="button-login-view-social"
+                        >
+                          Sign in to view social links
                         </button>
                       )}
                     </div>

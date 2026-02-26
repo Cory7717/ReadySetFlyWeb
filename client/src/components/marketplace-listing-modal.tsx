@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { X, MapPin, Mail, Phone, Calendar, DollarSign, Briefcase, Plane, Award, Wrench, Building2, Star, Edit, Flag, Eye } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,9 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import type { MarketplaceListing } from "@shared/schema";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
-import { formatPrice, formatPhoneNumber } from "@/lib/formatters";
+import { formatPhoneNumber } from "@/lib/formatters";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -46,6 +50,15 @@ const categoryLabels: Record<string, string> = {
   "job": "Job Opening",
 };
 
+const contactSellerSchema = z.object({
+  name: z.string().min(1, "Name is required").max(160),
+  email: z.string().email("Valid email is required").max(255),
+  phone: z.string().max(40).optional().or(z.literal("")),
+  message: z.string().max(2000).optional().or(z.literal("")),
+});
+
+type ContactSellerForm = z.infer<typeof contactSellerSchema>;
+
 export function MarketplaceListingModal({ listingId, open, onOpenChange }: MarketplaceListingModalProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -55,6 +68,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
   const [userHasFlagged, setUserHasFlagged] = useState(false);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const [jobApplicationOpen, setJobApplicationOpen] = useState(false);
+  const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const canViewContact = !!user;
 
   const requireLogin = () => {
@@ -64,6 +78,16 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
   const { data: listing, isLoading } = useQuery<MarketplaceListing>({
     queryKey: ["/api/marketplace", listingId],
     enabled: open && !!listingId,
+  });
+
+  const contactForm = useForm<ContactSellerForm>({
+    resolver: zodResolver(contactSellerSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      message: "",
+    },
   });
 
   // Populate admin fields and flag status when listing data loads
@@ -81,6 +105,17 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
       setUserHasFlagged((listing as any).userHasFlagged || false);
     }
   }, [listing?.id, listing?.adminNotes, listing?.expiresAt]);
+
+  useEffect(() => {
+    if (!contactDialogOpen) return;
+    const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+    contactForm.reset({
+      name: fullName || "",
+      email: user?.email || "",
+      phone: "",
+      message: "",
+    });
+  }, [contactDialogOpen, user?.firstName, user?.lastName, user?.email]);
 
   // Track view when listing loads (only once per listing view)
   useEffect(() => {
@@ -159,6 +194,42 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
       toast({
         title: "Update Failed",
         description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const sendContactMutation = useMutation({
+    mutationFn: async (data: ContactSellerForm) => {
+      if (!listing) {
+        throw new Error("Listing not found");
+      }
+      return apiRequest("POST", `/api/marketplace/${listing.id}/contact`, {
+        name: data.name.trim(),
+        email: data.email.trim(),
+        phone: data.phone?.trim() || undefined,
+        message: data.message?.trim() || undefined,
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Message sent",
+        description: "Your inquiry was sent to the advertiser.",
+      });
+      setContactDialogOpen(false);
+      const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+      contactForm.reset({
+        name: fullName || "",
+        email: user?.email || "",
+        phone: "",
+        message: "",
+      });
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : "Failed to send message.";
+      toast({
+        title: "Message failed",
+        description: message,
         variant: "destructive",
       });
     },
@@ -655,20 +726,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                           requireLogin();
                           return;
                         }
-                        // Create custom subject line based on category
-                        const categoryNames: Record<string, string> = {
-                          'aircraft-sale': 'Aircraft for Sale',
-                          'job': 'Aviation Job',
-                          'cfi': 'CFI Services',
-                          'flight-school': 'Flight School',
-                          'mechanic': 'Mechanic Services',
-                          'charter': 'Charter Service'
-                        };
-                        const categoryName = categoryNames[listing.category] || listing.category;
-                        const subject = `Inquiry From Ready Set Fly about your ${categoryName} Listing: ${listing.title}`;
-                        const body = `Hi,\n\nI'm interested in your ${categoryName} listing: ${listing.title}\n\n`;
-                        const mailtoLink = `mailto:${listing.contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                        window.location.href = mailtoLink;
+                        setContactDialogOpen(true);
                       }}
                       data-testid="button-contact-seller"
                     >
@@ -888,6 +946,99 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
         onOpenChange={setJobApplicationOpen}
       />
     )}
+
+    {/* Contact Seller Dialog */}
+    <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
+      <DialogContent className="max-w-md" data-testid="dialog-contact-seller">
+        <DialogHeader>
+          <DialogTitle>Contact seller</DialogTitle>
+          <DialogDescription>
+            Send a message about {listing?.title || "this listing"}.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...contactForm}>
+          <form
+            onSubmit={contactForm.handleSubmit((data) => sendContactMutation.mutate(data))}
+            className="space-y-4"
+          >
+            <FormField
+              control={contactForm.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Aviator Alex" {...field} data-testid="input-contact-seller-name" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={contactForm.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="alex@example.com" {...field} data-testid="input-contact-seller-email" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={contactForm.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone (optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="(555) 123-4567" {...field} data-testid="input-contact-seller-phone" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={contactForm.control}
+              name="message"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Message (optional)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Let them know how they can help..."
+                      className="min-h-[120px]"
+                      {...field}
+                      data-testid="textarea-contact-seller-message"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setContactDialogOpen(false)}
+                data-testid="button-cancel-contact-seller"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={sendContactMutation.isPending}
+                data-testid="button-submit-contact-seller"
+              >
+                {sendContactMutation.isPending ? "Sending..." : "Send message"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }

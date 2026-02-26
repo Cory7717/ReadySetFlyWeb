@@ -503,6 +503,140 @@ This lead originated on ReadySetFly.us and was sent by Ready Set Fly on behalf o
   }
 }
 
+export async function sendMarketplaceListingContactEmail(data: {
+  recipientEmail: string;
+  recipientName?: string | null;
+  listingId: string;
+  listingTitle: string;
+  listingCategory: string;
+  listingLocation?: string | null;
+  listingTier?: string | null;
+  name: string;
+  email: string;
+  phone?: string | null;
+  message?: string | null;
+}) {
+  const { getUncachableResendClient } = await import("./resendClient");
+  const { client: resend, fromEmail } = await getUncachableResendClient();
+  const safeMessage = data.message?.trim();
+  const messageHtml = safeMessage ? safeMessage.replace(/\n/g, "<br>") : "<em>No message provided.</em>";
+  const messageText = safeMessage ? safeMessage : "No message provided.";
+  const locationLabel = data.listingLocation || "Not specified";
+  const tierLabel = data.listingTier || "Not specified";
+  const appUrl = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #0f172a; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background: #f8fafc; }
+    .info-box { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin: 10px 0; }
+    .message-box { background: #f3f4f6; border-left: 4px solid #0f172a; padding: 15px; margin: 15px 0; }
+    .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }
+    .cta { display: inline-block; background: #1e40af; color: #ffffff !important; padding: 12px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Ready Set Fly Marketplace Inquiry</h1>
+      <p>New message from Ready Set Fly</p>
+    </div>
+
+    <div class="content">
+      <p>Hi ${data.recipientName || "Advertiser"},</p>
+      <p>A Ready Set Fly visitor asked about your marketplace listing.</p>
+
+      <div class="info-box">
+        <h3>Listing Details</h3>
+        <p><strong>Title:</strong> ${data.listingTitle}</p>
+        <p><strong>Category:</strong> ${data.listingCategory}</p>
+        <p><strong>Location:</strong> ${locationLabel}</p>
+        <p><strong>Tier:</strong> ${tierLabel}</p>
+        <p><strong>Listing ID:</strong> ${data.listingId}</p>
+      </div>
+
+      <div class="info-box">
+        <h3>Visitor Contact</h3>
+        <p><strong>Name:</strong> ${data.name}</p>
+        <p><strong>Email:</strong> ${data.email}</p>
+        <p><strong>Phone:</strong> ${data.phone || "Not provided"}</p>
+      </div>
+
+      <div class="message-box">
+        <h3>Message</h3>
+        <p>${messageHtml}</p>
+      </div>
+
+      <div style="text-align: center; margin: 20px 0;">
+        <a class="cta" href="${appUrl}/marketplace/listing/${data.listingId}">View Listing</a>
+      </div>
+
+      <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">
+        Reply to this email to respond directly to ${data.email}. This lead originated on ReadySetFly.us.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p>This message was sent by Ready Set Fly on behalf of ${data.name}.</p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const textBody = `
+READY SET FLY MARKETPLACE INQUIRY
+
+Hi ${data.recipientName || "Advertiser"},
+
+A Ready Set Fly visitor asked about your marketplace listing.
+
+LISTING DETAILS
+--------------
+Title: ${data.listingTitle}
+Category: ${data.listingCategory}
+Location: ${locationLabel}
+Tier: ${tierLabel}
+Listing ID: ${data.listingId}
+
+VISITOR CONTACT
+--------------
+Name: ${data.name}
+Email: ${data.email}
+Phone: ${data.phone || "Not provided"}
+
+MESSAGE
+-------
+${messageText}
+
+View listing: ${appUrl}/marketplace/listing/${data.listingId}
+
+---
+Reply to this email to respond directly to ${data.email}.
+This lead originated on ReadySetFly.us and was sent by Ready Set Fly on behalf of ${data.name}.
+  `.trim();
+
+  try {
+    await resend.emails.send({
+      from: fromEmail,
+      to: data.recipientEmail,
+      subject: `[RSF] Marketplace Inquiry: ${data.listingTitle}`,
+      html: htmlBody,
+      text: textBody,
+      replyTo: data.email,
+    });
+  } catch (error) {
+    console.error("Failed to send marketplace listing contact email:", error);
+    throw error;
+  }
+}
+
 export async function sendWelcomeEmail(data: {
   email: string;
   firstName?: string | null;

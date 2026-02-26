@@ -24,7 +24,7 @@ import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfIS
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
-import { sendBannerAdvertiserContactEmail, sendContactFormEmail } from "./email-templates";
+import { sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail } from "./email-templates";
 import { ADMIN_PERMISSIONS, ADMIN_ROLE_PERMISSIONS, normalizeAdminPermissions, type AdminPermission, type AdminRole } from "@shared/config/adminAccess";
 import registerMobileAuthRoutes from "./mobile-auth-routes";
 import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
@@ -6497,6 +6497,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Failed to increment view count:", error);
       res.status(500).json({ error: "Failed to track view" });
+    }
+  });
+
+  // Contact marketplace listing owner
+  app.post("/api/marketplace/:id/contact", contactFormRateLimiter, async (req, res) => {
+    try {
+      const contactSchema = z.object({
+        name: z.string().trim().min(1, "Name is required").max(160),
+        email: z.string().trim().email("Valid email is required").max(255),
+        phone: z.string().trim().max(40).optional(),
+        message: z.string().trim().max(2000).optional(),
+      });
+
+      const parsed = contactSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          error: "Invalid contact data",
+          details: parsed.error.errors,
+        });
+      }
+
+      const listingId = req.params.id;
+      if (getSampleMarketplaceListing(listingId)) {
+        return res.status(400).json({ error: "Sample listings cannot be contacted." });
+      }
+
+      const listing = await storage.getMarketplaceListing(listingId);
+      if (!listing) {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+
+      const listingOwner = await storage.getUser(listing.userId);
+      const recipientEmail = listing.contactEmail || listingOwner?.email;
+      if (!recipientEmail) {
+        return res.status(400).json({
+          error: "Listing does not have a contact email configured. Please ask the seller to update their listing.",
+        });
+      }
+
+      const categoryLabels: Record<string, string> = {
+        "aircraft-sale": "Aircraft For Sale",
+        "charter": "Charter Services",
+        "cfi": "CFI Services",
+        "flight-school": "Flight School",
+        "mechanic": "A&P Mechanic",
+        "job": "Job Opening",
+      };
+
+      const recipientName = listingOwner?.firstName || listingOwner?.email || undefined;
+
+      await sendMarketplaceListingContactEmail({
+        recipientEmail,
+        recipientName,
+        listingId: listing.id,
+        listingTitle: listing.title,
+        listingCategory: categoryLabels[listing.category] || listing.category,
+        listingLocation: listing.location || undefined,
+        listingTier: listing.tier || undefined,
+        name: parsed.data.name,
+        email: parsed.data.email,
+        phone: parsed.data.phone,
+        message: parsed.data.message,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Marketplace listing contact error:", error);
+      res.status(500).json({ error: "Failed to contact listing owner" });
     }
   });
 

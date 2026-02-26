@@ -3601,7 +3601,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PayPal - Create RSF Membership subscription
   app.post("/api/paypal/membership/subscribe", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const requesterId = req.user.claims.sub;
       const tier = req.body?.tier === "pro_plus" ? "pro_plus" : req.body?.tier === "pro" ? "pro" : null;
       const interval = parseBillingInterval(req.body?.interval);
       if (!tier || !interval) {
@@ -4658,7 +4658,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // SECURITY: Requires cryptographically signed token to prevent unauthorized completion
   app.post("/api/marketplace/complete-free-listing", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const requesterId = req.user.claims.sub;
       const { completionToken, listingData } = req.body;
       
       // SECURITY: Validate completion token is provided

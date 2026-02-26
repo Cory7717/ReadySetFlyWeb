@@ -6,8 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { trackEvent } from "@/lib/analytics";
 import { gpsTrainerDisclaimer, gpsTrainerUnits } from "@shared/gps-sims";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function GpsSimsHub() {
+  const { user, isAuthenticated } = useAuth();
+  const entitlements = (user as any)?.entitlements;
+  const isPro = entitlements?.canUseGpsSims ?? (user?.logbookProStatus === "active");
+
   useEffect(() => {
     trackEvent("gps_sims_hub_view", { page: "/gps-sims" });
   }, []);
@@ -40,12 +45,30 @@ export default function GpsSimsHub() {
             {gpsTrainerDisclaimer.join(" ")}
           </AlertDescription>
         </Alert>
+        {!isPro && (
+          <Alert variant="default">
+            <AlertTitle>RSF Pro unlocks full GPS sims</AlertTitle>
+            <AlertDescription>
+              {isAuthenticated
+                ? "Checkride mode, instructor-ready session reports, and advanced scenarios are available with RSF Pro."
+                : "Create a free account, then upgrade to RSF Pro for full GPS simulator access and instructor reports."}
+              <div className="mt-3">
+                <Button asChild size="sm">
+                  <Link href={isAuthenticated ? "/logbook/pro" : "/register"}>Unlock RSF Pro</Link>
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {gpsTrainerUnits.map((unit) => (
             <Card key={unit.id} className="hover-elevate">
               <CardHeader>
-                <CardTitle>{unit.title}</CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle>{unit.title}</CardTitle>
+                  {!isPro && <Badge variant="outline">RSF Pro</Badge>}
+                </div>
                 <CardDescription>{unit.subtitle}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">

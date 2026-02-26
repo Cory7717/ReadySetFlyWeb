@@ -17,6 +17,35 @@ function createStepState(task: GpsTrainerTask) {
   return new Array(task.steps.length).fill(false);
 }
 
+type TrainerSessionEntry = {
+  id: string;
+  label: string;
+  matched: boolean;
+  timestamp: number;
+};
+
+type TrainerSessionReport = {
+  id: string;
+  unitId: string;
+  unitTitle: string;
+  taskId: string;
+  taskTitle: string;
+  mode: "learn" | "checkride";
+  scenarioId: string | null;
+  startedAt: string;
+  completedAt: string;
+  durationSec: number;
+  requiredActions: string[];
+  matchedActions: string[];
+  totalActions: number;
+  accuracy: number;
+  completion: number;
+  score: number;
+  navSource: string;
+  activeLegIdent: string | null;
+  actionTimeline: Array<{ label: string; matched: boolean; timestamp: number }>;
+};
+
 export default function GpsSimsUnit() {
   const [, params] = useRoute("/gps-sims/:unitId");
   const unit = gpsTrainerUnits.find((item) => item.id === params?.unitId);
@@ -58,6 +87,11 @@ export default function GpsSimsUnit() {
   const [actionLog, setActionLog] = useState<Array<{ id: string; label: string; matched: boolean }>>(
     []
   );
+  const [sessionLog, setSessionLog] = useState<TrainerSessionEntry[]>([]);
+  const [matchedActions, setMatchedActions] = useState<string[]>([]);
+  const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null);
+  const [sessionCompletedAt, setSessionCompletedAt] = useState<number | null>(null);
+  const [lastSessionReport, setLastSessionReport] = useState<TrainerSessionReport | null>(null);
   const [showAvionicsExplain, setShowAvionicsExplain] = useState(true);
   const [activeScenarioId, setActiveScenarioId] = useState<string | null>(
     avionicsScenarios[0]?.id ?? null
@@ -129,6 +163,31 @@ export default function GpsSimsUnit() {
     setActionLog([]);
     setKnobValues({});
   }, [unit?.id]);
+
+  useEffect(() => {
+    resetSession();
+  }, [selectedTaskId, mode, unit?.id]);
+
+  useEffect(() => {
+    if (mode !== "checkride") return;
+    if (!sessionStartedAt || sessionCompletedAt) return;
+    if (requiredActionKeys.length && matchedRequiredCount >= requiredActionKeys.length) {
+      setSessionCompletedAt(Date.now());
+    }
+  }, [mode, sessionStartedAt, sessionCompletedAt, requiredActionKeys.length, matchedRequiredCount]);
+
+  useEffect(() => {
+    if (!unit) return;
+    const sessions = (profile?.progressJson as any)?.gpsTrainerSessions;
+    if (!Array.isArray(sessions)) {
+      setLastSessionReport(null);
+      return;
+    }
+    const latest = sessions
+      .filter((entry) => entry?.unitId === unit.id)
+      .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())[0];
+    setLastSessionReport(latest || null);
+  }, [profile?.progressJson, unit?.id]);
 
   useEffect(() => {
     setActiveScenarioId(avionicsScenarios[0]?.id ?? null);
@@ -228,6 +287,14 @@ export default function GpsSimsUnit() {
                   }
                 />
               </div>
+              <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+                <div className="text-xs font-semibold text-foreground mb-2">RSF Pro unlocks</div>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Checkride mode with scoring + realism guardrails.</li>
+                  <li>Instructor-ready session reports and progress history.</li>
+                  <li>Advanced scenarios and simulator presets.</li>
+                </ul>
+              </div>
               <Button asChild>
                 <Link href={gateCtaHref}>{gateCtaLabel}</Link>
               </Button>
@@ -240,12 +307,28 @@ export default function GpsSimsUnit() {
 
   const completedCount = progress.filter(Boolean).length;
   const actionHints = selectedTask.actionHints ?? [];
+  const requiredActionKeys = useMemo(
+    () => Array.from(new Set(actionHints)),
+    [actionHints]
+  );
   const rotationStep = 18;
   const activePage = avionics.activePage;
   const directToSelection =
     directToOptions[avionics.directToIndex] ?? directToOptions[0] ?? null;
   const mapPolyline = routePoints.map((point) => `${point.x},${point.y}`).join(" ");
   const mapHeading = Math.round(avionics.simulatedAircraft.groundTrackDeg);
+  const matchedRequiredCount = matchedActions.filter((key) => requiredActionKeys.includes(key)).length;
+  const totalActions = sessionLog.length;
+  const accuracy = totalActions ? Math.round((matchedRequiredCount / totalActions) * 100) : 0;
+  const completion = requiredActionKeys.length
+    ? Math.round((matchedRequiredCount / requiredActionKeys.length) * 100)
+    : 0;
+  const score = Math.round(completion * 0.7 + accuracy * 0.3);
+  const checkrideComplete = mode === "checkride" && requiredActionKeys.length > 0 &&
+    matchedRequiredCount >= requiredActionKeys.length;
+  const durationSec = sessionStartedAt
+    ? Math.max(0, Math.round(((sessionCompletedAt ?? Date.now()) - sessionStartedAt) / 1000))
+    : 0;
 
   const handleToggleStep = (index: number) => {
     setStepProgress((prev) => {
@@ -261,10 +344,18 @@ export default function GpsSimsUnit() {
       [selectedTask.id]: createStepState(selectedTask),
     }));
     setRevealed((prev) => ({ ...prev, [selectedTask.id]: false }));
+    resetSession();
   };
 
   const describeHotspot = (hotspotId: string) =>
     unit.panel.hotspots.find((item) => item.id === hotspotId)?.label ?? hotspotId;
+
+  const resetSession = () => {
+    setSessionLog([]);
+    setMatchedActions([]);
+    setSessionStartedAt(null);
+    setSessionCompletedAt(null);
+  };
 
   const recordAction = (action: {
     type: "press" | "rotate";
@@ -276,6 +367,7 @@ export default function GpsSimsUnit() {
     const matched =
       actionHints.includes(key) ||
       (action.type === "rotate" && actionHints.includes(baseKey));
+    const now = Date.now();
     const label =
       action.type === "press"
         ? `Pressed ${describeHotspot(action.hotspotId)}`
@@ -283,6 +375,13 @@ export default function GpsSimsUnit() {
             action.direction === "cw" ? "clockwise" : "counterclockwise"
           }`;
     setActionLog((prev) => [{ id: key, label, matched }, ...prev].slice(0, 6));
+    setSessionLog((prev) => [{ id: key, label, matched, timestamp: now }, ...prev].slice(0, 200));
+    if (mode === "checkride" && !sessionStartedAt) {
+      setSessionStartedAt(now);
+    }
+    if (matched) {
+      setMatchedActions((prev) => (prev.includes(key) ? prev : [...prev, key]));
+    }
   };
 
   const handleButtonPress = (hotspotId: string) => {
@@ -310,6 +409,7 @@ export default function GpsSimsUnit() {
     if (!scenario) return;
     setActiveScenarioId(scenarioId);
     applyScenario(scenario);
+    resetSession();
     trackEvent("scenario_start", { unit: unit.id, scenario: scenarioId });
   };
 
@@ -324,6 +424,7 @@ export default function GpsSimsUnit() {
     });
     setDirectToTarget(null);
     setPage("MAP");
+    resetSession();
   };
 
   const getHotspotCenter = (hotspotId: string) => {
@@ -416,6 +517,120 @@ export default function GpsSimsUnit() {
     saveProfile({ progressJson: payload });
   };
 
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (!mins) return `${secs}s`;
+    return `${mins}m ${secs}s`;
+  };
+
+  const buildSessionReport = () => {
+    if (!unit || !sessionStartedAt) return null;
+    const completedAt = sessionCompletedAt ?? Date.now();
+    const report: TrainerSessionReport = {
+      id: crypto.randomUUID?.() || `${unit.id}-${Date.now()}`,
+      unitId: unit.id,
+      unitTitle: unit.title,
+      taskId: selectedTask.id,
+      taskTitle: selectedTask.title,
+      mode,
+      scenarioId: activeScenarioId ?? null,
+      startedAt: new Date(sessionStartedAt).toISOString(),
+      completedAt: new Date(completedAt).toISOString(),
+      durationSec,
+      requiredActions: requiredActionKeys,
+      matchedActions,
+      totalActions,
+      accuracy,
+      completion,
+      score,
+      navSource: avionics.navSource,
+      activeLegIdent,
+      actionTimeline: sessionLog
+        .slice(0, 20)
+        .map((entry) => ({
+          label: entry.label,
+          matched: entry.matched,
+          timestamp: entry.timestamp,
+        }))
+        .reverse(),
+    };
+    return report;
+  };
+
+  const persistSessionReport = (report: TrainerSessionReport) => {
+    if (!canPersist) return;
+    const currentProgress = (profile?.progressJson as any) || {};
+    const sessions = Array.isArray(currentProgress.gpsTrainerSessions)
+      ? currentProgress.gpsTrainerSessions
+      : [];
+    const nextSessions = [report, ...sessions].slice(0, 40);
+    saveProfile({
+      progressJson: {
+        ...currentProgress,
+        gpsTrainerSessions: nextSessions,
+      },
+    });
+  };
+
+  const handleCompleteCheckride = () => {
+    const report = buildSessionReport();
+    if (!report) return;
+    setLastSessionReport(report);
+    persistSessionReport(report);
+    trackEvent("gps_checkride_complete", {
+      unit: report.unitId,
+      task: report.taskId,
+      score: report.score,
+      accuracy: report.accuracy,
+      completion: report.completion,
+      durationSec: report.durationSec,
+      mode: report.mode,
+    });
+  };
+
+  const downloadSessionReport = (report: TrainerSessionReport) => {
+    const lines: string[] = [];
+    lines.push("Ready Set Fly - GPS Simulator Session Report");
+    lines.push("");
+    lines.push(`Unit: ${report.unitTitle} (${report.unitId})`);
+    lines.push(`Task: ${report.taskTitle}`);
+    lines.push(`Mode: ${report.mode}`);
+    if (report.scenarioId) lines.push(`Scenario: ${report.scenarioId}`);
+    lines.push(`Started: ${report.startedAt}`);
+    lines.push(`Completed: ${report.completedAt}`);
+    lines.push(`Duration: ${formatDuration(report.durationSec)}`);
+    lines.push("");
+    lines.push(`Score: ${report.score}/100`);
+    lines.push(`Completion: ${report.completion}%`);
+    lines.push(`Accuracy: ${report.accuracy}%`);
+    lines.push(`Total actions: ${report.totalActions}`);
+    lines.push(`Nav source: ${report.navSource}`);
+    if (report.activeLegIdent) lines.push(`Active leg: ${report.activeLegIdent}`);
+    lines.push("");
+    lines.push("Required actions:");
+    report.requiredActions.forEach((action) => lines.push(`- ${action}`));
+    lines.push("");
+    lines.push("Matched actions:");
+    report.matchedActions.forEach((action) => lines.push(`- ${action}`));
+    lines.push("");
+    lines.push("Action timeline:");
+    report.actionTimeline.forEach((entry) => {
+      const stamp = new Date(entry.timestamp).toISOString();
+      lines.push(`- ${stamp} ${entry.matched ? "[OK]" : "[?]"} ${entry.label}`);
+    });
+
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `rsf-gps-session-${report.unitId}-${report.taskId}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const showSteps = mode === "learn" || revealed[selectedTask.id];
 
   const renderMapPanel = () => (
@@ -470,6 +685,11 @@ export default function GpsSimsUnit() {
             <div className="text-xs text-muted-foreground">
               Rotate the knob to move the cursor. Click a leg to activate it.
             </div>
+            {!avionics.cursorMode && (
+              <div className="text-xs text-amber-600">
+                Cursor mode is off. Push the knob to edit the flight plan.
+              </div>
+            )}
             <div className="space-y-2">
               {avionics.route.map((ident, index) => (
                 <div
@@ -487,6 +707,7 @@ export default function GpsSimsUnit() {
                       type="button"
                       size="sm"
                       variant="outline"
+                      disabled={!avionics.cursorMode}
                       onClick={() => activateLeg(index)}
                     >
                       Activate
@@ -495,6 +716,7 @@ export default function GpsSimsUnit() {
                       type="button"
                       size="sm"
                       variant="ghost"
+                      disabled={!avionics.cursorMode}
                       onClick={() => removeWaypoint(index)}
                     >
                       Remove
@@ -509,8 +731,9 @@ export default function GpsSimsUnit() {
                 onChange={(event) => setNewWaypoint(event.target.value.toUpperCase())}
                 placeholder="Add waypoint"
                 className="h-9 w-36 rounded-md border bg-background px-2 text-sm"
+                disabled={!avionics.cursorMode}
               />
-              <Button type="button" size="sm" onClick={handleAddWaypoint}>
+              <Button type="button" size="sm" onClick={handleAddWaypoint} disabled={!avionics.cursorMode}>
                 Add
               </Button>
             </div>
@@ -657,7 +880,7 @@ export default function GpsSimsUnit() {
             >
               Checkride Mode
             </Button>
-            <Badge variant="outline">Progress saves with RSF Pro</Badge>
+            <Badge variant="outline">Progress + instructor reports save with RSF Pro</Badge>
           </CardContent>
         </Card>
 
@@ -950,6 +1173,100 @@ export default function GpsSimsUnit() {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Checkride Score & Instructor Review</CardTitle>
+            <CardDescription>
+              Realism-focused scoring and reports. Complete the task to generate an instructor-ready summary.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {mode !== "checkride" ? (
+              <div className="text-sm text-muted-foreground">
+                Switch to Checkride Mode to track scoring, timing, and instructor reports.
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border p-3 text-sm">
+                    <div className="text-xs text-muted-foreground">Required actions</div>
+                    <div className="text-lg font-semibold">
+                      {matchedRequiredCount}/{requiredActionKeys.length}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-3 text-sm">
+                    <div className="text-xs text-muted-foreground">Accuracy</div>
+                    <div className="text-lg font-semibold">{accuracy}%</div>
+                  </div>
+                  <div className="rounded-lg border p-3 text-sm">
+                    <div className="text-xs text-muted-foreground">Completion</div>
+                    <div className="text-lg font-semibold">{completion}%</div>
+                  </div>
+                  <div className="rounded-lg border p-3 text-sm">
+                    <div className="text-xs text-muted-foreground">Time</div>
+                    <div className="text-lg font-semibold">
+                      {sessionStartedAt ? formatDuration(durationSec) : "—"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge variant={checkrideComplete ? "default" : "outline"}>
+                    {checkrideComplete ? "Ready to finalize" : "In progress"}
+                  </Badge>
+                  <Badge variant="secondary">Score: {score}/100</Badge>
+                  <Button
+                    type="button"
+                    onClick={handleCompleteCheckride}
+                    disabled={!checkrideComplete}
+                  >
+                    Generate instructor report
+                  </Button>
+                  <Button type="button" variant="outline" onClick={resetSession}>
+                    Reset attempt
+                  </Button>
+                </div>
+              </>
+            )}
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="text-sm font-semibold">Instructor review</div>
+              {lastSessionReport ? (
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-sm">
+                  <div className="font-semibold">{lastSessionReport.taskTitle}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(lastSessionReport.completedAt).toLocaleString()}
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <Badge variant="secondary">Score {lastSessionReport.score}/100</Badge>
+                    <Badge variant="outline">Accuracy {lastSessionReport.accuracy}%</Badge>
+                    <Badge variant="outline">Completion {lastSessionReport.completion}%</Badge>
+                    <Badge variant="outline">Time {formatDuration(lastSessionReport.durationSec)}</Badge>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => downloadSessionReport(lastSessionReport)}
+                  >
+                    Download report
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  No instructor report saved yet. Finish a checkride to generate one.
+                </div>
+              )}
+              {!canPersist && (
+                <div className="text-xs text-muted-foreground">
+                  Instructor reports save with RSF Pro. Upgrade to unlock report history and sharing.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

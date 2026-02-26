@@ -307,6 +307,8 @@ export const useAvionicsSimulator = (initialRoute?: string[]) => {
 
   const rotateKnob = useCallback(
     (knobId: string, delta: number) => {
+      let blockedReason: string | null = null;
+      let didChange = false;
       setState((prev) => {
         let selectedFieldIndex = prev.selectedFieldIndex;
         let mapRangeIndex = prev.mapRangeIndex;
@@ -315,15 +317,30 @@ export const useAvionicsSimulator = (initialRoute?: string[]) => {
 
         if (id.includes("range")) {
           mapRangeIndex = clampValue(mapRangeIndex + delta, 0, MAP_RANGES.length - 1);
+          didChange = mapRangeIndex !== prev.mapRangeIndex;
         } else if (prev.activePage === "FPL") {
+          if (!prev.cursorMode) {
+            blockedReason = "Enable cursor mode to edit the flight plan.";
+            return prev;
+          }
           const maxIndex = Math.max(prev.route.length - 1, 0);
           selectedFieldIndex = clampValue(selectedFieldIndex + delta, 0, maxIndex);
+          didChange = selectedFieldIndex !== prev.selectedFieldIndex;
         } else if (prev.activePage === "DIRECT") {
+          if (!prev.cursorMode) {
+            blockedReason = "Enable cursor mode to select Direct-To.";
+            return prev;
+          }
           const options = prev.route.length ? prev.route : Object.keys(KNOWN_WAYPOINTS);
           const maxIndex = Math.max(options.length - 1, 0);
           directToIndex = clampValue(directToIndex + delta, 0, maxIndex);
+          didChange = directToIndex !== prev.directToIndex;
+        } else {
+          blockedReason = "Rotate the knob on the MAP or FPL pages.";
+          return prev;
         }
 
+        if (!didChange) return prev;
         return {
           ...prev,
           selectedFieldIndex,
@@ -331,6 +348,10 @@ export const useAvionicsSimulator = (initialRoute?: string[]) => {
           directToIndex,
         };
       });
+      if (blockedReason) {
+        pushMessage(blockedReason);
+        return;
+      }
       pushMessage(`Rotated ${knobId} ${delta > 0 ? "clockwise" : "counterclockwise"}.`);
     },
     [pushMessage]
@@ -348,11 +369,22 @@ export const useAvionicsSimulator = (initialRoute?: string[]) => {
     (ident: string) => {
       const trimmed = ident.trim().toUpperCase();
       if (!trimmed) return;
-      setState((prev) => ({
-        ...prev,
-        route: [...prev.route, trimmed],
-        inputBuffer: "",
-      }));
+      let blockedReason: string | null = null;
+      setState((prev) => {
+        if (prev.activePage !== "FPL" || !prev.cursorMode) {
+          blockedReason = "Open FPL and enable cursor mode to add waypoints.";
+          return prev;
+        }
+        return {
+          ...prev,
+          route: [...prev.route, trimmed],
+          inputBuffer: "",
+        };
+      });
+      if (blockedReason) {
+        pushMessage(blockedReason);
+        return;
+      }
       pushMessage(`Added waypoint ${trimmed}.`);
     },
     [pushMessage]
@@ -360,12 +392,21 @@ export const useAvionicsSimulator = (initialRoute?: string[]) => {
 
   const removeWaypoint = useCallback(
     (index: number) => {
+      let blockedReason: string | null = null;
       setState((prev) => {
+        if (prev.activePage !== "FPL" || !prev.cursorMode) {
+          blockedReason = "Enable cursor mode to edit the flight plan.";
+          return prev;
+        }
         if (index < 0 || index >= prev.route.length) return prev;
         const nextRoute = prev.route.filter((_, idx) => idx !== index);
         const nextActive = clampValue(prev.activeLegIndex, 0, Math.max(nextRoute.length - 1, 0));
         return { ...prev, route: nextRoute, activeLegIndex: nextActive };
       });
+      if (blockedReason) {
+        pushMessage(blockedReason);
+        return;
+      }
       pushMessage("Removed waypoint.");
     },
     [pushMessage]
@@ -373,11 +414,22 @@ export const useAvionicsSimulator = (initialRoute?: string[]) => {
 
   const activateLeg = useCallback(
     (index: number) => {
-      setState((prev) => ({
-        ...prev,
-        activeLegIndex: clampValue(index, 0, Math.max(prev.route.length - 1, 0)),
-        directToTarget: null,
-      }));
+      let blockedReason: string | null = null;
+      setState((prev) => {
+        if (prev.activePage !== "FPL") {
+          blockedReason = "Activate legs from the flight plan page.";
+          return prev;
+        }
+        return {
+          ...prev,
+          activeLegIndex: clampValue(index, 0, Math.max(prev.route.length - 1, 0)),
+          directToTarget: null,
+        };
+      });
+      if (blockedReason) {
+        pushMessage(blockedReason);
+        return;
+      }
       pushMessage("Activated leg.");
     },
     [pushMessage]
@@ -385,11 +437,29 @@ export const useAvionicsSimulator = (initialRoute?: string[]) => {
 
   const setDirectToTarget = useCallback(
     (ident: string | null) => {
-      setState((prev) => ({
-        ...prev,
-        directToTarget: ident,
-        activePage: ident ? "NAV" : prev.activePage,
-      }));
+      let blockedReason: string | null = null;
+      let navWarning = false;
+      setState((prev) => {
+        if (ident && !["DIRECT", "NRST"].includes(prev.activePage)) {
+          blockedReason = "Press Direct-To before selecting a waypoint.";
+          return prev;
+        }
+        if (ident && prev.navSource === "VLOC") {
+          navWarning = true;
+        }
+        return {
+          ...prev,
+          directToTarget: ident,
+          activePage: ident ? "NAV" : prev.activePage,
+        };
+      });
+      if (blockedReason) {
+        pushMessage(blockedReason);
+        return;
+      }
+      if (navWarning) {
+        pushMessage("CDI set to VLOC. Switch to GPS for Direct-To guidance.");
+      }
       if (ident) {
         pushMessage(`Direct-To ${ident} activated.`);
       }

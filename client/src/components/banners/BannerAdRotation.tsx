@@ -222,7 +222,10 @@ export function BannerAdRotation({
   // Reset index and impression tracking when banner ads change
   useEffect(() => {
     if (bannerAds.length > 0) {
-      setCurrentIndex(0);
+      const startIndex = bannerAds.length > 1
+        ? Math.floor(Math.random() * bannerAds.length)
+        : 0;
+      setCurrentIndex(startIndex);
       setHasTrackedImpression(false);
     }
   }, [bannerAds]);

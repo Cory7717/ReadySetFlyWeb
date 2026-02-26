@@ -25,5 +25,12 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+try {
+  const dbUrl = new URL(process.env.DATABASE_URL);
+  console.log("DB host:", dbUrl.host, "db:", dbUrl.pathname);
+} catch (error) {
+  console.warn("DB host parse failed");
+}
+
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle({ client: pool, schema });

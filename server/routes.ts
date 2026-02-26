@@ -3193,7 +3193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'imageURL is required' });
       }
 
-      const userId = req.user.claims.sub;
+      const requesterId = req.user.claims.sub;
       
       // Use S3 for production, fallback to ObjectStorage for Replit
       if (process.env.AWS_S3_BUCKET) {
@@ -4646,10 +4646,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Invalid or expired security token" });
       }
       
-      // SECURITY: Verify user ID from token matches authenticated user
-      if (tokenData.userId !== userId) {
-        console.error(`❌ Token user ID mismatch. Expected ${userId}, token says ${tokenData.userId}`);
-        return res.status(403).json({ error: "Invalid security token" });
+      const tokenUserId = tokenData.userId ? String(tokenData.userId) : null;
+      // SECURITY: Verify user ID from token matches authenticated user (except admin free tokens)
+      if (tokenData.type !== "admin-free-marketplace-listing") {
+        if (!tokenUserId || tokenUserId !== requesterId) {
+          console.error(`❌ Token user ID mismatch. Expected ${requesterId}, token says ${tokenData.userId}`);
+          return res.status(403).json({ error: "Invalid security token" });
+        }
       }
 
       // Calculate final amount (must be $0 for free orders)
@@ -4681,7 +4684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Validate the base listing data
           const validatedData = insertMarketplaceListingSchema.parse({ 
             ...listingData, 
-            userId,
+            userId: requesterId,
             monthlyFee: "0",
           });
           
@@ -4696,7 +4699,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             await storage.recordPromoCodeUsage({
               promoCodeId: tokenData.promoCode,
-              userId: userId,
+              userId: requesterId,
               marketplaceListingId: listing.id,
             });
             logDebug(`✅ Promo code ${tokenData.promoCode} usage recorded for FREE marketplace listing ${listing.id}`);
@@ -4726,12 +4729,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.error("Failed to create threshold notification:", notifError);
           }
           
-          logDebug(`✅ FREE marketplace listing ${listing.id} completed with promo code ${tokenData.promoCode} by user ${userId}`);
+          logDebug(`✅ FREE marketplace listing ${listing.id} completed with promo code ${tokenData.promoCode} by user ${requesterId}`);
           
           const feeBreakdown = buildMarketplaceListingFeeBreakdown({
             category: listing.category,
             tier: listing.tier || "basic",
-            user: await storage.getUser(userId),
+            user: await storage.getUser(requesterId),
           });
 
           return res.status(201).json({ 
@@ -4746,10 +4749,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (tokenData.type === 'admin-free-marketplace-listing') {
+        const requester = await storage.getUser(requesterId);
+        if (!requester || (!requester.isAdmin && !requester.isSuperAdmin)) {
+          console.error(`❌ Non-admin user ${requesterId} attempted to use admin free listing token`);
+          return res.status(403).json({ error: "Admin access required" });
+        }
+
         const durationDays = Math.min(Math.max(Number(tokenData.durationDays) || 30, 1), 90);
+        const targetUserId = tokenUserId || requesterId;
         const validatedData = insertMarketplaceListingSchema.parse({ 
           ...listingData, 
-          userId,
+          userId: targetUserId,
           monthlyFee: "0",
         });
         
@@ -4760,7 +4770,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           monthlyFee: "0",
           expiresAt,
           promoFreeUntil: expiresAt,
-          promoGrantedBy: tokenData.issuedBy || userId,
+          promoGrantedBy: tokenData.issuedBy || requesterId,
           promoGrantedAt: new Date(),
           adminNotes: `Admin free listing grant (${durationDays}d) by ${tokenData.issuedBy || 'admin'}`,
         });
@@ -4768,10 +4778,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const feeBreakdown = buildMarketplaceListingFeeBreakdown({
           category: listing.category,
           tier: listing.tier || "basic",
-          user: await storage.getUser(userId),
+          user: await storage.getUser(targetUserId),
         });
 
-        logDebug(`✅ Admin free marketplace listing ${listing.id} created for user ${userId} by ${tokenData.issuedBy || 'admin'}`);
+        logDebug(`✅ Admin free marketplace listing ${listing.id} created for user ${targetUserId} by ${tokenData.issuedBy || 'admin'}`);
 
         return res.status(201).json({
           status: 'COMPLETED',
@@ -7877,13 +7887,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Issue an admin-only free listing token (used to create free listings for content/testing)
   app.post("/api/admin/marketplace/free-listing-token", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const requesterId = req.user.claims.sub;
-      const targetUserId = req.body?.userId || requesterId;
+      const requesterId = req.user?.claims?.sub || req.session?.userId;
+      const requestedUserId = typeof req.body?.userId === "string" ? req.body.userId.trim() : "";
+      const requestedEmail = typeof req.body?.email === "string" ? req.body.email.trim() : "";
       const durationDays = Math.min(Math.max(Number(req.body?.durationDays) || 30, 1), 90);
+
+      let targetUserId = requestedUserId || "";
+      let targetEmail = requestedEmail || "";
+
+      if (!targetUserId && targetEmail) {
+        const byEmail = await storage.getUserByEmail(targetEmail);
+        if (!byEmail) {
+          return res.status(404).json({ error: "User not found for the provided email" });
+        }
+        targetUserId = byEmail.id;
+        targetEmail = byEmail.email || targetEmail;
+      }
+
+      if (targetUserId) {
+        const targetUser = await storage.getUser(String(targetUserId));
+        if (!targetUser) {
+          return res.status(404).json({ error: "User not found for the provided user ID" });
+        }
+        if (!targetEmail) {
+          targetEmail = targetUser.email || "";
+        }
+      }
+
+      const finalUserId = targetUserId || requesterId;
 
       const token = jwt.sign({
         type: 'admin-free-marketplace-listing',
-        userId: targetUserId,
+        userId: finalUserId,
+        targetEmail: targetEmail || undefined,
         issuedBy: requesterId,
         durationDays,
         originalAmount: '0',
@@ -7891,7 +7927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         issuedAt: Date.now(),
       }, process.env.SESSION_SECRET || 'dev-secret', { expiresIn: '2h' });
 
-      res.json({ token, durationDays });
+      res.json({ token, durationDays, userId: finalUserId, email: targetEmail || undefined });
     } catch (error: any) {
       console.error('Failed to issue admin free listing token:', error);
       res.status(500).json({ error: error.message || 'Failed to issue token' });

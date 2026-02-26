@@ -118,6 +118,11 @@ export default function CreateMarketplaceListing() {
   const [promoCodeValid, setPromoCodeValid] = useState<boolean | null>(null);
   const [promoCodeChecking, setPromoCodeChecking] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
+  const [adminFreeContext, setAdminFreeContext] = useState<{
+    durationDays?: number;
+    targetEmail?: string;
+    targetUserId?: string;
+  } | null>(null);
 
   // Check if we're in edit mode
   const [isEditMode, params] = useRoute("/edit-marketplace-listing/:id");
@@ -162,6 +167,30 @@ export default function CreateMarketplaceListing() {
       form.setValue("contactEmail", user.email);
     }
   }, [user?.email, form]);
+
+  useEffect(() => {
+    if (isEditMode) return;
+    const storedGrant = typeof window !== "undefined"
+      ? window.localStorage.getItem("adminFreeListingGrant")
+      : null;
+    if (!storedGrant) return;
+    try {
+      const grant = JSON.parse(storedGrant);
+      const targetEmail = typeof grant?.targetEmail === "string" ? grant.targetEmail : "";
+      const targetUserId = typeof grant?.targetUserId === "string" ? grant.targetUserId : "";
+      const durationDays = Number(grant?.durationDays) || undefined;
+      setAdminFreeContext({
+        durationDays,
+        targetEmail: targetEmail || undefined,
+        targetUserId: targetUserId || undefined,
+      });
+      if (targetEmail) {
+        form.setValue("contactEmail", targetEmail);
+      }
+    } catch {
+      setAdminFreeContext(null);
+    }
+  }, [form, isEditMode]);
 
   // Pre-populate form with existing listing data when editing
   useEffect(() => {
@@ -644,6 +673,22 @@ export default function CreateMarketplaceListing() {
           <div className="mt-4 rounded-lg border border-amber-400/50 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             This is a sample listing for reference only. Sample listings are read-only.
           </div>
+        )}
+        {adminFreeContext && !isEditMode && (
+          <Alert className="mt-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Admin free listing enabled</AlertTitle>
+            <AlertDescription>
+              {adminFreeContext.targetEmail
+                ? `Listing will be created for ${adminFreeContext.targetEmail}. `
+                : adminFreeContext.targetUserId
+                ? `Listing will be created for user ID ${adminFreeContext.targetUserId}. `
+                : "Listing will be created under your admin account. "}
+              {adminFreeContext.durationDays
+                ? `Free period: ${adminFreeContext.durationDays} days.`
+                : "Free period active."}
+            </AlertDescription>
+          </Alert>
         )}
       </div>
 

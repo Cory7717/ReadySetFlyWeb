@@ -212,6 +212,10 @@ export default function AdminDashboard() {
   const [selectedMarketplace, setSelectedMarketplace] = useState<MarketplaceListing | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'aircraft' | 'marketplace'; id: string } | null>(null);
+  const [adminFreeListingDialogOpen, setAdminFreeListingDialogOpen] = useState(false);
+  const [adminFreeListingEmail, setAdminFreeListingEmail] = useState("");
+  const [adminFreeListingUserId, setAdminFreeListingUserId] = useState("");
+  const [adminFreeListingDurationDays, setAdminFreeListingDurationDays] = useState("90");
   
   // Promo alerts state
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
@@ -932,12 +936,24 @@ export default function AdminDashboard() {
   });
 
   const adminFreeListingTokenMutation = useMutation({
-    mutationFn: async (payload?: { userId?: string; durationDays?: number }) => {
+    mutationFn: async (payload?: { userId?: string; email?: string; durationDays?: number }) => {
       const response = await apiRequest("POST", "/api/admin/marketplace/free-listing-token", payload || {});
       return response.json();
     },
-    onSuccess: (data: { token: string; durationDays: number }) => {
-      localStorage.setItem('adminFreeListingGrant', JSON.stringify({ token: data.token, durationDays: data.durationDays }));
+    onSuccess: (data: { token: string; durationDays: number; userId?: string; email?: string }) => {
+      localStorage.setItem(
+        'adminFreeListingGrant',
+        JSON.stringify({
+          token: data.token,
+          durationDays: data.durationDays,
+          targetUserId: data.userId,
+          targetEmail: data.email,
+        })
+      );
+      setAdminFreeListingDialogOpen(false);
+      setAdminFreeListingEmail("");
+      setAdminFreeListingUserId("");
+      setAdminFreeListingDurationDays("90");
       toast({
         title: "Admin free listing enabled",
         description: `Grant ready for ${data.durationDays}-day listing. Complete the form to publish.`,
@@ -4318,12 +4334,11 @@ export default function AdminDashboard() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => adminFreeListingTokenMutation.mutate({})}
-                disabled={adminFreeListingTokenMutation.isPending}
+                onClick={() => setAdminFreeListingDialogOpen(true)}
                 data-testid="button-admin-free-listing"
               >
                 <Gift className="h-4 w-4 mr-2" />
-                {adminFreeListingTokenMutation.isPending ? "Preparing..." : "Create Free Listing"}
+                Create Free Listing
               </Button>
             </CardHeader>
             <CardContent>
@@ -6677,6 +6692,106 @@ export default function AdminDashboard() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin Free Marketplace Listing Dialog */}
+      <Dialog open={adminFreeListingDialogOpen} onOpenChange={setAdminFreeListingDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create Free Marketplace Listing</DialogTitle>
+            <DialogDescription>
+              Issue a free listing grant and continue through the standard listing flow.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="admin-free-email">Advertiser email</Label>
+              <Input
+                id="admin-free-email"
+                type="email"
+                placeholder="pilot@example.com"
+                value={adminFreeListingEmail}
+                onChange={(e) => setAdminFreeListingEmail(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional. If blank, the listing will be created under your admin account.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="admin-free-user-id">User ID (optional)</Label>
+              <Input
+                id="admin-free-user-id"
+                placeholder="user UUID"
+                value={adminFreeListingUserId}
+                onChange={(e) => setAdminFreeListingUserId(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Provide this if you prefer user ID instead of email.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="admin-free-duration">Duration (days)</Label>
+              <Input
+                id="admin-free-duration"
+                type="number"
+                min={1}
+                max={90}
+                value={adminFreeListingDurationDays}
+                onChange={(e) => setAdminFreeListingDurationDays(e.target.value)}
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAdminFreeListingDurationDays("90")}
+                >
+                  Use 90-day promo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAdminFreeListingDurationDays("30")}
+                >
+                  30 days
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAdminFreeListingDialogOpen(false)}
+              type="button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const email = adminFreeListingEmail.trim();
+                const userId = adminFreeListingUserId.trim();
+                const durationDays = Number(adminFreeListingDurationDays || 90);
+                if (!email && !userId) {
+                  toast({
+                    title: "Target user not set",
+                    description: "Enter an email or user ID to create a listing for an advertiser.",
+                  });
+                  return;
+                }
+                adminFreeListingTokenMutation.mutate({
+                  email: email || undefined,
+                  userId: userId || undefined,
+                  durationDays: Number.isFinite(durationDays) ? durationDays : 90,
+                });
+              }}
+              disabled={adminFreeListingTokenMutation.isPending}
+              type="button"
+            >
+              {adminFreeListingTokenMutation.isPending ? "Preparing..." : "Start Free Listing"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

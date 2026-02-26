@@ -107,10 +107,34 @@ export function serveStatic(app: Express) {
     app.use("/cesium", express.static(cesiumNodePath));
   }
 
-  app.use(express.static(distPath));
+  app.use((req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      return next();
+    }
+    const hasExtension = path.extname(req.path);
+    if (!hasExtension) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    }
+    return next();
+  });
+
+  app.use(
+    express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith(".html")) {
+          res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+          return;
+        }
+        if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        }
+      },
+    })
+  );
 
   // fall through to index.html if the file doesn't exist
   app.use("*", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }

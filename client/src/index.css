@@ -24,6 +24,15 @@
   }
 }
 
+.uppy-DashboardItem-previewImg {
+  object-fit: contain !important;
+  background-color: #fff;
+}
+
+.uppy-DashboardItem-previewInnerWrap {
+  background-color: #fff;
+}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);

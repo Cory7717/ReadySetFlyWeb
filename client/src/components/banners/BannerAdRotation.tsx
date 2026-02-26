@@ -323,11 +323,11 @@ export function BannerAdRotation({
 
             <div className="flex items-start gap-4">
               {showThumbnail && (
-                <div className="h-32 w-32 sm:h-36 sm:w-36 rounded-xl overflow-hidden bg-muted shadow-sm flex-shrink-0">
+                <div className="h-32 w-32 sm:h-36 sm:w-36 rounded-xl overflow-hidden bg-white shadow-sm flex-shrink-0 flex items-center justify-center">
                   <img
                     src={resolveObjectUrl(currentAd.imageUrl)}
                     alt={currentAd.title}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-contain"
                   />
                 </div>
               )}

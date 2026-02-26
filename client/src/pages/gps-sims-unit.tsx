@@ -89,6 +89,7 @@ export default function GpsSimsUnit() {
   } = derived;
 
   const getHotspotClass = (id: string) => `rsf-hotspot-${id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+  const cdiOffset = Math.round(avionics.cdiDeflection * 28);
 
   const hotspotCss = useMemo(() => {
     if (!unit?.panel?.hotspots) return "";
@@ -244,7 +245,6 @@ export default function GpsSimsUnit() {
   const directToSelection =
     directToOptions[avionics.directToIndex] ?? directToOptions[0] ?? null;
   const mapPolyline = routePoints.map((point) => `${point.x},${point.y}`).join(" ");
-  const cdiOffset = Math.round(avionics.cdiDeflection * 28);
   const mapHeading = Math.round(avionics.simulatedAircraft.groundTrackDeg);
 
   const handleToggleStep = (index: number) => {

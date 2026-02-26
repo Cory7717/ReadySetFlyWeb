@@ -1759,7 +1759,7 @@ function parseArcGisCompactDate(value: any) {
 
 function normalizeArcGisTfrFeature(feature: any) {
   if (!feature?.geometry) return null;
-  const props = feature?.properties || {};
+  const props = feature?.properties || feature?.attributes || {};
   const notamId =
     props.NOTAM ||
     props.NOTAM_ID ||
@@ -1855,7 +1855,37 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
         attempts.push({ url: baseUrl, ok: false, error: lastError });
         continue;
       }
-      const features = payload.features.map(normalizeArcGisTfrFeature).filter(Boolean);
+      const esriFeatures = payload.features
+        .map((feature: any) => {
+          if (feature?.type === "Feature" && feature?.properties) return feature;
+          const properties = feature?.attributes || feature?.properties || {};
+          const geometry = feature?.geometry;
+          if (!geometry) return null;
+          if (geometry.rings) {
+            return {
+              type: "Feature",
+              geometry: { type: "Polygon", coordinates: geometry.rings },
+              properties,
+            };
+          }
+          if (geometry.paths) {
+            return {
+              type: "Feature",
+              geometry: { type: "LineString", coordinates: geometry.paths[0] || [] },
+              properties,
+            };
+          }
+          if (Number.isFinite(geometry.x) && Number.isFinite(geometry.y)) {
+            return {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [geometry.x, geometry.y] },
+              properties,
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
+      const features = esriFeatures.map(normalizeArcGisTfrFeature).filter(Boolean);
       const data = {
         type: "FeatureCollection",
         features,
@@ -2047,7 +2077,7 @@ async function fetchArcGisSUA(bbox?: { minLon: number; minLat: number; maxLon: n
     spatialRel: "esriSpatialRelIntersects",
     inSR: "4326",
     outSR: "4326",
-    f: "geojson",
+    f: "json",
   });
 
   const url = `${SUA_ARCGIS_URL}?${params.toString()}`;

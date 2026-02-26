@@ -47,8 +47,9 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
   const [paypalConfig, setPaypalConfig] = useState<{ clientId: string; environment: string } | null>(null);
   const cardFieldsRef = useRef<any>(null);
 
-  // Fetch PayPal config
+  // Fetch PayPal config (skip for free listings)
   useEffect(() => {
+    if (isFree) return;
     fetch(apiUrl('/api/paypal/config'))
       .then(res => res.json())
       .then(config => setPaypalConfig(config))
@@ -60,10 +61,11 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
           variant: "destructive",
         });
       });
-  }, []);
+  }, [isFree, toast]);
 
   // Load PayPal SDK and initialize card fields
   useEffect(() => {
+    if (isFree) return;
     if (!paypalConfig) return;
 
     const loadPayPalSDK = async () => {
@@ -208,7 +210,7 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
     };
 
     loadPayPalSDK();
-  }, [paypalConfig, listingData.category, listingData.tier]);
+  }, [paypalConfig, listingData.category, listingData.tier, isFree, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

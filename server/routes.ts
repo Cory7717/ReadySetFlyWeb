@@ -2040,7 +2040,7 @@ async function enrichArcGisTfrFeatures(features: any[]) {
 
 function normalizeSUAFeature(feature: any) {
   if (!feature?.geometry) return null;
-  const props = feature?.properties || {};
+  const props = feature?.properties || feature?.attributes || {};
   const name = props.FEATURENAME || props.FEATURE_NAME || props.NAME || props.AIRSPACE || props.AIRSPACENAME || null;
   const type = props.SPECIALUSEAIRSPACETYPE || props.TYPE || props.CATEGORY || props.AIRSPACETYPE || null;
   const floor = props.FLOOR || props.FLOORVALUE || props.LOWERALTITUDE || props.LOWER_ALT || props.ALTLOWER || null;
@@ -2103,7 +2103,38 @@ async function fetchArcGisSUA(bbox?: { minLon: number; minLat: number; maxLon: n
     throw new Error("SUA ArcGIS response missing features");
   }
 
-  const features = payload.features.map(normalizeSUAFeature).filter(Boolean);
+  const esriFeatures = payload.features
+    .map((feature: any) => {
+      if (feature?.type === "Feature" && feature?.properties) return feature;
+      const properties = feature?.attributes || feature?.properties || {};
+      const geometry = feature?.geometry;
+      if (!geometry) return null;
+      if (geometry.rings) {
+        return {
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: geometry.rings },
+          properties,
+        };
+      }
+      if (geometry.paths) {
+        return {
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: geometry.paths[0] || [] },
+          properties,
+        };
+      }
+      if (Number.isFinite(geometry.x) && Number.isFinite(geometry.y)) {
+        return {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [geometry.x, geometry.y] },
+          properties,
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+
+  const features = esriFeatures.map(normalizeSUAFeature).filter(Boolean);
   return {
     type: "FeatureCollection",
     features,

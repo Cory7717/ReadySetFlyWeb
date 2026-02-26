@@ -33,6 +33,16 @@
   background-color: #fff;
 }
 
+.uppy-Dashboard-Item-preview img.uppy-Dashboard-Item-previewImg {
+  object-fit: contain !important;
+  background-color: #fff;
+}
+
+.uppy-Dashboard-Item-previewInnerWrap,
+.uppy-Dashboard-Item-preview {
+  background-color: #fff;
+}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);

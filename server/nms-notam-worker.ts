@@ -25,7 +25,7 @@ const NMS_CLASSIFICATIONS = (process.env.NMS_CLASSIFICATIONS || "DOMESTIC,INTERN
 const NMS_INITIAL_LOAD_ON_START = String(process.env.NMS_INITIAL_LOAD_ON_START ?? "false").toLowerCase() === "true";
 const NMS_POLL_INTERVAL_MINUTES = Number(process.env.NMS_POLL_INTERVAL_MINUTES || 15);
 const NMS_SOURCE = "nms_api";
-const MAX_DELTA_LOOKBACK_DAYS = 5;
+const MAX_DELTA_LOOKBACK_HOURS = Number(process.env.NMS_MAX_DELTA_LOOKBACK_HOURS || 24);
 const UPSERT_BATCH_SIZE = 500;
 
 let workerStarted = false;
@@ -320,7 +320,7 @@ async function setStateValue(key: string, value: string) {
 }
 
 function clampLookback(date: Date) {
-  const maxLookbackMs = MAX_DELTA_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+  const maxLookbackMs = MAX_DELTA_LOOKBACK_HOURS * 60 * 60 * 1000;
   const earliest = Date.now() - maxLookbackMs;
   if (date.getTime() < earliest) return new Date(earliest);
   return date;

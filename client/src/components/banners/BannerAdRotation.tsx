@@ -164,7 +164,7 @@ export function BannerAdRotation({
   const hasAdCopy = Boolean(currentAd?.adCopy?.trim());
   const hasBodyCopy = hasTagline || hasAdCopy;
   const hasMedia = hasImage || hasVideo;
-  const showHeroMedia = hasVideo || (!hasBodyCopy && hasMedia);
+  const showHeroMedia = hasVideo || hasImage;
   const showThumbnail = hasBodyCopy && hasImage;
   const resolveObjectUrl = (value?: string | null) => {
     if (!value) return undefined;
@@ -416,11 +416,22 @@ export function BannerAdRotation({
                   />
                 </div>
               ) : hasImage ? (
-                <img
-                  src={resolveObjectUrl(currentAd.imageUrl)}
-                  alt={currentAd.title}
-                  className="h-full w-full object-cover"
-                />
+                <div className="relative h-full w-full overflow-hidden">
+                  <img
+                    src={resolveObjectUrl(currentAd.imageUrl)}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 h-full w-full object-cover blur-2xl scale-110 opacity-60"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-slate-900/15" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <img
+                      src={resolveObjectUrl(currentAd.imageUrl)}
+                      alt={currentAd.title}
+                      className="h-[70%] w-[70%] object-contain opacity-35 drop-shadow-xl"
+                    />
+                  </div>
+                </div>
               ) : (
                 <div className="h-full w-full bg-[linear-gradient(140deg,rgba(14,165,233,0.18),rgba(249,115,22,0.2))]" />
               )}

@@ -294,9 +294,9 @@ export function Header() {
             <span className="font-display text-sm sm:text-xl font-bold hidden min-[400px]:inline">Ready Set Fly</span>
           </Link>
 
-          <div className="flex flex-1 items-center gap-2 min-w-0">
+          <div className="flex flex-1 flex-col sm:flex-row sm:items-center gap-2 min-w-0">
             {/* Main Navigation Tabs - Compact on mobile */}
-            <nav className="flex flex-1 items-center gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 min-w-0 overflow-x-auto whitespace-nowrap" role="navigation" aria-label="Main navigation">
+            <nav className="flex w-full sm:flex-1 items-center gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 min-w-0 overflow-x-auto whitespace-nowrap" role="navigation" aria-label="Main navigation">
               <Link href="/flight-planner" data-testid="link-plan-flight">
                 <Button
                   variant="ghost"
@@ -360,7 +360,7 @@ export function Header() {
             {/* Tool Search */}
             <form
               ref={searchRef}
-              className="relative w-[140px] sm:w-[180px] md:w-[220px] lg:w-[260px] flex-shrink-0 overflow-visible z-[90]"
+              className="relative w-full sm:w-[180px] md:w-[220px] lg:w-[260px] flex-shrink-0 overflow-visible z-[90] sm:order-none"
               onSubmit={(event) => {
                 event.preventDefault();
                 handleToolSubmit();

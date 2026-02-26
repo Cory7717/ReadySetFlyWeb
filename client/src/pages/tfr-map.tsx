@@ -303,7 +303,7 @@ export default function TfrMap() {
             TFR Map (RSF)
           </h1>
           <p className="text-muted-foreground max-w-3xl">
-            Live Temporary Flight Restrictions powered by FAA SWIM (US-only). Always verify with official sources before flight.
+            Live Temporary Flight Restrictions powered by the FAA NOTAM Management Service (US-only). Always verify with official sources before flight.
           </p>
         </div>
 
@@ -346,7 +346,9 @@ export default function TfrMap() {
                 Clear area filter
               </Button>
             )}
-            <Badge variant="outline">NOTAMs powered by FAA SWIM</Badge>
+            <Badge variant="outline" title="Direct from the FAA NOTAM Management Service (NMS).">
+              NOTAMs powered by FAA NMS
+            </Badge>
             <div className="flex items-center gap-2 pl-1">
               <Switch checked={showSUA} onCheckedChange={(checked) => setShowSUA(checked)} />
               <span className="text-sm text-muted-foreground">Show special-use airspace (MOA / Restricted)</span>
@@ -423,6 +425,10 @@ export default function TfrMap() {
                   Special-use airspace boundaries are static; activation times vary. Always verify with official sources before flight.
                 </p>
               )}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>Data: FAA NMS</span>
+                <span>Updated every 3 min</span>
+              </div>
             </CardContent>
           </Card>
 

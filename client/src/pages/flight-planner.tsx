@@ -1050,6 +1050,28 @@ export default function FlightPlanner() {
     return [start, suggestedWaypoint, rest[rest.length - 1]];
   }, [airportPoints, suggestedWaypoint]);
 
+  const syntheticVisionHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (departureResolved) params.set("dep", departureResolved.trim().toUpperCase());
+    if (destinationResolved) params.set("dest", destinationResolved.trim().toUpperCase());
+    if (waypoints.length > 0) params.set("wpts", waypoints.join(","));
+    if (plannedStops.length > 0) params.set("stops", plannedStops.join(","));
+    if (plannedAltitudeValue) params.set("alt", String(plannedAltitudeValue));
+    if (routePoints[0]) {
+      params.set("lat", routePoints[0].lat.toFixed(4));
+      params.set("lon", routePoints[0].lon.toFixed(4));
+    }
+    const query = params.toString();
+    return query ? `/synthetic-vision?${query}` : "/synthetic-vision";
+  }, [
+    departureResolved,
+    destinationResolved,
+    waypoints,
+    plannedStops,
+    plannedAltitudeValue,
+    routePoints,
+  ]);
+
   const routeBbox = useMemo(() => {
     if (routePoints.length === 0) return null;
     const lats = routePoints.map((point) => point.lat);
@@ -2027,9 +2049,9 @@ export default function FlightPlanner() {
               How to connect your ADS-B receiver
             </a>
             <a
-              href="/synthetic-vision"
+              href={syntheticVisionHref}
               className="text-primary hover:underline"
-              onClick={() => trackEvent("synthetic_vision_from_planner_click", { target: "/synthetic-vision" })}
+              onClick={() => trackEvent("synthetic_vision_from_planner_click", { target: syntheticVisionHref })}
             >
               Open RSF Synthetic Vision Lab
             </a>

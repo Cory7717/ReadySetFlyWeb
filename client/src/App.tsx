@@ -10,6 +10,7 @@ import { Footer } from "./components/footer";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent, trackSessionPing } from "@/lib/analytics";
 import { SignupNudgeBanner } from "@/components/SignupNudgeBanner";
+import { FreeAccountValueBar } from "@/components/FreeAccountValueBar";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { ScrollToTopButton } from "@/components/scroll-to-top-button";
 import { recordAnonSession, recordAnonToolInteraction, isSoftAuthEnabled } from "@/utils/anonUsage";
@@ -330,6 +331,7 @@ function AppShell() {
         <div className="min-h-screen bg-background flex flex-col">
           {/* Show Header for all users (authenticated and anonymous) */}
           <Header />
+          <FreeAccountValueBar />
           <div className="flex-1">
             <AnalyticsTracker />
             <ScrollToTopOnRoute />

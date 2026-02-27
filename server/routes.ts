@@ -3550,7 +3550,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       res.clearCookie("connect.sid");
-      return res.redirect("/");
+      const frontendBase = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+      const requestedRedirect = typeof req.query.redirect === "string" ? req.query.redirect : "";
+      let safeRedirect = frontendBase;
+      if (requestedRedirect) {
+        try {
+          const parsed = new URL(requestedRedirect);
+          const allowedHosts = new Set([
+            "readysetfly.us",
+            "www.readysetfly.us",
+            "localhost",
+            "127.0.0.1",
+          ]);
+          if (allowedHosts.has(parsed.hostname)) {
+            safeRedirect = parsed.origin;
+          }
+        } catch {
+          // ignore invalid redirect and use frontend base
+        }
+      }
+      return res.redirect(safeRedirect);
     } catch (error) {
       console.error("Logout error:", error);
       return res.status(500).json({ error: "Failed to logout" });

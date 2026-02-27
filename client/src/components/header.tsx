@@ -289,6 +289,13 @@ export function Header() {
     setToolMenuOpen(false);
   };
 
+  const logoutHref = useMemo(() => {
+    const base = apiUrl("/api/logout");
+    if (typeof window === "undefined") return base;
+    const redirect = window.location.origin;
+    return `${base}?redirect=${encodeURIComponent(redirect)}`;
+  }, []);
+
   return (
     <header className="sticky top-0 z-[80] w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 overflow-visible">
       <div className="container mx-auto px-3 sm:px-4 lg:px-8 min-w-0">
@@ -535,7 +542,7 @@ export function Header() {
                       <Link href="/settings" data-testid="link-settings">Settings</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <a href={apiUrl('/api/logout')} data-testid="button-logout">
+                      <a href={logoutHref} data-testid="button-logout">
                         <LogOut className="mr-2 h-4 w-4" />
                         Log out
                       </a>

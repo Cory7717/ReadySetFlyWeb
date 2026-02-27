@@ -14144,6 +14144,37 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.get("/api/cfi/students/:id/synthetic-vision-sessions", isAuthenticated, requireCfiAccess, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const profile = await storage.getCfiProfileByUser(userId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+      const student = await storage.getCfiStudentById(req.params.id);
+      if (!student || student.cfiProfileId !== profile.id) {
+        return res.status(404).json({ error: "Student not found" });
+      }
+
+      const studentProfile = await storage.getStudentProfile(student.studentUserId);
+      const sessionsRaw = (studentProfile?.progressJson as any)?.syntheticVisionSessions;
+      const sessions = Array.isArray(sessionsRaw) ? sessionsRaw : [];
+
+      res.json({
+        studentId: student.id,
+        studentUserId: student.studentUserId,
+        total: sessions.length,
+        sessions: sessions.slice(0, 40),
+      });
+    } catch (error) {
+      console.error("Failed to load student synthetic vision sessions:", error);
+      res.status(500).json({ error: "Failed to load synthetic vision sessions" });
+    }
+  });
+
   app.patch("/api/cfi/students/:id", isAuthenticated, requireCfiAccess, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;

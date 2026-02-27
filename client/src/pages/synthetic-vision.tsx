@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
+import { useStudentProfile } from "@/hooks/useStudentProfile";
 
 type AdsbAircraft = {
   icao?: string;
@@ -81,6 +82,8 @@ type SessionReport = {
   plannerContext: PlannerContext;
   sampleCount: number;
 };
+
+const SYNTHETIC_SESSION_HISTORY_LIMIT = 40;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const formatCallsign = (value?: string) => (value || "").trim();
@@ -180,6 +183,7 @@ const computeSampleScore = (
 
 export default function SyntheticVisionPage() {
   const { user, isAuthenticated } = useAuth();
+  const { profile, saveProfile, saving: profileSaving } = useStudentProfile();
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canUseGpsSims ?? (user?.logbookProStatus === "active");
 
@@ -205,6 +209,11 @@ export default function SyntheticVisionPage() {
   const [sessionStartMs, setSessionStartMs] = useState<number | null>(null);
   const [samples, setSamples] = useState<SessionSample[]>([]);
   const [report, setReport] = useState<SessionReport | null>(null);
+
+  const savedSessions = useMemo(() => {
+    const sessions = (profile?.progressJson as any)?.syntheticVisionSessions;
+    return Array.isArray(sessions) ? (sessions as SessionReport[]) : [];
+  }, [profile?.progressJson]);
 
   const selectedScenario =
     scenarioProfiles.find((scenario) => scenario.id === selectedScenarioId) ?? scenarioProfiles[0];
@@ -305,6 +314,24 @@ export default function SyntheticVisionPage() {
     trackEvent("synthetic_vision_session_start", { scenario: selectedScenario.id });
   };
 
+  const persistSession = (nextReport: SessionReport) => {
+    if (!isAuthenticated) return;
+    const currentProgress = (profile?.progressJson as Record<string, unknown>) || {};
+    const existing = Array.isArray((currentProgress as any).syntheticVisionSessions)
+      ? ((currentProgress as any).syntheticVisionSessions as SessionReport[])
+      : [];
+    const merged = [nextReport, ...existing.filter((session) => session?.id !== nextReport.id)].slice(
+      0,
+      SYNTHETIC_SESSION_HISTORY_LIMIT
+    );
+    saveProfile({
+      progressJson: {
+        ...currentProgress,
+        syntheticVisionSessions: merged,
+      },
+    });
+  };
+
   const stopSession = () => {
     setSessionActive(false);
     const durationSec = sessionStartMs ? Math.max(1, Math.round((Date.now() - sessionStartMs) / 1000)) : 0;
@@ -335,6 +362,7 @@ export default function SyntheticVisionPage() {
       sampleCount: source.length,
     };
     setReport(nextReport);
+    persistSession(nextReport);
     trackEvent("synthetic_vision_session_stop", {
       scenario: selectedScenario.id,
       avgScore: nextReport.avgScore,
@@ -400,6 +428,15 @@ export default function SyntheticVisionPage() {
         </section>
 
         <section className="container mx-auto px-4 py-10">
+          <Alert className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Synthetic stack in active buildout</AlertTitle>
+            <AlertDescription>
+              The Synthetic Vision Lab is available for early training and scoring, but the full in-flight feature set is
+              still being completed.
+            </AlertDescription>
+          </Alert>
+
           <Card>
             <CardHeader>
               <CardTitle>RSF Pro Feature</CardTitle>
@@ -434,7 +471,7 @@ export default function SyntheticVisionPage() {
     <div className="min-h-screen bg-background">
       <section className="bg-muted py-10">
         <div className="container mx-auto px-4 space-y-3">
-          <Badge variant="outline">RSF Pro - Phase 2</Badge>
+          <Badge variant="outline">RSF Pro - Phase 3</Badge>
           <h1 className="font-display text-3xl sm:text-4xl font-bold">RSF Synthetic Vision Lab</h1>
           <p className="text-muted-foreground max-w-3xl">
             Planner-linked synthetic vision with scenario scoring and instructor export.
@@ -456,6 +493,15 @@ export default function SyntheticVisionPage() {
           <AlertTitle>Advisory training tool</AlertTitle>
           <AlertDescription>
             For situational awareness training only. Not a certified primary flight display or collision-avoidance system.
+          </AlertDescription>
+        </Alert>
+
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Active development notice</AlertTitle>
+          <AlertDescription>
+            We are actively completing the Synthetic Vision Lab. Core training is live now, while advanced live-flight
+            capabilities are still rolling out.
           </AlertDescription>
         </Alert>
 
@@ -652,6 +698,27 @@ export default function SyntheticVisionPage() {
                   <div>Samples: {report.sampleCount}</div>
                 </div>
               )}
+
+              <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-medium text-foreground">Saved session history</div>
+                  {profileSaving && <span className="text-xs">Saving...</span>}
+                </div>
+                {savedSessions.length === 0 ? (
+                  <div className="mt-1">No saved sessions yet.</div>
+                ) : (
+                  <div className="mt-2 space-y-1">
+                    {savedSessions.slice(0, 5).map((session) => (
+                      <div key={session.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <span>{new Date(session.createdAt).toLocaleString()}</span>
+                        <span>{session.scenario}</span>
+                        <span>AVG {session.avgScore}</span>
+                        <span>Stable {session.stablePct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 

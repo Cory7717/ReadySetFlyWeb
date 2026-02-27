@@ -47,6 +47,24 @@ type ThreadWithStudent = {
   };
 };
 
+type SyntheticVisionSession = {
+  id?: string;
+  createdAt?: string;
+  scenario?: string;
+  durationSec?: number;
+  avgScore?: number;
+  stablePct?: number;
+  unstableEvents?: number;
+  sampleCount?: number;
+};
+
+type SyntheticVisionSessionsResponse = {
+  studentId: string;
+  studentUserId: string;
+  total: number;
+  sessions: SyntheticVisionSession[];
+};
+
 const LESSON_TYPES = ["flight", "ground", "sim", "brief"];
 const LESSON_STATUSES = ["planned", "in_progress", "complete"];
 const MILESTONE_STATUSES = ["not_started", "in_progress", "complete"];
@@ -182,6 +200,16 @@ export default function CfiTrainingCenter() {
     },
   });
 
+  const { data: syntheticVisionData } = useQuery<SyntheticVisionSessionsResponse>({
+    queryKey: ["/api/cfi/students", selectedStudentId, "synthetic-vision-sessions"],
+    enabled: canUseCfi && !!selectedStudentId,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/cfi/students/${selectedStudentId}/synthetic-vision-sessions`);
+      if (!res.ok) throw new Error("Failed to load synthetic vision sessions");
+      return res.json();
+    },
+  });
+
   const { data: threads = [] } = useQuery<ThreadWithStudent[]>({
     queryKey: ["/api/cfi/messages/threads"],
     enabled: canUseCfi,
@@ -222,6 +250,7 @@ export default function CfiTrainingCenter() {
   const milestoneProgress = milestones.length
     ? Math.round((completedMilestones / milestones.length) * 100)
     : 0;
+  const syntheticVisionSessions = syntheticVisionData?.sessions || [];
 
   useEffect(() => {
     if (lessonForm.templateId === "custom") return;
@@ -960,6 +989,42 @@ export default function CfiTrainingCenter() {
                   </div>
                 )}
               </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Synthetic Vision Sessions</CardTitle>
+            <CardDescription>
+              Review scored RSF Synthetic Vision Lab sessions for the selected student.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!selectedStudent ? (
+              <div className="text-sm text-muted-foreground">Select a student to view synthetic sessions.</div>
+            ) : syntheticVisionSessions.length === 0 ? (
+              <div className="text-sm text-muted-foreground">No synthetic sessions saved yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {syntheticVisionSessions.slice(0, 15).map((session) => (
+                  <div key={session.id || `${session.createdAt}-${session.scenario}`} className="rounded-lg border p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-sm font-semibold">{session.scenario || "Synthetic session"}</div>
+                      <Badge variant="outline">
+                        {typeof session.avgScore === "number" ? `AVG ${session.avgScore}` : "AVG --"}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                      <span>{formatDate(session.createdAt || null)}</span>
+                      <span>{typeof session.durationSec === "number" ? `${session.durationSec}s` : "--"}</span>
+                      <span>{typeof session.stablePct === "number" ? `Stable ${session.stablePct}%` : "Stable --"}</span>
+                      <span>{typeof session.unstableEvents === "number" ? `Unstable ${session.unstableEvents}` : "Unstable --"}</span>
+                      <span>{typeof session.sampleCount === "number" ? `Samples ${session.sampleCount}` : "Samples --"}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>

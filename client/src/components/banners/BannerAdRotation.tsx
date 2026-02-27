@@ -257,14 +257,6 @@ export function BannerAdRotation({
   useEffect(() => {
     if (currentAd && !hasTrackedImpression) {
       trackImpressionMutation.mutate(currentAd.id);
-      const page = typeof window !== "undefined" ? window.location.pathname : undefined;
-      trackEvent("banner_ad_impression", {
-        bannerAdId: currentAd.id,
-        advertiserId: currentAd.orderId || undefined,
-        placement,
-        category,
-        page,
-      });
       setHasTrackedImpression(true);
     }
   }, [currentAd?.id, hasTrackedImpression]);

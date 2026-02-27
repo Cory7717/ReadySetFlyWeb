@@ -169,14 +169,6 @@ export default function GpsSimsUnit() {
   }, [selectedTaskId, mode, unit?.id]);
 
   useEffect(() => {
-    if (mode !== "checkride") return;
-    if (!sessionStartedAt || sessionCompletedAt) return;
-    if (requiredActionKeys.length && matchedRequiredCount >= requiredActionKeys.length) {
-      setSessionCompletedAt(Date.now());
-    }
-  }, [mode, sessionStartedAt, sessionCompletedAt, requiredActionKeys.length, matchedRequiredCount]);
-
-  useEffect(() => {
     if (!unit) return;
     const sessions = (profile?.progressJson as any)?.gpsTrainerSessions;
     if (!Array.isArray(sessions)) {
@@ -329,6 +321,14 @@ export default function GpsSimsUnit() {
   const durationSec = sessionStartedAt
     ? Math.max(0, Math.round(((sessionCompletedAt ?? Date.now()) - sessionStartedAt) / 1000))
     : 0;
+
+  useEffect(() => {
+    if (mode !== "checkride") return;
+    if (!sessionStartedAt || sessionCompletedAt) return;
+    if (requiredActionKeys.length && matchedRequiredCount >= requiredActionKeys.length) {
+      setSessionCompletedAt(Date.now());
+    }
+  }, [mode, sessionStartedAt, sessionCompletedAt, requiredActionKeys.length, matchedRequiredCount]);
 
   const handleToggleStep = (index: number) => {
     setStepProgress((prev) => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, useMap, WMSTileLayer } from "react-leaflet";
 import type { FeatureCollection } from "geojson";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -131,6 +131,62 @@ const MapBoundsTracker = ({ enabled, onBoundsChange }: { enabled: boolean; onBou
 };
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+type BasemapMode = "standard" | "sectional" | "ifr";
+
+const FAA_WMS_URL = "https://sua.faa.gov/geoserver/wms";
+
+const AviationBasemapLayer = ({ mode }: { mode: BasemapMode }) => {
+  const map = useMap();
+  const [ifrLayer, setIfrLayer] = useState<"SUA:ifr_enroute_low" | "SUA:ifr_enroute_high">(
+    map.getZoom() >= 7 ? "SUA:ifr_enroute_low" : "SUA:ifr_enroute_high"
+  );
+
+  useEffect(() => {
+    if (mode !== "ifr") return;
+    const onZoom = () => {
+      setIfrLayer(map.getZoom() >= 7 ? "SUA:ifr_enroute_low" : "SUA:ifr_enroute_high");
+    };
+    onZoom();
+    map.on("zoomend", onZoom);
+    return () => {
+      map.off("zoomend", onZoom);
+    };
+  }, [map, mode]);
+
+  if (mode === "sectional") {
+    return (
+      <WMSTileLayer
+        url={FAA_WMS_URL}
+        layers="SUA:us_sectionals"
+        format="image/png"
+        transparent={false}
+        version="1.1.1"
+        attribution='FAA SUA Geoserver Charts'
+      />
+    );
+  }
+
+  if (mode === "ifr") {
+    return (
+      <WMSTileLayer
+        key={ifrLayer}
+        url={FAA_WMS_URL}
+        layers={ifrLayer}
+        format="image/png"
+        transparent={false}
+        version="1.1.1"
+        attribution='FAA SUA Geoserver Charts'
+      />
+    );
+  }
+
+  return (
+    <TileLayer
+      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+    />
+  );
+};
 
 export default function TfrMap() {
   const initialIcao =
@@ -144,6 +200,7 @@ export default function TfrMap() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSUA, setShowSUA] = useState(false);
   const [suaBbox, setSuaBbox] = useState<string | null>(null);
+  const [basemapMode, setBasemapMode] = useState<BasemapMode>("standard");
   const mapRef = useRef<L.Map | null>(null);
 
   const normalizedIcao = icaoFilter.trim().toUpperCase();
@@ -358,6 +415,25 @@ export default function TfrMap() {
                 {suaLoading ? "Loading SUA..." : `${suaFeatures.length} areas`}
               </Badge>
             )}
+            <div className="flex items-center gap-2">
+              <Label htmlFor="tfr-basemap" className="text-sm text-muted-foreground">
+                Basemap
+              </Label>
+              <select
+                id="tfr-basemap"
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                value={basemapMode}
+                onChange={(e) => {
+                  const next = e.target.value as BasemapMode;
+                  setBasemapMode(next);
+                  trackEvent("tfr_basemap_changed", { basemap: next });
+                }}
+              >
+                <option value="standard">Standard</option>
+                <option value="sectional">FAA Sectional</option>
+                <option value="ifr">IFR Enroute (Low/High)</option>
+              </select>
+            </div>
           </CardContent>
         </Card>
 
@@ -411,10 +487,7 @@ export default function TfrMap() {
                     }
                   }}
                 >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
+                  <AviationBasemapLayer mode={basemapMode} />
                   <TfrGeoJsonLayer data={geoJson} selectedId={selectedId} onSelect={handleFeatureClick} />
                   {showSUA && <SuaGeoJsonLayer data={suaGeoJson} />}
                   <MapBoundsTracker enabled={showSUA} onBoundsChange={handleSuaBounds} />

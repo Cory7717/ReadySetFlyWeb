@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
-import { BookOpen, CalendarDays, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator } from "lucide-react";
+import { BookOpen, CalendarDays, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -419,116 +419,117 @@ export default function Landing() {
       </div>
       </div>
 
-      {/* Tool Hub Spotlight */}
-      <div className="py-10 sm:py-12 bg-muted/10">
+      {/* Quick Start Index */}
+      <div className="py-8 sm:py-10 bg-muted/10 border-y border-border/40">
         <div className="container mx-auto px-4">
-          <div className="text-center space-y-2">
-            <Badge variant="outline" className="mx-auto text-xs">Tool Hub</Badge>
-            <h2 className="text-2xl sm:text-3xl font-semibold">Find the right tool fast</h2>
-            <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto">
-              Plan first, then verify airspace, and train with confidence. All tools are organized in one hub.
-            </p>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Card className="border-primary/20 bg-primary/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Plane className="h-5 w-5 text-primary" />
-                  Flight Planner
-                </CardTitle>
-                <CardDescription>Routes, fuel, time, and route analysis.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button asChild className="w-full">
-                  <Link
-                    href="/flight-planner"
-                    onClick={() => trackEvent("cta_click", { label: "tool_hub_flight_planner", target: "/flight-planner" })}
-                  >
-                    Open Flight Planner
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calculator className="h-5 w-5" />
-                  Pilot Calculators
-                </CardTitle>
-                <CardDescription>E6B, crosswind, density altitude, W&B, cost.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button asChild variant="outline" className="w-full">
-                  <Link
-                    href="/pilot-tools#calculators"
-                    onClick={() => trackEvent("cta_click", { label: "tool_hub_calculators", target: "/pilot-tools#calculators" })}
-                  >
-                    Open Calculators
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5" />
-                  Student Tools
-                </CardTitle>
-                <CardDescription>Roadmaps, costs, study tools, and progress.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button asChild variant="outline" className="w-full">
-                  <Link
-                    href="/student"
-                    onClick={() => trackEvent("cta_click", { label: "tool_hub_student", target: "/student" })}
-                  >
-                    Open Student Hub
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5" />
-                  IFR + Airspace
-                </CardTitle>
-                <CardDescription>IFR tools plus TFR and NOTAM awareness.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button asChild variant="outline" className="w-full">
-                  <Link
-                    href="/ifr-tools"
-                    onClick={() => trackEvent("cta_click", { label: "tool_hub_ifr", target: "/ifr-tools" })}
-                  >
-                    Open IFR Tools
-                  </Link>
-                </Button>
-                <Button asChild variant="secondary" className="w-full">
-                  <Link
-                    href="/tfr-map"
-                    onClick={() => trackEvent("cta_click", { label: "tool_hub_tfr", target: "/tfr-map" })}
-                  >
-                    Open TFR Map
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="mt-5 flex justify-center">
-            <Button asChild variant="secondary">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-2">
+              <Badge variant="outline" className="text-xs">Quick Start Index</Badge>
+              <h2 className="text-2xl sm:text-3xl font-semibold">Find What RSF Offers Fast</h2>
+              <p className="text-sm sm:text-base text-muted-foreground max-w-3xl">
+                Start with the feature area you need now. Open the full Tool Hub any time for the complete list.
+              </p>
+            </div>
+            <Button asChild variant="outline">
               <Link
                 href="/tool-hub"
-                onClick={() => trackEvent("cta_click", { label: "tool_hub_primary", target: "/tool-hub" })}
+                onClick={() => trackEvent("cta_click", { label: "quick_index_view_all_tools", target: "/tool-hub" })}
               >
-                Open the Tool Hub
+                View all tools &amp; features
               </Link>
             </Button>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <Card className="border-primary/20 bg-primary/5">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Plane className="h-4 w-4 text-primary" />
+                  Flight Planner
+                </div>
+                <p className="text-xs text-muted-foreground">Route, fuel, timing, and alternates.</p>
+                <Button asChild size="sm" className="w-full">
+                  <Link
+                    href="/flight-planner"
+                    onClick={() => trackEvent("cta_click", { label: "quick_index_flight_planner", target: "/flight-planner" })}
+                  >
+                    Open
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <AlertTriangle className="h-4 w-4" />
+                  TFR + NOTAM Map
+                </div>
+                <p className="text-xs text-muted-foreground">Current restrictions and airspace awareness.</p>
+                <Button asChild size="sm" variant="outline" className="w-full">
+                  <Link
+                    href="/tfr-map"
+                    onClick={() => trackEvent("cta_click", { label: "quick_index_tfr_map", target: "/tfr-map" })}
+                  >
+                    Open
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <BookOpen className="h-4 w-4" />
+                  Student Tools
+                </div>
+                <p className="text-xs text-muted-foreground">Roadmaps, study aids, and progress tracking.</p>
+                <Button asChild size="sm" variant="outline" className="w-full">
+                  <Link
+                    href="/student"
+                    onClick={() => trackEvent("cta_click", { label: "quick_index_student_tools", target: "/student" })}
+                  >
+                    Open
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <Calculator className="h-4 w-4" />
+                  IFR + Calculators
+                </div>
+                <p className="text-xs text-muted-foreground">IFR workflows, training sims, and pilot calculators.</p>
+                <Button asChild size="sm" variant="outline" className="w-full">
+                  <Link
+                    href="/ifr-tools"
+                    onClick={() => trackEvent("cta_click", { label: "quick_index_ifr_tools", target: "/ifr-tools" })}
+                  >
+                    Open
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <ShoppingBag className="h-4 w-4" />
+                  Marketplace
+                </div>
+                <p className="text-xs text-muted-foreground">Find CFIs, flight schools, rentals, and services.</p>
+                <Button asChild size="sm" variant="outline" className="w-full">
+                  <Link
+                    href="/marketplace"
+                    onClick={() => trackEvent("cta_click", { label: "quick_index_marketplace", target: "/marketplace" })}
+                  >
+                    Open
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

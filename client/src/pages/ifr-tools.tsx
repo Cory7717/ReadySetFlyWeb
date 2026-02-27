@@ -41,7 +41,11 @@ const tools = [
     title: "Live Traffic",
     description: "Global ADS-B traffic map powered by ADSBExchange.",
     href: "/live-traffic",
-    comingSoon: true,
+  },
+  {
+    title: "Synthetic Vision Lab",
+    description: "RSF Pro synthetic attitude/terrain trainer with compact live traffic panel.",
+    href: "/synthetic-vision",
   },
   {
     title: "NOTAMs & Active Runway",

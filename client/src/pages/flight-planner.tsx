@@ -2018,13 +2018,20 @@ export default function FlightPlanner() {
               {wakeLockError}
             </div>
           )}
-          <div className="mb-3 text-sm">
+          <div className="mb-3 flex flex-wrap gap-3 text-sm">
             <a
               href="/adsb-receiver-help"
               className="text-primary hover:underline"
               onClick={() => trackEvent("adsb_help_click", { target: "/adsb-receiver-help" })}
             >
-              How to connect your ADS‑B receiver
+              How to connect your ADS-B receiver
+            </a>
+            <a
+              href="/synthetic-vision"
+              className="text-primary hover:underline"
+              onClick={() => trackEvent("synthetic_vision_from_planner_click", { target: "/synthetic-vision" })}
+            >
+              Open RSF Synthetic Vision Lab
             </a>
           </div>
             {routeIcaos.length === 0 ? (

@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, BookOpen, Calculator, CloudSun, Plane, Radio } from "lucide-react";
+import { AlertTriangle, BookOpen, Calculator, CloudSun, Navigation, Plane, Radio } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 
 const calculatorLinks = [
@@ -134,6 +134,21 @@ export default function ToolHub() {
             <CardContent>
               <Button asChild variant="outline" className="w-full">
                 <Link href="/ifr-tools">Open IFR tools</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Navigation className="h-5 w-5" />
+                Synthetic Vision
+              </CardTitle>
+              <CardDescription>RSF Pro synthetic view + compact live traffic panel.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="outline" className="w-full">
+                <Link href="/synthetic-vision">Open synthetic vision</Link>
               </Button>
             </CardContent>
           </Card>

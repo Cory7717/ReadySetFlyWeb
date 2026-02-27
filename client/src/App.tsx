@@ -63,6 +63,7 @@ import RadioCommsTrainer from "@/pages/radio-comms-trainer";
 import AdsbReceiverHelp from "@/pages/adsb-receiver-help";
 import NotificationsPage from "@/pages/notifications";
 import AdsbLive from "@/pages/adsb-live";
+import SyntheticVisionPage from "@/pages/synthetic-vision";
 import Eb6Calculator from "@/pages/tools/Eb6Calculator";
 import CfiDirectory from "@/pages/cfi";
 import CfiProfile from "@/pages/cfi/profile";
@@ -129,6 +130,7 @@ function AnalyticsTracker() {
       "/radio-comms-trainer",
       "/adsb-receiver-help",
       "/live-traffic",
+      "/synthetic-vision",
       "/student",
       "/start-flying",
       "/gps-sims",
@@ -165,6 +167,7 @@ function Router() {
       <Route path="/register" component={Register} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/faq" component={FaqPage} />
+      <Route path="/synthetic-vision" component={SyntheticVisionPage} />
       <Route path="/logbook/pro" component={LogbookPro} />
       <Route path="/events" component={() => <StudentPageLoader component={EventsPage} />} />
       <Route path="/admin/invite" component={RequireAuth} />

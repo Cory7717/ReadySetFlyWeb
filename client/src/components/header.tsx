@@ -117,6 +117,11 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["live traffic", "adsb", "traffic map", "aircraft tracking"],
   },
   {
+    label: "Synthetic Vision",
+    path: "/synthetic-vision",
+    keywords: ["synthetic vision", "svt", "terrain view", "in-flight display", "pfd"],
+  },
+  {
     label: "VOR Trainer",
     path: "/student/vor-trainer",
     keywords: ["vor", "navigation", "training", "student"],

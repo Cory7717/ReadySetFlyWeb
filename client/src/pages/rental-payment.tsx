@@ -259,7 +259,7 @@ function CheckoutForm({ rental, aircraft, onSuccess }: { rental: Rental; aircraf
       
       <div className="mt-4 p-3 bg-muted rounded-md">
         <p className="text-xs text-center text-muted-foreground">
-          🔒 Secure payments processed by <span className="font-semibold">PayPal Business</span>
+          🔒 Secure payments processed by <span className="font-semibold">PayPal Business/Commerce</span>, a trusted global payments platform
         </p>
         <p className="text-xs text-center text-muted-foreground mt-1">
           Your payment information is encrypted and never stored on our servers

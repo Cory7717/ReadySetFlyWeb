@@ -206,7 +206,7 @@ export default function LogbookProPage() {
               </div>
 
               <Button onClick={handleSubscribe} disabled={loading}>
-                {loading ? "Redirecting..." : hasTrial ? "Start free trial with PayPal" : "Become a Member with PayPal"}
+                {loading ? "Redirecting..." : hasTrial ? "Start free trial with PayPal Business/Commerce" : "Become a Member with PayPal Business/Commerce"}
               </Button>
               <p className="text-xs text-muted-foreground">
                 By subscribing you agree to recurring billing at the selected interval.

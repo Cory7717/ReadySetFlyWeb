@@ -325,17 +325,17 @@ export default function VerifyIdentity() {
                 <Alert>
                   <CreditCard className="h-4 w-4" />
                   <AlertDescription>
-                    Payment processing is handled securely through PayPal Business when you complete your first rental or listing transaction.
+                    Payment processing is handled securely through PayPal Business/Commerce, a trusted global payments platform, when you complete your first rental or listing transaction.
                   </AlertDescription>
                 </Alert>
                 <div className="p-6 border-2 border-dashed rounded-lg text-center">
                   <CreditCard className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                   <p className="text-lg font-medium mb-2">Payment Method</p>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Your payment method will be securely added via PayPal Business when you make your first rental or listing payment. All transactions are processed through our trusted payment partner.
+                    Your payment method will be securely added via PayPal Business/Commerce, a trusted global payments platform, when you make your first rental or listing payment. All transactions are processed through our trusted payment partner.
                   </p>
                   <p className="text-xs text-muted-foreground mt-4">
-                    Ready Set Fly uses PayPal Business for secure payment processing
+                    Ready Set Fly uses PayPal Business/Commerce, a trusted global payments platform, for secure payment processing
                   </p>
                 </div>
               </>

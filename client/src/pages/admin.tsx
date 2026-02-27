@@ -1427,8 +1427,8 @@ export default function AdminDashboard() {
         });
       } else if (error?.error === 'Payment reference missing') {
         toast({
-          title: "Missing PayPal reference",
-          description: "Capture must complete and record a PayPal order ID before activation.",
+          title: "Missing PayPal Business/Commerce reference",
+          description: "Capture must complete and record a PayPal Business/Commerce order ID before activation.",
           variant: "destructive",
         });
       } else if (error?.error === 'Approval required') {
@@ -5124,7 +5124,7 @@ export default function AdminDashboard() {
                           </div>
                           <div className="text-sm space-y-1">
                             <p><span className="text-muted-foreground">User ID:</span> {withdrawal.userId}</p>
-                            <p><span className="text-muted-foreground">PayPal Email:</span> {withdrawal.paypalEmail}</p>
+                            <p><span className="text-muted-foreground">PayPal Business/Commerce Email:</span> {withdrawal.paypalEmail}</p>
                             <p><span className="text-muted-foreground">Requested:</span> {new Date(withdrawal.requestedAt).toLocaleString()}</p>
                             {withdrawal.processedAt && (
                               <p><span className="text-muted-foreground">Processed:</span> {new Date(withdrawal.processedAt).toLocaleString()}</p>
@@ -5313,7 +5313,7 @@ export default function AdminDashboard() {
             <CardContent>
               {bannerOrders.some(o => o.paymentStatus !== 'paid' && o.paymentStatus !== 'comped') && (
                 <div className="mb-4 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive" data-testid="alert-unpaid-banner-orders">
-                  Some banner orders are unpaid. Capture payment (PayPal) before approval and activation.
+                  Some banner orders are unpaid. Capture payment (PayPal Business/Commerce) before approval and activation.
                 </div>
               )}
               {ordersLoading ? (

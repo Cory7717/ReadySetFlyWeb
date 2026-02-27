@@ -4905,7 +4905,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   <div class="container">
     <div class="header">
       <h1>Complete Payment</h1>
-      <p>Secure payment powered by PayPal</p>
+      <p>Secure payment powered by PayPal Business/Commerce, a trusted global payments platform</p>
     </div>
     
     <div class="card">
@@ -5047,7 +5047,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   <div class="container">
     <div class="header">
       <h1>Complete Payment</h1>
-      <p>Secure payment powered by PayPal</p>
+      <p>Secure payment powered by PayPal Business/Commerce, a trusted global payments platform</p>
     </div>
     
     <div class="card">
@@ -5237,7 +5237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   <div class="container">
     <div class="header">
       <h1>Complete Payment</h1>
-      <p>Secure payment powered by PayPal</p>
+      <p>Secure payment powered by PayPal Business/Commerce, a trusted global payments platform</p>
     </div>
     
     <div class="card">

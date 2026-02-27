@@ -12,7 +12,7 @@ export default function LogbookProSuccess() {
     const params = new URLSearchParams(window.location.search);
     const subscriptionId = params.get("subscription_id") || params.get("subscriptionId");
     if (!subscriptionId) {
-      setError("Missing subscription ID from PayPal.");
+      setError("Missing subscription ID from PayPal Business/Commerce.");
       setStatus("Failed");
       return;
     }

@@ -51,14 +51,14 @@ export default function OwnerWithdrawals() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({
-        title: "PayPal Email Updated",
-        description: "Your PayPal email has been saved successfully."
+        title: "PayPal Business/Commerce Email Updated",
+        description: "Your PayPal Business/Commerce email has been saved successfully."
       });
     },
     onError: (error: any) => {
       toast({
         title: "Update Failed",
-        description: error.message || "Failed to update PayPal email",
+        description: error.message || "Failed to update PayPal Business/Commerce email",
         variant: "destructive"
       });
     }
@@ -76,7 +76,7 @@ export default function OwnerWithdrawals() {
       setWithdrawalAmount("");
       toast({
         title: "Payout Processing",
-        description: "Your funds are being sent to PayPal now. Funds typically arrive within minutes."
+        description: "Your funds are being sent to PayPal Business/Commerce now. Funds typically arrive within minutes."
       });
     },
     onError: (error: any) => {
@@ -92,7 +92,7 @@ export default function OwnerWithdrawals() {
     if (!paypalEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(paypalEmail)) {
       toast({
         title: "Invalid Email",
-        description: "Please enter a valid PayPal email address",
+        description: "Please enter a valid PayPal Business/Commerce email address",
         variant: "destructive"
       });
       return;
@@ -124,8 +124,8 @@ export default function OwnerWithdrawals() {
 
     if (!paypalEmail) {
       toast({
-        title: "PayPal Email Required",
-        description: "Please set your PayPal email before requesting a withdrawal",
+        title: "PayPal Business/Commerce Email Required",
+        description: "Please set your PayPal Business/Commerce email before requesting a withdrawal",
         variant: "destructive"
       });
       return;
@@ -190,12 +190,12 @@ export default function OwnerWithdrawals() {
       {/* PayPal Email Setup */}
       <Card>
         <CardHeader>
-          <CardTitle data-testid="heading-paypal-setup">PayPal Email</CardTitle>
-          <CardDescription>Set your PayPal email to receive withdrawals</CardDescription>
+          <CardTitle data-testid="heading-paypal-setup">PayPal Business/Commerce Email</CardTitle>
+          <CardDescription>Set your PayPal Business/Commerce email to receive withdrawals</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="paypal-email">PayPal Email Address</Label>
+            <Label htmlFor="paypal-email">PayPal Business/Commerce Email Address</Label>
             <div className="flex gap-2">
               <Input
                 id="paypal-email"
@@ -215,7 +215,7 @@ export default function OwnerWithdrawals() {
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            Payouts are sent via PayPal and typically arrive within minutes to 30 minutes.
+            Payouts are sent via PayPal Business/Commerce, a trusted global payments platform, and typically arrive within minutes to 30 minutes.
           </p>
         </CardContent>
       </Card>
@@ -224,7 +224,7 @@ export default function OwnerWithdrawals() {
       <Card>
         <CardHeader>
           <CardTitle data-testid="heading-request-withdrawal">Request Withdrawal</CardTitle>
-          <CardDescription>Withdraw your available balance to PayPal</CardDescription>
+          <CardDescription>Withdraw your available balance to PayPal Business/Commerce</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -257,10 +257,10 @@ export default function OwnerWithdrawals() {
           <div className="bg-muted p-4 rounded-md space-y-2">
             <p className="text-sm font-medium">Important Information</p>
             <ul className="text-sm text-muted-foreground space-y-1">
-              <li>• Withdrawals are processed instantly via PayPal Payouts</li>
-              <li>• PayPal charges approximately 2% per payout (deducted from platform funds)</li>
-              <li>• Funds typically arrive in your PayPal account within minutes</li>
-              <li>• You'll receive an email confirmation from PayPal when funds arrive</li>
+              <li>• Withdrawals are processed instantly via PayPal Business/Commerce Payouts</li>
+              <li>• PayPal Business/Commerce charges approximately 2% per payout (deducted from platform funds)</li>
+              <li>• Funds typically arrive in your PayPal Business/Commerce account within minutes</li>
+              <li>• You'll receive an email confirmation from PayPal Business/Commerce when funds arrive</li>
             </ul>
           </div>
         </CardContent>

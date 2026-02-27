@@ -29,7 +29,7 @@ const FAQS = [
     id: "payments",
     question: "How are payments handled?",
     answer:
-      "Payments are processed securely through PayPal. The platform records the transaction history for both owners and renters.",
+      "Payments are processed securely through PayPal Business/Commerce, a trusted global payments platform. The platform records the transaction history for both owners and renters.",
   },
   {
     id: "support",

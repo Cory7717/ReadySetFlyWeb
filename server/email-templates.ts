@@ -205,7 +205,7 @@ export function getBannerAdOrderEmailHtml(
       
       <h3>What happens next?</h3>
       <ol>
-        <li><strong>Complete Payment</strong> - Use the button above to view your order and submit payment via PayPal</li>
+        <li><strong>Complete Payment</strong> - Use the button above to view your order and submit payment via PayPal Business/Commerce, a trusted global payments platform</li>
         <li><strong>Order Review</strong> - Our team will review and approve your banner ad content (usually within 1 business day)</li>
         <li><strong>Campaign Launch</strong> - Your banner ad goes live on Ready Set Fly once approved</li>
         <li><strong>Monthly Renewals</strong> - Your campaign continues monthly until you choose to cancel</li>
@@ -276,7 +276,7 @@ IMPORTANT: Payment Required
 Your banner ad campaign will be activated once payment is received. Please complete payment within 7 days to secure your advertising slot.
 
 WHAT HAPPENS NEXT?
-1. Complete Payment - View your order and submit payment via PayPal
+1. Complete Payment - View your order and submit payment via PayPal Business/Commerce, a trusted global payments platform
 2. Order Review - Our team will review and approve your banner ad content (usually within 1 business day)
 3. Campaign Launch - Your banner ad goes live on Ready Set Fly once approved
 4. Monthly Renewals - Your campaign continues monthly until you choose to cancel

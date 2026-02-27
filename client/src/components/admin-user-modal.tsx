@@ -480,7 +480,7 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                         )}
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm">PayPal Account Connected</span>
+                        <span className="text-sm">PayPal Business/Commerce Account Connected</span>
                         {user.paypalEmail ? (
                           <CheckCircle className="h-5 w-5 text-chart-2" />
                         ) : (
@@ -489,7 +489,7 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                       </div>
                       {user.paypalEmail && (
                         <div>
-                          <div className="text-sm font-medium text-muted-foreground mt-3">PayPal Email</div>
+                          <div className="text-sm font-medium text-muted-foreground mt-3">PayPal Business/Commerce Email</div>
                           <div className="text-xs">{user.paypalEmail}</div>
                         </div>
                       )}

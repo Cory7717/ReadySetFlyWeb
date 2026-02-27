@@ -29,9 +29,9 @@ export default function OwnerPayoutSetup() {
       <div className="space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold">Set Up Instant PayPal Payouts</h1>
+          <h1 className="text-3xl font-bold">Set Up Instant PayPal Business/Commerce Payouts</h1>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Ready Set Fly uses PayPal Business for secure, instant payout processing. Get your rental earnings in minutes, not days.
+            Ready Set Fly uses PayPal Business/Commerce, a trusted global payments platform, for secure, instant payout processing. Get your rental earnings in minutes, not days.
           </p>
         </div>
 
@@ -46,7 +46,7 @@ export default function OwnerPayoutSetup() {
                 <div>
                   <p className="font-semibold">Instant Transfers</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Funds arrive in your PayPal account within minutes
+                    Funds arrive in your PayPal Business/Commerce account within minutes
                   </p>
                 </div>
               </div>
@@ -62,7 +62,7 @@ export default function OwnerPayoutSetup() {
                 <div>
                   <p className="font-semibold">Secure Processing</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Trusted PayPal Business payment gateway
+                    Trusted PayPal Business/Commerce payment gateway
                   </p>
                 </div>
               </div>
@@ -78,7 +78,7 @@ export default function OwnerPayoutSetup() {
                 <div>
                   <p className="font-semibold">Simple Setup</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Just add your PayPal email and start withdrawing
+                    Just add your PayPal Business/Commerce email and start withdrawing
                   </p>
                 </div>
               </div>
@@ -91,7 +91,7 @@ export default function OwnerPayoutSetup() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Info className="h-5 w-5 text-primary" />
-              How PayPal Payouts Work
+              How PayPal Business/Commerce Payouts Work
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -99,9 +99,9 @@ export default function OwnerPayoutSetup() {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="font-medium">Connect Your PayPal Account</p>
+                  <p className="font-medium">Connect Your PayPal Business/Commerce Account</p>
                   <p className="text-sm text-muted-foreground">
-                    Add your PayPal email address to receive instant payouts
+                    Add your PayPal Business/Commerce email address to receive instant payouts
                   </p>
                 </div>
               </div>
@@ -121,7 +121,7 @@ export default function OwnerPayoutSetup() {
                 <div>
                   <p className="font-medium">Receive Funds Instantly</p>
                   <p className="text-sm text-muted-foreground">
-                    Funds typically arrive in your PayPal account within minutes
+                    Funds typically arrive in your PayPal Business/Commerce account within minutes
                   </p>
                 </div>
               </div>
@@ -132,7 +132,7 @@ export default function OwnerPayoutSetup() {
         {/* PayPal Resources */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Learn More About PayPal</CardTitle>
+            <CardTitle className="text-base">Learn More About PayPal Business/Commerce</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <a
@@ -147,7 +147,7 @@ export default function OwnerPayoutSetup() {
                   <ExternalLink className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-sm">PayPal Payouts Documentation</p>
+                  <p className="font-medium text-sm">PayPal Business/Commerce Payouts Documentation</p>
                   <p className="text-xs text-muted-foreground">Learn about instant payout processing</p>
                 </div>
               </div>
@@ -166,7 +166,7 @@ export default function OwnerPayoutSetup() {
                   <ExternalLink className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="font-medium text-sm">PayPal Business Guide</p>
+                  <p className="font-medium text-sm">PayPal Business/Commerce Guide</p>
                   <p className="text-xs text-muted-foreground">Secure payment processing and withdrawals</p>
                 </div>
               </div>
@@ -182,7 +182,7 @@ export default function OwnerPayoutSetup() {
               <div>
                 <h3 className="font-semibold text-lg mb-2">Ready to Get Started?</h3>
                 <p className="text-sm text-muted-foreground">
-                  Set up instant PayPal withdrawals to receive your rental earnings
+                  Set up instant PayPal Business/Commerce withdrawals to receive your rental earnings
                 </p>
               </div>
               <Button 
@@ -192,7 +192,7 @@ export default function OwnerPayoutSetup() {
                 className="bg-accent text-accent-foreground hover:bg-accent"
               >
                 <DollarSign className="mr-2 h-4 w-4" />
-                Go to PayPal Withdrawals
+                Go to PayPal Business/Commerce Withdrawals
               </Button>
               <p className="text-xs text-muted-foreground">
                 Funds typically arrive within minutes. US residents only.

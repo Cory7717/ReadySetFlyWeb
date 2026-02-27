@@ -342,7 +342,7 @@ const CheckoutForm = ({ listingData, onSuccess, isFree, promoCode, discountAmoun
       
       <div className="mt-4 p-3 bg-muted rounded-md">
         <p className="text-xs text-center text-muted-foreground">
-          🔒 Secure payments processed by <span className="font-semibold">PayPal Business</span>
+          🔒 Secure payments processed by <span className="font-semibold">PayPal Business/Commerce</span>, a trusted global payments platform
         </p>
         <p className="text-xs text-center text-muted-foreground mt-1">
           Your payment information is encrypted and never stored on our servers
@@ -805,7 +805,7 @@ export default function MarketplaceListingCheckout() {
             {isUpgradeMode ? "Complete Upgrade Payment" : "Complete Your Payment"}
           </CardTitle>
           <CardDescription>
-            Secure payment powered by PayPal
+            Secure payment powered by PayPal Business/Commerce, a trusted global payments platform
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -957,7 +957,7 @@ export default function MarketplaceListingCheckout() {
           />
 
           <p className="text-xs text-muted-foreground text-center">
-            Your payment information is securely processed by PayPal. We never store your card details.
+            Your payment information is securely processed by PayPal Business/Commerce, a trusted global payments platform. We never store your card details.
           </p>
         </CardContent>
       </Card>

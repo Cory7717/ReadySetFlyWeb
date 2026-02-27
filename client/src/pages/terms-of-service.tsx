@@ -151,15 +151,15 @@ export default function TermsOfService() {
 
             <h3 className="text-lg font-semibold mt-4 mb-2">5.3 Payment Processing</h3>
             <p>
-              All payments are processed through PayPal, our exclusive payment processor. You agree to comply 
-              with PayPal's terms of service. We do not store your complete payment card information. Only credit 
+              All payments are processed through PayPal Business/Commerce, a trusted global payments platform and our exclusive payment processor. You agree to comply 
+              with PayPal Business/Commerce's terms of service. We do not store your complete payment card information. Only credit 
               card payments are accepted (Pay Later options are disabled for compliance and security).
             </p>
 
             <h3 className="text-lg font-semibold mt-4 mb-2">5.4 Owner Withdrawals</h3>
             <p>
-              Aircraft owners can request withdrawals of their rental earnings via PayPal. Withdrawals are 
-              processed using the PayPal Payouts API and are typically completed within 1-3 business days. 
+              Aircraft owners can request withdrawals of their rental earnings via PayPal Business/Commerce, a trusted global payments platform. Withdrawals are 
+              processed using the PayPal Business/Commerce Payouts API and are typically completed within 1-3 business days. 
               Minimum withdrawal amount may apply.
             </p>
 

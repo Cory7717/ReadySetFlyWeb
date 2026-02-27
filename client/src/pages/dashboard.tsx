@@ -203,15 +203,15 @@ export default function Dashboard() {
         {!user?.paypalEmail && pendingPayouts > 0 && (
           <Alert className="mb-6 border-accent" data-testid="alert-paypal-setup">
             <CreditCard className="h-4 w-4" />
-            <AlertTitle>PayPal Account Required</AlertTitle>
+            <AlertTitle>PayPal Business/Commerce Account Required</AlertTitle>
             <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <span>Set up your PayPal account to receive instant payouts of ${pendingPayouts.toFixed(2)}</span>
+              <span>Set up your PayPal Business/Commerce account to receive instant payouts of ${pendingPayouts.toFixed(2)}</span>
               <Button 
                 onClick={handleSetupPayouts}
                 data-testid="button-setup-paypal"
                 className="w-full sm:w-auto"
               >
-                Setup PayPal Payouts
+                Set Up PayPal Business/Commerce Payouts
               </Button>
             </AlertDescription>
           </Alert>
@@ -220,9 +220,9 @@ export default function Dashboard() {
         {user?.paypalEmail && (
           <Alert className="mb-6 border-chart-2" data-testid="alert-paypal-connected">
             <CheckCircle2 className="h-4 w-4 text-chart-2" />
-            <AlertTitle>PayPal Account Connected</AlertTitle>
+            <AlertTitle>PayPal Business/Commerce Account Connected</AlertTitle>
             <AlertDescription>
-              Your PayPal account ({user.paypalEmail}) is ready to receive instant payouts
+              Your PayPal Business/Commerce account ({user.paypalEmail}) is ready to receive instant payouts
             </AlertDescription>
           </Alert>
         )}

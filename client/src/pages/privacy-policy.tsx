@@ -53,7 +53,7 @@ export default function PrivacyPolicy() {
               </li>
               <li>
                 <strong>Payment Information:</strong> We collect payment information necessary to process rental payments 
-                and marketplace transactions, including payment method details processed by our payment processor (PayPal).
+                and marketplace transactions, including payment method details processed by our payment processor (PayPal Business/Commerce, a trusted global payments platform).
               </li>
               <li>
                 <strong>Messages:</strong> We collect and store messages you send through our platform messaging system.
@@ -113,11 +113,11 @@ export default function PrivacyPolicy() {
             <p>We share information with third-party service providers who assist us in operating the Platform:</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>
-                <strong>PayPal:</strong> Processes all payments for aircraft rentals and marketplace listing fees. 
+                <strong>PayPal Business/Commerce:</strong> A trusted global payments platform that processes all payments for aircraft rentals and marketplace listing fees. 
                 View their privacy policy at <a href="https://www.paypal.com/us/legalhub/privacy-full" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">paypal.com/us/legalhub/privacy-full</a>
               </li>
               <li>
-                <strong>PayPal Payouts API:</strong> Processes owner withdrawals. 
+                <strong>PayPal Business/Commerce Payouts API:</strong> Processes owner withdrawals. 
                 View their privacy policy at <a href="https://www.paypal.com/us/legalhub/privacy-full" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">paypal.com/us/legalhub/privacy-full</a>
               </li>
               <li>

@@ -1809,7 +1809,7 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
     ? `${bbox.minLon},${bbox.minLat},${bbox.maxLon},${bbox.maxLat}`
     : "-180,-90,180,90";
 
-  const params = new URLSearchParams({
+  const paramsBase = {
     where: "1=1",
     outFields: "*",
     returnGeometry: "true",
@@ -1818,93 +1818,115 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
     spatialRel: "esriSpatialRelIntersects",
     inSR: "4326",
     outSR: "4326",
-    f: "json",
-  });
+  };
+
+  const formatOrder = ["json", "geojson"];
+  const headerVariants = [
+    {
+      label: "with-referer",
+      headers: {
+        "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+        "Accept": "application/json",
+        "Referer": "https://tfr.faa.gov",
+        "Origin": "https://tfr.faa.gov",
+      },
+    },
+    {
+      label: "no-referer",
+      headers: {
+        "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+        "Accept": "application/json",
+      },
+    },
+  ];
 
   for (const baseUrl of FAA_TFR_ARCGIS_URLS) {
-    const url = `${baseUrl}?${params.toString()}`;
-    lastUrl = baseUrl;
-    try {
-      const response = await fetchWithTimeout(
-        url,
-        {
-          headers: {
-            "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
-            "Accept": "application/json",
-            "Referer": "https://tfr.faa.gov",
-            "Origin": "https://tfr.faa.gov",
-          },
-        },
-        8000
-      );
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        const snippet = errorText.trim().slice(0, 200);
-        lastError = `HTTP ${response.status}${snippet ? `: ${snippet}` : ""}`;
-        attempts.push({ url: baseUrl, ok: false, status: response.status, error: lastError });
-        continue;
-      }
-      const payload = await response.json().catch(() => null);
-      if (payload?.error) {
-        lastError = payload.error?.message || "ArcGIS error";
-        attempts.push({ url: baseUrl, ok: false, error: lastError });
-        continue;
-      }
-      if (!payload?.features || !Array.isArray(payload.features)) {
-        lastError = "ArcGIS response missing features";
-        attempts.push({ url: baseUrl, ok: false, error: lastError });
-        continue;
-      }
-      const esriFeatures = payload.features
-        .map((feature: any) => {
-          if (feature?.type === "Feature" && feature?.properties) return feature;
-          const properties = feature?.attributes || feature?.properties || {};
-          const geometry = feature?.geometry;
-          if (!geometry) return null;
-          if (geometry.rings) {
-            return {
-              type: "Feature",
-              geometry: { type: "Polygon", coordinates: geometry.rings },
-              properties,
-            };
+    for (const format of formatOrder) {
+      const params = new URLSearchParams({ ...paramsBase, f: format });
+      for (const variant of headerVariants) {
+        const url = `${baseUrl}?${params.toString()}`;
+        lastUrl = url;
+        try {
+          const response = await fetchWithTimeout(
+            url,
+            {
+              headers: variant.headers,
+            },
+            8000
+          );
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => "");
+            const snippet = errorText.trim().slice(0, 200);
+            lastError = `HTTP ${response.status}${snippet ? `: ${snippet}` : ""}`;
+            attempts.push({ url, ok: false, status: response.status, error: `${lastError} (${variant.label})` });
+            continue;
           }
-          if (geometry.paths) {
-            return {
-              type: "Feature",
-              geometry: { type: "LineString", coordinates: geometry.paths[0] || [] },
-              properties,
-            };
+          const payload = await response.json().catch(() => null);
+          if (payload?.error) {
+            lastError = payload.error?.message || "ArcGIS error";
+            attempts.push({ url, ok: false, error: `${lastError} (${variant.label})` });
+            continue;
           }
-          if (Number.isFinite(geometry.x) && Number.isFinite(geometry.y)) {
-            return {
-              type: "Feature",
-              geometry: { type: "Point", coordinates: [geometry.x, geometry.y] },
-              properties,
-            };
+          if (!payload?.features || !Array.isArray(payload.features)) {
+            lastError = "ArcGIS response missing features";
+            attempts.push({ url, ok: false, error: `${lastError} (${variant.label})` });
+            continue;
           }
-          return null;
-        })
-        .filter(Boolean);
-      const features = esriFeatures.map(normalizeArcGisTfrFeature).filter(Boolean);
-      const data = {
-        type: "FeatureCollection",
-        features,
-        updatedAt: new Date().toISOString(),
-        source: "faa-arcgis",
-      };
-      if (features.length) {
-        tfrLastSuccess = { data, fetchedAt: Date.now() };
+
+          const rawFeatures = payload.features;
+          const esriFeatures = rawFeatures
+            .map((feature: any) => {
+              if (feature?.type === "Feature" && feature?.properties) return feature;
+              const properties = feature?.attributes || feature?.properties || {};
+              const geometry = feature?.geometry;
+              if (!geometry) return null;
+              if (geometry.rings) {
+                return {
+                  type: "Feature",
+                  geometry: { type: "Polygon", coordinates: geometry.rings },
+                  properties,
+                };
+              }
+              if (geometry.paths) {
+                return {
+                  type: "Feature",
+                  geometry: { type: "LineString", coordinates: geometry.paths[0] || [] },
+                  properties,
+                };
+              }
+              if (Number.isFinite(geometry.x) && Number.isFinite(geometry.y)) {
+                return {
+                  type: "Feature",
+                  geometry: { type: "Point", coordinates: [geometry.x, geometry.y] },
+                  properties,
+                };
+              }
+              return null;
+            })
+            .filter(Boolean);
+
+          const features = esriFeatures.map(normalizeArcGisTfrFeature).filter(Boolean);
+          const data = {
+            type: "FeatureCollection",
+            features,
+            updatedAt: new Date().toISOString(),
+            source: "faa-arcgis",
+          };
+          if (features.length) {
+            tfrLastSuccess = { data, fetchedAt: Date.now() };
+          }
+          return {
+            data: {
+              ...data,
+            },
+            attempts,
+          };
+        } catch (error: any) {
+          console.error("ArcGIS TFR fetch failed:", error);
+          lastError = error?.message || "ArcGIS fetch failed";
+          attempts.push({ url, ok: false, error: `${lastError} (${variant.label})` });
+        }
       }
-      return {
-        data: {
-          ...data,
-        },
-        attempts,
-      };
-    } catch (error: any) {
-      console.error("ArcGIS TFR fetch failed:", error);
-      lastError = error?.message || "ArcGIS fetch failed";
-      attempts.push({ url: baseUrl, ok: false, error: lastError });
     }
   }
 

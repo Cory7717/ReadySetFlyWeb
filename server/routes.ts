@@ -1425,6 +1425,7 @@ const tfmsCache = new Map<string, { expiresAt: number; value: any }>();
 const FAA_TFR_ARCGIS_URLS = [
   ...(TFR_ARCGIS_PROXY_URL ? [TFR_ARCGIS_PROXY_URL] : []),
   ...TFR_ARCGIS_URLS,
+  "https://services1.arcgis.com/n4Ot9Qz0t5espY4s/ArcGIS/rest/services/FAA_TFRs/FeatureServer/0/query",
   "https://services1.arcgis.com/n4Ot9Qz0t5espY4s/arcgis/rest/services/FAA_TFRs/FeatureServer/0/query",
   "https://gis.faa.gov/arcgis/rest/services/TFMS/TFR/MapServer/0/query",
   "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query",

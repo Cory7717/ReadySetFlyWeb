@@ -3515,16 +3515,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const success = await storage.deleteUser(userId);
       
       if (success) {
-        // Logout the user by destroying the session
+        // Logout safely: run passport logout first, then destroy session to avoid race conditions.
+        const sendDeleted = () => res.json({ message: "Account deleted successfully" });
+        const destroySession = () => {
+          if (req.session && typeof req.session.destroy === "function") {
+            return req.session.destroy((destroyErr: any) => {
+              if (destroyErr) {
+                console.error("Session destroy error after account deletion:", destroyErr);
+              }
+              sendDeleted();
+            });
+          }
+          return sendDeleted();
+        };
+
         if (req.session && typeof req.logout === "function") {
-          req.logout((err: any) => {
+          return req.logout((err: any) => {
             if (err) {
               console.error("Error logging out after account deletion:", err);
             }
+            destroySession();
           });
         }
-        
-        res.json({ message: "Account deleted successfully" });
+
+        return destroySession();
       } else {
         res.status(500).json({ error: "Failed to delete account" });
       }
@@ -3537,31 +3551,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Web logout endpoint (used by header link)
   app.get("/api/logout", (req, res) => {
     try {
-      if (req.session && typeof req.logout === "function") {
-        req.logout((err: any) => {
-          if (err) {
-            console.error("Logout error:", err);
-          }
-        });
-        req.session.destroy((err: any) => {
-          if (err) {
-            console.error("Session destroy error:", err);
-          }
-        });
-      }
-      res.clearCookie("connect.sid");
       const frontendBase = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
       const requestedRedirect = typeof req.query.redirect === "string" ? req.query.redirect : "";
       let safeRedirect = frontendBase;
       if (requestedRedirect) {
         try {
           const parsed = new URL(requestedRedirect);
-          const allowedHosts = new Set([
-            "readysetfly.us",
-            "www.readysetfly.us",
-            "localhost",
-            "127.0.0.1",
-          ]);
+          const allowedHosts = new Set(["readysetfly.us", "www.readysetfly.us", "localhost", "127.0.0.1"]);
           if (allowedHosts.has(parsed.hostname)) {
             safeRedirect = parsed.origin;
           }
@@ -3569,7 +3565,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // ignore invalid redirect and use frontend base
         }
       }
-      return res.redirect(safeRedirect);
+
+      const finish = () => {
+        res.clearCookie("connect.sid");
+        return res.redirect(safeRedirect);
+      };
+
+      const destroySession = () => {
+        if (req.session && typeof req.session.destroy === "function") {
+          return req.session.destroy((destroyErr: any) => {
+            if (destroyErr) {
+              console.error("Session destroy error:", destroyErr);
+            }
+            finish();
+          });
+        }
+        return finish();
+      };
+
+      if (req.session && typeof req.logout === "function") {
+        return req.logout((err: any) => {
+          if (err) {
+            console.error("Logout error:", err);
+          }
+          destroySession();
+        });
+      }
+
+      return destroySession();
     } catch (error) {
       console.error("Logout error:", error);
       return res.status(500).json({ error: "Failed to logout" });

@@ -96,10 +96,11 @@ export function FreeAccountValueBar() {
   if (!visible) return null;
 
   return (
-    <div className="border-b bg-sky-50/80">
+    <div className="border-b border-sky-200 bg-gradient-to-r from-sky-50 to-cyan-50">
       <div className="container mx-auto px-4 py-3">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-700">Free Account Benefits</p>
             <p className="text-sm font-semibold text-slate-900">Create your free Ready Set Fly account</p>
             <p className="text-xs text-slate-700">
               Save routes and favorites, track training progress, and manage listing messages from one dashboard.

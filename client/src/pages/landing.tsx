@@ -442,14 +442,16 @@ export default function Landing() {
                   </Button>
                 </div>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
                   <Card className="border-primary/20 bg-primary/5">
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
-                        <Plane className="h-4 w-4 text-primary" />
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                        <Plane className="h-5 w-5 text-primary" />
                         Flight Planner
+                        </div>
+                        <p className="text-sm text-muted-foreground">Route, fuel, timing, alternates, and planning flow.</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">Route, fuel, timing, and alternates.</p>
                       <Button asChild size="sm" className="w-full">
                         <Link
                           href="/flight-planner"
@@ -462,12 +464,14 @@ export default function Landing() {
                   </Card>
 
                   <Card>
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
-                        <AlertTriangle className="h-4 w-4" />
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                          <AlertTriangle className="h-5 w-5" />
                         TFR + NOTAM Map
+                        </div>
+                        <p className="text-sm text-muted-foreground">Current restrictions, NOTAM awareness, and active airspace overlays.</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">Current restrictions and airspace awareness.</p>
                       <Button asChild size="sm" variant="outline" className="w-full">
                         <Link
                           href="/tfr-map"
@@ -480,12 +484,14 @@ export default function Landing() {
                   </Card>
 
                   <Card>
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
-                        <BookOpen className="h-4 w-4" />
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                          <BookOpen className="h-5 w-5" />
                         Student Tools
+                        </div>
+                        <p className="text-sm text-muted-foreground">Roadmaps, study aids, progress tracking, and pilot training support.</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">Roadmaps, study aids, and progress tracking.</p>
                       <Button asChild size="sm" variant="outline" className="w-full">
                         <Link
                           href="/student"
@@ -498,12 +504,14 @@ export default function Landing() {
                   </Card>
 
                   <Card>
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
-                        <Calculator className="h-4 w-4" />
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                          <Calculator className="h-5 w-5" />
                         IFR + Calculators
+                        </div>
+                        <p className="text-sm text-muted-foreground">IFR workflows, training sims, and core pilot calculation tools.</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">IFR workflows, training sims, and pilot calculators.</p>
                       <Button asChild size="sm" variant="outline" className="w-full">
                         <Link
                           href="/ifr-tools"
@@ -516,12 +524,14 @@ export default function Landing() {
                   </Card>
 
                   <Card>
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
-                        <ShoppingBag className="h-4 w-4" />
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                          <ShoppingBag className="h-5 w-5" />
                         Marketplace
+                        </div>
+                        <p className="text-sm text-muted-foreground">Find CFIs, flight schools, rentals, jobs, and aviation services.</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">Find CFIs, flight schools, rentals, and services.</p>
                       <Button asChild size="sm" variant="outline" className="w-full">
                         <Link
                           href="/marketplace"
@@ -534,12 +544,14 @@ export default function Landing() {
                   </Card>
 
                   <Card>
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
-                        <CalendarDays className="h-4 w-4" />
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                          <CalendarDays className="h-5 w-5" />
                         Airport Conditions
+                        </div>
+                        <p className="text-sm text-muted-foreground">Weather, runway advisory, and NOTAM briefing for fast planning context.</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">Weather, runway advisory, and NOTAM briefing.</p>
                       <Button asChild size="sm" variant="outline" className="w-full">
                         <a
                           href="#airport-weather"

@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
-import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -548,18 +548,18 @@ export default function Landing() {
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 text-base font-semibold">
-                          <CalendarDays className="h-5 w-5" />
-                        Airport Conditions
+                          <FileText className="h-5 w-5" />
+                        Digital Logbook
                         </div>
-                        <p className="text-sm text-muted-foreground">Weather, runway advisory, and NOTAM briefing for fast planning context.</p>
+                        <p className="text-sm text-muted-foreground">Track flights, endorsements, signoffs, and progress in your RSF logbook.</p>
                       </div>
                       <Button asChild size="sm" variant="outline" className="w-full">
-                        <a
-                          href="#airport-weather"
-                          onClick={() => trackEvent("cta_click", { label: "quick_index_airport_conditions", target: "#airport-weather" })}
+                        <Link
+                          href="/logbook"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_digital_logbook", target: "/logbook" })}
                         >
-                          Open below
-                        </a>
+                          Open
+                        </Link>
                       </Button>
                     </CardContent>
                   </Card>

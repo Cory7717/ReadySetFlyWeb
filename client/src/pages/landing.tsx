@@ -14,6 +14,7 @@ import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useEffect, useMemo, useRef, useState } from "react";
 import av8mapsLogo from "@assets/Av8Maps.JPG";
+import rsfPromoVideo from "@assets/rsf-video-2026-02-28.mp4";
 import { membershipPlanOptions, membershipTierInfo } from "@shared/membership-plans";
 
 interface WeatherData {
@@ -562,6 +563,20 @@ export default function Landing() {
                       </Button>
                     </CardContent>
                   </Card>
+                </div>
+
+                <div className="mt-4 overflow-hidden rounded-xl border border-border/60 bg-black shadow-sm">
+                  <video
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    preload="metadata"
+                    aria-label="Ready Set Fly overview video"
+                    className="h-full min-h-[240px] w-full object-cover"
+                  >
+                    <source src={rsfPromoVideo} type="video/mp4" />
+                  </video>
                 </div>
               </CardContent>
             </Card>

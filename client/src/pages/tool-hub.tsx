@@ -32,7 +32,7 @@ const calculatorLinks = [
 const toolSections = [
   {
     title: "Core Pilot Tools",
-    description: "The tools most pilots will use repeatedly for planning, logging, and daily decisions.",
+    description: "Start with the tools most pilots are likely to use repeatedly for planning, logging, weather, and restriction checks.",
     cards: [
       {
         title: "Flight Planner",
@@ -41,6 +41,7 @@ const toolSections = [
         cta: "Open planner",
         icon: Plane,
         accent: true,
+        badge: "Most used",
       },
       {
         title: "Digital Logbook",
@@ -48,7 +49,7 @@ const toolSections = [
         href: "/logbook",
         cta: "Open logbook",
         icon: FileText,
-        badge: "Core tool",
+        badge: "Most used",
       },
       {
         title: "Airport Conditions",
@@ -58,6 +59,14 @@ const toolSections = [
         icon: CloudSun,
       },
       {
+        title: "TFR Map",
+        description: "Live TFRs, SUA overlays, and airspace restriction awareness.",
+        href: "/tfr-map",
+        cta: "Open TFR map",
+        icon: AlertTriangle,
+        badge: "FAA SWIM",
+      },
+      {
         title: "Aviation Weather Hub",
         description: "METARs, TAFs, PIREPs, hazards, winds aloft, icing, and turbulence.",
         href: "/aviation-weather",
@@ -65,62 +74,6 @@ const toolSections = [
         icon: Cloud,
         badge: "New",
       },
-    ],
-  },
-  {
-    title: "Training and IFR",
-    description: "Training workflows, scenario practice, and instrument-reference tools.",
-    cards: [
-      {
-        title: "Student Tools",
-        description: "Training plans, study tools, abbreviations, and progress tracking.",
-        href: "/student",
-        cta: "Open Student Hub",
-        icon: BookOpen,
-      },
-      {
-        title: "GPS Trainers",
-        description: "RSF GPS training units and interactive cockpit workflow practice.",
-        href: "/gps-sims",
-        cta: "Open GPS trainers",
-        icon: Route,
-      },
-      {
-        title: "IFR Tools",
-        description: "IFR planners, procedures, sims, and training aids.",
-        href: "/ifr-tools",
-        cta: "Open IFR tools",
-        icon: Radio,
-      },
-      {
-        title: "IFR Approach Plates",
-        description: "Search and review current FAA approach plates.",
-        href: "/approach-plates",
-        cta: "Open plates",
-        icon: FileText,
-      },
-      {
-        title: "Radio Comms Trainer",
-        description: "Practice phraseology and scenario-based ATC communication.",
-        href: "/radio-comms-trainer",
-        cta: "Open trainer",
-        icon: Signal,
-      },
-      {
-        title: "Synthetic Vision",
-        description: "RSF Pro synthetic-vision lab with training scoring and review.",
-        href: "/synthetic-vision",
-        cta: "Open synthetic vision",
-        icon: Navigation,
-        badge: "RSF Pro",
-      },
-    ],
-  },
-  {
-    title: "Calculators and Airspace",
-    description: "Quick-reference computation tools plus live restriction checks.",
-    cards: [
-      {
         title: "Pilot Calculators",
         description: "All calculators in one place.",
         href: "/pilot-tools#calculators",
@@ -129,14 +82,12 @@ const toolSections = [
         badge: "Free tools",
         detailBadges: calculatorLinks.map((calc) => calc.label),
       },
-      {
-        title: "TFR Map",
-        description: "Live TFRs, SUA overlays, and airspace restriction awareness.",
-        href: "/tfr-map",
-        cta: "Open TFR map",
-        icon: AlertTriangle,
-        badge: "FAA SWIM",
-      },
+    ],
+  },
+  {
+    title: "Advanced Planning and Airspace",
+    description: "Use these after the core workflow for briefing depth, performance checks, and situational awareness.",
+    cards: [
       {
         title: "NOTAM Briefing",
         description: "Jump straight to airport NOTAM briefing and runway advisory tools.",
@@ -176,9 +127,72 @@ const toolSections = [
     ],
   },
   {
-    title: "Directories and Feature Entry Points",
-    description: "The non-tool destinations users still need for discovering instructors, rentals, services, and events.",
+    title: "Training and IFR",
+    description: "When users move beyond planning, these are the next training, IFR, and scenario tools they are likely to use.",
     cards: [
+      {
+        title: "IFR Tools",
+        description: "IFR planners, procedures, sims, and training aids.",
+        href: "/ifr-tools",
+        cta: "Open IFR tools",
+        icon: Radio,
+      },
+      {
+        title: "IFR Approach Plates",
+        description: "Search and review current FAA approach plates.",
+        href: "/approach-plates",
+        cta: "Open plates",
+        icon: FileText,
+      },
+      {
+        title: "GPS Trainers",
+        description: "RSF GPS training units and interactive cockpit workflow practice.",
+        href: "/gps-sims",
+        cta: "Open GPS trainers",
+        icon: Route,
+      },
+      {
+        title: "Radio Comms Trainer",
+        description: "Practice phraseology and scenario-based ATC communication.",
+        href: "/radio-comms-trainer",
+        cta: "Open trainer",
+        icon: Signal,
+      },
+      {
+        title: "Student Tools",
+        description: "Training plans, study tools, abbreviations, and progress tracking.",
+        href: "/student",
+        cta: "Open Student Hub",
+        icon: BookOpen,
+      },
+      {
+        title: "Synthetic Vision",
+        description: "RSF Pro synthetic-vision lab with training scoring and review.",
+        href: "/synthetic-vision",
+        cta: "Open synthetic vision",
+        icon: Navigation,
+        badge: "RSF Pro",
+      },
+    ],
+  },
+  {
+    title: "Directories and Feature Entry Points",
+    description: "These are the broader entry points for instructors, rentals, marketplace discovery, events, and support.",
+    cards: [
+      {
+        title: "Marketplace",
+        description: "Explore schools, services, jobs, charter, and aviation business listings.",
+        href: "/marketplace",
+        cta: "Open marketplace",
+        icon: Briefcase,
+      },
+      {
+        title: "Rentals",
+        description: "Browse rentals, aircraft access, and school-related listings.",
+        href: "/rentals",
+        cta: "Browse rentals",
+        icon: Plane,
+      },
       {
         title: "CFI Directory",
         description: "Browse instructors, compare profiles, and connect with CFIs.",
@@ -192,20 +206,6 @@ const toolSections = [
         href: "/dashboard/cfi",
         cta: "Open CFI profile",
         icon: Users,
-      },
-      {
-        title: "Rentals",
-        description: "Browse rentals, aircraft access, and school-related listings.",
-        href: "/rentals",
-        cta: "Browse rentals",
-        icon: Plane,
-      },
-      {
-        title: "Marketplace",
-        description: "Explore schools, services, jobs, charter, and aviation business listings.",
-        href: "/marketplace",
-        cta: "Open marketplace",
-        icon: Briefcase,
       },
       {
         title: "Aviation Events",
@@ -240,9 +240,10 @@ export default function ToolHub() {
           <p className="text-muted-foreground max-w-3xl">
             All current RSF pilot tools and training utilities in one place. Start with planning and logging, then move into weather, IFR, and training workflows.
           </p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button
               asChild
+              className="w-full sm:w-auto"
               onClick={() => trackEvent("tool_hub_click", { target: "/flight-planner" })}
             >
               <Link href="/flight-planner">Open Flight Planner</Link>
@@ -250,16 +251,19 @@ export default function ToolHub() {
             <Button
               variant="outline"
               asChild
+              className="w-full sm:w-auto"
               onClick={() => trackEvent("tool_hub_click", { target: "/logbook" })}
             >
               <Link href="/logbook">Open Digital Logbook</Link>
             </Button>
-            <Badge variant="secondary">All pilot tools</Badge>
+            <div className="flex items-center">
+              <Badge variant="secondary">All pilot tools</Badge>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="container mx-auto px-4 py-10 space-y-8">
+      <section className="container mx-auto px-4 py-8 sm:py-10 space-y-8 sm:space-y-10">
         {toolSections.map((section) => (
           <div key={section.title} className="space-y-4">
             <div className="space-y-1">
@@ -267,7 +271,7 @@ export default function ToolHub() {
               <p className="text-sm text-muted-foreground">{section.description}</p>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {section.cards.map((card) => {
                 const Icon = card.icon;
                 const href =
@@ -279,9 +283,9 @@ export default function ToolHub() {
                 return (
                   <Card
                     key={card.title}
-                    className={card.accent ? "border-primary/20 bg-primary/5" : undefined}
+                    className={card.accent ? "h-full border-primary/20 bg-primary/5" : "h-full"}
                   >
-                    <CardHeader>
+                    <CardHeader className="pb-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-2">
                           <CardTitle className="flex items-center gap-2">
@@ -293,7 +297,7 @@ export default function ToolHub() {
                         {card.badge ? <Badge variant="outline">{card.badge}</Badge> : null}
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="flex h-full flex-col justify-between space-y-3">
                       {card.detailBadges ? (
                         <div className="flex flex-wrap gap-2">
                           {card.detailBadges.map((detail) => (

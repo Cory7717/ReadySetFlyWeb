@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
-import { BookOpen, CalendarDays, Shield, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -419,379 +419,210 @@ export default function Landing() {
       </div>
       </div>
 
-      {/* Quick Start Index */}
       <div className="py-8 sm:py-10 bg-muted/10 border-y border-border/40">
         <div className="container mx-auto px-4">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <Badge variant="outline" className="text-xs">Quick Start Index</Badge>
-              <h2 className="text-2xl sm:text-3xl font-semibold">Find What RSF Offers Fast</h2>
-              <p className="text-sm sm:text-base text-muted-foreground max-w-3xl">
-                Start with the feature area you need now. Open the full Tool Hub any time for the complete list.
-              </p>
-            </div>
-            <Button asChild variant="outline">
-              <Link
-                href="/tool-hub"
-                onClick={() => trackEvent("cta_click", { label: "quick_index_view_all_tools", target: "/tool-hub" })}
-              >
-                View all tools &amp; features
-              </Link>
-            </Button>
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <Plane className="h-4 w-4 text-primary" />
-                  Flight Planner
-                </div>
-                <p className="text-xs text-muted-foreground">Route, fuel, timing, and alternates.</p>
-                <Button asChild size="sm" className="w-full">
-                  <Link
-                    href="/flight-planner"
-                    onClick={() => trackEvent("cta_click", { label: "quick_index_flight_planner", target: "/flight-planner" })}
-                  >
-                    Open
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <AlertTriangle className="h-4 w-4" />
-                  TFR + NOTAM Map
-                </div>
-                <p className="text-xs text-muted-foreground">Current restrictions and airspace awareness.</p>
-                <Button asChild size="sm" variant="outline" className="w-full">
-                  <Link
-                    href="/tfr-map"
-                    onClick={() => trackEvent("cta_click", { label: "quick_index_tfr_map", target: "/tfr-map" })}
-                  >
-                    Open
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <BookOpen className="h-4 w-4" />
-                  Student Tools
-                </div>
-                <p className="text-xs text-muted-foreground">Roadmaps, study aids, and progress tracking.</p>
-                <Button asChild size="sm" variant="outline" className="w-full">
-                  <Link
-                    href="/student"
-                    onClick={() => trackEvent("cta_click", { label: "quick_index_student_tools", target: "/student" })}
-                  >
-                    Open
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <Calculator className="h-4 w-4" />
-                  IFR + Calculators
-                </div>
-                <p className="text-xs text-muted-foreground">IFR workflows, training sims, and pilot calculators.</p>
-                <Button asChild size="sm" variant="outline" className="w-full">
-                  <Link
-                    href="/ifr-tools"
-                    onClick={() => trackEvent("cta_click", { label: "quick_index_ifr_tools", target: "/ifr-tools" })}
-                  >
-                    Open
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <ShoppingBag className="h-4 w-4" />
-                  Marketplace
-                </div>
-                <p className="text-xs text-muted-foreground">Find CFIs, flight schools, rentals, and services.</p>
-                <Button asChild size="sm" variant="outline" className="w-full">
-                  <Link
-                    href="/marketplace"
-                    onClick={() => trackEvent("cta_click", { label: "quick_index_marketplace", target: "/marketplace" })}
-                  >
-                    Open
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-
-      {/* Membership Matrix */}
-      <div className="py-10 sm:py-14 bg-muted/20">
-        <div className="container mx-auto px-4">
-          <div className="text-center space-y-3">
-            <Badge variant="outline" className="mx-auto text-xs">RSF Memberships</Badge>
-            <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
-            <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto">
-              See exactly what you get when you upgrade. Free tools stay open; Pro adds saves and alerts; Pro+ unlocks operational intelligence.
-            </p>
-          </div>
-
-          <div className="mt-8 grid gap-6 lg:grid-cols-3">
-            <Card className="border-primary/10">
-              <CardHeader>
-                <CardTitle className="text-lg">RSF Free</CardTitle>
-                <CardDescription>Open tools, no credit card required.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-3xl font-bold">$0<span className="text-sm text-muted-foreground">/mo</span></div>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
-                    Run all calculators and planning tools.
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
-                    View live NOTAMs, TFRs, and weather.
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
-                    Create aviation events with a free RSF account (anti-spam).
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card className="border-primary/30 shadow-sm">
-              <CardHeader>
-                <Badge className="w-fit">Most Popular</Badge>
-                <CardTitle className="text-lg">{membershipTierInfo.pro.title}</CardTitle>
-                <CardDescription>{membershipTierInfo.pro.subtitle}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-3xl font-bold">
-                  ${proMonthly?.toFixed(2) ?? "14.99"}
-                  <span className="text-sm text-muted-foreground">/mo</span>
-                </div>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  {membershipTierInfo.pro.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <Button asChild className="w-full">
-                  <Link href="/logbook/pro">Upgrade to Pro</Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="border-primary/20">
-              <CardHeader>
-                <Badge variant="secondary" className="w-fit">Power Pilot</Badge>
-                <CardTitle className="text-lg">{membershipTierInfo.pro_plus.title}</CardTitle>
-                <CardDescription>{membershipTierInfo.pro_plus.subtitle}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-3xl font-bold">
-                  ${proPlusMonthly?.toFixed(2) ?? "24.99"}
-                  <span className="text-sm text-muted-foreground">/mo</span>
-                </div>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  {membershipTierInfo.pro_plus.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <Button asChild variant="outline" className="w-full">
-                  <Link href="/logbook/pro">Upgrade to Pro+</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-
-      {/* Choose your starting point */}
-      <div className="py-10 sm:py-12">
-        <div className="container mx-auto px-4">
-          <div className="text-center space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-semibold">Choose your starting point</h2>
-            <p className="text-sm sm:text-base text-muted-foreground">
-              RSF supports pilots at every stage -- pick a starting point.
-            </p>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
-            <span className="font-semibold text-foreground">Popular tools:</span>
-            {[
-              { label: "e6b advanced", href: "/tools/e6b", slug: "e6b-advanced" },
-              { label: "VOR/Knob Trainer", href: "/student/vor-trainer", slug: "vor-knob" },
-              { label: "Six-Pack Panel", href: "/student/six-pack-trainer", slug: "six-pack" },
-              { label: "IFR Tools", href: "/ifr-tools", slug: "ifr-tools" },
-              { label: "TFR Map", href: "/tfr-map", slug: "tfr-map" },
-              { label: "NOTAM Briefing", href: "/pilot-tools#airport-briefing", slug: "notam-briefing" },
-            ].map((tool) => (
-              <Button key={tool.slug} size="sm" variant="outline" asChild>
-                <Link
-                  href={tool.href}
-                  onClick={() => trackEvent("starting_point_tool_click", { tool_slug: tool.slug })}
-                >
-                  {tool.label}
-                </Link>
-              </Button>
-            ))}
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
-            <span className="font-semibold text-foreground">CFI instructor?</span>
-            <Button size="sm" variant="secondary" asChild>
-              <Link
-                href="/cfi"
-                onClick={() => trackEvent("starting_point_tool_click", { tool_slug: "cfi-directory" })}
-              >
-                Create your profile
-              </Link>
-            </Button>
-          </div>
-          <Card className="mt-6 border-primary/20 bg-primary/5">
-            <CardContent className="p-5 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-base sm:text-lg font-semibold">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                  CFI Instructors: Create your RSF profile
-                </div>
-                <p className="text-sm text-muted-foreground max-w-2xl">
-                  Get discovered by student pilots, highlight your ratings, and accept booking requests through the CFI marketplace.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  variant="outline"
-                  asChild
-                >
-                  <Link
-                    href="/cfi"
-                    onClick={() => trackEvent("cta_click", { label: "landing_cfi_directory", target: "/cfi" })}
-                  >
-                    View CFI directory
-                  </Link>
-                </Button>
-                <Button asChild>
-                  <Link
-                    href="/dashboard/cfi"
-                    onClick={() => trackEvent("cta_click", { label: "landing_cfi_create_profile", target: "/dashboard/cfi" })}
-                  >
-                    Create your profile
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-          <FeaturedPartnerToolCard
-            className="mt-6 mx-auto w-full md:w-2/3"
-            partnerKey="av8maps"
-            title="Av8Maps — Nationwide GA Destination Maps"
-            description="Choose your next flight destination with fly-in camping, restaurants, aviation-friendly stays, and more."
-            logoSrc={av8mapsLogo}
-            ctaLabel="Explore Av8Maps"
-            outboundPath="/out/av8maps"
-            placement="home_featured_partner_card"
-            source="home_featured_partner_card"
-            badgeLabel="Featured Partner Tool"
-            embedEnabled={AV8MAPS_EMBED_ENABLED}
-            embedUrl={AV8MAPS_EMBED_URL || undefined}
-            tiles={av8mapsTiles}
-          />
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {[
-              {
-                id: "experienced_pilot",
-                title: "Experienced Pilot",
-                subtitle: "Planning, performance, currency, and proficiency tools",
-                primary: { label: "Open pilot tools", href: "/pilot-tools", track: "start_experienced_primary" },
-                links: [
-                  { label: "Pilot calculators", href: "/pilot-tools", track: "start_experienced_calculators" },
-                  { label: "Digital logbook", href: "/logbook", track: "start_experienced_logbook" },
-                  { label: "Currency tracking", href: "/logbook", track: "start_experienced_currency" },
-                  { label: "IFR tools", href: "/ifr-tools", track: "start_experienced_ifr" },
-                ],
-              },
-              {
-                id: "student_pilot",
-                title: "Student Pilot",
-                subtitle: "Training guidance, fundamentals, and progress tracking",
-                primary: { label: "Open Student Hub", href: "/student", track: "start_student_primary" },
-                links: [
-                  { label: "6-Pack trainer", href: "/student/six-pack-trainer", track: "start_student_six_pack" },
-                  { label: "Training syllabi", href: "/student/syllabi", track: "start_student_syllabi" },
-                  { label: "Cost calculator", href: "/student/cost", track: "start_student_cost" },
-                  { label: "Student weather", href: "/student/weather", track: "start_student_weather" },
-                ],
-              },
-              {
-                id: "rent_aircraft",
-                title: "Rent an Aircraft",
-                subtitle: "Find rentals, flight schools, and verified access",
-                primary: { label: "Browse rentals", href: "/rentals", track: "start_rentals_primary" },
-                links: [
-                  { label: "Flight schools", href: "/rentals", track: "start_rentals_schools" },
-                  { label: "Verification & safety", href: "/faq", track: "start_rentals_verification" },
-                ],
-              },
-              {
-                id: "marketplace_jobs",
-                title: "Marketplace & Jobs",
-                subtitle: "Aircraft, jobs, services, and charter listings",
-                primary: { label: "Open marketplace", href: "/marketplace", track: "start_marketplace_primary" },
-                links: [
-                  { label: "Aircraft listings", href: "/marketplace", track: "start_marketplace_aircraft" },
-                  { label: "Aviation jobs", href: "/marketplace", track: "start_marketplace_jobs" },
-                  { label: "Services & charter", href: "/marketplace", track: "start_marketplace_services" },
-                ],
-              },
-            ].map((card) => (
-              <Card key={card.title} className="border-muted-foreground/20">
-                <CardContent className="p-5 space-y-4">
+          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <Card className="border-border/50">
+              <CardContent className="p-5 sm:p-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div className="space-y-2">
-                    <div className="text-lg font-semibold">{card.title}</div>
-                    <p className="text-sm text-muted-foreground">{card.subtitle}</p>
+                    <Badge variant="outline" className="text-xs">Quick Start Index</Badge>
+                    <h2 className="text-2xl sm:text-3xl font-semibold">Find What RSF Offers Fast</h2>
+                    <p className="text-sm sm:text-base text-muted-foreground max-w-3xl">
+                      Start with the feature area you need now. Open the full Tool Hub any time for the complete list.
+                    </p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {card.links.map((link) => (
-                      <Button key={link.label} size="sm" variant="outline" asChild>
-                        <Link
-                          href={link.href}
-                          onClick={() => trackEvent("cta_click", { label: link.track, target: link.href })}
-                        >
-                          {link.label}
-                        </Link>
-                      </Button>
-                    ))}
-                  </div>
-                  <Button size="sm" variant="secondary" className="w-fit" asChild>
+                  <Button asChild variant="outline">
                     <Link
-                      href={card.primary.href}
-                      onClick={() => {
-                        trackEvent("starting_point_card_click", { card_id: card.id });
-                        trackEvent("cta_click", { label: card.primary.track, target: card.primary.href });
-                      }}
+                      href="/tool-hub"
+                      onClick={() => trackEvent("cta_click", { label: "quick_index_view_all_tools", target: "/tool-hub" })}
                     >
-                      {card.primary.label}
+                      View all tools &amp; features
                     </Link>
                   </Button>
-                </CardContent>
-              </Card>
-            ))}
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <Card className="border-primary/20 bg-primary/5">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <Plane className="h-4 w-4 text-primary" />
+                        Flight Planner
+                      </div>
+                      <p className="text-xs text-muted-foreground">Route, fuel, timing, and alternates.</p>
+                      <Button asChild size="sm" className="w-full">
+                        <Link
+                          href="/flight-planner"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_flight_planner", target: "/flight-planner" })}
+                        >
+                          Open
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <AlertTriangle className="h-4 w-4" />
+                        TFR + NOTAM Map
+                      </div>
+                      <p className="text-xs text-muted-foreground">Current restrictions and airspace awareness.</p>
+                      <Button asChild size="sm" variant="outline" className="w-full">
+                        <Link
+                          href="/tfr-map"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_tfr_map", target: "/tfr-map" })}
+                        >
+                          Open
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <BookOpen className="h-4 w-4" />
+                        Student Tools
+                      </div>
+                      <p className="text-xs text-muted-foreground">Roadmaps, study aids, and progress tracking.</p>
+                      <Button asChild size="sm" variant="outline" className="w-full">
+                        <Link
+                          href="/student"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_student_tools", target: "/student" })}
+                        >
+                          Open
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <Calculator className="h-4 w-4" />
+                        IFR + Calculators
+                      </div>
+                      <p className="text-xs text-muted-foreground">IFR workflows, training sims, and pilot calculators.</p>
+                      <Button asChild size="sm" variant="outline" className="w-full">
+                        <Link
+                          href="/ifr-tools"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_ifr_tools", target: "/ifr-tools" })}
+                        >
+                          Open
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <ShoppingBag className="h-4 w-4" />
+                        Marketplace
+                      </div>
+                      <p className="text-xs text-muted-foreground">Find CFIs, flight schools, rentals, and services.</p>
+                      <Button asChild size="sm" variant="outline" className="w-full">
+                        <Link
+                          href="/marketplace"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_marketplace", target: "/marketplace" })}
+                        >
+                          Open
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/50">
+              <CardContent className="p-5 sm:p-6">
+                <div className="text-center space-y-3">
+                  <Badge variant="outline" className="mx-auto text-xs">RSF Memberships</Badge>
+                  <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
+                  <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto">
+                    See exactly what you get when you upgrade. Free tools stay open; Pro adds saves and alerts; Pro+ unlocks operational intelligence.
+                  </p>
+                </div>
+
+                <div className="mt-6 grid gap-4">
+                  <Card className="border-primary/10">
+                    <CardHeader>
+                      <CardTitle className="text-lg">RSF Free</CardTitle>
+                      <CardDescription>Open tools, no credit card required.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="text-3xl font-bold">$0<span className="text-sm text-muted-foreground">/mo</span></div>
+                      <ul className="space-y-2 text-sm text-muted-foreground">
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
+                          Run all calculators and planning tools.
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
+                          View live NOTAMs, TFRs, and weather.
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
+                          Create aviation events with a free RSF account (anti-spam).
+                        </li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-primary/30 shadow-sm">
+                    <CardHeader>
+                      <Badge className="w-fit">Most Popular</Badge>
+                      <CardTitle className="text-lg">{membershipTierInfo.pro.title}</CardTitle>
+                      <CardDescription>{membershipTierInfo.pro.subtitle}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="text-3xl font-bold">
+                        ${proMonthly?.toFixed(2) ?? "14.99"}
+                        <span className="text-sm text-muted-foreground">/mo</span>
+                      </div>
+                      <ul className="space-y-2 text-sm text-muted-foreground">
+                        {membershipTierInfo.pro.features.map((feature) => (
+                          <li key={feature} className="flex items-start gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
+                      <Button asChild className="w-full">
+                        <Link href="/logbook/pro">Upgrade to Pro</Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-primary/20">
+                    <CardHeader>
+                      <Badge variant="secondary" className="w-fit">Power Pilot</Badge>
+                      <CardTitle className="text-lg">{membershipTierInfo.pro_plus.title}</CardTitle>
+                      <CardDescription>{membershipTierInfo.pro_plus.subtitle}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="text-3xl font-bold">
+                        ${proPlusMonthly?.toFixed(2) ?? "24.99"}
+                        <span className="text-sm text-muted-foreground">/mo</span>
+                      </div>
+                      <ul className="space-y-2 text-sm text-muted-foreground">
+                        {membershipTierInfo.pro_plus.features.map((feature) => (
+                          <li key={feature} className="flex items-start gap-2">
+                            <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
+                            {feature}
+                          </li>
+                        ))}
+                      </ul>
+                      <Button asChild variant="outline" className="w-full">
+                        <Link href="/logbook/pro">Upgrade to Pro+</Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
@@ -844,7 +675,7 @@ export default function Landing() {
                                   <div className="font-semibold">{suggestion.icao}</div>
                                   <div className="text-xs text-muted-foreground">
                                     {suggestion.name}
-                                    {suggestion.city ? ` • ${suggestion.city}` : ""}
+                                    {suggestion.city ? ` â€¢ ${suggestion.city}` : ""}
                                     {suggestion.state ? `, ${suggestion.state}` : ""}
                                   </div>
                                 </button>
@@ -1049,32 +880,175 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* Safety-first intent */}
-      <div className="py-10 sm:py-12 bg-muted/30">
+      {/* Choose your starting point */}
+      <div className="py-10 sm:py-12">
         <div className="container mx-auto px-4">
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start">
-            <div className="space-y-3">
-              <div className="text-sm text-muted-foreground">Safety-first decision support</div>
-              <h2 className="text-2xl sm:text-3xl font-semibold">Risk is surfaced early, not after the fact</h2>
-              <p className="text-sm sm:text-base text-muted-foreground">
-                RSF is a safety-first decision-support tool. Planning drives what you see, and each alert feels like a
-                quiet copilot -- not a loud warning.
-              </p>
-            </div>
-            <div className="space-y-3 text-sm text-muted-foreground">
-              <div className="flex items-start gap-2">
-                <Shield className="mt-1 h-4 w-4 text-primary" />
-                <span>Weather, altitude, and route risks are summarized in one overview.</span>
+          <div className="text-center space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-semibold">Choose your starting point</h2>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              RSF supports pilots at every stage -- pick a starting point.
+            </p>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">Popular tools:</span>
+            {[
+              { label: "e6b advanced", href: "/tools/e6b", slug: "e6b-advanced" },
+              { label: "VOR/Knob Trainer", href: "/student/vor-trainer", slug: "vor-knob" },
+              { label: "Six-Pack Panel", href: "/student/six-pack-trainer", slug: "six-pack" },
+              { label: "IFR Tools", href: "/ifr-tools", slug: "ifr-tools" },
+              { label: "TFR Map", href: "/tfr-map", slug: "tfr-map" },
+              { label: "NOTAM Briefing", href: "/pilot-tools#airport-briefing", slug: "notam-briefing" },
+            ].map((tool) => (
+              <Button key={tool.slug} size="sm" variant="outline" asChild>
+                <Link
+                  href={tool.href}
+                  onClick={() => trackEvent("starting_point_tool_click", { tool_slug: tool.slug })}
+                >
+                  {tool.label}
+                </Link>
+              </Button>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">CFI instructor?</span>
+            <Button size="sm" variant="secondary" asChild>
+              <Link
+                href="/cfi"
+                onClick={() => trackEvent("starting_point_tool_click", { tool_slug: "cfi-directory" })}
+              >
+                Create your profile
+              </Link>
+            </Button>
+          </div>
+          <Card className="mt-6 border-primary/20 bg-primary/5">
+            <CardContent className="p-5 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-base sm:text-lg font-semibold">
+                  <BookOpen className="h-5 w-5 text-primary" />
+                  CFI Instructors: Create your RSF profile
+                </div>
+                <p className="text-sm text-muted-foreground max-w-2xl">
+                  Get discovered by student pilots, highlight your ratings, and accept booking requests through the CFI marketplace.
+                </p>
               </div>
-              <div className="flex items-start gap-2">
-                <Shield className="mt-1 h-4 w-4 text-primary" />
-                <span>Training tools appear only when they support the plan you're building.</span>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="outline"
+                  asChild
+                >
+                  <Link
+                    href="/cfi"
+                    onClick={() => trackEvent("cta_click", { label: "landing_cfi_directory", target: "/cfi" })}
+                  >
+                    View CFI directory
+                  </Link>
+                </Button>
+                <Button asChild>
+                  <Link
+                    href="/dashboard/cfi"
+                    onClick={() => trackEvent("cta_click", { label: "landing_cfi_create_profile", target: "/dashboard/cfi" })}
+                  >
+                    Create your profile
+                  </Link>
+                </Button>
               </div>
-              <div className="flex items-start gap-2">
-                <Shield className="mt-1 h-4 w-4 text-primary" />
-                <span>Logging happens after the plan -- so reflection stays tied to real decisions.</span>
-              </div>
-            </div>
+            </CardContent>
+          </Card>
+          <FeaturedPartnerToolCard
+            className="mt-6 mx-auto w-full md:w-2/3"
+            partnerKey="av8maps"
+            title="Av8Maps — Nationwide GA Destination Maps"
+            description="Choose your next flight destination with fly-in camping, restaurants, aviation-friendly stays, and more."
+            logoSrc={av8mapsLogo}
+            ctaLabel="Explore Av8Maps"
+            outboundPath="/out/av8maps"
+            placement="home_featured_partner_card"
+            source="home_featured_partner_card"
+            badgeLabel="Featured Partner Tool"
+            embedEnabled={AV8MAPS_EMBED_ENABLED}
+            embedUrl={AV8MAPS_EMBED_URL || undefined}
+            tiles={av8mapsTiles}
+          />
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                id: "experienced_pilot",
+                title: "Experienced Pilot",
+                subtitle: "Planning, performance, currency, and proficiency tools",
+                primary: { label: "Open pilot tools", href: "/pilot-tools", track: "start_experienced_primary" },
+                links: [
+                  { label: "Pilot calculators", href: "/pilot-tools", track: "start_experienced_calculators" },
+                  { label: "Digital logbook", href: "/logbook", track: "start_experienced_logbook" },
+                  { label: "Currency tracking", href: "/logbook", track: "start_experienced_currency" },
+                  { label: "IFR tools", href: "/ifr-tools", track: "start_experienced_ifr" },
+                ],
+              },
+              {
+                id: "student_pilot",
+                title: "Student Pilot",
+                subtitle: "Training guidance, fundamentals, and progress tracking",
+                primary: { label: "Open Student Hub", href: "/student", track: "start_student_primary" },
+                links: [
+                  { label: "6-Pack trainer", href: "/student/six-pack-trainer", track: "start_student_six_pack" },
+                  { label: "Training syllabi", href: "/student/syllabi", track: "start_student_syllabi" },
+                  { label: "Cost calculator", href: "/student/cost", track: "start_student_cost" },
+                  { label: "Student weather", href: "/student/weather", track: "start_student_weather" },
+                ],
+              },
+              {
+                id: "rent_aircraft",
+                title: "Rent an Aircraft",
+                subtitle: "Find rentals, flight schools, and verified access",
+                primary: { label: "Browse rentals", href: "/rentals", track: "start_rentals_primary" },
+                links: [
+                  { label: "Flight schools", href: "/rentals", track: "start_rentals_schools" },
+                  { label: "Verification & safety", href: "/faq", track: "start_rentals_verification" },
+                ],
+              },
+              {
+                id: "marketplace_jobs",
+                title: "Marketplace & Jobs",
+                subtitle: "Aircraft, jobs, services, and charter listings",
+                primary: { label: "Open marketplace", href: "/marketplace", track: "start_marketplace_primary" },
+                links: [
+                  { label: "Aircraft listings", href: "/marketplace", track: "start_marketplace_aircraft" },
+                  { label: "Aviation jobs", href: "/marketplace", track: "start_marketplace_jobs" },
+                  { label: "Services & charter", href: "/marketplace", track: "start_marketplace_services" },
+                ],
+              },
+            ].map((card) => (
+              <Card key={card.title} className="border-muted-foreground/20">
+                <CardContent className="p-5 space-y-4">
+                  <div className="space-y-2">
+                    <div className="text-lg font-semibold">{card.title}</div>
+                    <p className="text-sm text-muted-foreground">{card.subtitle}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {card.links.map((link) => (
+                      <Button key={link.label} size="sm" variant="outline" asChild>
+                        <Link
+                          href={link.href}
+                          onClick={() => trackEvent("cta_click", { label: link.track, target: link.href })}
+                        >
+                          {link.label}
+                        </Link>
+                      </Button>
+                    ))}
+                  </div>
+                  <Button size="sm" variant="secondary" className="w-fit" asChild>
+                    <Link
+                      href={card.primary.href}
+                      onClick={() => {
+                        trackEvent("starting_point_card_click", { card_id: card.id });
+                        trackEvent("cta_click", { label: card.primary.track, target: card.primary.href });
+                      }}
+                    >
+                      {card.primary.label}
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
       </div>
@@ -1170,144 +1144,6 @@ export default function Landing() {
               </CardContent>
             </Card>
           )}
-        </div>
-      </div>
-
-      {/* Student Pilot Hub Section */}
-      <div className="bg-primary/5 py-12 sm:py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-5xl mx-auto">
-            <Card className="border-primary/20">
-              <CardContent className="p-6 sm:p-8 lg:p-10">
-                <div className="grid gap-6 md:grid-cols-[1.1fr_0.9fr] items-center">
-                  <div className="space-y-4">
-                    <Badge variant="outline" className="text-xs w-fit">Student Pilot Hub</Badge>
-                    <h2 className="text-2xl sm:text-3xl font-bold">
-                      New to flying? Start here.
-                    </h2>
-                    <p className="text-muted-foreground">
-                      Use our Student Pilot tools to map out your journey, estimate training costs, and
-                      connect with trusted flight schools near you.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <Button asChild>
-                        <Link
-                          href="/student"
-                          onClick={() => trackEvent("cta_click", { label: "student_hub", target: "/student" })}
-                        >
-                          Open Student Pilot Hub
-                        </Link>
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="grid gap-3">
-                    <div className="rounded-xl border bg-background/70 p-4">
-                      <div className="font-semibold">Can I Become a Pilot?</div>
-                      <div className="text-sm text-muted-foreground">
-                        Quick wizard with timeline, cost range, and next steps.
-                      </div>
-                    </div>
-                    <div className="rounded-xl border bg-background/70 p-4">
-                      <div className="font-semibold">Training Roadmap</div>
-                      <div className="text-sm text-muted-foreground">
-                        Step-by-step milestones with local recommendations.
-                      </div>
-                    </div>
-                    <div className="rounded-xl border bg-background/70 p-4">
-                      <div className="font-semibold">Cost & Progress Trackers</div>
-                      <div className="text-sm text-muted-foreground">
-                        Estimate costs and track your progress in one place.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-
-      {/* Features Section */}
-      <div id="features" className="container mx-auto px-4 py-12 sm:py-16">
-        <h2 className="text-2xl sm:text-3xl font-bold text-center mb-3">
-          Plan. Brief. Train. Reflect.
-        </h2>
-        <p className="text-center text-muted-foreground max-w-2xl mx-auto mb-8 sm:mb-12">
-          Ready Set Fly keeps the focus on planning-first safety. Tools appear when your flight needs them.
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-          <Card data-testid="card-feature-planning">
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Plane className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold">Flight Planning</h3>
-                <p className="text-muted-foreground">
-                  Build a route, choose altitude, and get route analysis tailored to your flight.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card data-testid="card-feature-overview">
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Shield className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold">Route Analysis</h3>
-                <p className="text-muted-foreground">
-                  Surface weather, crosswinds, and route risks early without alarmist noise.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card data-testid="card-feature-training">
-            <CardContent className="pt-6">
-              <div className="flex flex-col items-center text-center space-y-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <BookOpen className="h-6 w-6 text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold">Training + Logbook</h3>
-                <p className="text-muted-foreground">
-                  Reinforce skills during planning and log your flight once it's complete.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* CTA Section */}
-      <div className="bg-muted/50 py-12 sm:py-16">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold mb-4">
-            Ready to get started?
-          </h2>
-          <p className="text-base sm:text-xl text-muted-foreground mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
-            Jump into planning tools, training, and the logbook in minutes.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button asChild size="lg" data-testid="button-cta-plan-flight">
-              <Link
-                href="/pilot-tools"
-                onClick={() => trackEvent("cta_click", { label: "pilot_tools_cta", target: "/pilot-tools" })}
-              >
-                Explore Pilot Tools
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" data-testid="button-cta-student-hub">
-              <Link
-                href="/student"
-                onClick={() => trackEvent("cta_click", { label: "student_hub_cta", target: "/student" })}
-              >
-                Training Tools
-              </Link>
-            </Button>
-          </div>
         </div>
       </div>
 

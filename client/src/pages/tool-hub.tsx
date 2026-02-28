@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   AlertTriangle,
   BookOpen,
+  Briefcase,
   Calculator,
   Cloud,
   CloudSun,
@@ -15,8 +16,10 @@ import {
   Radio,
   Route,
   Signal,
+  Users,
 } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
+import { useAuth } from "@/hooks/useAuth";
 
 const calculatorLinks = [
   { label: "e6b advanced", href: "/tools/e6b" },
@@ -172,9 +175,58 @@ const toolSections = [
       },
     ],
   },
+  {
+    title: "Directories and Feature Entry Points",
+    description: "The non-tool destinations users still need for discovering instructors, rentals, services, and events.",
+    cards: [
+      {
+        title: "CFI Directory",
+        description: "Browse instructors, compare profiles, and connect with CFIs.",
+        href: "/cfi",
+        cta: "Open CFI directory",
+        icon: Users,
+      },
+      {
+        title: "CFI Instructor Profile",
+        description: "Create or manage your instructor presence inside the RSF CFI marketplace.",
+        href: "/dashboard/cfi",
+        cta: "Open CFI profile",
+        icon: Users,
+      },
+      {
+        title: "Rentals",
+        description: "Browse rentals, aircraft access, and school-related listings.",
+        href: "/rentals",
+        cta: "Browse rentals",
+        icon: Plane,
+      },
+      {
+        title: "Marketplace",
+        description: "Explore schools, services, jobs, charter, and aviation business listings.",
+        href: "/marketplace",
+        cta: "Open marketplace",
+        icon: Briefcase,
+      },
+      {
+        title: "Aviation Events",
+        description: "Find fly-ins, seminars, community events, and safety gatherings.",
+        href: "/events",
+        cta: "View events",
+        icon: BookOpen,
+      },
+      {
+        title: "FAQ and Verification",
+        description: "Read platform guidance, verification details, and operational help.",
+        href: "/faq",
+        cta: "Open FAQ",
+        icon: FileText,
+      },
+    ],
+  },
 ];
 
 export default function ToolHub() {
+  const { isAuthenticated } = useAuth();
   useEffect(() => {
     trackEvent("tool_hub_view");
   }, []);
@@ -218,6 +270,12 @@ export default function ToolHub() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {section.cards.map((card) => {
                 const Icon = card.icon;
+                const href =
+                  card.title === "CFI Instructor Profile" && !isAuthenticated ? "/register" : card.href;
+                const cta =
+                  card.title === "CFI Instructor Profile" && !isAuthenticated
+                    ? "Create free account"
+                    : card.cta;
                 return (
                   <Card
                     key={card.title}
@@ -249,9 +307,9 @@ export default function ToolHub() {
                         asChild
                         className="w-full"
                         variant={card.accent ? "default" : "outline"}
-                        onClick={() => trackEvent("tool_hub_click", { target: card.href })}
+                        onClick={() => trackEvent("tool_hub_click", { target: href })}
                       >
-                        <Link href={card.href}>{card.cta}</Link>
+                        <Link href={href}>{cta}</Link>
                       </Button>
                     </CardContent>
                   </Card>

@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useMemo, useRef, useState } from "react";
 import av8mapsLogo from "@assets/Av8Maps.JPG";
 import rsfPromoVideo from "@assets/rsf-video-2026-02-28.mp4";
@@ -93,6 +94,7 @@ function extractRunwayInUse(metar: any): string | null {
 }
 
 export default function Landing() {
+  const { isAuthenticated } = useAuth();
   const { data: eventsData } = useQuery({
     queryKey: ["aviation-events", "feed"],
     queryFn: async () => {
@@ -925,62 +927,36 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* Choose your starting point */}
+      {/* CFI marketplace and featured partner */}
       <div className="py-10 sm:py-12">
         <div className="container mx-auto px-4">
-          <div className="text-center space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-semibold">Choose your starting point</h2>
-            <p className="text-sm sm:text-base text-muted-foreground">
-              RSF supports pilots at every stage -- pick a starting point.
-            </p>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
-            <span className="font-semibold text-foreground">Popular tools:</span>
-            {[
-              { label: "e6b advanced", href: "/tools/e6b", slug: "e6b-advanced" },
-              { label: "VOR/Knob Trainer", href: "/student/vor-trainer", slug: "vor-knob" },
-              { label: "Six-Pack Panel", href: "/student/six-pack-trainer", slug: "six-pack" },
-              { label: "IFR Tools", href: "/ifr-tools", slug: "ifr-tools" },
-              { label: "TFR Map", href: "/tfr-map", slug: "tfr-map" },
-              { label: "NOTAM Briefing", href: "/pilot-tools#airport-briefing", slug: "notam-briefing" },
-            ].map((tool) => (
-              <Button key={tool.slug} size="sm" variant="outline" asChild>
-                <Link
-                  href={tool.href}
-                  onClick={() => trackEvent("starting_point_tool_click", { tool_slug: tool.slug })}
-                >
-                  {tool.label}
-                </Link>
-              </Button>
-            ))}
-          </div>
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
-            <span className="font-semibold text-foreground">CFI instructor?</span>
-            <Button size="sm" variant="secondary" asChild>
-              <Link
-                href="/cfi"
-                onClick={() => trackEvent("starting_point_tool_click", { tool_slug: "cfi-directory" })}
-              >
-                Create your profile
-              </Link>
-            </Button>
-          </div>
           <Card className="mt-6 border-primary/20 bg-primary/5">
-            <CardContent className="p-5 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-base sm:text-lg font-semibold">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                  CFI Instructors: Create your RSF profile
+            <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-4 max-w-3xl">
+                <div className="space-y-2">
+                  <Badge variant="outline" className="text-xs">CFI Marketplace</Badge>
+                  <div className="flex items-center gap-2 text-base sm:text-lg font-semibold">
+                    <BookOpen className="h-5 w-5 text-primary" />
+                    CFI Instructors: Create your RSF profile
+                  </div>
+                  <p className="text-sm text-muted-foreground max-w-2xl">
+                    Get discovered by student pilots, highlight your ratings, set your training focus, and accept booking requests through the CFI marketplace.
+                  </p>
                 </div>
-                <p className="text-sm text-muted-foreground max-w-2xl">
-                  Get discovered by student pilots, highlight your ratings, and accept booking requests through the CFI marketplace.
-                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {[
+                    "Create a free RSF account or sign in",
+                    "Build your instructor profile with ratings and specialties",
+                    "Appear in the directory and receive student inquiries",
+                  ].map((item) => (
+                    <div key={item} className="rounded-lg border border-primary/15 bg-background/70 p-3 text-sm text-muted-foreground">
+                      {item}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  variant="outline"
-                  asChild
-                >
+              <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-[260px]">
+                <Button variant="outline" asChild>
                   <Link
                     href="/cfi"
                     onClick={() => trackEvent("cta_click", { label: "landing_cfi_directory", target: "/cfi" })}
@@ -990,19 +966,34 @@ export default function Landing() {
                 </Button>
                 <Button asChild>
                   <Link
-                    href="/dashboard/cfi"
-                    onClick={() => trackEvent("cta_click", { label: "landing_cfi_create_profile", target: "/dashboard/cfi" })}
+                    href={isAuthenticated ? "/dashboard/cfi" : "/register"}
+                    onClick={() =>
+                      trackEvent("cta_click", {
+                        label: isAuthenticated ? "landing_cfi_create_profile" : "landing_cfi_register",
+                        target: isAuthenticated ? "/dashboard/cfi" : "/register",
+                      })
+                    }
                   >
-                    Create your profile
+                    {isAuthenticated ? "Create your profile" : "Create free account"}
                   </Link>
                 </Button>
+                {!isAuthenticated ? (
+                  <Button variant="ghost" asChild>
+                    <Link
+                      href="/login"
+                      onClick={() => trackEvent("cta_click", { label: "landing_cfi_sign_in", target: "/login" })}
+                    >
+                      Already have an account? Sign in
+                    </Link>
+                  </Button>
+                ) : null}
               </div>
             </CardContent>
           </Card>
           <FeaturedPartnerToolCard
             className="mt-6 mx-auto w-full md:w-2/3"
             partnerKey="av8maps"
-            title="Av8Maps — Nationwide GA Destination Maps"
+            title="Av8Maps - Nationwide GA Destination Maps"
             description="Choose your next flight destination with fly-in camping, restaurants, aviation-friendly stays, and more."
             logoSrc={av8mapsLogo}
             ctaLabel="Explore Av8Maps"
@@ -1014,87 +1005,6 @@ export default function Landing() {
             embedUrl={AV8MAPS_EMBED_URL || undefined}
             tiles={av8mapsTiles}
           />
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {[
-              {
-                id: "experienced_pilot",
-                title: "Experienced Pilot",
-                subtitle: "Planning, performance, currency, and proficiency tools",
-                primary: { label: "Open pilot tools", href: "/pilot-tools", track: "start_experienced_primary" },
-                links: [
-                  { label: "Pilot calculators", href: "/pilot-tools", track: "start_experienced_calculators" },
-                  { label: "Digital logbook", href: "/logbook", track: "start_experienced_logbook" },
-                  { label: "Currency tracking", href: "/logbook", track: "start_experienced_currency" },
-                  { label: "IFR tools", href: "/ifr-tools", track: "start_experienced_ifr" },
-                ],
-              },
-              {
-                id: "student_pilot",
-                title: "Student Pilot",
-                subtitle: "Training guidance, fundamentals, and progress tracking",
-                primary: { label: "Open Student Hub", href: "/student", track: "start_student_primary" },
-                links: [
-                  { label: "6-Pack trainer", href: "/student/six-pack-trainer", track: "start_student_six_pack" },
-                  { label: "Training syllabi", href: "/student/syllabi", track: "start_student_syllabi" },
-                  { label: "Cost calculator", href: "/student/cost", track: "start_student_cost" },
-                  { label: "Student weather", href: "/student/weather", track: "start_student_weather" },
-                ],
-              },
-              {
-                id: "rent_aircraft",
-                title: "Rent an Aircraft",
-                subtitle: "Find rentals, flight schools, and verified access",
-                primary: { label: "Browse rentals", href: "/rentals", track: "start_rentals_primary" },
-                links: [
-                  { label: "Flight schools", href: "/rentals", track: "start_rentals_schools" },
-                  { label: "Verification & safety", href: "/faq", track: "start_rentals_verification" },
-                ],
-              },
-              {
-                id: "marketplace_jobs",
-                title: "Marketplace & Jobs",
-                subtitle: "Aircraft, jobs, services, and charter listings",
-                primary: { label: "Open marketplace", href: "/marketplace", track: "start_marketplace_primary" },
-                links: [
-                  { label: "Aircraft listings", href: "/marketplace", track: "start_marketplace_aircraft" },
-                  { label: "Aviation jobs", href: "/marketplace", track: "start_marketplace_jobs" },
-                  { label: "Services & charter", href: "/marketplace", track: "start_marketplace_services" },
-                ],
-              },
-            ].map((card) => (
-              <Card key={card.title} className="border-muted-foreground/20">
-                <CardContent className="p-5 space-y-4">
-                  <div className="space-y-2">
-                    <div className="text-lg font-semibold">{card.title}</div>
-                    <p className="text-sm text-muted-foreground">{card.subtitle}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {card.links.map((link) => (
-                      <Button key={link.label} size="sm" variant="outline" asChild>
-                        <Link
-                          href={link.href}
-                          onClick={() => trackEvent("cta_click", { label: link.track, target: link.href })}
-                        >
-                          {link.label}
-                        </Link>
-                      </Button>
-                    ))}
-                  </div>
-                  <Button size="sm" variant="secondary" className="w-fit" asChild>
-                    <Link
-                      href={card.primary.href}
-                      onClick={() => {
-                        trackEvent("starting_point_card_click", { card_id: card.id });
-                        trackEvent("cta_click", { label: card.primary.track, target: card.primary.href });
-                      }}
-                    >
-                      {card.primary.label}
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         </div>
       </div>
 

@@ -532,6 +532,24 @@ export default function Landing() {
                       </Button>
                     </CardContent>
                   </Card>
+
+                  <Card>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <CalendarDays className="h-4 w-4" />
+                        Airport Conditions
+                      </div>
+                      <p className="text-xs text-muted-foreground">Weather, runway advisory, and NOTAM briefing.</p>
+                      <Button asChild size="sm" variant="outline" className="w-full">
+                        <a
+                          href="#airport-weather"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_airport_conditions", target: "#airport-weather" })}
+                        >
+                          Open below
+                        </a>
+                      </Button>
+                    </CardContent>
+                  </Card>
                 </div>
               </CardContent>
             </Card>

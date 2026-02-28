@@ -74,6 +74,7 @@ const toolSections = [
         icon: Cloud,
         badge: "New",
       },
+      {
         title: "Pilot Calculators",
         description: "All calculators in one place.",
         href: "/pilot-tools#calculators",

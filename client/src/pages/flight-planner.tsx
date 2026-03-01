@@ -1814,7 +1814,7 @@ export default function FlightPlanner() {
             </p>
             {!isPro && (
               <p className="text-xs text-muted-foreground mt-2">
-                RSF Pro adds saved plans, alerts, analytics, and full training scenarios.
+                Free accounts can save your first plan. RSF Pro adds unlimited saved plans, aircraft profiles, alerts, and analytics.
               </p>
             )}
           </div>
@@ -2892,14 +2892,24 @@ export default function FlightPlanner() {
           {isGuest && (
             <Alert>
               <AlertDescription>
-                Create a free RSF account to save your first flight plan and keep it synced.
+                Create a free RSF account to save your first flight plan, return to it later, and build toward logbook and currency workflows.
               </AlertDescription>
             </Alert>
+          )}
+          {isGuest && (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button asChild variant="outline">
+                <Link href="/register">Create Free Account</Link>
+              </Button>
+              <Button asChild variant="ghost">
+                <Link href="/login">Sign In</Link>
+              </Button>
+            </div>
           )}
           {planLimitReached && (
             <Alert>
               <AlertDescription>
-                Free accounts can save one active plan. Upgrade to RSF Pro to save more.
+                Free accounts can save one active plan. Upgrade to RSF Pro for unlimited saved plans, aircraft profiles, and planning history.
               </AlertDescription>
             </Alert>
           )}

@@ -5,9 +5,25 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiUrl } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
+import { trackEvent } from "@/lib/analytics";
 import { cancelAuthGate, completeAuthGate, subscribeAuthGate } from "@/utils/authGate";
 
 const POPUP_NAME = "rsf_auth_popup";
+
+const authGateMessages: Record<string, { title: string; description: string }> = {
+  save_flight_plan: {
+    title: "Create a free account to save this plan",
+    description: "Save your route, fuel notes, and departure timing so you can return to it from any device.",
+  },
+  save_aircraft_profile: {
+    title: "Create a free account to save this aircraft profile",
+    description: "Keep your aircraft details attached to future planning sessions without re-entering them.",
+  },
+  sync_logbook_entry: {
+    title: "Sign in to continue to Pro sync",
+    description: "RSF Pro connects planner workflow to your digital logbook, currency, and training history.",
+  },
+};
 
 export function AuthGateModal() {
   const { isAuthenticated } = useAuth();
@@ -29,6 +45,9 @@ export function AuthGateModal() {
       setActionName(request?.actionName ?? null);
       setOpen(Boolean(request));
       setWaiting(false);
+      if (request?.actionName) {
+        trackEvent("auth_gate_viewed", { action: request.actionName });
+      }
     });
   }, []);
 
@@ -73,13 +92,15 @@ export function AuthGateModal() {
     });
   };
 
+  const message = actionName ? authGateMessages[actionName] : undefined;
+
   return (
     <AlertDialog open={open} onOpenChange={(next) => !next && handleCancel()}>
       <AlertDialogContent data-testid="dialog-auth-gate">
         <AlertDialogHeader>
-          <AlertDialogTitle>Sign in to save this</AlertDialogTitle>
+          <AlertDialogTitle>{message?.title ?? "Sign in to save this"}</AlertDialogTitle>
           <AlertDialogDescription>
-            Create a free RSF account to save, sync across devices, and access your tools anywhere.
+            {message?.description ?? "Create a free RSF account to save, sync across devices, and access your tools anywhere."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

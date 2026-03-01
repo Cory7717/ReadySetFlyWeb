@@ -68,7 +68,7 @@ export function SignupNudgeBanner() {
           <div>
             <div className="text-sm font-semibold text-foreground">Make RSF Yours</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Create a free account to save tools, sync across devices, and unlock higher usage limits.
+              Create a free account to save flight plans, track logbook history, keep training progress, and sync across devices.
             </p>
           </div>
           <button

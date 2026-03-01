@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, type MembershipTier } from "@shared/membership-plans";
+import { trackEvent } from "@/lib/analytics";
 
 export default function LogbookProPage() {
   const { user, isAuthenticated } = useAuth();
@@ -14,6 +15,10 @@ export default function LogbookProPage() {
   const [selectedTier, setSelectedTier] = useState<MembershipTier>("pro");
   const [selectedInterval, setSelectedInterval] = useState<MembershipInterval>("annual");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    trackEvent("upgrade_page_viewed", { page: "/logbook/pro" });
+  }, []);
 
   if (!isAuthenticated) {
     return (
@@ -56,6 +61,12 @@ export default function LogbookProPage() {
   const handleSubscribe = async () => {
     setLoading(true);
     try {
+      trackEvent("subscription_checkout_started", {
+        page: "/logbook/pro",
+        tier: selectedTier,
+        interval: selectedPlan.interval,
+        totalToday: selectedPlanTotal,
+      });
       const res = await apiRequest("POST", "/api/paypal/membership/subscribe", {
         tier: selectedTier,
         interval: selectedPlan.interval,
@@ -76,6 +87,7 @@ export default function LogbookProPage() {
     if (!confirm("Cancel RSF Pro? You can continue using the free tools.")) return;
     setLoading(true);
     try {
+      trackEvent("subscription_cancel_requested", { page: "/logbook/pro" });
       const res = await apiRequest("POST", "/api/paypal/membership/cancel", { reason: "User cancellation" });
       const data = await res.json();
       if (!res.ok) {
@@ -96,10 +108,30 @@ export default function LogbookProPage() {
         <CardHeader>
           <CardTitle>RSF Pro Membership</CardTitle>
           <CardDescription>
-            Save, alerts, analytics, and pro training tools - all in one membership. Become a member today and upgrade to RSF Pro and Pro+.
+            Upgrade when you want more than free access: save planning workflow, automate currency tracking, and keep instructor-ready records together.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="text-sm font-semibold">Save workflow</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Keep flight plans, aircraft profiles, and training history tied together.
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="text-sm font-semibold">Stay current</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Track landings, IFR recency, medical, flight review, and IPC dates without manual spreadsheets.
+              </p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="text-sm font-semibold">Train smarter</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Unlock saved trainer history, guided workflows, and instructor-friendly records.
+              </p>
+            </div>
+          </div>
           <div className="rounded-lg border bg-muted/30 p-4">
             <div className="text-sm font-semibold mb-2">
               Included with {membershipTierInfo[selectedTier].title}

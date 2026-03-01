@@ -1094,7 +1094,7 @@ export default function Logbook() {
             Upgrade to RSF Pro
           </CardTitle>
           <CardDescription>
-            Save, alerts, and analytics require RSF Pro.
+            Keep the free digital logbook forever. Upgrade when you want currency automation, endorsements, and deeper workflow intelligence.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1148,7 +1148,7 @@ export default function Logbook() {
               <Badge variant="default">RSF Pro Active</Badge>
             )}
             <p className="text-xs text-muted-foreground text-center">
-              Tip: <strong>Your logbook data will always be free and exportable.</strong> Pro adds intelligence and automation.
+              Tip: <strong>Your logbook data stays free and exportable.</strong> Pro adds saved workflow value through currency tracking, reminders, and instructor-ready records.
             </p>
             <Button variant="default" asChild>
               <Link href="/logbook/pro">{isPro ? "Manage Membership" : "Upgrade to RSF Pro"}</Link>

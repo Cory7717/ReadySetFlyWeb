@@ -1,8 +1,14 @@
 import { Link } from "wouter";
+import { useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { trackEvent } from "@/lib/analytics";
 
 export default function LogbookProCancel() {
+  useEffect(() => {
+    trackEvent("subscription_checkout_cancelled", { page: "/logbook/pro/cancel" });
+  }, []);
+
   return (
     <div className="container mx-auto py-10 px-4">
       <Card>

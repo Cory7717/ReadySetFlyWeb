@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
+import { trackEvent } from "@/lib/analytics";
 
 export default function LogbookProSuccess() {
   const [status, setStatus] = useState<string>("Processing...");
@@ -12,6 +13,7 @@ export default function LogbookProSuccess() {
     const params = new URLSearchParams(window.location.search);
     const subscriptionId = params.get("subscription_id") || params.get("subscriptionId");
     if (!subscriptionId) {
+      trackEvent("subscription_confirm_failed", { reason: "missing_subscription_id" });
       setError("Missing subscription ID from PayPal Business/Commerce.");
       setStatus("Failed");
       return;
@@ -19,6 +21,7 @@ export default function LogbookProSuccess() {
     apiRequest("GET", `/api/paypal/membership/confirm?subscriptionId=${subscriptionId}`)
       .then((res) => res.json())
       .then((data) => {
+        trackEvent("subscription_confirmed", { status: data?.status || "confirmed" });
         if (data?.status) {
           setStatus(`Subscription status: ${data.status}`);
         } else {
@@ -26,6 +29,7 @@ export default function LogbookProSuccess() {
         }
       })
       .catch((err) => {
+        trackEvent("subscription_confirm_failed", { reason: err.message || "unknown" });
         setError(err.message || "Failed to confirm subscription");
         setStatus("Failed");
       });

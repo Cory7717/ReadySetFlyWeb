@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { trackEvent } from "@/lib/analytics";
 import { NextStepCTA } from "@/components/student/NextStepCTA";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
+import { useAuth } from "@/hooks/useAuth";
 
 const tools = [
   { title: "Can I Become a Pilot?", description: "Quick wizard to map your path.", href: "/student/wizard" },
@@ -26,6 +27,7 @@ const tools = [
 ];
 
 export default function StudentHub() {
+  const { isAuthenticated } = useAuth();
   useEffect(() => {
     trackEvent("student_page_view", { page: "hub" });
   }, []);
@@ -61,6 +63,26 @@ export default function StudentHub() {
       />
 
       <section className="container mx-auto px-4 py-10">
+        {!isAuthenticated ? (
+          <Card className="mb-6 border-primary/20 bg-primary/5">
+            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="text-sm font-semibold">Create a free account to keep training momentum</div>
+                <p className="text-sm text-muted-foreground">
+                  Save student progress, return to your training tools later, and connect with schools or instructors when you are ready.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:w-auto">
+                <Button asChild onClick={() => trackEvent("student_cta_click", { label: "Create Free Account", target: "/register" })}>
+                  <Link href="/register">Create Free Account</Link>
+                </Button>
+                <Button variant="outline" asChild onClick={() => trackEvent("student_cta_click", { label: "Sign In", target: "/login" })}>
+                  <Link href="/login">Sign In</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tools.map((tool) => (
             <Card key={tool.href} className="hover-elevate">

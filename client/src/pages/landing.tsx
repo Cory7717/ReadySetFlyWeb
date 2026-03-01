@@ -626,7 +626,7 @@ export default function Landing() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="text-3xl font-bold">
-                        ${proMonthly?.toFixed(2) ?? "14.99"}
+                        ${proMonthly?.toFixed(2) ?? "7.99"}
                         <span className="text-sm text-muted-foreground">/mo</span>
                       </div>
                       <ul className="space-y-2 text-sm text-muted-foreground">
@@ -651,7 +651,7 @@ export default function Landing() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="text-3xl font-bold">
-                        ${proPlusMonthly?.toFixed(2) ?? "24.99"}
+                        ${proPlusMonthly?.toFixed(2) ?? "14.99"}
                         <span className="text-sm text-muted-foreground">/mo</span>
                       </div>
                       <ul className="space-y-2 text-sm text-muted-foreground">

@@ -422,21 +422,21 @@ export default function Landing() {
       </div>
       </div>
 
-      <div className="py-8 sm:py-10 bg-[linear-gradient(180deg,rgba(15,23,42,0.03),rgba(15,23,42,0))] border-y border-border/40">
+      <div className="rsf-section-band py-8 sm:py-10">
         <div className="container mx-auto px-4">
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <Card className="overflow-hidden border-slate-900/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.04),rgba(255,255,255,0.98))] shadow-sm">
+            <Card className="overflow-hidden bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.6))]">
               <CardContent className="p-5 sm:p-6">
-                <div className="mb-5 flex items-center justify-between rounded-xl border border-slate-900/10 bg-slate-900 px-4 py-3 text-slate-100">
+                <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-slate-900/20 bg-[linear-gradient(135deg,hsl(210_26%_12%),hsl(195_32%_22%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
                   <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-300">Operations Deck</div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-200">Operations Deck</div>
                     <div className="text-sm text-slate-200">Daily-use tools pilots should find first</div>
                   </div>
-                  <Badge variant="secondary" className="border-0 bg-amber-400/15 text-amber-200">Core workflow</Badge>
+                  <Badge variant="secondary" className="border-0 bg-white/10 text-amber-100 shadow-none">Core workflow</Badge>
                 </div>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div className="space-y-2">
-                    <Badge variant="outline" className="text-xs">Quick Start Index</Badge>
+                    <span className="rsf-kicker">Quick Start Index</span>
                     <h2 className="text-2xl sm:text-3xl font-semibold">Find What RSF Offers Fast</h2>
                     <p className="text-sm sm:text-base text-muted-foreground max-w-3xl">
                       Start with the operational area you need now. The full Tool Hub remains available for the broader inventory.
@@ -453,10 +453,10 @@ export default function Landing() {
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <Card className="border-primary/20 bg-primary/5 shadow-sm">
+                  <Card className="border-primary/25 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.08))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">Core workflow</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Core workflow</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                         <Plane className="h-5 w-5 text-primary" />
                         Flight Planner
@@ -474,10 +474,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-amber-500/20 bg-amber-50/40 shadow-sm dark:bg-amber-950/10">
+                  <Card className="border-amber-500/30 bg-[linear-gradient(180deg,hsl(var(--card)),rgba(198,122,27,0.08))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-700/80 dark:text-amber-300/70">Airspace</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-700/90 dark:text-amber-300/80">Airspace</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <AlertTriangle className="h-5 w-5" />
                         TFR + NOTAM Map
@@ -495,10 +495,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-sky-500/20 bg-sky-50/40 shadow-sm dark:bg-sky-950/10">
+                  <Card className="border-[hsl(var(--accent)/0.28)] bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--accent)/0.08))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-700/80 dark:text-sky-300/70">Training</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--accent))]">Training</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <BookOpen className="h-5 w-5" />
                         Student Tools
@@ -516,10 +516,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-violet-500/20 bg-violet-50/40 shadow-sm dark:bg-violet-950/10">
+                  <Card className="border-slate-800/15 bg-[linear-gradient(180deg,hsl(var(--card)),rgba(22,32,42,0.06))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-700/80 dark:text-violet-300/70">Instrument + Performance</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/90 dark:text-slate-300/80">Instrument + Performance</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <Calculator className="h-5 w-5" />
                         IFR + Calculators
@@ -537,10 +537,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-emerald-500/20 bg-emerald-50/40 shadow-sm dark:bg-emerald-950/10">
+                  <Card className="border-teal-700/20 bg-[linear-gradient(180deg,hsl(var(--card)),rgba(47,107,115,0.08))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-700/80 dark:text-emerald-300/70">Discovery</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-teal-800/90 dark:text-teal-200/80">Discovery</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <ShoppingBag className="h-5 w-5" />
                         Marketplace
@@ -558,10 +558,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-slate-900/15 bg-slate-50/60 shadow-sm dark:bg-slate-900/20">
+                  <Card className="border-orange-900/15 bg-[linear-gradient(180deg,hsl(var(--card)),rgba(128,93,40,0.08))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600/90 dark:text-slate-300/70">Records</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-900/70 dark:text-orange-200/80">Records</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <FileText className="h-5 w-5" />
                         Digital Logbook
@@ -580,7 +580,7 @@ export default function Landing() {
                   </Card>
                 </div>
 
-                <div className="mt-4 overflow-hidden rounded-xl border border-slate-900/15 bg-slate-950 shadow-sm">
+                <div className="mt-4 overflow-hidden rounded-[1rem] border border-slate-900/20 bg-[linear-gradient(180deg,hsl(210_26%_12%),hsl(205_22%_16%))] shadow-[var(--shadow-rsf-panel)]">
                   <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
                     <span>RSF walkthrough</span>
                     <span className="text-slate-400">Muted overview</span>
@@ -600,10 +600,10 @@ export default function Landing() {
               </CardContent>
             </Card>
 
-            <Card className="border-border/50 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] shadow-sm">
+            <Card className="bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.55))]">
               <CardContent className="p-5 sm:p-6">
                 <div className="text-center space-y-3">
-                  <Badge variant="outline" className="mx-auto text-xs">RSF Memberships</Badge>
+                  <span className="rsf-kicker mx-auto">RSF Memberships</span>
                   <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
                   <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto">
                     Pricing is visible up front. Free keeps the tools open; Pro adds saves, tracking, and workflow continuity; Pro+ is for heavier-use pilots.
@@ -611,7 +611,7 @@ export default function Landing() {
                 </div>
 
                 <div className="mt-6 grid gap-4">
-                  <Card className="border-primary/10">
+                  <Card className="bg-[linear-gradient(180deg,hsl(var(--card)),rgba(255,255,255,0.55))]">
                     <CardHeader>
                       <CardTitle className="text-lg">RSF Free</CardTitle>
                       <CardDescription>Open tools, no credit card required.</CardDescription>
@@ -635,7 +635,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-primary/30 shadow-sm">
+                  <Card className="border-primary/35 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.08))]">
                     <CardHeader>
                       <Badge className="w-fit">Most Popular</Badge>
                       <CardTitle className="text-lg">{membershipTierInfo.pro.title}</CardTitle>
@@ -660,7 +660,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-primary/20">
+                  <Card className="border-[hsl(var(--accent)/0.26)] bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--accent)/0.07))]">
                     <CardHeader>
                       <Badge variant="secondary" className="w-fit">Power Pilot</Badge>
                       <CardTitle className="text-lg">{membershipTierInfo.pro_plus.title}</CardTitle>
@@ -701,7 +701,7 @@ export default function Landing() {
             </p>
           </div>
 
-          <Card className="border-muted-foreground/20">
+          <Card className="bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.45))]">
             <CardContent className="p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="space-y-2">
@@ -769,7 +769,7 @@ export default function Landing() {
           </Card>
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <Card id="airport-weather" className="border-muted-foreground/20">
+            <Card id="airport-weather" className="bg-[linear-gradient(180deg,hsl(var(--card)),rgba(47,107,115,0.05))]">
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle>{conditionsTitle}</CardTitle>
@@ -849,7 +849,7 @@ export default function Landing() {
               </CardContent>
             </Card>
 
-            <Card id="airport-briefing" className="border-muted-foreground/20">
+            <Card id="airport-briefing" className="bg-[linear-gradient(180deg,hsl(var(--card)),rgba(198,122,27,0.05))]">
               <CardHeader>
                 <CardTitle>Airport Briefing</CardTitle>
                 <CardDescription>Runway guidance and live NOTAMs for {searchIcao}</CardDescription>
@@ -947,11 +947,11 @@ export default function Landing() {
       {/* CFI marketplace and featured partner */}
       <div className="py-10 sm:py-12">
         <div className="container mx-auto px-4">
-          <Card className="mt-6 border-primary/20 bg-primary/5">
+          <Card className="mt-6 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.07))]">
             <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-4 max-w-3xl">
                 <div className="space-y-2">
-                  <Badge variant="outline" className="text-xs">CFI Marketplace</Badge>
+                  <span className="rsf-kicker">CFI Marketplace</span>
                   <div className="flex items-center gap-2 text-base sm:text-lg font-semibold">
                     <BookOpen className="h-5 w-5 text-primary" />
                     CFI Instructors: Create your RSF profile
@@ -966,7 +966,7 @@ export default function Landing() {
                     "Build your instructor profile with ratings and specialties",
                     "Appear in the directory and receive student inquiries",
                   ].map((item) => (
-                    <div key={item} className="rounded-lg border border-primary/15 bg-background/70 p-3 text-sm text-muted-foreground">
+                    <div key={item} className="rounded-[0.9rem] border border-primary/15 bg-background/70 p-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
                       {item}
                     </div>
                   ))}
@@ -1045,7 +1045,7 @@ export default function Landing() {
           </div>
 
           {feedEvents.length ? (
-            <div className="relative mt-6 rounded-2xl border bg-background/70">
+            <div className="relative mt-6 rounded-[1.3rem] border border-card-border bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.45))] shadow-[var(--shadow-rsf-panel)]">
               <div className="absolute -left-4 top-1/2 z-10 hidden -translate-y-1/2 sm:flex">
                 <Button
                   variant="secondary"
@@ -1076,13 +1076,13 @@ export default function Landing() {
                 onTouchStart={() => pauseAutoScroll()}
                 className="events-scroll flex gap-4 overflow-x-auto px-4 py-4 scroll-smooth snap-x snap-mandatory"
               >
-                {feedEvents.map((event) => (
+                {feedEvents.map((event: any) => (
                   <Link
                     key={event.id}
                     href="/events"
                     onClick={() => trackEvent("cta_click", { label: "events_feed", target: "/events" })}
                   >
-                    <div className="min-w-[260px] snap-start overflow-hidden rounded-xl border bg-background shadow-sm hover:shadow-md transition-shadow">
+                    <div className="min-w-[260px] snap-start overflow-hidden rounded-[1rem] border border-card-border bg-[linear-gradient(180deg,hsl(var(--card)),rgba(255,255,255,0.58))] shadow-sm transition-shadow hover:shadow-[var(--shadow-rsf-panel)]">
                       {event.imageUrl && (
                         <img
                           src={event.imageUrl}

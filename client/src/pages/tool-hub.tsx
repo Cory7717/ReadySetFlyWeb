@@ -256,9 +256,9 @@ export default function ToolHub() {
 
   return (
     <div className="min-h-screen">
-      <section className="border-b border-slate-900/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(30,41,59,0.94))] py-10 text-slate-100">
+      <section className="border-b border-slate-900/10 bg-[linear-gradient(135deg,hsl(210_28%_11%),hsl(195_33%_22%))] py-10 text-slate-100">
         <div className="container mx-auto px-4 space-y-3">
-          <Badge variant="secondary" className="border-0 bg-amber-400/15 text-amber-200">Tool Hub</Badge>
+          <span className="rsf-kicker border-white/10 bg-white/10 text-amber-100">Tool Hub</span>
           <h1 className="font-display text-3xl sm:text-4xl font-bold">Pilot Tool Hub</h1>
           <p className="max-w-3xl text-slate-300">
             Start with the daily-use pilot workflow first: plan, brief, log, then move into weather depth, IFR practice, directories, and supporting tools.
@@ -274,13 +274,13 @@ export default function ToolHub() {
             <Button
               variant="outline"
               asChild
-              className="w-full border-slate-300/20 bg-transparent text-slate-100 hover:bg-white/5 sm:w-auto"
+              className="w-full border-slate-300/20 bg-white/5 text-slate-100 hover:bg-white/10 sm:w-auto"
               onClick={() => trackEvent("tool_hub_click", { target: "/logbook" })}
             >
               <Link href="/logbook">Open Digital Logbook</Link>
             </Button>
             <div className="flex items-center">
-              <Badge variant="secondary" className="border-0 bg-white/10 text-slate-200">All pilot tools</Badge>
+              <Badge variant="secondary" className="border-0 bg-white/10 text-slate-200 shadow-none">All pilot tools</Badge>
             </div>
           </div>
         </div>
@@ -289,7 +289,7 @@ export default function ToolHub() {
       <section className="container mx-auto px-4 py-8 sm:py-10 space-y-8 sm:space-y-10">
         {toolSections.map((section) => (
           <div key={section.title} className="space-y-4">
-            <div className="rounded-2xl border border-slate-900/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(255,255,255,0.98))] p-4 sm:p-5">
+            <div className="rounded-[1.2rem] border border-card-border bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.45))] p-4 sm:p-5 shadow-sm">
               <div className="space-y-1 border-l-4 border-amber-400 pl-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">RSF workflow group</div>
                 <h2 className="text-2xl font-semibold">{section.title}</h2>
@@ -311,8 +311,8 @@ export default function ToolHub() {
                     key={card.title}
                     className={[
                       "h-full",
-                      card.accent ? "border-primary/25 bg-[linear-gradient(180deg,rgba(37,99,235,0.07),rgba(255,255,255,0.98))] shadow-sm" : "bg-white/95 shadow-sm",
-                      card.comingSoon ? "border-dashed bg-muted/40 text-muted-foreground opacity-70" : "",
+                      card.accent ? "border-primary/30 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.09))]" : "",
+                      card.comingSoon ? "border-dashed bg-[linear-gradient(180deg,hsl(var(--card)/0.72),hsl(var(--muted)/0.7))] text-muted-foreground opacity-70" : "",
                     ].join(" ").trim()}
                   >
                     <CardHeader className="pb-4">
@@ -324,7 +324,7 @@ export default function ToolHub() {
                           </CardTitle>
                           <CardDescription>{card.description}</CardDescription>
                         </div>
-                        {card.badge ? <Badge variant="outline">{card.badge}</Badge> : null}
+                        {card.badge ? <Badge variant={card.accent ? "default" : "outline"}>{card.badge}</Badge> : null}
                       </div>
                     </CardHeader>
                     <CardContent className="flex h-full flex-col justify-between space-y-3">

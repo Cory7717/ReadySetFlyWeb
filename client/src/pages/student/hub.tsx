@@ -18,7 +18,7 @@ const tools = [
   { title: "Aviation Abbreviations", description: "RSF glossary and quiz mode for common acronyms.", href: "/student/abbreviations" },
   { title: "VOR Trainer", description: "Radials, OBS, flags, and intercept drills.", href: "/student/vor-trainer" },
   { title: "6-Pack Panel Trainer", description: "Learn the classic flight instruments with an interactive panel.", href: "/student/six-pack-trainer" },
-  { title: "RSF GPS Simulators", description: "IFR GPS workflows for top avionics stacks.", href: "/gps-sims" },
+  { title: "RSF GPS Simulators", description: "IFR GPS workflows for top avionics stacks.", href: "/gps-sims", comingSoon: true },
   { title: "IFR Tools Hub", description: "Plates, simulators, and IFR planning tools.", href: "/ifr-tools" },
   { title: "Independent CFI Syllabi", description: "ACS-aligned Part 61 training templates.", href: "/student/syllabi" },
   { title: "Preflight & Checklist Trainer", description: "Lightweight training flows.", href: "/student/checklists" },
@@ -85,15 +85,27 @@ export default function StudentHub() {
         ) : null}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tools.map((tool) => (
-            <Card key={tool.href} className="hover-elevate">
+            <Card
+              key={tool.href}
+              className={tool.comingSoon ? "border-dashed bg-muted/40 text-muted-foreground opacity-70" : "hover-elevate"}
+            >
               <CardHeader>
-                <CardTitle>{tool.title}</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  {tool.title}
+                  {tool.comingSoon ? <Badge variant="secondary">Coming soon</Badge> : null}
+                </CardTitle>
                 <CardDescription>{tool.description}</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button asChild variant="outline" className="w-full">
-                  <Link href={tool.href}>Open tool</Link>
-                </Button>
+                {tool.comingSoon ? (
+                  <Button variant="outline" className="w-full" disabled aria-disabled>
+                    Coming soon
+                  </Button>
+                ) : (
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href={tool.href}>Open tool</Link>
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}

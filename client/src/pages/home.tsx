@@ -227,17 +227,17 @@ export default function Home() {
           <Card className="border-sky-500/20 bg-sky-500/5">
             <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <div className="text-sm font-semibold">New: RSF GPS Simulators</div>
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  RSF GPS Simulators
+                  <Badge variant="secondary">Coming soon</Badge>
+                </div>
                 <p className="text-sm text-muted-foreground">
-                  Practice IFR GPS workflows on RSF-branded glass panels and stacks.
+                  IFR GPS workflows stay visible here, but this training stack is intentionally held until the simulator workflows are fully production-ready.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={() => trackEvent("cta_click", { label: "rentals_to_gps_sims", target: "/gps-sims" })}
-                  asChild
-                >
-                  <Link href="/gps-sims">Open GPS Sims</Link>
+                <Button disabled aria-disabled>
+                  Coming soon
                 </Button>
               </div>
             </CardContent>

@@ -422,17 +422,24 @@ export default function Landing() {
       </div>
       </div>
 
-      <div className="py-8 sm:py-10 bg-muted/10 border-y border-border/40">
+      <div className="py-8 sm:py-10 bg-[linear-gradient(180deg,rgba(15,23,42,0.03),rgba(15,23,42,0))] border-y border-border/40">
         <div className="container mx-auto px-4">
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <Card className="border-border/50">
+            <Card className="overflow-hidden border-slate-900/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.04),rgba(255,255,255,0.98))] shadow-sm">
               <CardContent className="p-5 sm:p-6">
+                <div className="mb-5 flex items-center justify-between rounded-xl border border-slate-900/10 bg-slate-900 px-4 py-3 text-slate-100">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-300">Operations Deck</div>
+                    <div className="text-sm text-slate-200">Daily-use tools pilots should find first</div>
+                  </div>
+                  <Badge variant="secondary" className="border-0 bg-amber-400/15 text-amber-200">Core workflow</Badge>
+                </div>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div className="space-y-2">
                     <Badge variant="outline" className="text-xs">Quick Start Index</Badge>
                     <h2 className="text-2xl sm:text-3xl font-semibold">Find What RSF Offers Fast</h2>
                     <p className="text-sm sm:text-base text-muted-foreground max-w-3xl">
-                      Start with the feature area you need now. Open the full Tool Hub any time for the complete list.
+                      Start with the operational area you need now. The full Tool Hub remains available for the broader inventory.
                     </p>
                   </div>
                   <Button asChild variant="outline">
@@ -446,9 +453,10 @@ export default function Landing() {
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <Card className="border-primary/20 bg-primary/5">
+                  <Card className="border-primary/20 bg-primary/5 shadow-sm">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">Core workflow</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                         <Plane className="h-5 w-5 text-primary" />
                         Flight Planner
@@ -466,9 +474,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="border-amber-500/20 bg-amber-50/40 shadow-sm dark:bg-amber-950/10">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-700/80 dark:text-amber-300/70">Airspace</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <AlertTriangle className="h-5 w-5" />
                         TFR + NOTAM Map
@@ -486,9 +495,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="border-sky-500/20 bg-sky-50/40 shadow-sm dark:bg-sky-950/10">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-700/80 dark:text-sky-300/70">Training</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <BookOpen className="h-5 w-5" />
                         Student Tools
@@ -506,9 +516,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="border-violet-500/20 bg-violet-50/40 shadow-sm dark:bg-violet-950/10">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-700/80 dark:text-violet-300/70">Instrument + Performance</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <Calculator className="h-5 w-5" />
                         IFR + Calculators
@@ -526,9 +537,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="border-emerald-500/20 bg-emerald-50/40 shadow-sm dark:bg-emerald-950/10">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-700/80 dark:text-emerald-300/70">Discovery</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <ShoppingBag className="h-5 w-5" />
                         Marketplace
@@ -546,9 +558,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="border-slate-900/15 bg-slate-50/60 shadow-sm dark:bg-slate-900/20">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-600/90 dark:text-slate-300/70">Records</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <FileText className="h-5 w-5" />
                         Digital Logbook
@@ -567,7 +580,11 @@ export default function Landing() {
                   </Card>
                 </div>
 
-                <div className="mt-4 overflow-hidden rounded-xl border border-border/60 bg-black shadow-sm">
+                <div className="mt-4 overflow-hidden rounded-xl border border-slate-900/15 bg-slate-950 shadow-sm">
+                  <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
+                    <span>RSF walkthrough</span>
+                    <span className="text-slate-400">Muted overview</span>
+                  </div>
                   <video
                     autoPlay
                     loop
@@ -583,13 +600,13 @@ export default function Landing() {
               </CardContent>
             </Card>
 
-            <Card className="border-border/50">
+            <Card className="border-border/50 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.98))] shadow-sm">
               <CardContent className="p-5 sm:p-6">
                 <div className="text-center space-y-3">
                   <Badge variant="outline" className="mx-auto text-xs">RSF Memberships</Badge>
                   <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
                   <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto">
-                    See exactly what you get when you upgrade. Free tools stay open; Pro adds saves and alerts; Pro+ unlocks operational intelligence.
+                    Pricing is visible up front. Free keeps the tools open; Pro adds saves, tracking, and workflow continuity; Pro+ is for heavier-use pilots.
                   </p>
                 </div>
 

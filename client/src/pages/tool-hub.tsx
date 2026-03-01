@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ComponentType } from "react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,24 @@ import {
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
 
+type ToolHubCard = {
+  title: string;
+  description: string;
+  href: string;
+  cta: string;
+  icon: ComponentType<{ className?: string }>;
+  accent?: boolean;
+  badge?: string;
+  detailBadges?: string[];
+  comingSoon?: boolean;
+};
+
+type ToolHubSection = {
+  title: string;
+  description: string;
+  cards: ToolHubCard[];
+};
+
 const calculatorLinks = [
   { label: "e6b advanced", href: "/tools/e6b" },
   { label: "Crosswind", href: "/pilot-tools#calculators" },
@@ -29,7 +47,7 @@ const calculatorLinks = [
   { label: "Ownership Cost", href: "/ownership-cost-calculator" },
 ];
 
-const toolSections = [
+const toolSections: ToolHubSection[] = [
   {
     title: "Core Pilot Tools",
     description: "Start with the tools most pilots are likely to use repeatedly for planning, logging, weather, and restriction checks.",
@@ -100,9 +118,10 @@ const toolSections = [
         title: "Live Traffic",
         description: "Global ADS-B traffic view for situational awareness.",
         href: "/live-traffic",
-        cta: "Open live traffic",
+        cta: "Coming soon",
         icon: Plane,
-        badge: "Beta",
+        badge: "Coming soon",
+        comingSoon: true,
       },
       {
         title: "Weight & Balance",
@@ -149,8 +168,10 @@ const toolSections = [
         title: "GPS Trainers",
         description: "RSF GPS training units and interactive cockpit workflow practice.",
         href: "/gps-sims",
-        cta: "Open GPS trainers",
+        cta: "Coming soon",
         icon: Route,
+        badge: "Coming soon",
+        comingSoon: true,
       },
       {
         title: "Radio Comms Trainer",
@@ -170,9 +191,10 @@ const toolSections = [
         title: "Synthetic Vision",
         description: "RSF Pro synthetic-vision lab with training scoring and review.",
         href: "/synthetic-vision",
-        cta: "Open synthetic vision",
+        cta: "Coming soon",
         icon: Navigation,
-        badge: "RSF Pro",
+        badge: "Coming soon",
+        comingSoon: true,
       },
     ],
   },
@@ -234,12 +256,12 @@ export default function ToolHub() {
 
   return (
     <div className="min-h-screen">
-      <section className="bg-muted/30 py-10">
+      <section className="border-b border-slate-900/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.96),rgba(30,41,59,0.94))] py-10 text-slate-100">
         <div className="container mx-auto px-4 space-y-3">
-          <Badge variant="outline">Tool Hub</Badge>
+          <Badge variant="secondary" className="border-0 bg-amber-400/15 text-amber-200">Tool Hub</Badge>
           <h1 className="font-display text-3xl sm:text-4xl font-bold">Pilot Tool Hub</h1>
-          <p className="text-muted-foreground max-w-3xl">
-            All current RSF pilot tools and training utilities in one place. Start with planning and logging, then move into weather, IFR, and training workflows.
+          <p className="max-w-3xl text-slate-300">
+            Start with the daily-use pilot workflow first: plan, brief, log, then move into weather depth, IFR practice, directories, and supporting tools.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button
@@ -252,13 +274,13 @@ export default function ToolHub() {
             <Button
               variant="outline"
               asChild
-              className="w-full sm:w-auto"
+              className="w-full border-slate-300/20 bg-transparent text-slate-100 hover:bg-white/5 sm:w-auto"
               onClick={() => trackEvent("tool_hub_click", { target: "/logbook" })}
             >
               <Link href="/logbook">Open Digital Logbook</Link>
             </Button>
             <div className="flex items-center">
-              <Badge variant="secondary">All pilot tools</Badge>
+              <Badge variant="secondary" className="border-0 bg-white/10 text-slate-200">All pilot tools</Badge>
             </div>
           </div>
         </div>
@@ -267,9 +289,12 @@ export default function ToolHub() {
       <section className="container mx-auto px-4 py-8 sm:py-10 space-y-8 sm:space-y-10">
         {toolSections.map((section) => (
           <div key={section.title} className="space-y-4">
-            <div className="space-y-1">
-              <h2 className="text-2xl font-semibold">{section.title}</h2>
-              <p className="text-sm text-muted-foreground">{section.description}</p>
+            <div className="rounded-2xl border border-slate-900/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(255,255,255,0.98))] p-4 sm:p-5">
+              <div className="space-y-1 border-l-4 border-amber-400 pl-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">RSF workflow group</div>
+                <h2 className="text-2xl font-semibold">{section.title}</h2>
+                <p className="text-sm text-muted-foreground">{section.description}</p>
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -284,7 +309,11 @@ export default function ToolHub() {
                 return (
                   <Card
                     key={card.title}
-                    className={card.accent ? "h-full border-primary/20 bg-primary/5" : "h-full"}
+                    className={[
+                      "h-full",
+                      card.accent ? "border-primary/25 bg-[linear-gradient(180deg,rgba(37,99,235,0.07),rgba(255,255,255,0.98))] shadow-sm" : "bg-white/95 shadow-sm",
+                      card.comingSoon ? "border-dashed bg-muted/40 text-muted-foreground opacity-70" : "",
+                    ].join(" ").trim()}
                   >
                     <CardHeader className="pb-4">
                       <div className="flex items-start justify-between gap-3">
@@ -301,7 +330,7 @@ export default function ToolHub() {
                     <CardContent className="flex h-full flex-col justify-between space-y-3">
                       {card.detailBadges ? (
                         <div className="flex flex-wrap gap-2">
-                          {card.detailBadges.map((detail) => (
+                          {card.detailBadges.map((detail: string) => (
                             <Badge key={detail} variant="outline">
                               {detail}
                             </Badge>
@@ -309,12 +338,17 @@ export default function ToolHub() {
                         </div>
                       ) : null}
                       <Button
-                        asChild
                         className="w-full"
                         variant={card.accent ? "default" : "outline"}
-                        onClick={() => trackEvent("tool_hub_click", { target: href })}
+                        disabled={card.comingSoon}
+                        aria-disabled={card.comingSoon}
+                        onClick={() => {
+                          if (!card.comingSoon) {
+                            trackEvent("tool_hub_click", { target: href });
+                          }
+                        }}
                       >
-                        <Link href={href}>{cta}</Link>
+                        {card.comingSoon ? cta : <Link href={href}>{cta}</Link>}
                       </Button>
                     </CardContent>
                   </Card>

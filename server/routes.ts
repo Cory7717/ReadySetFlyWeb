@@ -181,6 +181,7 @@ const parseGibsTimeDimension = (value: string, count: number) => {
 function getPublicBaseUrl() {
   const base =
     process.env.APP_BASE_URL ||
+    process.env.WEB_BASE_URL ||
     process.env.REPLIT_DEV_DOMAIN ||
     process.env.RENDER_EXTERNAL_URL ||
     "http://localhost:5000";
@@ -3174,7 +3175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     credentials: true,
   }));
 
-  // Auth middleware (from blueprint:javascript_log_in_with_replit)
+  // Auth middleware
   await setupAuth(app);
 
   // Unified authentication routes (for both web and mobile)
@@ -3437,7 +3438,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Auth routes (from blueprint:javascript_log_in_with_replit)
+  // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       if (String(process.env.AUTH_LOG_REQUEST_META || '').toLowerCase() === 'true') {
@@ -10697,7 +10698,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     </div>
     
     <div style="text-align: center; margin: 30px 0;">
-      <a href="${process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}/marketplace/${listingId}` : 'https://readysetfly.com'}" 
+      <a href="${process.env.APP_BASE_URL || process.env.WEB_BASE_URL || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : 'https://readysetfly.us')}/marketplace/${listingId}" 
          style="display: inline-block; background: #0066cc; color: white; text-decoration: none; padding: 12px 30px; border-radius: 6px; font-weight: 500; font-size: 16px;">
         View Application
       </a>

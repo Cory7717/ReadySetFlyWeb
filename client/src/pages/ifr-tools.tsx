@@ -11,6 +11,7 @@ const tools = [
     title: "RSF GPS Simulators",
     description: "Functionally accurate GPS workflows for IFR training.",
     href: "/gps-sims",
+    comingSoon: true,
   },
   {
     title: "IFR Approach Plates",
@@ -41,11 +42,13 @@ const tools = [
     title: "Live Traffic",
     description: "Global ADS-B traffic map powered by ADSBExchange.",
     href: "/live-traffic",
+    comingSoon: true,
   },
   {
     title: "Synthetic Vision Lab",
     description: "RSF Pro synthetic attitude/terrain trainer with compact live traffic panel.",
     href: "/synthetic-vision",
+    comingSoon: true,
   },
   {
     title: "NOTAMs & Active Runway",
@@ -75,8 +78,8 @@ export default function IfrTools() {
             Guest mode is fully supported.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button asChild variant="outline">
-              <Link href="/gps-sims">Open GPS Sims</Link>
+            <Button variant="outline" disabled aria-disabled>
+              GPS Sims coming soon
             </Button>
             <Button asChild variant="outline">
               <Link href="/student">Student Hub</Link>
@@ -93,9 +96,19 @@ export default function IfrTools() {
           </AlertDescription>
         </Alert>
 
+        <Alert className="border-dashed">
+          <AlertTitle>Active development</AlertTitle>
+          <AlertDescription>
+            GPS simulators, Synthetic Vision, and Live Traffic remain visible here, but they are intentionally held in a coming-soon state until the workflows are fully hardened.
+          </AlertDescription>
+        </Alert>
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tools.map((tool) => (
-            <Card key={tool.href} className="hover-elevate">
+            <Card
+              key={tool.href}
+              className={tool.comingSoon ? "border-dashed bg-muted/40 text-muted-foreground opacity-70" : "hover-elevate"}
+            >
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   {tool.title}

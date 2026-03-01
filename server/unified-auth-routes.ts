@@ -143,7 +143,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         // Don't fail registration if email sending fails
       }
 
-      // Create web session (compatible with Replit Auth middleware)
+      // Create web session (compatible with the shared auth middleware)
       req.session.userId = user.id;
       req.session.passport = {
         user: {
@@ -216,7 +216,7 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
-      // Create web session (compatible with Replit Auth middleware)
+      // Create web session (compatible with the shared auth middleware)
       req.session.userId = user.id;
       req.session.passport = {
         user: {

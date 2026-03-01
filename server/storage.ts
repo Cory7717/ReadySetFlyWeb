@@ -202,7 +202,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   getAdminUsers(): Promise<User[]>;
-  upsertUser(user: UpsertUser): Promise<User>; // REQUIRED for Replit Auth
+  upsertUser(user: UpsertUser): Promise<User>;
   searchUsers(query: string): Promise<User[]>; // Admin search by name
   updateUserPassword(id: string, hashedPassword: string): Promise<User | undefined>;
   deleteUser(id: string): Promise<boolean>; // Delete user and all related data

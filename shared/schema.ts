@@ -19,7 +19,7 @@ export const withdrawalStatuses = ["pending", "processing", "completed", "failed
 export const approachPlateTypes = ["IAP", "SID", "STAR", "AIRPORT", "OTHER"] as const;
 export const adminRoles = ["operations", "finance", "sales", "support", "content", "housekeeping"] as const;
 
-// Session storage table (REQUIRED for Replit Auth - from blueprint:javascript_log_in_with_replit)
+// Session storage table for web and OAuth-backed authentication
 export const sessions = pgTable(
   "sessions",
   {
@@ -56,7 +56,7 @@ export const oauthExchangeTokens = pgTable("oauth_exchange_tokens", {
   index("idx_oauth_exchange_tokens_expires").on(table.expiresAt),
 ]);
 
-// Users / Pilots (Merged with Replit Auth requirements - from blueprint:javascript_log_in_with_replit)
+// Users / Pilots
 export const users = pgTable("users", {
   // Auth fields (from blueprint - REQUIRED)
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -155,7 +155,7 @@ export const users = pgTable("users", {
   cfiGrantGrantedAt: timestamp("cfi_grant_granted_at"),
   
   // Mobile app authentication (optional - for users who sign up via mobile)
-  hashedPassword: text("hashed_password"), // bcrypt hash, null for Replit Auth only users
+  hashedPassword: text("hashed_password"), // bcrypt hash, null for OAuth-only users
   passwordCreatedAt: timestamp("password_created_at"),
   
   // Email verification (for email/password auth)
@@ -2377,7 +2377,7 @@ export const insertPaypalOrderConsumptionSchema = createInsertSchema(paypalOrder
 // Select types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type UpsertUser = typeof users.$inferInsert; // For Replit Auth (from blueprint:javascript_log_in_with_replit)
+export type UpsertUser = typeof users.$inferInsert;
 
 export type AdminInvite = typeof adminInvites.$inferSelect;
 export type InsertAdminInvite = z.infer<typeof insertAdminInviteSchema>;

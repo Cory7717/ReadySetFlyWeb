@@ -1,4 +1,4 @@
-// Unified OAuth/session auth (Google OAuth 2.0 + optional legacy Replit OIDC)
+// Unified OAuth/session auth (Google OAuth 2.0 + session-backed web auth)
 // Keeps compatibility with existing code expecting req.user.claims.sub
 
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
@@ -263,7 +263,7 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
       passport.authenticate("google", {
         scope: ["profile", "email"],
         callbackURL: `${getApiBaseUrl()}/api/auth/google/mobile/callback`,
-      })
+      } as any)
     );
 
     // Callback (web)
@@ -292,7 +292,7 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
       passport.authenticate("google", {
         failureRedirect: "/",
         callbackURL: `${getApiBaseUrl()}/api/auth/google/mobile/callback`,
-      }),
+      } as any),
       (req: any, res: any) => {
         const userId = req.user?.claims?.sub;
         if (userId) req.session.userId = userId;

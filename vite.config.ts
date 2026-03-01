@@ -10,7 +10,7 @@ import cesium from "vite-plugin-cesium";
 const isGitHubPages = process.env.GITHUB_PAGES === "true";
 
 export default defineConfig(async () => {
-  const replitPlugins =
+  const devPlatformPlugins =
     process.env.NODE_ENV !== "production" && process.env.REPL_ID !== undefined
       ? [
           (await import("@replit/vite-plugin-cartographer")).cartographer(),
@@ -22,7 +22,7 @@ export default defineConfig(async () => {
     define: {
       CESIUM_BASE_URL: '"/cesium/"',
     },
-    plugins: [react(), runtimeErrorOverlay(), cesium(), ...replitPlugins],
+    plugins: [react(), runtimeErrorOverlay(), cesium(), ...devPlatformPlugins],
     assetsInclude: ["**/*.JPG"],
     resolve: {
       alias: {

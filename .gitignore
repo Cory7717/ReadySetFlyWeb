@@ -3,7 +3,31 @@ dist
 .DS_Store
 *.tar.gz
 debug
+.local/
+.replit
+*.log
 
 .env
 .env.*
 **/.env
+
+# Dataroom and generated collateral are not part of the app runtime
+dataroom/
+
+# Local planning / analysis docs not needed in public git
+ANALYSIS_SUMMARY.md
+AIRCRAFT_LIBRARY_SETUP.md
+AWS_S3_SETUP.md
+E2E_TEST_ANALYSIS.md
+INTEGRATION_TODO.md
+MOBILE_FEATURE_PARITY_ANALYSIS.md
+MOBILE_PAYMENT_SETUP.md
+MOBILE_SETUP_REQUIRED.md
+MOBILE_TESTING_GUIDE.md
+MOBILE_UPDATES_NEEDED.md
+PAYPAL_PAYOUT_ANALYSIS.md
+QUICK_TEST_GUIDE.md
+START_HERE.md
+TESTING_COMPLETE.md
+design_guidelines.md
+replit.md

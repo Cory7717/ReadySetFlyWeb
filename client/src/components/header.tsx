@@ -67,8 +67,8 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["ifr charts", "plates", "approach", "charts"],
   },
   {
-    label: "GPS Sims",
-    path: "/gps-sims",
+    label: "GPS Sims (Coming Soon)",
+    path: "/tool-hub",
     keywords: ["gps simulator", "g1000", "gtn", "gtx", "ifr gps"],
   },
   {
@@ -112,13 +112,13 @@ const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["adsb receiver", "stratux", "sentry", "traffic receiver"],
   },
   {
-    label: "Live Traffic",
-    path: "/live-traffic",
+    label: "Live Traffic (Coming Soon)",
+    path: "/tool-hub",
     keywords: ["live traffic", "adsb", "traffic map", "aircraft tracking"],
   },
   {
-    label: "Synthetic Vision",
-    path: "/synthetic-vision",
+    label: "Synthetic Vision (Coming Soon)",
+    path: "/tool-hub",
     keywords: ["synthetic vision", "svt", "terrain view", "in-flight display", "pfd"],
   },
   {

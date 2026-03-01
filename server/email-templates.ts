@@ -1,5 +1,6 @@
 export function getListingReminderEmailHtml(userName: string, aircraftCount: number, marketplaceCount: number): string {
   const totalListings = aircraftCount + marketplaceCount;
+  const dashboardUrl = process.env.APP_BASE_URL || process.env.WEB_BASE_URL || "https://readysetfly.us";
   
   return `
 <!DOCTYPE html>
@@ -52,7 +53,7 @@ export function getListingReminderEmailHtml(userName: string, aircraftCount: num
       </ul>
       
       <div style="text-align: center;">
-        <a href="${process.env.REPLIT_DEV_DOMAIN || 'https://readysetfly.replit.app'}/dashboard" class="button">
+        <a href="${dashboardUrl}/dashboard" class="button">
           Review My Listings
         </a>
       </div>
@@ -74,6 +75,7 @@ export function getListingReminderEmailHtml(userName: string, aircraftCount: num
 
 export function getListingReminderEmailText(userName: string, aircraftCount: number, marketplaceCount: number): string {
   const totalListings = aircraftCount + marketplaceCount;
+  const dashboardUrl = process.env.APP_BASE_URL || process.env.WEB_BASE_URL || "https://readysetfly.us";
   
   return `
 Hi ${userName},
@@ -90,7 +92,7 @@ Why review your listings?
 - Remove or deactivate outdated listings
 - Keep your profile competitive
 
-Review your listings here: ${process.env.REPLIT_DEV_DOMAIN || 'https://readysetfly.replit.app'}/dashboard
+Review your listings here: ${dashboardUrl}/dashboard
 
 Pro Tip: Click the "Refresh" button on each listing to mark it as reviewed. This helps other users see that your listings are actively managed.
 
@@ -976,6 +978,7 @@ export function getMarketplaceListingExpirationReminderHtml(
     expiresAt: string;
   }
 ): string {
+  const dashboardUrl = process.env.APP_BASE_URL || process.env.WEB_BASE_URL || "https://readysetfly.us";
   const categoryDisplay = listingDetails.category === "aircraft-sale" ? "Aircraft for Sale" :
                          listingDetails.category === "charter" ? "Charter Service" :
                          listingDetails.category === "cfi" ? "CFI Instructor" :
@@ -1053,7 +1056,7 @@ export function getMarketplaceListingExpirationReminderHtml(
       </ol>
       
       <div style="text-align: center; margin: 20px 0;">
-        <a href="${process.env.REPLIT_DEV_DOMAIN || 'https://readysetfly.us'}/dashboard" class="button">
+        <a href="${dashboardUrl}/dashboard" class="button">
           Go to My Listings
         </a>
       </div>
@@ -1088,6 +1091,7 @@ export function getMarketplaceListingExpirationReminderText(
     leadDays?: number;
   }
 ): string {
+  const dashboardUrl = process.env.APP_BASE_URL || process.env.WEB_BASE_URL || "https://readysetfly.us";
   const categoryDisplay = listingDetails.category === "aircraft-sale" ? "Aircraft for Sale" :
                          listingDetails.category === "charter" ? "Charter Service" :
                          listingDetails.category === "cfi" ? "CFI Instructor" :
@@ -1136,7 +1140,7 @@ To renew your listing, visit your dashboard and create a new listing:
 3. Click "Create New Listing" to post again
 4. Select your preferred tier and complete payment
 
-View your listings: ${process.env.REPLIT_DEV_DOMAIN || 'https://readysetfly.us'}/dashboard
+View your listings: ${dashboardUrl}/dashboard
 
 Need Help? Reply to this email or contact support@readysetfly.us for assistance with renewing your listing.
 

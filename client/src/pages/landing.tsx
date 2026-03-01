@@ -369,7 +369,7 @@ export default function Landing() {
       />
 
       {/* Hero Section */}
-      <div className="relative bg-gradient-to-br from-primary/20 via-background to-background">
+      <div className="relative bg-[linear-gradient(180deg,hsl(var(--background)),hsl(var(--background)))]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
           <div className="max-w-4xl mx-auto text-center space-y-4 sm:space-y-6">
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight">
@@ -427,12 +427,12 @@ export default function Landing() {
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
             <Card className="overflow-hidden bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.6))]">
               <CardContent className="p-5 sm:p-6">
-                <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-slate-900/20 bg-[linear-gradient(135deg,hsl(210_26%_12%),hsl(195_32%_22%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-slate-900/20 bg-[linear-gradient(135deg,hsl(221_38%_16%),hsl(221_68%_34%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
                   <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-200">Operations Deck</div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Operations Deck</div>
                     <div className="text-sm text-slate-200">Daily-use tools pilots should find first</div>
                   </div>
-                  <Badge variant="secondary" className="border-0 bg-white/10 text-amber-100 shadow-none">Core workflow</Badge>
+                  <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">Core workflow</Badge>
                 </div>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div className="space-y-2">
@@ -474,10 +474,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-amber-500/30 bg-[linear-gradient(180deg,hsl(var(--card)),rgba(198,122,27,0.08))]">
+                  <Card className="border-primary/25 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.06))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-700/90 dark:text-amber-300/80">Airspace</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Airspace</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <AlertTriangle className="h-5 w-5" />
                         TFR + NOTAM Map
@@ -537,10 +537,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-teal-700/20 bg-[linear-gradient(180deg,hsl(var(--card)),rgba(47,107,115,0.08))]">
+                  <Card className="border-primary/18 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.04))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-teal-800/90 dark:text-teal-200/80">Discovery</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">Discovery</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <ShoppingBag className="h-5 w-5" />
                         Marketplace
@@ -558,10 +558,10 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-orange-900/15 bg-[linear-gradient(180deg,hsl(var(--card)),rgba(128,93,40,0.08))]">
+                  <Card className="border-accent/30 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--accent)/0.1))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-orange-900/70 dark:text-orange-200/80">Records</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/80 dark:text-slate-300/80">Records</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <FileText className="h-5 w-5" />
                         Digital Logbook
@@ -580,7 +580,7 @@ export default function Landing() {
                   </Card>
                 </div>
 
-                <div className="mt-4 overflow-hidden rounded-[1rem] border border-slate-900/20 bg-[linear-gradient(180deg,hsl(210_26%_12%),hsl(205_22%_16%))] shadow-[var(--shadow-rsf-panel)]">
+                <div className="mt-4 overflow-hidden rounded-[1rem] border border-slate-900/20 bg-[linear-gradient(180deg,hsl(221_34%_15%),hsl(219_28%_20%))] shadow-[var(--shadow-rsf-panel)]">
                   <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
                     <span>RSF walkthrough</span>
                     <span className="text-slate-400">Muted overview</span>
@@ -769,7 +769,7 @@ export default function Landing() {
           </Card>
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <Card id="airport-weather" className="bg-[linear-gradient(180deg,hsl(var(--card)),rgba(47,107,115,0.05))]">
+            <Card id="airport-weather" className="bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.04))]">
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle>{conditionsTitle}</CardTitle>
@@ -789,7 +789,7 @@ export default function Landing() {
                       {flightCategory.category}
                     </Badge>
                     {runwayInUseDisplay && (
-                      <Badge variant="outline" className="bg-amber-50 text-amber-800">
+                      <Badge variant="outline" className="bg-primary/10 text-primary">
                         Active RWY: {runwayInUseDisplay}
                       </Badge>
                     )}
@@ -849,7 +849,7 @@ export default function Landing() {
               </CardContent>
             </Card>
 
-            <Card id="airport-briefing" className="bg-[linear-gradient(180deg,hsl(var(--card)),rgba(198,122,27,0.05))]">
+            <Card id="airport-briefing" className="bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--accent)/0.1))]">
               <CardHeader>
                 <CardTitle>Airport Briefing</CardTitle>
                 <CardDescription>Runway guidance and live NOTAMs for {searchIcao}</CardDescription>
@@ -863,7 +863,7 @@ export default function Landing() {
                   {(runwayInUseDisplay || atisInfo) && (
                     <div className="flex flex-wrap gap-2">
                       {runwayInUseDisplay && (
-                        <Badge variant="outline" className="bg-amber-50 text-amber-800">
+                        <Badge variant="outline" className="bg-primary/10 text-primary">
                           Active RWY: {runwayInUseDisplay}
                         </Badge>
                       )}

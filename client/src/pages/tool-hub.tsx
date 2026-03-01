@@ -256,9 +256,9 @@ export default function ToolHub() {
 
   return (
     <div className="min-h-screen">
-      <section className="border-b border-slate-900/10 bg-[linear-gradient(135deg,hsl(210_28%_11%),hsl(195_33%_22%))] py-10 text-slate-100">
+      <section className="border-b border-slate-900/10 bg-[linear-gradient(135deg,hsl(221_38%_14%),hsl(221_64%_30%))] py-10 text-slate-100">
         <div className="container mx-auto px-4 space-y-3">
-          <span className="rsf-kicker border-white/10 bg-white/10 text-amber-100">Tool Hub</span>
+          <span className="rsf-kicker border-white/10 bg-white/10 text-slate-100">Tool Hub</span>
           <h1 className="font-display text-3xl sm:text-4xl font-bold">Pilot Tool Hub</h1>
           <p className="max-w-3xl text-slate-300">
             Start with the daily-use pilot workflow first: plan, brief, log, then move into weather depth, IFR practice, directories, and supporting tools.
@@ -290,7 +290,7 @@ export default function ToolHub() {
         {toolSections.map((section) => (
           <div key={section.title} className="space-y-4">
             <div className="rounded-[1.2rem] border border-card-border bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.45))] p-4 sm:p-5 shadow-sm">
-              <div className="space-y-1 border-l-4 border-amber-400 pl-4">
+              <div className="space-y-1 border-l-4 border-primary pl-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">RSF workflow group</div>
                 <h2 className="text-2xl font-semibold">{section.title}</h2>
                 <p className="text-sm text-muted-foreground">{section.description}</p>

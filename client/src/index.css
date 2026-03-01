@@ -72,67 +72,67 @@ img.uppy-Dashboard-Item-previewImg {
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 36 27% 94%;
+  --background: 216 17% 94%;
 
-  --foreground: 212 27% 14%;
+  --foreground: 220 28% 14%;
 
-  --border: 28 16% 80%;
+  --border: 218 12% 80%;
 
-  --card: 42 36% 98%;
+  --card: 210 20% 98%;
 
-  --card-foreground: 212 27% 14%;
+  --card-foreground: 220 28% 14%;
 
-  --card-border: 30 17% 79%;
+  --card-border: 217 13% 79%;
 
-  --sidebar: 34 22% 93%;
+  --sidebar: 216 15% 92%;
 
-  --sidebar-foreground: 212 27% 14%;
+  --sidebar-foreground: 220 28% 14%;
 
-  --sidebar-border: 28 14% 80%;
+  --sidebar-border: 217 10% 79%;
 
-  --sidebar-primary: 29 72% 41%;
+  --sidebar-primary: 221 78% 46%;
 
-  --sidebar-primary-foreground: 42 36% 98%;
+  --sidebar-primary-foreground: 210 20% 98%;
 
-  --sidebar-accent: 197 26% 87%;
+  --sidebar-accent: 216 13% 86%;
 
-  --sidebar-accent-foreground: 198 38% 24%;
+  --sidebar-accent-foreground: 220 20% 26%;
 
-  --sidebar-ring: 29 72% 41%;
+  --sidebar-ring: 221 78% 46%;
 
-  --popover: 42 36% 98%;
+  --popover: 210 20% 98%;
 
-  --popover-foreground: 212 27% 14%;
+  --popover-foreground: 220 28% 14%;
 
-  --popover-border: 30 17% 79%;
+  --popover-border: 217 13% 79%;
 
-  --primary: 29 72% 41%;
+  --primary: 221 78% 46%;
 
-  --primary-foreground: 42 36% 98%;
+  --primary-foreground: 210 20% 98%;
 
-  --secondary: 196 31% 29%;
+  --secondary: 221 24% 24%;
 
-  --secondary-foreground: 42 36% 98%;
+  --secondary-foreground: 210 20% 98%;
 
-  --muted: 34 20% 90%;
+  --muted: 216 14% 89%;
 
-  --muted-foreground: 210 13% 35%;
+  --muted-foreground: 220 10% 38%;
 
-  --accent: 188 36% 37%;
+  --accent: 215 12% 73%;
 
-  --accent-foreground: 42 36% 98%;
+  --accent-foreground: 220 24% 20%;
 
   --destructive: 0 72% 51%;
 
   --destructive-foreground: 0 0% 98%;
 
-  --input: 28 14% 72%;
-  --ring: 29 72% 41%;
-  --chart-1: 29 72% 41%;
-  --chart-2: 188 36% 37%;
-  --chart-3: 43 76% 58%;
-  --chart-4: 207 33% 41%;
-  --chart-5: 196 31% 29%;
+  --input: 217 11% 72%;
+  --ring: 221 78% 46%;
+  --chart-1: 221 78% 46%;
+  --chart-2: 218 17% 56%;
+  --chart-3: 214 11% 70%;
+  --chart-4: 221 24% 24%;
+  --chart-5: 207 29% 35%;
 
   --font-sans: Inter, sans-serif;
   --font-serif: Georgia, serif;
@@ -141,13 +141,13 @@ img.uppy-Dashboard-Item-previewImg {
   --radius: .8rem;
   --shadow-2xs: 0px 1px 2px 0px hsl(212 24% 14% / 0.05);
   --shadow-xs: 0px 2px 3px 0px hsl(212 24% 14% / 0.07);
-  --shadow-sm: 0px 8px 18px -16px hsl(212 24% 14% / 0.22), 0px 2px 0px 0px hsl(28 16% 64% / 0.5);
-  --shadow: 0px 12px 28px -18px hsl(212 24% 14% / 0.28), 0px 3px 0px 0px hsl(28 16% 62% / 0.55);
-  --shadow-md: 0px 16px 36px -22px hsl(212 24% 14% / 0.3), 0px 3px 0px 0px hsl(28 16% 60% / 0.55);
-  --shadow-lg: 0px 18px 42px -24px hsl(212 24% 14% / 0.34), 0px 4px 0px 0px hsl(28 16% 58% / 0.55);
-  --shadow-xl: 0px 26px 52px -28px hsl(212 24% 14% / 0.36), 0px 5px 0px 0px hsl(28 16% 56% / 0.58);
-  --shadow-2xl: 0px 30px 64px -30px hsl(212 24% 14% / 0.42), 0px 6px 0px 0px hsl(28 16% 52% / 0.6);
-  --shadow-rsf-panel: 0px 18px 42px -24px hsl(212 24% 14% / 0.22), 0px 4px 0px 0px hsl(28 16% 68% / 0.52);
+  --shadow-sm: 0px 8px 18px -16px hsl(220 28% 14% / 0.22), 0px 2px 0px 0px hsl(216 12% 68% / 0.56);
+  --shadow: 0px 12px 28px -18px hsl(220 28% 14% / 0.28), 0px 3px 0px 0px hsl(216 12% 66% / 0.58);
+  --shadow-md: 0px 16px 36px -22px hsl(220 28% 14% / 0.3), 0px 3px 0px 0px hsl(216 12% 64% / 0.58);
+  --shadow-lg: 0px 18px 42px -24px hsl(220 28% 14% / 0.34), 0px 4px 0px 0px hsl(216 12% 62% / 0.6);
+  --shadow-xl: 0px 26px 52px -28px hsl(220 28% 14% / 0.36), 0px 5px 0px 0px hsl(216 12% 60% / 0.62);
+  --shadow-2xl: 0px 30px 64px -30px hsl(220 28% 14% / 0.42), 0px 6px 0px 0px hsl(216 12% 56% / 0.64);
+  --shadow-rsf-panel: 0px 18px 42px -24px hsl(220 28% 14% / 0.22), 0px 4px 0px 0px hsl(216 12% 68% / 0.56);
   --shadow-rsf-button: 0px 10px 20px -14px hsl(212 24% 14% / 0.26), 0px 3px 0px 0px hsl(var(--primary-border) / 0.95);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -193,67 +193,67 @@ img.uppy-Dashboard-Item-previewImg {
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 210 28% 9%;
+  --background: 221 31% 9%;
 
-  --foreground: 38 28% 93%;
+  --foreground: 214 16% 93%;
 
-  --border: 210 17% 24%;
+  --border: 218 16% 24%;
 
-  --card: 213 24% 13%;
+  --card: 220 24% 13%;
 
-  --card-foreground: 38 28% 93%;
+  --card-foreground: 214 16% 93%;
 
-  --card-border: 210 17% 22%;
+  --card-border: 218 16% 22%;
 
-  --sidebar: 213 23% 11%;
+  --sidebar: 220 24% 11%;
 
-  --sidebar-foreground: 38 28% 93%;
+  --sidebar-foreground: 214 16% 93%;
 
-  --sidebar-border: 210 17% 18%;
+  --sidebar-border: 218 16% 18%;
 
-  --sidebar-primary: 34 78% 55%;
+  --sidebar-primary: 219 85% 60%;
 
-  --sidebar-primary-foreground: 212 27% 12%;
+  --sidebar-primary-foreground: 221 31% 10%;
 
-  --sidebar-accent: 196 22% 22%;
+  --sidebar-accent: 217 11% 28%;
 
-  --sidebar-accent-foreground: 38 28% 93%;
+  --sidebar-accent-foreground: 214 16% 93%;
 
-  --sidebar-ring: 34 78% 55%;
+  --sidebar-ring: 219 85% 60%;
 
-  --popover: 213 24% 13%;
+  --popover: 220 24% 13%;
 
-  --popover-foreground: 38 28% 93%;
+  --popover-foreground: 214 16% 93%;
 
-  --popover-border: 210 17% 22%;
+  --popover-border: 218 16% 22%;
 
-  --primary: 34 78% 55%;
+  --primary: 219 85% 60%;
 
-  --primary-foreground: 212 27% 12%;
+  --primary-foreground: 221 31% 10%;
 
-  --secondary: 192 28% 34%;
+  --secondary: 219 28% 28%;
 
-  --secondary-foreground: 38 28% 93%;
+  --secondary-foreground: 214 16% 93%;
 
-  --muted: 210 16% 17%;
+  --muted: 218 15% 17%;
 
-  --muted-foreground: 35 12% 70%;
+  --muted-foreground: 216 10% 72%;
 
-  --accent: 190 33% 44%;
+  --accent: 217 10% 56%;
 
-  --accent-foreground: 38 28% 93%;
+  --accent-foreground: 214 16% 93%;
 
   --destructive: 0 72% 51%;
 
   --destructive-foreground: 215 8% 94%;
 
-  --input: 210 15% 28%;
-  --ring: 34 78% 55%;
-  --chart-1: 34 78% 55%;
-  --chart-2: 190 33% 44%;
-  --chart-3: 46 78% 62%;
-  --chart-4: 207 35% 54%;
-  --chart-5: 192 28% 34%;
+  --input: 218 14% 29%;
+  --ring: 219 85% 60%;
+  --chart-1: 219 85% 60%;
+  --chart-2: 218 18% 62%;
+  --chart-3: 216 10% 72%;
+  --chart-4: 219 28% 28%;
+  --chart-5: 206 28% 42%;
 
   --shadow-2xs: 0px 1px 2px 0px hsl(212 28% 4% / 0.32);
   --shadow-xs: 0px 2px 4px 0px hsl(212 28% 4% / 0.38);
@@ -263,7 +263,7 @@ img.uppy-Dashboard-Item-previewImg {
   --shadow-lg: 0px 22px 42px -22px hsl(212 28% 4% / 0.68), 0px 4px 0px 0px hsl(210 16% 18% / 0.9);
   --shadow-xl: 0px 28px 52px -24px hsl(212 28% 4% / 0.72), 0px 5px 0px 0px hsl(210 16% 16% / 0.92);
   --shadow-2xl: 0px 34px 70px -26px hsl(212 28% 4% / 0.78), 0px 6px 0px 0px hsl(210 16% 14% / 0.94);
-  --shadow-rsf-panel: 0px 24px 52px -28px hsl(212 28% 4% / 0.72), 0px 4px 0px 0px hsl(210 16% 20% / 0.85);
+  --shadow-rsf-panel: 0px 24px 52px -28px hsl(212 28% 4% / 0.72), 0px 4px 0px 0px hsl(217 14% 22% / 0.9);
   --shadow-rsf-button: 0px 12px 24px -16px hsl(212 28% 4% / 0.7), 0px 3px 0px 0px hsl(var(--primary-border) / 0.92);
 
   /* Automatically computed borders - intensity can be controlled by the user by the --opaque-button-border-intensity setting */

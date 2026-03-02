@@ -361,11 +361,13 @@ export function BannerAdRotation({
                   />
                 </div>
               ) : (
-                <img
-                  src={resolveObjectUrl(currentAd.imageUrl)}
-                  alt={currentAd.title}
-                  className="h-full w-full object-cover"
-                />
+                <div className="flex h-full w-full items-center justify-center bg-white/85 p-3">
+                  <img
+                    src={resolveObjectUrl(currentAd.imageUrl)}
+                    alt={currentAd.title}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
               )}
             </div>
           )}

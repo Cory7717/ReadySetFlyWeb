@@ -388,7 +388,7 @@ export default function Landing() {
       <div className="relative overflow-hidden bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
           <div className="max-w-4xl mx-auto text-center space-y-4 sm:space-y-6">
-            <h1 className="bg-[linear-gradient(180deg,#eef3fa_0%,#cfd7e3_42%,#a9b4c4_100%)] bg-clip-text text-4xl font-bold tracking-tight text-transparent drop-shadow-[0_1px_0_rgba(255,255,255,0.28)] sm:text-5xl md:text-6xl">
+            <h1 className="bg-[linear-gradient(180deg,#f7f9fc_0%,#c9d2df_28%,#7e8da3_62%,#4f5f77_100%)] bg-clip-text text-4xl font-bold tracking-tight text-transparent drop-shadow-[0_1px_0_rgba(255,255,255,0.2)] sm:text-5xl md:text-6xl">
               Ready Set Fly
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4">

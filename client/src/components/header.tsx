@@ -221,6 +221,8 @@ export function Header() {
   const isTraining = location.startsWith("/student") || location.startsWith("/start-flying");
   const isTools = location.startsWith("/tool-hub") || location.startsWith("/pilot-tools") || location.startsWith("/ifr-tools");
   const isFaq = location === "/faq";
+  const isMarketplace = location.startsWith("/marketplace");
+  const isRentals = location.startsWith("/rentals");
 
   const displayName = user?.firstName && user?.lastName
     ? `${user.firstName} ${user.lastName}`
@@ -313,12 +315,41 @@ export function Header() {
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 w-full order-3 sm:order-2 sm:flex-1">
             {/* Main Navigation Tabs - Compact on mobile */}
-            <nav className="flex w-full sm:flex-1 items-center gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 min-w-0 overflow-x-auto whitespace-nowrap" role="navigation" aria-label="Main navigation">
+            <nav className="flex w-full sm:flex-1 items-center justify-between gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 min-w-0 overflow-x-auto sm:overflow-visible whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="navigation" aria-label="Main navigation">
+              <Link href="/marketplace" data-testid="link-marketplace">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isMarketplace ? "bg-background shadow-sm" : ""}`}
+                  onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}
+                >
+                  Marketplace
+                </Button>
+              </Link>
+              <Link href="/rentals" data-testid="link-rentals">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isRentals ? "bg-background shadow-sm" : ""}`}
+                  onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}
+                >
+                  Rentals
+                </Button>
+              </Link>
+              <Link href="/faq" data-testid="link-faq">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isFaq ? "bg-background shadow-sm" : ""}`}
+                >
+                  FAQ
+                </Button>
+              </Link>
               <Link href="/flight-planner" data-testid="link-plan-flight">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isPlanner ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isPlanner ? "bg-background shadow-sm" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "plan_flight", target: "/flight-planner" })}
                 >
                   Plan Flight
@@ -328,7 +359,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isTraining ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isTraining ? "bg-background shadow-sm" : ""}`}
                 >
                   Training
                 </Button>
@@ -337,39 +368,10 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isTools ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isTools ? "bg-background shadow-sm" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "tools", target: "/tool-hub" })}
                 >
                   Tools
-                </Button>
-              </Link>
-              <Link href="/faq" data-testid="link-faq">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-4 ${isFaq ? "bg-background shadow-sm" : ""}`}
-                >
-                  FAQ
-                </Button>
-              </Link>
-              <Link href="/rentals" data-testid="link-rentals">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full text-xs sm:text-sm px-2 sm:px-4"
-                  onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}
-                >
-                  Rentals
-                </Button>
-              </Link>
-              <Link href="/marketplace" data-testid="link-marketplace">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full text-xs sm:text-sm px-2 sm:px-4"
-                  onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}
-                >
-                  Marketplace
                 </Button>
               </Link>
             </nav>
@@ -377,7 +379,7 @@ export function Header() {
             {/* Tool Search */}
             <form
               ref={searchRef}
-              className="relative w-full sm:w-[180px] md:w-[220px] lg:w-[260px] flex-shrink-0 overflow-visible z-[90] sm:order-none mt-1 sm:mt-0"
+              className="relative w-full sm:w-[135px] md:w-[165px] lg:w-[195px] flex-shrink-0 overflow-visible z-[90] sm:order-none mt-1 sm:mt-0"
               onSubmit={(event) => {
                 event.preventDefault();
                 handleToolSubmit();
@@ -386,7 +388,7 @@ export function Header() {
               <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="search"
-                placeholder="Search RSF (I.e., Jobs, Rentals, Logbook"
+                placeholder="Search RSF"
                 value={toolQuery}
                 onChange={(event) => {
                   setToolQuery(event.target.value);

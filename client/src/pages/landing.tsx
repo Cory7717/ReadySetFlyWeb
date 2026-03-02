@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
-import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -32,6 +32,8 @@ interface AirportSearchResult {
   city?: string | null;
   state?: string | null;
 }
+
+type LandingModuleId = "conditions" | "cfi" | "partner" | "events";
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 const AV8MAPS_EMBED_ENABLED =
@@ -124,6 +126,7 @@ export default function Landing() {
   const autoScrollActiveRef = useRef(false);
   const [eventsHovering, setEventsHovering] = useState(false);
   const [autoPauseUntil, setAutoPauseUntil] = useState(0);
+  const [openLandingModules, setOpenLandingModules] = useState<LandingModuleId[]>([]);
   const [icaoInput, setIcaoInput] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
@@ -356,6 +359,19 @@ export default function Landing() {
       container.style.scrollBehavior = "";
     };
   }, [feedEvents.length, eventsHovering, autoPauseUntil]);
+
+  const toggleLandingModule = (moduleId: LandingModuleId) => {
+    setOpenLandingModules((current) => {
+      const next = current.includes(moduleId)
+        ? current.filter((item) => item !== moduleId)
+        : [...current, moduleId];
+      trackEvent("landing_module_toggle", {
+        module: moduleId,
+        state: next.includes(moduleId) ? "open" : "closed",
+      });
+      return next;
+    });
+  };
 
   useEffect(() => {
     trackEvent("starting_point_section_view");
@@ -691,8 +707,71 @@ export default function Landing() {
         </div>
       </div>
 
-      {/* Current Conditions */}
       <div className="py-10 sm:py-12">
+        <div className="container mx-auto px-4">
+          <Card className="overflow-hidden border-white/12 bg-[linear-gradient(180deg,hsl(221_54%_18%/0.82),hsl(221_42%_15%/0.88))] text-slate-100 shadow-[var(--shadow-rsf-panel)]">
+            <CardContent className="p-5 sm:p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-2">
+                  <span className="rsf-kicker border-white/12 bg-white/8 text-slate-100">Operational Modules</span>
+                  <h2 className="text-2xl sm:text-3xl font-semibold">Open the next section when you need it</h2>
+                  <p className="max-w-3xl text-sm text-slate-200/85 sm:text-base">
+                    Keep the landing page focused, then reveal the operational area you want to work in next.
+                  </p>
+                </div>
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-300">Reveal workflow</div>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  {
+                    id: "conditions" as LandingModuleId,
+                    title: "Current Conditions",
+                    description: "Weather, runway guidance, and NOTAM briefing",
+                  },
+                  {
+                    id: "cfi" as LandingModuleId,
+                    title: "Create Your CFI Profile",
+                    description: "Instructor directory and profile setup",
+                  },
+                  {
+                    id: "partner" as LandingModuleId,
+                    title: "Featured Partner Tool",
+                    description: "Destination planning with Av8Maps",
+                  },
+                  {
+                    id: "events" as LandingModuleId,
+                    title: "Community Calendar",
+                    description: "Fly-ins, safety seminars, and aviation events",
+                  },
+                ].map((module) => {
+                  const isOpen = openLandingModules.includes(module.id);
+                  return (
+                    <button
+                      key={module.id}
+                      type="button"
+                      onClick={() => toggleLandingModule(module.id)}
+                      className="rounded-[1rem] border border-white/12 bg-white/6 p-4 text-left transition-colors hover:bg-white/10"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="text-sm font-semibold text-slate-50">{module.title}</div>
+                          <div className="text-xs text-slate-300">{module.description}</div>
+                        </div>
+                        {isOpen ? <ChevronUp className="mt-0.5 h-4 w-4 text-slate-200" /> : <ChevronDown className="mt-0.5 h-4 w-4 text-slate-200" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Current Conditions */}
+      {openLandingModules.includes("conditions") && (
+      <div className="pb-10 sm:pb-12">
         <div className="container mx-auto px-4 space-y-6">
           <div className="text-center space-y-2">
             <h2 className="text-2xl sm:text-3xl font-semibold">Current Conditions</h2>
@@ -943,10 +1022,13 @@ export default function Landing() {
           </div>
         </div>
       </div>
+      )}
 
       {/* CFI marketplace and featured partner */}
+      {(openLandingModules.includes("cfi") || openLandingModules.includes("partner")) && (
       <div className="py-10 sm:py-12">
         <div className="container mx-auto px-4">
+          {openLandingModules.includes("cfi") ? (
           <Card className="mt-6 border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--primary)/0.11))]">
             <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-4 max-w-3xl">
@@ -1007,25 +1089,30 @@ export default function Landing() {
               </div>
             </CardContent>
           </Card>
-          <FeaturedPartnerToolCard
-            className="mt-6 mx-auto w-full md:w-2/3"
-            partnerKey="av8maps"
-            title="Av8Maps - Nationwide GA Destination Maps"
-            description="Choose your next flight destination with fly-in camping, restaurants, aviation-friendly stays, and more."
-            logoSrc={av8mapsLogo}
-            ctaLabel="Explore Av8Maps"
-            outboundPath="/out/av8maps"
-            placement="home_featured_partner_card"
-            source="home_featured_partner_card"
-            badgeLabel="Featured Partner Tool"
-            embedEnabled={AV8MAPS_EMBED_ENABLED}
-            embedUrl={AV8MAPS_EMBED_URL || undefined}
-            tiles={av8mapsTiles}
-          />
+          ) : null}
+          {openLandingModules.includes("partner") ? (
+            <FeaturedPartnerToolCard
+              className="mt-6 mx-auto w-full md:w-2/3"
+              partnerKey="av8maps"
+              title="Av8Maps - Nationwide GA Destination Maps"
+              description="Choose your next flight destination with fly-in camping, restaurants, aviation-friendly stays, and more."
+              logoSrc={av8mapsLogo}
+              ctaLabel="Explore Av8Maps"
+              outboundPath="/out/av8maps"
+              placement="home_featured_partner_card"
+              source="home_featured_partner_card"
+              badgeLabel="Featured Partner Tool"
+              embedEnabled={AV8MAPS_EMBED_ENABLED}
+              embedUrl={AV8MAPS_EMBED_URL || undefined}
+              tiles={av8mapsTiles}
+            />
+          ) : null}
         </div>
       </div>
+      )}
 
       {/* Aviation Events Feed */}
+      {openLandingModules.includes("events") && (
       <div className="py-10">
         <div className="container mx-auto px-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1118,6 +1205,7 @@ export default function Landing() {
           )}
         </div>
       </div>
+      )}
 
       {/* Mobile App Section */}
       <div className="py-12 sm:py-16">

@@ -9467,12 +9467,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const property = typeof req.query.property === "string" ? req.query.property.trim() : "";
       const mporStandardRaw = Number(req.query.mporStandard ?? 24);
       const mporStandard = Number.isFinite(mporStandardRaw) ? mporStandardRaw : 24;
+      const budgetRaw = Number(req.query.budget);
+      const budgetedRevenue = Number.isFinite(budgetRaw) ? budgetRaw : null;
+      const roomInventoryRaw = Number(req.query.roomInventory ?? 134);
+      const roomInventory = Number.isFinite(roomInventoryRaw) && roomInventoryRaw > 0 ? roomInventoryRaw : 134;
       const summary = await buildHkSummary(startDate, endDate, property || null);
       const pdfBuffer = await renderHkMetricsPdf({
         property: property || "All",
         startDate,
         endDate,
         mporStandard,
+        budgetedRevenue,
+        roomInventory,
         summary: summary as any,
       });
       const safeProperty = (property || "all").replace(/[^a-z0-9-_]+/gi, "-").toLowerCase();

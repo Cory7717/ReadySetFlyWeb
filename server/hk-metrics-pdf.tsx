@@ -58,6 +58,8 @@ type HkPdfOptions = {
   startDate: string;
   endDate: string;
   mporStandard: number;
+  budgetedRevenue: number | null;
+  roomInventory: number;
   summary: HkSummary;
 };
 
@@ -177,7 +179,17 @@ const renderTable = (headers: string[], rows: Array<(string | number | null | un
 );
 
 export async function renderHkMetricsPdf(options: HkPdfOptions) {
-  const { property, startDate, endDate, summary, mporStandard } = options;
+  const { property, startDate, endDate, summary, mporStandard, budgetedRevenue, roomInventory } = options;
+  const reportDayCount = Math.max(
+    1,
+    Math.round(
+      (new Date(`${endDate}T00:00:00Z`).getTime() - new Date(`${startDate}T00:00:00Z`).getTime()) / 86400000
+    ) + 1
+  );
+  const overallOccupancy =
+    roomInventory > 0 ? `${((summary.overall.roomsSold / (roomInventory * reportDayCount)) * 100).toFixed(1)}%` : null;
+  const varianceToBudget =
+    budgetedRevenue === null ? null : (summary.overall.roomRevenueDaily ?? 0) - budgetedRevenue;
 
   const dailyRows = summary.dailyEntries.map((entry) => [
     entry.metricDate,
@@ -210,7 +222,17 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
   const monthlyRows = summary.monthlyRollups.map((entry) => [
     `${entry.key} (${entry.monthStart})`,
     entry.roomsSold,
+    roomInventory > 0
+      ? `${((entry.roomsSold /
+          (roomInventory *
+            (Math.round(
+              (new Date(`${entry.monthEnd}T00:00:00Z`).getTime() - new Date(`${entry.monthStart}T00:00:00Z`).getTime()) / 86400000
+            ) + 1))) *
+        100).toFixed(1)}%`
+      : null,
     entry.roomRevenueDaily,
+    entry.key === startDate.slice(0, 7) ? budgetedRevenue : null,
+    entry.key === startDate.slice(0, 7) && budgetedRevenue !== null ? (entry.roomRevenueDaily ?? 0) - budgetedRevenue : null,
     entry.totalDailyHours,
     entry.hpor,
     entry.checkouts,
@@ -267,6 +289,22 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
               <Text style={styles.summaryValue}>{formatValue(summary.overall.totalDailyHours)}</Text>
             </View>
             <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Budgeted Revenue</Text>
+              <Text style={styles.summaryValue}>{formatValue(budgetedRevenue)}</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Variance to Budget</Text>
+              <Text style={styles.summaryValue}>{formatValue(varianceToBudget)}</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Occupancy %</Text>
+              <Text style={styles.summaryValue}>{formatValue(overallOccupancy)}</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Room Inventory</Text>
+              <Text style={styles.summaryValue}>{formatValue(roomInventory)}</Text>
+            </View>
+            <View style={styles.summaryItem}>
               <Text style={styles.summaryLabel}>MPOR (Min)</Text>
               <Text style={styles.summaryValue}>{formatValue(summary.overall.mporPaid)}</Text>
             </View>
@@ -296,7 +334,7 @@ export async function renderHkMetricsPdf(options: HkPdfOptions) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Monthly Rollups</Text>
           {renderTable(
-            ["Month", "Sold", "Room Rev", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR (Min)"],
+            ["Month", "Sold", "Occ %", "Room Rev", "Budget", "Var to Budget", "Paid Hrs", "HPOR", "CO", "SO", "Rooms", "Std Hrs", "Variance", "MPOR (Min)"],
             monthlyRows
           )}
         </View>

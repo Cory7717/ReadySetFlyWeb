@@ -114,6 +114,7 @@ type HkSettings = {
   lunchMinutes: number;
   mporStandard: number;
   clockInTime: string;
+  roomInventory: number;
 };
 
 type HkAttendantEntry = {
@@ -135,6 +136,8 @@ type HkDayMeta = {
   roomsSoldImported?: boolean;
   notes: string;
 };
+
+type HkBudgetMap = Record<string, string>;
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -183,10 +186,28 @@ export default function AdminDashboard() {
           lunchMinutes: Number(parsed.lunchMinutes || 30),
           mporStandard: Number(parsed.mporStandard || 24),
           clockInTime: parsed.clockInTime || "08:00",
+          roomInventory: Number(parsed.roomInventory || 134),
         };
       } catch {}
     }
-    return { checkoutMinutes: 30, stayoverMinutes: 15, lunchMinutes: 30, mporStandard: 24, clockInTime: "08:00" };
+    return {
+      checkoutMinutes: 30,
+      stayoverMinutes: 15,
+      lunchMinutes: 30,
+      mporStandard: 24,
+      clockInTime: "08:00",
+      roomInventory: 134,
+    };
+  });
+  const [hkMonthlyBudgets, setHkMonthlyBudgets] = useState<HkBudgetMap>(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("hk-monthly-budgets") : null;
+    if (!stored) return {};
+    try {
+      const parsed = JSON.parse(stored) as HkBudgetMap;
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
   });
   const [hkExpandedDays, setHkExpandedDays] = useState<Record<string, boolean>>({});
   const [hkDayMeta, setHkDayMeta] = useState<Record<string, HkDayMeta>>({});
@@ -388,6 +409,12 @@ export default function AdminDashboard() {
       window.localStorage.setItem("hk-settings", JSON.stringify(hkSettings));
     }
   }, [hkSettings]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("hk-monthly-budgets", JSON.stringify(hkMonthlyBudgets));
+    }
+  }, [hkMonthlyBudgets]);
 
   
   const { toast } = useToast();
@@ -1825,6 +1852,13 @@ export default function AdminDashboard() {
     }).format(numeric);
   };
 
+  const formatPercentValue = (value: unknown) => {
+    if (value === null || value === undefined || value === "") return "-";
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "-";
+    return `${numeric.toFixed(1)}%`;
+  };
+
   const normalizeCurrencyInput = (value: string) => value.replace(/[^0-9.]/g, "");
 
   const formatDateInputValue = (value: unknown) => {
@@ -1888,6 +1922,42 @@ export default function AdminDashboard() {
           strokeLinejoin="round"
         />
       </svg>
+    );
+  };
+
+  const classifyHkDayMix = (checkouts: number, stayovers: number) => {
+    const total = checkouts + stayovers;
+    if (total <= 0) return "No load";
+    if (checkouts / total >= 0.55) return "Heavy C/O";
+    if (stayovers / total >= 0.55) return "Heavy S/O";
+    return "Balanced";
+  };
+
+  const TrendTimeline = ({
+    days,
+  }: {
+    days: Array<{ dateKey: string; mpor: number | null; dayLabel: string; shortDate: string; mixLabel: string }>;
+  }) => {
+    const values = days.map((day) => day.mpor);
+    return (
+      <div className="space-y-2">
+        <Sparkline values={values} />
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {days.map((day) => (
+            <div
+              key={day.dateKey}
+              className="min-w-[82px] rounded-md border bg-muted/20 px-2 py-2 text-center"
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                {day.dayLabel}
+              </div>
+              <div className="text-[10px] text-muted-foreground">{day.shortDate}</div>
+              <div className="mt-1 text-[10px] font-medium text-primary">{day.mixLabel}</div>
+              <div className="mt-1 text-xs font-semibold">{formatHkValue(day.mpor)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
   };
 
@@ -1963,6 +2033,18 @@ export default function AdminDashboard() {
       .map((day) => format(day, "yyyy-MM-dd"));
   }, [hkMonth]);
 
+  const hkDayTrendContext = useMemo(() => {
+    return hkMonthDays.reduce<Record<string, { dayLabel: string; shortDate: string; mixLabel: string }>>((acc, dateKey) => {
+      const totals = computeDayTotals(dateKey);
+      acc[dateKey] = {
+        dayLabel: format(parseISO(dateKey), "EEE"),
+        shortDate: format(parseISO(dateKey), "M/d"),
+        mixLabel: classifyHkDayMix(totals.totalCO, totals.totalSO),
+      };
+      return acc;
+    }, {});
+  }, [hkMonthDays, hkAttendantsByDay]);
+
   const hkRoster = useMemo(() => {
     const names = new Set<string>();
     Object.values(hkAttendantsByDay).forEach((entries) => {
@@ -2034,6 +2116,24 @@ export default function AdminDashboard() {
       }
     );
   }, [hkMonthDays, hkDayMeta, hkAttendantsByDay, hkSettings.mporStandard]);
+
+  const hkSelectedMonthBudget = useMemo(() => {
+    const raw = hkMonthlyBudgets[hkMonth];
+    if (!raw || !String(raw).trim()) return null;
+    return toNumber(raw);
+  }, [hkMonthlyBudgets, hkMonth]);
+
+  const hkSelectedMonthOccupancy = useMemo(() => {
+    if (hkSettings.roomInventory <= 0 || hkMonthDays.length === 0) return null;
+    const availableRoomNights = hkSettings.roomInventory * hkMonthDays.length;
+    if (availableRoomNights <= 0) return null;
+    return (hkDailySummary.sumRoomsSold / availableRoomNights) * 100;
+  }, [hkDailySummary.sumRoomsSold, hkMonthDays.length, hkSettings.roomInventory]);
+
+  const hkSelectedMonthVarianceToBudget = useMemo(() => {
+    if (hkSelectedMonthBudget === null) return null;
+    return hkDailySummary.sumRoomRevenueDaily - hkSelectedMonthBudget;
+  }, [hkDailySummary.sumRoomRevenueDaily, hkSelectedMonthBudget]);
 
   const hkLatestDayWithEntries = useMemo(() => {
     return (
@@ -2124,12 +2224,25 @@ export default function AdminDashboard() {
           hoursTotal += day.hours;
         });
         const mpor = toMporMinutes(hoursTotal, roomsTotal);
+        const trendDays = dateKeys.map((dateKey) => {
+          const context = hkDayTrendContext[dateKey] || {
+            dayLabel: format(parseISO(dateKey), "EEE"),
+            shortDate: format(parseISO(dateKey), "M/d"),
+            mixLabel: "No load",
+          };
+          return {
+            dateKey,
+            mpor: data.byDate[dateKey]?.mpor ?? null,
+            ...context,
+          };
+        });
         return {
           attendantName,
           roomsTotal,
           hoursTotal,
           mpor,
           trend: data.trend,
+          trendDays,
         };
       })
       .filter((entry) => entry.mpor !== null)
@@ -2143,12 +2256,12 @@ export default function AdminDashboard() {
   const hkRankingWeekly = useMemo(() => {
     if (!hkSelectedWeek) return [];
     return buildAttendantRanking(hkSelectedWeek.dateKeys);
-  }, [hkSelectedWeek, hkAttendantStats]);
+  }, [hkSelectedWeek, hkAttendantStats, hkDayTrendContext]);
 
   const hkRankingMtd = useMemo(() => {
     const mtdDates = hkMonthDays.filter((dateKey) => dateKey <= hkMtdEndDate);
     return buildAttendantRanking(mtdDates);
-  }, [hkMonthDays, hkMtdEndDate, hkAttendantStats]);
+  }, [hkMonthDays, hkMtdEndDate, hkAttendantStats, hkDayTrendContext]);
 
   const toggleHkDay = (dateKey: string) => {
     setHkExpandedDays((prev) => ({ ...prev, [dateKey]: !prev[dateKey] }));
@@ -2397,8 +2510,10 @@ export default function AdminDashboard() {
   const hkWeeklyRollups = hkSummary?.weeklyRollups ?? [];
   const hkMonthlyRollups = hkSummary?.monthlyRollups ?? [];
   const hkPropertyParam = hkProperty ? `&property=${encodeURIComponent(hkProperty)}` : "";
+  const hkBudgetParam = hkSelectedMonthBudget !== null ? `&budget=${encodeURIComponent(hkSelectedMonthBudget.toFixed(2))}` : "";
+  const hkRoomInventoryParam = `&roomInventory=${encodeURIComponent(hkSettings.roomInventory)}`;
   const hkPdfUrl = apiUrl(
-    `/api/admin/hk-metrics/pdf?start=${hkMonthRange.startDate}&end=${hkMonthRange.endDate}${hkPropertyParam}&mporStandard=${hkSettings.mporStandard}`
+    `/api/admin/hk-metrics/pdf?start=${hkMonthRange.startDate}&end=${hkMonthRange.endDate}${hkPropertyParam}&mporStandard=${hkSettings.mporStandard}${hkBudgetParam}${hkRoomInventoryParam}`
   );
 
   return (
@@ -3217,7 +3332,7 @@ export default function AdminDashboard() {
               <CardDescription>One row per day with expandable attendant production</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-6">
                 <div className="space-y-2">
                   <Label>Month</Label>
                   <Input type="month" value={hkMonth} onChange={(event) => setHkMonth(event.target.value)} />
@@ -3232,6 +3347,36 @@ export default function AdminDashboard() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <Label>Monthly Budget</Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={hkMonthlyBudgets[hkMonth] ?? ""}
+                      onChange={(event) =>
+                        setHkMonthlyBudgets((prev) => ({
+                          ...prev,
+                          [hkMonth]: normalizeCurrencyInput(event.target.value),
+                        }))
+                      }
+                      className="pl-7"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Total Rooms</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={hkSettings.roomInventory}
+                    onChange={(event) =>
+                      setHkSettings((prev) => ({ ...prev, roomInventory: Math.max(1, toNumber(event.target.value)) }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label>Clock In Time</Label>
                   <Input
                     type="time"
@@ -3243,6 +3388,28 @@ export default function AdminDashboard() {
                   <Button asChild className="w-full">
                     <a href={hkPdfUrl} target="_blank" rel="noreferrer">Export PDF</a>
                   </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-4">
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Actual Revenue</div>
+                  <div className="mt-2 text-2xl font-semibold">{formatCurrencyValue(hkDailySummary.sumRoomRevenueDaily)}</div>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Budget</div>
+                  <div className="mt-2 text-2xl font-semibold">{formatCurrencyValue(hkSelectedMonthBudget)}</div>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Variance to Budget</div>
+                  <div className="mt-2 text-2xl font-semibold">{formatCurrencyValue(hkSelectedMonthVarianceToBudget)}</div>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Occupancy</div>
+                  <div className="mt-2 text-2xl font-semibold">{formatPercentValue(hkSelectedMonthOccupancy)}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {formatHkValue(hkSettings.roomInventory)} rooms x {formatHkValue(hkMonthDays.length)} days
+                  </div>
                 </div>
               </div>
 
@@ -3658,7 +3825,10 @@ export default function AdminDashboard() {
                         <tr>
                           <th className="p-2 text-left">Month</th>
                           <th className="p-2 text-right">Sold</th>
+                          <th className="p-2 text-right">Occupancy</th>
                           <th className="p-2 text-right">Room Rev</th>
+                          <th className="p-2 text-right">Budget</th>
+                          <th className="p-2 text-right">Var to Budget</th>
                           <th className="p-2 text-right">Paid Hrs</th>
                           <th className="p-2 text-right">HPOR</th>
                           <th className="p-2 text-right">Missing</th>
@@ -3679,11 +3849,26 @@ export default function AdminDashboard() {
                             : null;
                           const roomRevenue = isSelectedMonth ? hkDailySummary.sumRoomRevenueDaily : entry.roomRevenueDaily;
                           const hporValue = isSelectedMonth ? mtdHpor : entry.hpor;
+                          const roomsSoldValue = isSelectedMonth ? hkDailySummary.sumRoomsSold : Number(entry.roomsSold || 0);
+                          const monthBudgetRaw = hkMonthlyBudgets[entry.key];
+                          const monthBudget = monthBudgetRaw && monthBudgetRaw.trim() ? toNumber(monthBudgetRaw) : null;
+                          const monthBudgetVariance = monthBudget === null ? null : Number(roomRevenue ?? 0) - monthBudget;
+                          const availableRoomNights =
+                            hkSettings.roomInventory > 0
+                              ? hkSettings.roomInventory * eachDayOfInterval({
+                                  start: parseISO(entry.monthStart),
+                                  end: parseISO(entry.monthEnd),
+                                }).length
+                              : 0;
+                          const occupancy = availableRoomNights > 0 ? (roomsSoldValue / availableRoomNights) * 100 : null;
                           return (
                           <tr key={entry.key} className="border-b">
                             <td className="p-2">{entry.key}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.roomsSold)}</td>
+                            <td className="p-2 text-right">{formatPercentValue(occupancy)}</td>
                             <td className="p-2 text-right">{formatCurrencyValue(roomRevenue)}</td>
+                            <td className="p-2 text-right">{formatCurrencyValue(monthBudget)}</td>
+                            <td className="p-2 text-right">{formatCurrencyValue(monthBudgetVariance)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.totalDailyHours)}</td>
                             <td className="p-2 text-right">{formatHkValue(hporValue)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.hporMissingDays)}</td>
@@ -3746,7 +3931,7 @@ export default function AdminDashboard() {
                           <th className="p-2 text-right">MPOR (Min)</th>
                           <th className="p-2 text-right">Rooms</th>
                           <th className="p-2 text-right">Hours</th>
-                          <th className="p-2 text-left">Trend</th>
+                          <th className="p-2 text-left min-w-[340px]">Trend by Day</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3758,7 +3943,7 @@ export default function AdminDashboard() {
                             <td className="p-2 text-right">{formatHkValue(entry.roomsTotal)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.hoursTotal)}</td>
                             <td className="p-2">
-                              <Sparkline values={entry.trend} />
+                              <TrendTimeline days={entry.trendDays} />
                             </td>
                           </tr>
                         ))}
@@ -3782,7 +3967,7 @@ export default function AdminDashboard() {
                           <th className="p-2 text-right">MPOR (Min)</th>
                           <th className="p-2 text-right">Rooms</th>
                           <th className="p-2 text-right">Hours</th>
-                          <th className="p-2 text-left">Trend</th>
+                          <th className="p-2 text-left min-w-[340px]">Trend by Day</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3794,7 +3979,7 @@ export default function AdminDashboard() {
                             <td className="p-2 text-right">{formatHkValue(entry.roomsTotal)}</td>
                             <td className="p-2 text-right">{formatHkValue(entry.hoursTotal)}</td>
                             <td className="p-2">
-                              <Sparkline values={entry.trend} />
+                              <TrendTimeline days={entry.trendDays} />
                             </td>
                           </tr>
                         ))}

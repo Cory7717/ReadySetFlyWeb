@@ -97,6 +97,7 @@ export const users = pgTable("users", {
   weeklyEmailOptIn: boolean("weekly_email_opt_in").default(true),
   weeklyEmailLastSentAt: timestamp("weekly_email_last_sent_at"),
   weeklyEmailOptOutAt: timestamp("weekly_email_opt_out_at"),
+  proTrialOfferSentAt: timestamp("pro_trial_offer_sent_at"),
   
   // Identity Documents
   governmentIdFrontUrl: text("government_id_front_url"),

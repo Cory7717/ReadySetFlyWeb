@@ -6049,6 +6049,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/admin/marketing/pro-trial-offer", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const dryRun = Boolean(req.body?.dryRun);
+      const testEmail = typeof req.body?.testEmail === "string" ? req.body.testEmail.trim() : "";
+      const forceResend = Boolean(req.body?.forceResend);
+      const requestedLimit = Number(req.body?.limit);
+      const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(250, requestedLimit)) : 250;
+
+      const {
+        getProTrialOfferEmailHtml,
+        getProTrialOfferEmailText,
+      } = await import("./email-templates");
+
+      const allUsers = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          firstName: users.firstName,
+          isSuspended: users.isSuspended,
+          weeklyEmailOptIn: users.weeklyEmailOptIn,
+          membershipTier: users.membershipTier,
+          membershipStatus: users.membershipStatus,
+          membershipTrialEndsAt: users.membershipTrialEndsAt,
+          proTrialOfferSentAt: users.proTrialOfferSentAt,
+        })
+        .from(users);
+
+      const candidates = allUsers
+        .filter((user) => {
+          if (!user.email) return false;
+          if (user.isSuspended) return false;
+          if (!user.weeklyEmailOptIn) return false;
+          if (!forceResend && user.proTrialOfferSentAt) return false;
+          if (user.membershipStatus === "active" || user.membershipStatus === "trialing") return false;
+          if (user.membershipTrialEndsAt) return false;
+          if (user.membershipTier && user.membershipTier !== "free") return false;
+          return true;
+        })
+        .slice(0, limit);
+
+      if (testEmail) {
+        const { client, fromEmail } = await getUncachableResendClient();
+        const token = signMarketingToken({ userId: req.user?.claims?.sub || "test-user", action: "weekly_opt_out" });
+        const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+
+        await client.emails.send({
+          from: fromEmail,
+          to: testEmail,
+          subject: "Try RSF Pro free for 14 days",
+          html: getProTrialOfferEmailHtml({ firstName: "Pilot", unsubscribeUrl }),
+          text: getProTrialOfferEmailText({ firstName: "Pilot", unsubscribeUrl }),
+        });
+
+        return res.json({
+          success: true,
+          mode: "test",
+          sentTo: testEmail,
+        });
+      }
+
+      if (dryRun) {
+        return res.json({
+          success: true,
+          mode: "dry-run",
+          totalCandidates: candidates.length,
+          candidates: candidates.map((user) => ({
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            membershipTier: user.membershipTier,
+            membershipStatus: user.membershipStatus,
+            previouslySentAt: user.proTrialOfferSentAt,
+          })),
+        });
+      }
+
+      const { client, fromEmail } = await getUncachableResendClient();
+      const errors: string[] = [];
+      let emailsSent = 0;
+
+      for (const user of candidates) {
+        const firstName = user.firstName || user.email!.split("@")[0];
+        const token = signMarketingToken({ userId: user.id, action: "weekly_opt_out" });
+        const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+
+        try {
+          await client.emails.send({
+            from: fromEmail,
+            to: user.email!,
+            subject: "Try RSF Pro free for 14 days",
+            html: getProTrialOfferEmailHtml({ firstName, unsubscribeUrl }),
+            text: getProTrialOfferEmailText({ firstName, unsubscribeUrl }),
+          });
+
+          await storage.updateUser(user.id, {
+            proTrialOfferSentAt: new Date(),
+          });
+
+          emailsSent += 1;
+        } catch (error: any) {
+          console.error(`Failed to send Pro trial offer to ${user.email}:`, error);
+          errors.push(`${user.email}: ${error.message || "send failed"}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        mode: "send",
+        totalCandidates: candidates.length,
+        emailsSent,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error: any) {
+      console.error("Pro trial offer campaign error:", error);
+      res.status(500).json({ error: "Failed to send Pro trial offer campaign", details: error.message });
+    }
+  });
+
   // Cron endpoint: Clear approach-plate cache (metadata is fetched on demand)
   app.post("/api/cron/approach-plates/sync", async (req, res) => {
     try {

@@ -1286,4 +1286,78 @@ Unsubscribe: ${data.unsubscribeUrl}
   `.trim();
 }
 
+export function getProTrialOfferEmailHtml(data: {
+  firstName: string;
+  unsubscribeUrl: string;
+}): string {
+  const appUrl = process.env.FRONTEND_BASE_URL || process.env.APP_BASE_URL || process.env.WEB_BASE_URL || "https://readysetfly.us";
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #eef2ff; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+    .card { background: #ffffff; border-radius: 12px; padding: 28px; border: 1px solid #cbd5e1; }
+    .header { background: linear-gradient(135deg, #1d4ed8, #1e3a8a); color: #fff; padding: 20px 24px; border-radius: 10px; }
+    .cta { display: inline-block; background: #1d4ed8; color: #fff !important; padding: 12px 18px; border-radius: 8px; text-decoration: none; font-weight: 700; }
+    .list { margin: 16px 0; padding-left: 18px; }
+    .note { font-size: 12px; color: #64748b; margin-top: 20px; }
+    .pill { display: inline-block; margin-top: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <div class="pill">14-day Pro trial</div>
+        <h2 style="margin: 12px 0 0 0;">Try RSF Pro free for 14 days</h2>
+      </div>
+      <p style="margin-top: 20px;">Hi ${data.firstName},</p>
+      <p>Ready Set Fly now includes a 14-day free trial on the monthly RSF Pro plan. If you have been browsing the marketplace, planning flights, or using the training tools, this is the easiest way to try the full workflow.</p>
+      <ul class="list">
+        <li>Save flight plans and aircraft profiles.</li>
+        <li>Keep your digital logbook, endorsements, and training history in one place.</li>
+        <li>Track currency and continue working across planning and training tools.</li>
+      </ul>
+      <p>RSF is built to make general aviation easier to navigate — from rentals and instructors to planning and tracking tools in one place.</p>
+      <div style="margin-top: 18px;">
+        <a class="cta" href="${appUrl}/logbook-pro">Start your 14-day trial</a>
+      </div>
+      <p class="note">
+        Monthly plans start at $5.99 after the free trial. Cancel any time before renewal.
+        <a href="${data.unsubscribeUrl}">Unsubscribe</a>.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+export function getProTrialOfferEmailText(data: {
+  firstName: string;
+  unsubscribeUrl: string;
+}): string {
+  const appUrl = process.env.FRONTEND_BASE_URL || process.env.APP_BASE_URL || process.env.WEB_BASE_URL || "https://readysetfly.us";
+  return `
+Try RSF Pro free for 14 days
+
+Hi ${data.firstName},
+
+Ready Set Fly now includes a 14-day free trial on the monthly RSF Pro plan.
+
+Try the full workflow:
+- Save flight plans and aircraft profiles
+- Keep your digital logbook and training history in one place
+- Track currency and continue working across planning and training tools
+
+Start your trial: ${appUrl}/logbook-pro
+
+Monthly plans start at $5.99 after the free trial. Cancel any time before renewal.
+Unsubscribe: ${data.unsubscribeUrl}
+  `.trim();
+}
+
 

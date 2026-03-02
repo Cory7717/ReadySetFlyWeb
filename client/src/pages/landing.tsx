@@ -388,17 +388,17 @@ export default function Landing() {
       <div className="relative overflow-hidden bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
           <div className="max-w-4xl mx-auto text-center space-y-4 sm:space-y-6">
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight">
+            <h1 className="bg-[linear-gradient(180deg,#eef3fa_0%,#cfd7e3_42%,#a9b4c4_100%)] bg-clip-text text-4xl font-bold tracking-tight text-transparent drop-shadow-[0_1px_0_rgba(255,255,255,0.28)] sm:text-5xl md:text-6xl">
               Ready Set Fly
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4">
-              Find rentals, instructors, and aviation services. Keep the tools close.
+              Making general aviation easier to navigate.
             </p>
             <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
-              Ready Set Fly is a marketplace-first aviation platform for pilots who need rentals, CFIs, flight schools, and aviation services in one place.
+              From aircraft rentals to instructors and local services, we are bringing everything in General Aviation into one place — so pilots spend less time searching and more time flying.
             </p>
             <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto px-4">
-              The built-in planner, digital logbook, current conditions, and training tools are here to keep users engaged after they land on the marketplace and need to keep working.
+              The built-in planner, digital logbook, current conditions, and training tools help pilots plan flights, track progress, and manage their flying workflow in one place.
             </p>
             <p className="text-sm sm:text-base font-semibold text-primary">
               Find first. Plan second. Train and track when you are ready.

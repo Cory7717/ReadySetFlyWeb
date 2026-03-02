@@ -386,7 +386,7 @@ export function Header() {
               <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="search"
-                placeholder="Search tools..."
+                placeholder="Search RSF (I.e., Jobs, Rentals, Logbook"
                 value={toolQuery}
                 onChange={(event) => {
                   setToolQuery(event.target.value);

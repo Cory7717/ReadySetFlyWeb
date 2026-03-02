@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Switch } from "@/components/ui/switch";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import { ObjectUploader } from "@/components/ObjectUploader";
+import { PageShell } from "@/components/layout/PageShell";
 
 // Helper function to calculate totals from entries
 function calculateTotals(entries: LogbookEntry[]) {
@@ -470,7 +471,17 @@ export default function Logbook() {
   const totals = calculateTotals(entries);
 
   return (
-    <div className="container mx-auto py-8 px-4">
+    <PageShell
+      kicker="Records"
+      title="Digital Logbook"
+      description="Capture flights, endorsements, totals, and currency in one working logbook."
+      actions={
+        <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">
+          Free digital logbook
+        </Badge>
+      }
+      contentClassName="space-y-6"
+    >
       <UpgradePromptDialog
         open={showUpgradePrompt}
         onOpenChange={setShowUpgradePrompt}
@@ -1394,7 +1405,7 @@ export default function Logbook() {
           </DialogContent>
         </Dialog>
       )}
-    </div>
+    </PageShell>
   );
 }
 

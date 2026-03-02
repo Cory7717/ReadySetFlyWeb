@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { trackEvent } from "@/lib/analytics";
+import { PageShell } from "@/components/layout/PageShell";
 
 const tools = [
   {
@@ -68,27 +69,29 @@ export default function IfrTools() {
   }, []);
 
   return (
-    <div className="min-h-screen">
-      <section className="bg-muted py-10">
-        <div className="container mx-auto px-4 space-y-3">
-          <Badge variant="outline">IFR Tools</Badge>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold">Instrument Flight Tools</h1>
-          <p className="text-muted-foreground max-w-3xl">
-            Train IFR workflows with RSF-branded simulators, plates, and planning tools.
-            Guest mode is fully supported.
-          </p>
-          <div className="flex flex-wrap gap-3">
+    <PageShell
+      kicker="Instrument"
+      title="Instrument Flight Tools"
+      description={
+        <>
+          Train IFR workflows with RSF-branded simulators, plates, and planning tools.
+          {" "}
+          Guest mode is fully supported.
+        </>
+      }
+      actions={
+        <>
             <Button variant="outline" disabled aria-disabled>
               GPS Sims coming soon
             </Button>
             <Button asChild variant="outline">
               <Link href="/student">Student Hub</Link>
             </Button>
-          </div>
-        </div>
-      </section>
-
-      <section className="container mx-auto px-4 py-10 space-y-6">
+        </>
+      }
+      contentClassName="space-y-6"
+    >
+      <section className="space-y-6">
         <Alert>
           <AlertTitle>Training aid only</AlertTitle>
           <AlertDescription>
@@ -131,6 +134,6 @@ export default function IfrTools() {
           ))}
         </div>
       </section>
-    </div>
+    </PageShell>
   );
 }

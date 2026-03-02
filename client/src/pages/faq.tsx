@@ -1,4 +1,5 @@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { PageShell } from "@/components/layout/PageShell";
 
 const FAQS = [
   {
@@ -41,14 +42,12 @@ const FAQS = [
 
 export default function FaqPage() {
   return (
-    <div className="container mx-auto py-10 px-4 max-w-4xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold">FAQ</h1>
-        <p className="text-muted-foreground">
-          Quick answers to common questions about Ready Set Fly.
-        </p>
-      </div>
-
+    <PageShell
+      kicker="Support"
+      title="FAQ"
+      description="Quick answers to common questions about Ready Set Fly."
+      contentClassName="max-w-4xl space-y-6"
+    >
       <Accordion type="single" collapsible className="space-y-3">
         {FAQS.map((item) => (
           <AccordionItem key={item.id} value={item.id} className="rounded-lg border">
@@ -61,6 +60,6 @@ export default function FaqPage() {
           </AccordionItem>
         ))}
       </Accordion>
-    </div>
+    </PageShell>
   );
 }

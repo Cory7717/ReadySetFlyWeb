@@ -7,6 +7,7 @@ import { trackEvent } from "@/lib/analytics";
 import { NextStepCTA } from "@/components/student/NextStepCTA";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { useAuth } from "@/hooks/useAuth";
+import { PageShell } from "@/components/layout/PageShell";
 
 const tools = [
   { title: "Can I Become a Pilot?", description: "Quick wizard to map your path.", href: "/student/wizard" },
@@ -33,14 +34,12 @@ export default function StudentHub() {
   }, []);
 
   return (
-    <div className="min-h-screen">
-      <section className="bg-muted py-10">
-        <div className="container mx-auto px-4 space-y-3">
-          <h1 className="font-display text-3xl sm:text-4xl font-bold">Student Pilots</h1>
-          <p className="text-muted-foreground max-w-3xl">
-            Start flying with tools-first guidance. Build confidence, plan your timeline, and connect with training providers.
-          </p>
-          <div className="flex flex-wrap gap-3">
+    <PageShell
+      kicker="Training"
+      title="Student Pilots"
+      description="Start flying with tools-first guidance. Build confidence, plan your timeline, and connect with training providers."
+      actions={
+        <>
             <NextStepCTA label="Find a Flight School" type="flight-school" />
             <NextStepCTA label="Book a Discovery Flight" type="flight-school" tags={["discovery-flight"]} />
             <Button
@@ -53,16 +52,13 @@ export default function StudentHub() {
               <Link href="/flight-planner">Open Flight Planner</Link>
             </Button>
             <Badge variant="outline">Free tools for new pilots</Badge>
-          </div>
-        </div>
-      </section>
+        </>
+      }
+      contentClassName="space-y-8"
+    >
+      <BannerAdRotation placement="student-hub" className="px-0 py-0" />
 
-      <BannerAdRotation
-        placement="student-hub"
-        className="container mx-auto px-4 py-8"
-      />
-
-      <section className="container mx-auto px-4 py-10">
+      <section>
         {!isAuthenticated ? (
           <Card className="mb-6 border-primary/20 bg-primary/5">
             <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -111,6 +107,6 @@ export default function StudentHub() {
           ))}
         </div>
       </section>
-    </div>
+    </PageShell>
   );
 }

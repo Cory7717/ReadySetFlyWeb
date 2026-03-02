@@ -18,6 +18,7 @@ import { formatPrice } from "@/lib/formatters";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
+import { PageShell } from "@/components/layout/PageShell";
 
 const categories = [
   { id: "aircraft-sale", label: "Aircraft For Sale", fee: "$25-100/mo" },
@@ -159,32 +160,12 @@ export default function Marketplace() {
   }, [selectedCategory, isLoading, categoryListings.length, appliedQueryParams, cityFilter, keywordFilter, hasShownSchoolEmptyModal]);
 
   return (
-    <div className="min-h-screen">
-      {/* Header */}
-      <section className="bg-muted py-8 sm:py-12">
-        <div className="container mx-auto px-4">
-          <h1 className="font-display text-3xl sm:text-4xl font-bold mb-3 sm:mb-4" data-testid="text-marketplace-title">
-            Aviation Marketplace
-          </h1>
-          <p className="text-base sm:text-lg text-muted-foreground max-w-3xl">
-            Connect with the aviation community. Buy, sell, and find professional services.
-          </p>
-          {!isAuthenticated && (
-            <div className="mt-4">
-              <Alert>
-                <AlertDescription className="flex flex-wrap items-center gap-3">
-                  <span>Create a free account to save listings and contact sellers faster.</span>
-                  <Button asChild size="sm">
-                    <Link href="/register">Create free account</Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href="/login">Sign in</Link>
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
-          <div className="flex flex-wrap gap-3 mt-4">
+    <PageShell
+      kicker="Marketplace"
+      title="Aviation Marketplace"
+      description="Connect with the aviation community. Buy, sell, and find professional services."
+      actions={
+        <>
             <Button
               variant="default"
               onClick={() => {
@@ -208,12 +189,28 @@ export default function Marketplace() {
             >
               Post a Listing
             </Button>
-          </div>
+        </>
+      }
+      contentClassName="px-0 py-0"
+    >
+      {!isAuthenticated && (
+        <div className="container mx-auto px-4 pt-6">
+          <Alert>
+            <AlertDescription className="flex flex-wrap items-center gap-3">
+              <span>Create a free account to save listings and contact sellers faster.</span>
+              <Button asChild size="sm">
+                <Link href="/register">Create free account</Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/login">Sign in</Link>
+              </Button>
+            </AlertDescription>
+          </Alert>
         </div>
-      </section>
+      )}
 
       {/* Category Navigation */}
-      <section className="border-b bg-background sticky top-16 z-40">
+      <section className="sticky top-16 z-40 border-b border-white/10 bg-[hsl(var(--card)/0.9)] backdrop-blur-md">
         <div className="container mx-auto px-4">
           <ScrollArea className="w-full whitespace-nowrap">
             <div className="flex gap-2 py-4">
@@ -668,6 +665,6 @@ export default function Marketplace() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

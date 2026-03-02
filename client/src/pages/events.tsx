@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PageShell } from "@/components/layout/PageShell";
 
 type AviationEvent = {
   id: string;
@@ -204,7 +205,7 @@ export default function EventsPage() {
   };
 
   const mutation = useMutation({
-    mutationFn: async (payload: typeof formState) => {
+    mutationFn: async (payload: z.infer<typeof eventSchema>) => {
       const response = await fetch(apiUrl("/api/events"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -279,29 +280,21 @@ export default function EventsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      <section className="bg-gradient-to-br from-slate-50 via-background to-background py-12">
-        <div className="container mx-auto px-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <CalendarDays className="h-4 w-4" />
-            Aviation Community Calendar
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-bold">Upcoming Aviation Events</h1>
-          <p className="text-muted-foreground max-w-3xl">
-            Share fly-ins, airshows, safety seminars, and training nights. Events require a free RSF account to reduce
-            spam and keep the calendar aviation-focused.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Button asChild variant="outline">
-              <Link href="/">Back to Home</Link>
-            </Button>
-            <Badge variant="outline">US-only</Badge>
-            <Badge variant="secondary">Free account required</Badge>
-          </div>
-        </div>
-      </section>
-
-      <section className="container mx-auto px-4 py-10 grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+    <PageShell
+      kicker="Community"
+      title="Upcoming Aviation Events"
+      description="Share fly-ins, airshows, safety seminars, and training nights. Events require a free RSF account to reduce spam and keep the calendar aviation-focused."
+      actions={
+        <>
+          <Button asChild variant="outline">
+            <Link href="/">Back to Home</Link>
+          </Button>
+          <Badge variant="outline">US-only</Badge>
+          <Badge variant="secondary">Free account required</Badge>
+        </>
+      }
+      contentClassName="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]"
+    >
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Event Feed</h2>
@@ -530,7 +523,7 @@ export default function EventsPage() {
             </CardContent>
           </Card>
         </div>
-      </section>
+      
 
       <Dialog open={Boolean(selectedEvent)} onOpenChange={(open) => (!open ? setSelectedEvent(null) : null)}>
         <DialogContent className="max-w-xl">
@@ -569,6 +562,6 @@ export default function EventsPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }

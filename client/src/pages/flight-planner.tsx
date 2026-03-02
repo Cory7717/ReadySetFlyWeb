@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import type { FlightPlan } from "@shared/schema";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
+import { PageShell } from "@/components/layout/PageShell";
 
 const PlannerMap = lazy(() => import("@/components/flight-planner/PlannerMap"));
 const CesiumGlobe = lazy(() => import("@/components/flight-planner/CesiumGlobe"));
@@ -1771,7 +1772,34 @@ export default function FlightPlanner() {
   }, [selectedProfile, selectedType, selectedTypeId]);
 
   return (
-    <div className="container mx-auto py-10 px-4 max-w-6xl space-y-6">
+    <PageShell
+      kicker="Core Workflow"
+      title="Plan a Flight"
+      description={
+        <>
+          Build a route and get route analysis before you fly.
+          {!isPro ? (
+            <span className="block pt-2 text-xs text-slate-200/80 sm:text-sm">
+              Free accounts can save your first plan. RSF Pro adds unlimited saved plans, aircraft profiles, alerts, and analytics.
+            </span>
+          ) : null}
+        </>
+      }
+      actions={
+        <>
+          {!isPro && <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Preview mode</Badge>}
+          <Button
+            asChild
+            variant="outline"
+            className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10"
+            onClick={() => trackEvent("planner_upgrade_click", { target: "/logbook/pro" })}
+          >
+            <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
+          </Button>
+        </>
+      }
+      contentClassName="max-w-6xl space-y-6"
+    >
       <UpgradePromptDialog
         open={showUpgradePrompt}
         onOpenChange={setShowUpgradePrompt}
@@ -1784,30 +1812,6 @@ export default function FlightPlanner() {
           "Upgrade for unlimited saved plans, alerts, and advanced analytics.",
         ]}
       />
-      <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-3xl font-bold">Plan a Flight</h1>
-            <p className="text-muted-foreground">
-              Build a route and get route analysis before you fly.
-            </p>
-            {!isPro && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Free accounts can save your first plan. RSF Pro adds unlimited saved plans, aircraft profiles, alerts, and analytics.
-              </p>
-            )}
-          </div>
-        <div className="flex items-center gap-2">
-          {!isPro && <Badge variant="outline">Preview mode</Badge>}
-          <Button
-            asChild
-            variant="outline"
-            onClick={() => trackEvent("planner_upgrade_click", { target: "/logbook/pro" })}
-          >
-            <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
-          </Button>
-        </div>
-      </div>
-
       <Alert>
         <AlertDescription>
           Planning estimates only. Always verify against the aircraft POH/AFM and current conditions.
@@ -3042,6 +3046,6 @@ export default function FlightPlanner() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageShell>
   );
 }

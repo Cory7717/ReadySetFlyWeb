@@ -369,7 +369,7 @@ export default function Landing() {
       />
 
       {/* Hero Section */}
-      <div className="relative bg-[linear-gradient(180deg,hsl(var(--background)),hsl(var(--background)))]">
+      <div className="relative overflow-hidden bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
           <div className="max-w-4xl mx-auto text-center space-y-4 sm:space-y-6">
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight">
@@ -425,9 +425,9 @@ export default function Landing() {
       <div className="rsf-section-band py-8 sm:py-10">
         <div className="container mx-auto px-4">
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <Card className="overflow-hidden bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.6))]">
+            <Card className="overflow-hidden border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))]">
               <CardContent className="p-5 sm:p-6">
-                <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-slate-900/20 bg-[linear-gradient(135deg,hsl(221_38%_16%),hsl(221_68%_34%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
                   <div>
                     <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Operations Deck</div>
                     <div className="text-sm text-slate-200">Daily-use tools pilots should find first</div>
@@ -453,7 +453,7 @@ export default function Landing() {
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <Card className="border-primary/25 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.08))]">
+                  <Card className="border-primary/30 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Core workflow</div>
@@ -474,7 +474,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-primary/25 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.06))]">
+                  <Card className="border-primary/28 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.1))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Airspace</div>
@@ -495,7 +495,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-[hsl(var(--accent)/0.28)] bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--accent)/0.08))]">
+                  <Card className="border-[hsl(var(--accent)/0.34)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.12))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--accent))]">Training</div>
@@ -516,7 +516,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-slate-800/15 bg-[linear-gradient(180deg,hsl(var(--card)),rgba(22,32,42,0.06))]">
+                  <Card className="border-slate-900/18 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(22,32,42,0.1))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/90 dark:text-slate-300/80">Instrument + Performance</div>
@@ -537,7 +537,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-primary/18 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.04))]">
+                  <Card className="border-primary/22 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">Discovery</div>
@@ -558,7 +558,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-accent/30 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--accent)/0.1))]">
+                  <Card className="border-accent/34 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.14))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/80 dark:text-slate-300/80">Records</div>
@@ -580,7 +580,7 @@ export default function Landing() {
                   </Card>
                 </div>
 
-                <div className="mt-4 overflow-hidden rounded-[1rem] border border-slate-900/20 bg-[linear-gradient(180deg,hsl(221_34%_15%),hsl(219_28%_20%))] shadow-[var(--shadow-rsf-panel)]">
+                <div className="mt-4 overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,hsl(221_52%_19%),hsl(221_34%_15%))] shadow-[var(--shadow-rsf-panel)]">
                   <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
                     <span>RSF walkthrough</span>
                     <span className="text-slate-400">Muted overview</span>
@@ -600,7 +600,7 @@ export default function Landing() {
               </CardContent>
             </Card>
 
-            <Card className="bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.55))]">
+            <Card className="border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))]">
               <CardContent className="p-5 sm:p-6">
                 <div className="text-center space-y-3">
                   <span className="rsf-kicker mx-auto">RSF Memberships</span>
@@ -611,7 +611,7 @@ export default function Landing() {
                 </div>
 
                 <div className="mt-6 grid gap-4">
-                  <Card className="bg-[linear-gradient(180deg,hsl(var(--card)),rgba(255,255,255,0.55))]">
+                  <Card className="border-white/16 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(255,255,255,0.62))]">
                     <CardHeader>
                       <CardTitle className="text-lg">RSF Free</CardTitle>
                       <CardDescription>Open tools, no credit card required.</CardDescription>
@@ -635,7 +635,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-primary/35 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.08))]">
+                  <Card className="border-primary/40 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))]">
                     <CardHeader>
                       <Badge className="w-fit">Most Popular</Badge>
                       <CardTitle className="text-lg">{membershipTierInfo.pro.title}</CardTitle>
@@ -660,7 +660,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-[hsl(var(--accent)/0.26)] bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--accent)/0.07))]">
+                  <Card className="border-[hsl(var(--accent)/0.32)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.11))]">
                     <CardHeader>
                       <Badge variant="secondary" className="w-fit">Power Pilot</Badge>
                       <CardTitle className="text-lg">{membershipTierInfo.pro_plus.title}</CardTitle>
@@ -701,7 +701,7 @@ export default function Landing() {
             </p>
           </div>
 
-          <Card className="bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.45))]">
+          <Card className="border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.7))]">
             <CardContent className="p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="space-y-2">
@@ -769,7 +769,7 @@ export default function Landing() {
           </Card>
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <Card id="airport-weather" className="bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.04))]">
+            <Card id="airport-weather" className="border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--primary)/0.09))]">
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle>{conditionsTitle}</CardTitle>
@@ -849,7 +849,7 @@ export default function Landing() {
               </CardContent>
             </Card>
 
-            <Card id="airport-briefing" className="bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--accent)/0.1))]">
+            <Card id="airport-briefing" className="border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--accent)/0.14))]">
               <CardHeader>
                 <CardTitle>Airport Briefing</CardTitle>
                 <CardDescription>Runway guidance and live NOTAMs for {searchIcao}</CardDescription>
@@ -947,7 +947,7 @@ export default function Landing() {
       {/* CFI marketplace and featured partner */}
       <div className="py-10 sm:py-12">
         <div className="container mx-auto px-4">
-          <Card className="mt-6 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.07))]">
+          <Card className="mt-6 border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--primary)/0.11))]">
             <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-4 max-w-3xl">
                 <div className="space-y-2">
@@ -1045,7 +1045,7 @@ export default function Landing() {
           </div>
 
           {feedEvents.length ? (
-            <div className="relative mt-6 rounded-[1.3rem] border border-card-border bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.45))] shadow-[var(--shadow-rsf-panel)]">
+            <div className="relative mt-6 rounded-[1.3rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.68))] shadow-[var(--shadow-rsf-panel)]">
               <div className="absolute -left-4 top-1/2 z-10 hidden -translate-y-1/2 sm:flex">
                 <Button
                   variant="secondary"
@@ -1082,7 +1082,7 @@ export default function Landing() {
                     href="/events"
                     onClick={() => trackEvent("cta_click", { label: "events_feed", target: "/events" })}
                   >
-                    <div className="min-w-[260px] snap-start overflow-hidden rounded-[1rem] border border-card-border bg-[linear-gradient(180deg,hsl(var(--card)),rgba(255,255,255,0.58))] shadow-sm transition-shadow hover:shadow-[var(--shadow-rsf-panel)]">
+                    <div className="min-w-[260px] snap-start overflow-hidden rounded-[1rem] border border-white/14 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(255,255,255,0.66))] shadow-sm transition-shadow hover:shadow-[var(--shadow-rsf-panel)]">
                       {event.imageUrl && (
                         <img
                           src={event.imageUrl}

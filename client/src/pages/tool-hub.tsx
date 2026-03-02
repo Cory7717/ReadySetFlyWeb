@@ -256,7 +256,7 @@ export default function ToolHub() {
 
   return (
     <div className="min-h-screen">
-      <section className="border-b border-slate-900/10 bg-[linear-gradient(135deg,hsl(221_38%_14%),hsl(221_64%_30%))] py-10 text-slate-100">
+      <section className="border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_66%_19%),hsl(221_74%_34%))] py-10 text-slate-100 shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)]">
         <div className="container mx-auto px-4 space-y-3">
           <span className="rsf-kicker border-white/10 bg-white/10 text-slate-100">Tool Hub</span>
           <h1 className="font-display text-3xl sm:text-4xl font-bold">Pilot Tool Hub</h1>
@@ -289,7 +289,7 @@ export default function ToolHub() {
       <section className="container mx-auto px-4 py-8 sm:py-10 space-y-8 sm:space-y-10">
         {toolSections.map((section) => (
           <div key={section.title} className="space-y-4">
-            <div className="rounded-[1.2rem] border border-card-border bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--muted)/0.45))] p-4 sm:p-5 shadow-sm">
+            <div className="rounded-[1.2rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.68))] p-4 sm:p-5 shadow-sm">
               <div className="space-y-1 border-l-4 border-primary pl-4">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">RSF workflow group</div>
                 <h2 className="text-2xl font-semibold">{section.title}</h2>
@@ -311,8 +311,9 @@ export default function ToolHub() {
                     key={card.title}
                     className={[
                       "h-full",
-                      card.accent ? "border-primary/30 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--primary)/0.09))]" : "",
-                      card.comingSoon ? "border-dashed bg-[linear-gradient(180deg,hsl(var(--card)/0.72),hsl(var(--muted)/0.7))] text-muted-foreground opacity-70" : "",
+                      !card.accent && !card.comingSoon ? "border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),rgba(255,255,255,0.58))]" : "",
+                      card.accent ? "border-primary/34 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))]" : "",
+                      card.comingSoon ? "border-dashed border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.74),hsl(var(--muted)/0.74))] text-muted-foreground opacity-70" : "",
                     ].join(" ").trim()}
                   >
                     <CardHeader className="pb-4">

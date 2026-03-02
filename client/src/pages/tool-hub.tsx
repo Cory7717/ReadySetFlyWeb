@@ -49,158 +49,8 @@ const calculatorLinks = [
 
 const toolSections: ToolHubSection[] = [
   {
-    title: "Core Pilot Tools",
-    description: "Start with the tools most pilots are likely to use repeatedly for planning, logging, weather, and restriction checks.",
-    cards: [
-      {
-        title: "Flight Planner",
-        description: "Build routes, fuel plans, timing, and alternates.",
-        href: "/flight-planner",
-        cta: "Open planner",
-        icon: Plane,
-        accent: true,
-        badge: "Most used",
-      },
-      {
-        title: "Digital Logbook",
-        description: "Track flights, endorsements, aircraft, and training history.",
-        href: "/logbook",
-        cta: "Open logbook",
-        icon: FileText,
-        badge: "Most used",
-      },
-      {
-        title: "Airport Conditions",
-        description: "Weather, NOTAMs, runway briefing, and hazards.",
-        href: "/pilot-tools#airport-weather",
-        cta: "Open conditions",
-        icon: CloudSun,
-      },
-      {
-        title: "TFR Map",
-        description: "Live TFRs, SUA overlays, and airspace restriction awareness.",
-        href: "/tfr-map",
-        cta: "Open TFR map",
-        icon: AlertTriangle,
-        badge: "FAA SWIM",
-      },
-      {
-        title: "Aviation Weather Hub",
-        description: "METARs, TAFs, PIREPs, hazards, winds aloft, icing, and turbulence.",
-        href: "/aviation-weather",
-        cta: "Open weather hub",
-        icon: Cloud,
-        badge: "New",
-      },
-      {
-        title: "Pilot Calculators",
-        description: "All calculators in one place.",
-        href: "/pilot-tools#calculators",
-        cta: "Open calculators",
-        icon: Calculator,
-        badge: "Free tools",
-        detailBadges: calculatorLinks.map((calc) => calc.label),
-      },
-    ],
-  },
-  {
-    title: "Advanced Planning and Airspace",
-    description: "Use these after the core workflow for briefing depth, performance checks, and situational awareness.",
-    cards: [
-      {
-        title: "NOTAM Briefing",
-        description: "Jump straight to airport NOTAM briefing and runway advisory tools.",
-        href: "/pilot-tools#airport-briefing",
-        cta: "Open NOTAM briefing",
-        icon: FileText,
-      },
-      {
-        title: "Live Traffic",
-        description: "Global ADS-B traffic view for situational awareness.",
-        href: "/live-traffic",
-        cta: "Coming soon",
-        icon: Plane,
-        badge: "Coming soon",
-        comingSoon: true,
-      },
-      {
-        title: "Weight & Balance",
-        description: "Aircraft loading, envelope checks, and load planning.",
-        href: "/weight-balance",
-        cta: "Open weight & balance",
-        icon: Calculator,
-      },
-      {
-        title: "Ownership Cost Calculator",
-        description: "Estimate ownership costs and long-term operating economics.",
-        href: "/ownership-cost-calculator",
-        cta: "Open ownership cost",
-        icon: Calculator,
-      },
-      {
-        title: "E6B Advanced",
-        description: "Use the digital E6B workflow for planning and inflight calculations.",
-        href: "/tools/e6b",
-        cta: "Open E6B",
-        icon: Calculator,
-      },
-    ],
-  },
-  {
-    title: "Training and IFR",
-    description: "When users move beyond planning, these are the next training, IFR, and scenario tools they are likely to use.",
-    cards: [
-      {
-        title: "IFR Tools",
-        description: "IFR planners, procedures, sims, and training aids.",
-        href: "/ifr-tools",
-        cta: "Open IFR tools",
-        icon: Radio,
-      },
-      {
-        title: "IFR Approach Plates",
-        description: "Search and review current FAA approach plates.",
-        href: "/approach-plates",
-        cta: "Open plates",
-        icon: FileText,
-      },
-      {
-        title: "GPS Trainers",
-        description: "RSF GPS training units and interactive cockpit workflow practice.",
-        href: "/gps-sims",
-        cta: "Coming soon",
-        icon: Route,
-        badge: "Coming soon",
-        comingSoon: true,
-      },
-      {
-        title: "Radio Comms Trainer",
-        description: "Practice phraseology and scenario-based ATC communication.",
-        href: "/radio-comms-trainer",
-        cta: "Open trainer",
-        icon: Signal,
-      },
-      {
-        title: "Student Tools",
-        description: "Training plans, study tools, abbreviations, and progress tracking.",
-        href: "/student",
-        cta: "Open Student Hub",
-        icon: BookOpen,
-      },
-      {
-        title: "Synthetic Vision",
-        description: "RSF Pro synthetic-vision lab with training scoring and review.",
-        href: "/synthetic-vision",
-        cta: "Coming soon",
-        icon: Navigation,
-        badge: "Coming soon",
-        comingSoon: true,
-      },
-    ],
-  },
-  {
-    title: "Directories and Feature Entry Points",
-    description: "These are the broader entry points for instructors, rentals, marketplace discovery, events, and support.",
+    title: "Find",
+    description: "Start with the marketplace and directory entry points. These are the reasons many users land on RSF first.",
     cards: [
       {
         title: "Marketplace",
@@ -208,6 +58,8 @@ const toolSections: ToolHubSection[] = [
         href: "/marketplace",
         cta: "Open marketplace",
         icon: Briefcase,
+        accent: true,
+        badge: "Most used",
       },
       {
         title: "Rentals",
@@ -215,6 +67,7 @@ const toolSections: ToolHubSection[] = [
         href: "/rentals",
         cta: "Browse rentals",
         icon: Plane,
+        badge: "Most used",
       },
       {
         title: "CFI Directory",
@@ -246,6 +99,157 @@ const toolSections: ToolHubSection[] = [
       },
     ],
   },
+  {
+    title: "Plan",
+    description: "Once users find what they need, these are the core planning and briefing tools that keep them on RSF.",
+    cards: [
+      {
+        title: "Flight Planner",
+        description: "Build routes, fuel plans, timing, and alternates.",
+        href: "/flight-planner",
+        cta: "Open planner",
+        icon: Plane,
+        accent: true,
+        badge: "Core workflow",
+      },
+      {
+        title: "Airport Conditions",
+        description: "Weather, NOTAMs, runway briefing, and hazards.",
+        href: "/pilot-tools#airport-weather",
+        cta: "Open conditions",
+        icon: CloudSun,
+      },
+      {
+        title: "TFR Map",
+        description: "Live TFRs, SUA overlays, and airspace restriction awareness.",
+        href: "/tfr-map",
+        cta: "Open TFR map",
+        icon: AlertTriangle,
+        badge: "FAA SWIM",
+      },
+      {
+        title: "Aviation Weather Hub",
+        description: "METARs, TAFs, PIREPs, hazards, winds aloft, icing, and turbulence.",
+        href: "/aviation-weather",
+        cta: "Open weather hub",
+        icon: Cloud,
+        badge: "New",
+      },
+      {
+        title: "NOTAM Briefing",
+        description: "Jump straight to airport NOTAM briefing and runway advisory tools.",
+        href: "/pilot-tools#airport-briefing",
+        cta: "Open NOTAM briefing",
+        icon: FileText,
+      },
+      {
+        title: "Pilot Calculators",
+        description: "All calculators in one place.",
+        href: "/pilot-tools#calculators",
+        cta: "Open calculators",
+        icon: Calculator,
+        badge: "Free tools",
+        detailBadges: calculatorLinks.map((calc) => calc.label),
+      },
+    ],
+  },
+  {
+    title: "Train & Track",
+    description: "These tools keep pilots coming back after discovery and planning: logging, training, IFR prep, and practice history.",
+    cards: [
+      {
+        title: "Digital Logbook",
+        description: "Track flights, endorsements, aircraft, and training history.",
+        href: "/logbook",
+        cta: "Open logbook",
+        icon: FileText,
+        accent: true,
+        badge: "Most used",
+      },
+      {
+        title: "Student Tools",
+        description: "Training plans, study tools, abbreviations, and progress tracking.",
+        href: "/student",
+        cta: "Open Student Hub",
+        icon: BookOpen,
+      },
+      {
+        title: "IFR Tools",
+        description: "IFR planners, procedures, sims, and training aids.",
+        href: "/ifr-tools",
+        cta: "Open IFR tools",
+        icon: Radio,
+      },
+      {
+        title: "IFR Approach Plates",
+        description: "Search and review current FAA approach plates.",
+        href: "/approach-plates",
+        cta: "Open plates",
+        icon: FileText,
+      },
+      {
+        title: "Radio Comms Trainer",
+        description: "Practice phraseology and scenario-based ATC communication.",
+        href: "/radio-comms-trainer",
+        cta: "Open trainer",
+        icon: Signal,
+      },
+      {
+        title: "Weight & Balance",
+        description: "Aircraft loading, envelope checks, and load planning.",
+        href: "/weight-balance",
+        cta: "Open weight & balance",
+        icon: Calculator,
+      },
+    ],
+  },
+  {
+    title: "Advanced & Coming Soon",
+    description: "Power-user tools stay visible here, but unfinished IFR-critical features remain clearly marked until they are production-ready.",
+    cards: [
+      {
+        title: "Ownership Cost Calculator",
+        description: "Estimate ownership costs and long-term operating economics.",
+        href: "/ownership-cost-calculator",
+        cta: "Open ownership cost",
+        icon: Calculator,
+      },
+      {
+        title: "E6B Advanced",
+        description: "Use the digital E6B workflow for planning and inflight calculations.",
+        href: "/tools/e6b",
+        cta: "Open E6B",
+        icon: Calculator,
+      },
+      {
+        title: "Live Traffic",
+        description: "Global ADS-B traffic view for situational awareness.",
+        href: "/live-traffic",
+        cta: "Coming soon",
+        icon: Plane,
+        badge: "Coming soon",
+        comingSoon: true,
+      },
+      {
+        title: "GPS Trainers",
+        description: "RSF GPS training units and interactive cockpit workflow practice.",
+        href: "/gps-sims",
+        cta: "Coming soon",
+        icon: Route,
+        badge: "Coming soon",
+        comingSoon: true,
+      },
+      {
+        title: "Synthetic Vision",
+        description: "RSF Pro synthetic-vision lab with training scoring and review.",
+        href: "/synthetic-vision",
+        cta: "Coming soon",
+        icon: Navigation,
+        badge: "Coming soon",
+        comingSoon: true,
+      },
+    ],
+  },
 ];
 
 export default function ToolHub() {
@@ -259,28 +263,36 @@ export default function ToolHub() {
       <section className="border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_66%_19%),hsl(221_74%_34%))] py-10 text-slate-100 shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)]">
         <div className="container mx-auto px-4 space-y-3">
           <span className="rsf-kicker border-white/10 bg-white/10 text-slate-100">Tool Hub</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold">Pilot Tool Hub</h1>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold">RSF Tools &amp; Features Hub</h1>
           <p className="max-w-3xl text-slate-300">
-            Start with the daily-use pilot workflow first: plan, brief, log, then move into weather depth, IFR practice, directories, and supporting tools.
+            Use RSF in the same order pilots actually work: find what you need in aviation, plan the flight, then train and track the work that follows.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button
               asChild
               className="w-full sm:w-auto"
-              onClick={() => trackEvent("tool_hub_click", { target: "/flight-planner" })}
+              onClick={() => trackEvent("tool_hub_click", { target: "/marketplace" })}
             >
-              <Link href="/flight-planner">Open Flight Planner</Link>
+              <Link href="/marketplace">Open Marketplace</Link>
             </Button>
             <Button
               variant="outline"
               asChild
               className="w-full border-slate-300/20 bg-white/5 text-slate-100 hover:bg-white/10 sm:w-auto"
-              onClick={() => trackEvent("tool_hub_click", { target: "/logbook" })}
+              onClick={() => trackEvent("tool_hub_click", { target: "/rentals" })}
             >
-              <Link href="/logbook">Open Digital Logbook</Link>
+              <Link href="/rentals">Browse Rentals</Link>
+            </Button>
+            <Button
+              variant="outline"
+              asChild
+              className="w-full border-slate-300/20 bg-white/5 text-slate-100 hover:bg-white/10 sm:w-auto"
+              onClick={() => trackEvent("tool_hub_click", { target: "/flight-planner" })}
+            >
+              <Link href="/flight-planner">Open Flight Planner</Link>
             </Button>
             <div className="flex items-center">
-              <Badge variant="secondary" className="border-0 bg-white/10 text-slate-200 shadow-none">All pilot tools</Badge>
+              <Badge variant="secondary" className="border-0 bg-white/10 text-slate-200 shadow-none">All tools &amp; features</Badge>
             </div>
           </div>
         </div>

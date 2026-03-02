@@ -12,24 +12,23 @@ export type MembershipPlanOption = {
 export const membershipTierInfo: Record<MembershipTier, { title: string; subtitle: string; features: string[] }> = {
   pro: {
     title: "RSF Pro (Core)",
-    subtitle: "Save, alerts, analytics, and pro training workflows.",
+    subtitle: "Save your planning and logbook workflow after a 14-day trial.",
     features: [
-      "Save flight plans, aircraft profiles, and logbook entries with cloud sync.",
-      "Currency tracking with alerts (medical, flight review, IPC).",
-      "Endorsements + instructor sign-offs inside the logbook.",
-      "Radio Comms Trainer: full scenarios, scoring, and saved practice history.",
-      "GPS sims + guided VOR training tools.",
-      "Core analytics and export-ready summaries.",
+      "14-day free trial on the monthly plan to test the full workflow before you pay.",
+      "Save flight plans, aircraft profiles, and digital logbook entries with cloud sync.",
+      "Currency tracking with alerts (medical, flight review, IPC) and instructor sign-offs.",
+      "Saved training progress, radio comms scoring history, and export-ready summaries.",
       "10% listing-fee discount on traditional marketplace listings.",
     ],
   },
   pro_plus: {
     title: "RSF Pro+ (Advanced / Power Pilot)",
-    subtitle: "Operational intelligence overlays + power-user tooling.",
+    subtitle: "Advanced planning workspace for heavier-use pilots.",
     features: [
       "Everything in RSF Pro (Core).",
-      "TFMS Operational Intelligence: congestion overlay + departure risk score.",
-      "Priority access to power-user tools and beta releases.",
+      "14-day free trial on the monthly plan before billing starts.",
+      "Advanced planning overlays and power-user tooling as they ship.",
+      "Priority access to beta releases and higher-end workflow tools.",
       "20% listing-fee discount on traditional marketplace listings.",
     ],
   },
@@ -37,13 +36,13 @@ export const membershipTierInfo: Record<MembershipTier, { title: string; subtitl
 
 export const membershipPlanOptions: Record<MembershipTier, MembershipPlanOption[]> = {
   pro: [
-    { interval: "annual", label: "Annual", price: 79.0, badge: "Best Value" },
-    { interval: "biannual", label: "6 Months", price: 44.99 },
-    { interval: "monthly", label: "Monthly", price: 7.99, trialDays: 7 },
+    { interval: "annual", label: "Annual", price: 59.99, badge: "Best Value" },
+    { interval: "biannual", label: "6 Months", price: 32.99 },
+    { interval: "monthly", label: "Monthly", price: 5.99, trialDays: 14 },
   ],
   pro_plus: [
-    { interval: "annual", label: "Annual", price: 149.0, badge: "Best Value" },
-    { interval: "biannual", label: "6 Months", price: 84.99 },
-    { interval: "monthly", label: "Monthly", price: 14.99, trialDays: 7 },
+    { interval: "annual", label: "Annual", price: 119.99, badge: "Best Value" },
+    { interval: "biannual", label: "6 Months", price: 64.99 },
+    { interval: "monthly", label: "Monthly", price: 11.99, trialDays: 14 },
   ],
 };

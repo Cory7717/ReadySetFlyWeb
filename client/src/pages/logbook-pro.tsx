@@ -13,7 +13,7 @@ export default function LogbookProPage() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const [selectedTier, setSelectedTier] = useState<MembershipTier>("pro");
-  const [selectedInterval, setSelectedInterval] = useState<MembershipInterval>("annual");
+  const [selectedInterval, setSelectedInterval] = useState<MembershipInterval>("monthly");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -105,20 +105,20 @@ export default function LogbookProPage() {
   return (
     <div className="container mx-auto py-10 px-4 space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>RSF Pro Membership</CardTitle>
-          <CardDescription>
-            Upgrade when you want more than free access: save planning workflow, automate currency tracking, and keep instructor-ready records together.
-          </CardDescription>
-        </CardHeader>
+          <CardHeader>
+            <CardTitle>RSF Pro Membership</CardTitle>
+            <CardDescription>
+            Start with a free account for marketplace access and open tools. Upgrade when you want saved workflow, tracked records, and a 14-day paid-tier trial before billing starts.
+            </CardDescription>
+          </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <div className="text-sm font-semibold">Save workflow</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Keep flight plans, aircraft profiles, and training history tied together.
-              </p>
-            </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="text-sm font-semibold">Save workflow</div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                Keep flight plans, favorites, aircraft profiles, and training history tied together after users find what they need in RSF.
+                </p>
+              </div>
             <div className="rounded-lg border bg-muted/30 p-4">
               <div className="text-sm font-semibold">Stay current</div>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -211,7 +211,7 @@ export default function LogbookProPage() {
                       </div>
                       {plan.trialDays && (
                         <div className="text-xs text-emerald-600 mt-2">
-                          {plan.trialDays}-day free trial (monthly only)
+                          {plan.trialDays}-day free trial
                         </div>
                       )}
                     </button>
@@ -242,7 +242,7 @@ export default function LogbookProPage() {
               </Button>
               <p className="text-xs text-muted-foreground">
                 By subscribing you agree to recurring billing at the selected interval.
-                {hasTrial && " Trial converts automatically unless canceled."}
+                {hasTrial && " Monthly subscriptions start with a 14-day trial and convert automatically unless canceled."}
               </p>
             </>
           )}

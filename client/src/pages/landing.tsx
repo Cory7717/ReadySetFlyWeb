@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
-import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -392,45 +392,43 @@ export default function Landing() {
               Ready Set Fly
             </h1>
             <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4">
-              Plan a flight. Get route analysis. Learn and log with confidence.
+              Find rentals, instructors, and aviation services. Keep the tools close.
             </p>
             <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
-              Ready Set Fly is a planning-first, safety-oriented pilot tool. Training and logging are embedded into the planning flow so risk surfaces earlier and decisions stay sharper.
+              Ready Set Fly is a marketplace-first aviation platform for pilots who need rentals, CFIs, flight schools, and aviation services in one place.
             </p>
             <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto px-4">
-              RSF is built for pilots who want clearer planning, smarter route decisions, and post-flight reflection -- before any transactions ever enter the picture.
+              The built-in planner, digital logbook, current conditions, and training tools are here to keep users engaged after they land on the marketplace and need to keep working.
             </p>
             <p className="text-sm sm:text-base font-semibold text-primary">
-              Plan first. Train smart. Then connect with rentals and listings.
+              Find first. Plan second. Train and track when you are ready.
             </p>
             <Badge variant="outline" className="mx-auto text-xs px-3 py-1">
               Available for US Residents Only
             </Badge>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-              <Button 
-                size="lg" 
-                asChild
-                data-testid="button-plan-flight"
-              >
+              <Button size="lg" asChild data-testid="button-marketplace">
                 <Link
-                  href="/flight-planner"
-                  onClick={() => trackEvent("cta_click", { label: "plan_flight", target: "/flight-planner" })}
+                  href="/marketplace"
+                  onClick={() => trackEvent("cta_click", { label: "landing_marketplace", target: "/marketplace" })}
                 >
-                  Plan a flight
+                  Explore marketplace
                 </Link>
               </Button>
-              <Button 
-                size="lg" 
-                variant="outline"
-                asChild
-                data-testid="button-training"
-              >
+              <Button size="lg" variant="outline" asChild data-testid="button-rentals">
                 <Link
-                  href="/student"
-                  onClick={() => trackEvent("cta_click", { label: "training", target: "/student" })}
+                  href="/rentals"
+                  onClick={() => trackEvent("cta_click", { label: "landing_rentals", target: "/rentals" })}
                 >
-                  <BookOpen className="h-4 w-4 mr-2" />
-                  Training tools
+                  Browse rentals
+                </Link>
+              </Button>
+              <Button size="lg" variant="outline" asChild data-testid="button-plan-flight">
+                <Link
+                  href="/flight-planner"
+                  onClick={() => trackEvent("cta_click", { label: "landing_plan_flight", target: "/flight-planner" })}
+                >
+                  Open flight planner
                 </Link>
               </Button>
             </div>
@@ -444,18 +442,18 @@ export default function Landing() {
             <Card className="overflow-hidden border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))]">
               <CardContent className="p-5 sm:p-6">
                 <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
-                  <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Operations Deck</div>
-                    <div className="text-sm text-slate-200">Daily-use tools pilots should find first</div>
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Operations Deck</div>
+                    <div className="text-sm text-slate-200">Marketplace entry points first, support tools second</div>
                   </div>
-                  <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">Core workflow</Badge>
+                  <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">Find • Plan • Track</Badge>
                 </div>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div className="space-y-2">
                     <span className="rsf-kicker">Quick Start Index</span>
-                    <h2 className="text-2xl sm:text-3xl font-semibold">Find What RSF Offers Fast</h2>
+                    <h2 className="text-2xl sm:text-3xl font-semibold">Start With What You Need Right Now</h2>
                     <p className="text-sm sm:text-base text-muted-foreground max-w-3xl">
-                      Start with the operational area you need now. The full Tool Hub remains available for the broader inventory.
+                      Use RSF to find aviation services first, then keep planning, logging, and training in the same workflow.
                     </p>
                   </div>
                   <Button asChild variant="outline">
@@ -472,98 +470,14 @@ export default function Landing() {
                   <Card className="border-primary/30 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Core workflow</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Find</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
-                        <Plane className="h-5 w-5 text-primary" />
-                        Flight Planner
-                        </div>
-                        <p className="text-sm text-muted-foreground">Route, fuel, timing, alternates, and planning flow.</p>
-                      </div>
-                      <Button asChild size="sm" className="w-full">
-                        <Link
-                          href="/flight-planner"
-                          onClick={() => trackEvent("cta_click", { label: "quick_index_flight_planner", target: "/flight-planner" })}
-                        >
-                          Open
-                        </Link>
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-primary/28 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.1))]">
-                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
-                      <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Airspace</div>
-                        <div className="flex items-center gap-2 text-base font-semibold">
-                          <AlertTriangle className="h-5 w-5" />
-                        TFR + NOTAM Map
-                        </div>
-                        <p className="text-sm text-muted-foreground">Current restrictions, NOTAM awareness, and active airspace overlays.</p>
-                      </div>
-                      <Button asChild size="sm" variant="outline" className="w-full">
-                        <Link
-                          href="/tfr-map"
-                          onClick={() => trackEvent("cta_click", { label: "quick_index_tfr_map", target: "/tfr-map" })}
-                        >
-                          Open
-                        </Link>
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-[hsl(var(--accent)/0.34)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.12))]">
-                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
-                      <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--accent))]">Training</div>
-                        <div className="flex items-center gap-2 text-base font-semibold">
-                          <BookOpen className="h-5 w-5" />
-                        Student Tools
-                        </div>
-                        <p className="text-sm text-muted-foreground">Roadmaps, study aids, progress tracking, and pilot training support.</p>
-                      </div>
-                      <Button asChild size="sm" variant="outline" className="w-full">
-                        <Link
-                          href="/student"
-                          onClick={() => trackEvent("cta_click", { label: "quick_index_student_tools", target: "/student" })}
-                        >
-                          Open
-                        </Link>
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-slate-900/18 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(22,32,42,0.1))]">
-                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
-                      <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/90 dark:text-slate-300/80">Instrument + Performance</div>
-                        <div className="flex items-center gap-2 text-base font-semibold">
-                          <Calculator className="h-5 w-5" />
-                        IFR + Calculators
-                        </div>
-                        <p className="text-sm text-muted-foreground">IFR workflows, training sims, and core pilot calculation tools.</p>
-                      </div>
-                      <Button asChild size="sm" variant="outline" className="w-full">
-                        <Link
-                          href="/ifr-tools"
-                          onClick={() => trackEvent("cta_click", { label: "quick_index_ifr_tools", target: "/ifr-tools" })}
-                        >
-                          Open
-                        </Link>
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-primary/22 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))]">
-                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
-                      <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">Discovery</div>
-                        <div className="flex items-center gap-2 text-base font-semibold">
-                          <ShoppingBag className="h-5 w-5" />
+                        <ShoppingBag className="h-5 w-5 text-primary" />
                         Marketplace
                         </div>
-                        <p className="text-sm text-muted-foreground">Find CFIs, flight schools, rentals, jobs, and aviation services.</p>
+                        <p className="text-sm text-muted-foreground">Find CFIs, flight schools, jobs, charter, and aviation services.</p>
                       </div>
-                      <Button asChild size="sm" variant="outline" className="w-full">
+                      <Button asChild size="sm" className="w-full">
                         <Link
                           href="/marketplace"
                           onClick={() => trackEvent("cta_click", { label: "quick_index_marketplace", target: "/marketplace" })}
@@ -574,20 +488,104 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-accent/34 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.14))]">
+                  <Card className="border-primary/28 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.1))]">
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/80 dark:text-slate-300/80">Records</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Find</div>
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                          <Plane className="h-5 w-5" />
+                        Rentals
+                        </div>
+                        <p className="text-sm text-muted-foreground">Browse aircraft access and school-related rental options.</p>
+                      </div>
+                      <Button asChild size="sm" variant="outline" className="w-full">
+                        <Link
+                          href="/rentals"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_rentals", target: "/rentals" })}
+                        >
+                          Open
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-[hsl(var(--accent)/0.34)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.12))]">
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--accent))]">Connect</div>
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                          <Users className="h-5 w-5" />
+                        CFI Directory
+                        </div>
+                        <p className="text-sm text-muted-foreground">Compare instructor profiles and connect with CFIs on RSF.</p>
+                      </div>
+                      <Button asChild size="sm" variant="outline" className="w-full">
+                        <Link
+                          href="/cfi"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_cfi_directory", target: "/cfi" })}
+                        >
+                          Open
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-slate-900/18 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(22,32,42,0.1))]">
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/90 dark:text-slate-300/80">Plan</div>
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                          <Plane className="h-5 w-5" />
+                        Flight Planner
+                        </div>
+                        <p className="text-sm text-muted-foreground">Route, fuel, timing, alternates, and day-of-flight planning flow.</p>
+                      </div>
+                      <Button asChild size="sm" variant="outline" className="w-full">
+                        <Link
+                          href="/flight-planner"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_flight_planner", target: "/flight-planner" })}
+                        >
+                          Open
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-primary/22 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))]">
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">Track</div>
                         <div className="flex items-center gap-2 text-base font-semibold">
                           <FileText className="h-5 w-5" />
                         Digital Logbook
                         </div>
-                        <p className="text-sm text-muted-foreground">Track flights, endorsements, signoffs, and progress in your RSF logbook.</p>
+                        <p className="text-sm text-muted-foreground">Keep flights, endorsements, signoffs, and currency in one record.</p>
                       </div>
                       <Button asChild size="sm" variant="outline" className="w-full">
                         <Link
                           href="/logbook"
                           onClick={() => trackEvent("cta_click", { label: "quick_index_digital_logbook", target: "/logbook" })}
+                        >
+                          Open
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-accent/34 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.14))]">
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/80 dark:text-slate-300/80">Brief</div>
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                          <AlertTriangle className="h-5 w-5" />
+                        TFR + NOTAM Map
+                        </div>
+                        <p className="text-sm text-muted-foreground">Review restrictions, NOTAM awareness, and active airspace overlays.</p>
+                      </div>
+                      <Button asChild size="sm" variant="outline" className="w-full">
+                        <Link
+                          href="/tfr-map"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_tfr_map", target: "/tfr-map" })}
                         >
                           Open
                         </Link>
@@ -622,7 +620,7 @@ export default function Landing() {
                   <span className="rsf-kicker mx-auto">RSF Memberships</span>
                   <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
                   <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto">
-                    Pricing is visible up front. Free keeps the tools open; Pro adds saves, tracking, and workflow continuity; Pro+ is for heavier-use pilots.
+                    Start with a free account for marketplace browsing and open tools. Upgrade when you want saved workflow, tracked records, and two full weeks to test the paid tier before billing.
                   </p>
                 </div>
 
@@ -630,22 +628,22 @@ export default function Landing() {
                   <Card className="border-white/16 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(255,255,255,0.62))]">
                     <CardHeader>
                       <CardTitle className="text-lg">RSF Free</CardTitle>
-                      <CardDescription>Open tools, no credit card required.</CardDescription>
+                      <CardDescription>Marketplace access and open tools, no credit card required.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="text-3xl font-bold">$0<span className="text-sm text-muted-foreground">/mo</span></div>
                       <ul className="space-y-2 text-sm text-muted-foreground">
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
-                          Run all calculators and planning tools.
+                          Browse marketplace, rentals, and CFI directory without paying first.
                         </li>
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
-                          View live NOTAMs, TFRs, and weather.
+                          Use current conditions, TFR/NOTAM awareness, and core planning tools.
                         </li>
                         <li className="flex items-start gap-2">
                           <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" />
-                          Create aviation events with a free RSF account (anti-spam).
+                          Create an account to save favorites, contact faster, and start basic planning.
                         </li>
                       </ul>
                     </CardContent>
@@ -659,9 +657,10 @@ export default function Landing() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="text-3xl font-bold">
-                        ${proMonthly?.toFixed(2) ?? "7.99"}
+                        ${proMonthly?.toFixed(2) ?? "5.99"}
                         <span className="text-sm text-muted-foreground">/mo</span>
                       </div>
+                      <p className="text-xs font-medium text-emerald-600">14-day free trial on monthly billing</p>
                       <ul className="space-y-2 text-sm text-muted-foreground">
                         {membershipTierInfo.pro.features.map((feature) => (
                           <li key={feature} className="flex items-start gap-2">
@@ -684,9 +683,10 @@ export default function Landing() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="text-3xl font-bold">
-                        ${proPlusMonthly?.toFixed(2) ?? "14.99"}
+                        ${proPlusMonthly?.toFixed(2) ?? "11.99"}
                         <span className="text-sm text-muted-foreground">/mo</span>
                       </div>
+                      <p className="text-xs font-medium text-emerald-600">14-day free trial on monthly billing</p>
                       <ul className="space-y-2 text-sm text-muted-foreground">
                         {membershipTierInfo.pro_plus.features.map((feature) => (
                           <li key={feature} className="flex items-start gap-2">
@@ -716,7 +716,7 @@ export default function Landing() {
                   <span className="rsf-kicker border-white/12 bg-white/8 text-slate-100">Operational Modules</span>
                   <h2 className="text-2xl sm:text-3xl font-semibold">Open the next section when you need it</h2>
                   <p className="max-w-3xl text-sm text-slate-200/85 sm:text-base">
-                    Keep the landing page focused, then reveal the operational area you want to work in next.
+                    Where do you want to go next?.
                   </p>
                 </div>
                 <div className="text-xs uppercase tracking-[0.18em] text-slate-300">Reveal workflow</div>
@@ -1303,4 +1303,3 @@ export default function Landing() {
     </div>
   );
 }
-

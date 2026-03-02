@@ -6,7 +6,13 @@ const FAQS = [
     id: "why-subscription",
     question: "Why should I pay for a subscription?",
     answer:
-      "Ready Set Fly stores and secures a large amount of data for your listings, logbook entries, documents, and messages so it is always accessible. That storage and availability creates ongoing infrastructure costs, and subscriptions keep the platform reliable and growing.",
+      "Most of RSF stays open for free so users can browse the marketplace, rentals, and core planning tools first. Paid plans are for pilots who want saved workflow, digital logbook depth, training history, and ongoing currency tracking.",
+  },
+  {
+    id: "trial",
+    question: "Do you offer a free trial?",
+    answer:
+      "Yes. RSF Pro monthly plans start with a 14-day free trial so you can test the full workflow before billing starts.",
   },
   {
     id: "what-included",

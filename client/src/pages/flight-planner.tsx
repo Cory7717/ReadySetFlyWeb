@@ -202,6 +202,27 @@ const FALLBACK_TYPE: AircraftType = {
 };
 const CUSTOM_TYPE_ID = "custom";
 
+const formatMinutesLabel = (minutes: number) => {
+  if (!Number.isFinite(minutes) || minutes <= 0) return "-";
+  const rounded = Math.max(1, Math.round(minutes));
+  const hours = Math.floor(rounded / 60);
+  const mins = rounded % 60;
+  if (hours === 0) return `${mins} min`;
+  if (mins === 0) return `${hours}h`;
+  return `${hours}h ${mins}m`;
+};
+
+type FilingPreviewResponse = {
+  live: false;
+  provider: string;
+  routeType: string;
+  readyToFile: boolean;
+  providerUrl: string;
+  warnings: string[];
+  nextSteps: string[];
+  packet: Record<string, unknown>;
+};
+
 type WeatherResponse = {
   icao: string;
   metar: any;
@@ -438,6 +459,8 @@ export default function FlightPlanner() {
     studentProfile?.wizardJson || studentProfile?.roadmapJson || studentProfile?.progressJson
   );
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [showFilingPayload, setShowFilingPayload] = useState(false);
+  const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
 
   useEffect(() => {
     trackEvent("planner_page_view", { page: "flight-planner" });
@@ -490,6 +513,15 @@ export default function FlightPlanner() {
     usableFuelOverrideGal: "",
     maxGrossWeightOverrideLb: "",
   });
+  const [filingDraft, setFilingDraft] = useState({
+    flightRules: "VFR",
+    aircraftId: "",
+    equipment: "S/C",
+    soulsOnBoard: "1",
+    aircraftColor: "",
+    pilotName: "",
+    remarks: "",
+  });
   const [checklist, setChecklist] = useState(checklistDefaults);
   const [departureSuggestions, setDepartureSuggestions] = useState<AirportSearchResult[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<AirportSearchResult[]>([]);
@@ -537,6 +569,20 @@ export default function FlightPlanner() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    setFilingDraft((current) => ({
+      ...current,
+      aircraftId: current.aircraftId || form.tailNumber || "",
+      aircraftColor: current.aircraftColor || "White / Blue",
+      pilotName:
+        current.pilotName ||
+        [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+        user?.email ||
+        "",
+      remarks: current.remarks || "RSF filing handoff preview",
+    }));
+  }, [form.tailNumber, user?.firstName, user?.lastName, user?.email]);
 
   useEffect(() => {
     localStorage.setItem("flightPlannerChecklist", JSON.stringify(checklist));
@@ -1081,6 +1127,90 @@ export default function FlightPlanner() {
   const totalFuel = tripFuel + reserveFuel;
   const eteMinutes = eteHours ? Math.round(eteHours * 60) : 0;
   const canAutoArrival = Boolean(form.plannedDepartureAt && eteMinutes);
+  const routeStringFull = useMemo(
+    () =>
+      [form.departure || "-", plannedStopsInput, waypointsInput, form.destination || ""]
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .join(" "),
+    [form.departure, plannedStopsInput, waypointsInput, form.destination]
+  );
+  const fuelAvailableGallons = useMemo(() => {
+    const onboard = Number(form.fuelOnBoard);
+    if (Number.isFinite(onboard) && onboard > 0) return onboard;
+    return planningFuel;
+  }, [form.fuelOnBoard, planningFuel]);
+  const enduranceMinutes = useMemo(() => {
+    if (!planningBurn || planningBurn <= 0) return 0;
+    return (fuelAvailableGallons / planningBurn) * 60;
+  }, [fuelAvailableGallons, planningBurn]);
+  const legNavRows = useMemo(() => {
+    let cumulativeNm = 0;
+    return legs.map((leg) => {
+      cumulativeNm += leg.distanceNm;
+      const course = Math.round(bearingDeg(leg.from, leg.to));
+      const legMinutes = groundspeed > 0 ? (leg.distanceNm / groundspeed) * 60 : 0;
+      const legFuel = planningBurn > 0 ? (leg.distanceNm / groundspeed) * planningBurn : 0;
+      return {
+        key: `${leg.from.icao}-${leg.to.icao}`,
+        from: leg.from.icao,
+        to: leg.to.icao,
+        course,
+        distanceNm: leg.distanceNm,
+        legMinutes,
+        legFuel,
+        cumulativeNm,
+      };
+    });
+  }, [legs, groundspeed, planningBurn]);
+  const filingPacket = useMemo(() => ({
+    filingLive: false,
+    provider: "pending-flight-service-handoff",
+    flightRules: filingDraft.flightRules,
+    departure: form.departure.trim().toUpperCase() || null,
+    destination: form.destination.trim().toUpperCase() || null,
+    route: routeStringFull || null,
+    alternate: form.alternate.trim().toUpperCase() || null,
+    plannedDepartureLocal: form.plannedDepartureAt || null,
+    plannedDepartureUtc: form.plannedDepartureAt ? toUtcIso(form.plannedDepartureAt, departureTimeZone) : null,
+    plannedArrivalLocal: form.plannedArrivalAt || null,
+    plannedArrivalUtc: form.plannedArrivalAt ? toUtcIso(form.plannedArrivalAt, destinationTimeZone) : null,
+    trueAirspeedKtas: Math.round(planningCruise),
+    plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
+    estimatedEnrouteMinutes: eteMinutes || null,
+    enduranceMinutes: Math.round(enduranceMinutes) || null,
+    fuelRequiredGallons: totalFuel ? Number(totalFuel.toFixed(1)) : null,
+    fuelOnBoardGallons: fuelAvailableGallons ? Number(fuelAvailableGallons.toFixed(1)) : null,
+    aircraftId: filingDraft.aircraftId.trim() || form.tailNumber.trim() || null,
+    aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
+    equipment: filingDraft.equipment.trim() || null,
+    soulsOnBoard: filingDraft.soulsOnBoard.trim() || null,
+    aircraftColor: filingDraft.aircraftColor.trim() || null,
+    pilotName: filingDraft.pilotName.trim() || null,
+    remarks: [filingDraft.remarks.trim(), form.notes.trim()].filter(Boolean).join(" | ") || "Prepared in RSF",
+  }), [
+    filingDraft,
+    form.departure,
+    form.destination,
+    form.alternate,
+    form.plannedDepartureAt,
+    form.plannedArrivalAt,
+    form.tailNumber,
+    form.aircraftType,
+    form.notes,
+    routeStringFull,
+    departureTimeZone,
+    destinationTimeZone,
+    planningCruise,
+    plannedAltitude,
+    eteMinutes,
+    enduranceMinutes,
+    totalFuel,
+    fuelAvailableGallons,
+    selectedProfile?.name,
+    selectedType.make,
+    selectedType.model,
+  ]);
 
   const tfrRouteQuery = useQuery({
     queryKey: ["/api/tfrs", "route", tfrBboxParam],
@@ -1544,6 +1674,24 @@ export default function FlightPlanner() {
       setArrivalAuto(true);
     };
 
+  const copyFilingPacket = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(filingPacket, null, 2));
+      toast({ title: "Filing packet copied" });
+    } catch {
+      toast({ title: "Copy failed", description: "Unable to copy the filing packet.", variant: "destructive" });
+    }
+  };
+
+  const openFlightServiceHandoff = () => {
+    trackEvent("planner_filing_preview", {
+      flightRules: filingPacket.flightRules,
+      departure: filingPacket.departure || undefined,
+      destination: filingPacket.destination || undefined,
+    });
+    filingPreviewMutation.mutate();
+  };
+
   const toUtcIso = (value: string, timeZone: string) => {
     const utcDate = zonedDateTimeToUtc(value, timeZone);
     if (utcDate) return utcDate.toISOString();
@@ -1676,6 +1824,30 @@ export default function FlightPlanner() {
     },
     onError: (error: any) => {
       toast({ title: "Logbook entry failed", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const filingPreviewMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/flight-plans/filing-preview", filingPacket);
+      return res.json() as Promise<FilingPreviewResponse>;
+    },
+    onSuccess: (result) => {
+      setFilingPreview(result);
+      setShowFilingPayload(true);
+      toast({
+        title: result.readyToFile ? "Filing preview ready" : "Filing preview generated",
+        description: result.readyToFile
+          ? "RSF validated the packet and staged the non-live auto-file handoff."
+          : "Review the warnings before filing through Flight Service.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Preview failed",
+        description: error.message || "Unable to build the filing preview.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -2299,16 +2471,40 @@ export default function FlightPlanner() {
             Usable fuel: {planningFuel ? `${planningFuel} gal` : "-"} | Max gross weight: {planningMaxWeight ? `${planningMaxWeight} lb` : "-"}
           </div>
 
-          {isPro && legs.length > 0 && (
-            <div className="rounded-lg border p-4 space-y-2">
-              <div className="font-semibold">Per-Leg Breakdown (Pro)</div>
-              <div className="grid gap-2 text-sm">
-                {legs.map((leg) => (
-                  <div key={`${leg.from.icao}-${leg.to.icao}`} className="flex justify-between">
-                      <span>{leg.from.icao}{" to "}{leg.to.icao}</span>
-                    <span>{leg.distanceNm.toFixed(1)} NM</span>
-                  </div>
-                ))}
+          {legNavRows.length > 0 && (
+            <div className="rounded-lg border p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold">Navigation Log</div>
+                  <div className="text-xs text-muted-foreground">Leg-by-leg course, time, and fuel planning.</div>
+                </div>
+                {isPro && <Badge variant="secondary">Enhanced planning</Badge>}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[620px] text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="py-2 pr-3">Leg</th>
+                      <th className="py-2 pr-3">Course</th>
+                      <th className="py-2 pr-3">Dist</th>
+                      <th className="py-2 pr-3">ETE</th>
+                      <th className="py-2 pr-3">Fuel</th>
+                      <th className="py-2">Cum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {legNavRows.map((leg) => (
+                      <tr key={leg.key} className="border-b last:border-b-0">
+                        <td className="py-2 pr-3 font-medium">{leg.from}{" to "}{leg.to}</td>
+                        <td className="py-2 pr-3">{String(leg.course).padStart(3, "0")}°</td>
+                        <td className="py-2 pr-3">{leg.distanceNm.toFixed(1)} NM</td>
+                        <td className="py-2 pr-3">{formatMinutesLabel(leg.legMinutes)}</td>
+                        <td className="py-2 pr-3">{leg.legFuel.toFixed(1)} gal</td>
+                        <td className="py-2">{leg.cumulativeNm.toFixed(1)} NM</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -2640,6 +2836,89 @@ export default function FlightPlanner() {
           )}
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={showFilingPayload}
+        onOpenChange={(open) => {
+          setShowFilingPayload(open);
+          if (!open) setFilingPreview(null);
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Auto-file Handoff Preview</DialogTitle>
+            <DialogDescription>
+              RSF validates and stages the filing packet, but official filing still completes through Flight Service until live handoff is enabled.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            {filingPreview ? (
+              <>
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Provider</div>
+                    <div className="font-semibold">{filingPreview.provider}</div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Route type</div>
+                    <div className="font-semibold">{filingPreview.routeType}</div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Readiness</div>
+                    <div className="font-semibold">
+                      {filingPreview.readyToFile ? "Validated for handoff" : "Needs review"}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Live filing</div>
+                    <div className="font-semibold">Disabled</div>
+                  </div>
+                </div>
+                {filingPreview.warnings.length > 0 && (
+                  <Alert>
+                    <AlertDescription>
+                      <div className="font-semibold">Items to review before filing</div>
+                      <ul className="mt-2 list-disc pl-5 space-y-1">
+                        {filingPreview.warnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <div className="rounded-lg border p-3">
+                  <div className="font-semibold">Next steps</div>
+                  <ol className="mt-2 list-decimal pl-5 space-y-1 text-muted-foreground">
+                    {filingPreview.nextSteps.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+                <div className="rounded-lg border bg-muted/40 p-3">
+                  <div className="mb-2 font-semibold">Staged filing payload</div>
+                  <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words text-xs">
+                    {JSON.stringify(filingPreview.packet, null, 2)}
+                  </pre>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button type="button" variant="outline" onClick={copyFilingPacket}>
+                    Copy filing packet
+                  </Button>
+                  <Button type="button" disabled>
+                    Send to Flight Service (Not live yet)
+                  </Button>
+                  <Button type="button" variant="ghost" asChild>
+                    <a href={filingPreview.providerUrl} target="_blank" rel="noreferrer">
+                      Continue with Flight Service
+                    </a>
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="text-muted-foreground">Building filing preview...</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Card id="route-analysis" className="relative">
         <CardHeader>
           <CardTitle>Route Analysis</CardTitle>
@@ -2825,18 +3104,13 @@ export default function FlightPlanner() {
       <Card>
         <CardHeader>
           <CardTitle>Flight Plan Summary (Preparation)</CardTitle>
-          <CardDescription>ReadySetFly does not file flight plans. Use this summary as a planning aid.</CardDescription>
+          <CardDescription>Preparation summary and filing-ready packet preview. Auto-filing is wired but not live yet.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div className="grid gap-2 md:grid-cols-2">
             <div>
               <div className="text-muted-foreground">Route</div>
-              <div>
-                {[form.departure || "-", plannedStopsInput, waypointsInput, form.destination || ""]
-                  .map((value) => value.trim())
-                  .filter(Boolean)
-                  .join(" ")}
-              </div>
+              <div>{routeStringFull || "-"}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Alternate</div>
@@ -2851,11 +3125,110 @@ export default function FlightPlanner() {
               <div>{totalFuel ? `${totalFuel.toFixed(1)} gal` : "-"}</div>
             </div>
           </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Flight Rules</Label>
+              <Select
+                value={filingDraft.flightRules}
+                onValueChange={(value) => setFilingDraft((current) => ({ ...current, flightRules: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="VFR">VFR</SelectItem>
+                  <SelectItem value="IFR">IFR</SelectItem>
+                  <SelectItem value="DVFR">DVFR</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Aircraft ID / Tail</Label>
+              <Input
+                value={filingDraft.aircraftId}
+                onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftId: e.target.value }))}
+                placeholder="N123RS"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Equipment</Label>
+              <Input
+                value={filingDraft.equipment}
+                onChange={(e) => setFilingDraft((current) => ({ ...current, equipment: e.target.value }))}
+                placeholder="S/C"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Souls on board</Label>
+              <Input
+                value={filingDraft.soulsOnBoard}
+                onChange={(e) => setFilingDraft((current) => ({ ...current, soulsOnBoard: e.target.value }))}
+                placeholder="1"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Aircraft color</Label>
+              <Input
+                value={filingDraft.aircraftColor}
+                onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftColor: e.target.value }))}
+                placeholder="White / Blue"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>PIC name</Label>
+              <Input
+                value={filingDraft.pilotName}
+                onChange={(e) => setFilingDraft((current) => ({ ...current, pilotName: e.target.value }))}
+                placeholder="Pilot name"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Filing remarks</Label>
+            <Textarea
+              value={filingDraft.remarks}
+              onChange={(e) => setFilingDraft((current) => ({ ...current, remarks: e.target.value }))}
+              rows={2}
+              placeholder="Route notes or filing remarks"
+            />
+          </div>
+          <div className="grid gap-2 md:grid-cols-3">
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">Cruise / Altitude</div>
+              <div className="font-semibold">{Math.round(planningCruise)} KTAS at {plannedAltitude || "-"} ft</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">Fuel on board / endurance</div>
+              <div className="font-semibold">{fuelAvailableGallons.toFixed(1)} gal / {formatMinutesLabel(enduranceMinutes)}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">Filing status</div>
+              <div className="font-semibold">
+                {filingPreviewMutation.isPending ? "Validating handoff..." : "Preview wired, send disabled"}
+              </div>
+            </div>
+          </div>
           <Alert>
             <AlertDescription>
-              Filing guidance: VFR flight plans can be filed via Flight Service. IFR flight plans must be filed through an approved provider. Filing integration is coming soon.
+              Filing guidance: RSF now builds a filing-ready packet and preview payload, but official filing remains through approved providers until the handoff is activated.
             </AlertDescription>
           </Alert>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button type="button" variant="outline" onClick={copyFilingPacket}>
+              Copy filing packet
+            </Button>
+            <Button type="button" variant="outline" onClick={openFlightServiceHandoff} disabled={filingPreviewMutation.isPending}>
+              {filingPreviewMutation.isPending ? "Building preview..." : "Preview auto-file payload"}
+            </Button>
+            <Button type="button" disabled>
+              Auto-file with Flight Service (Coming soon)
+            </Button>
+            <Button type="button" variant="ghost" asChild>
+              <a href="https://www.1800wxbrief.com/" target="_blank" rel="noreferrer">
+                Open Flight Service
+              </a>
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

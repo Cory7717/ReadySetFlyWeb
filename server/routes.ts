@@ -15749,6 +15749,87 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   });
 
   // Flight Planner (Logbook Pro)
+  const filingPreviewSchema = z.object({
+    live: z.literal(false).optional(),
+    provider: z.string().optional(),
+    flightRules: z.string().trim().default("VFR"),
+    departure: z.string().trim().optional().nullable(),
+    destination: z.string().trim().optional().nullable(),
+    route: z.string().trim().optional().nullable(),
+    alternate: z.string().trim().optional().nullable(),
+    plannedDepartureLocal: z.string().trim().optional().nullable(),
+    plannedDepartureUtc: z.string().trim().optional().nullable(),
+    plannedArrivalLocal: z.string().trim().optional().nullable(),
+    plannedArrivalUtc: z.string().trim().optional().nullable(),
+    trueAirspeedKtas: z.coerce.number().nullable().optional(),
+    plannedAltitudeFt: z.union([z.string(), z.number()]).optional().nullable(),
+    estimatedEnrouteMinutes: z.coerce.number().nullable().optional(),
+    enduranceMinutes: z.coerce.number().nullable().optional(),
+    fuelRequiredGallons: z.coerce.number().nullable().optional(),
+    fuelOnBoardGallons: z.coerce.number().nullable().optional(),
+    aircraftId: z.string().trim().optional().nullable(),
+    aircraftType: z.string().trim().optional().nullable(),
+    equipment: z.string().trim().optional().nullable(),
+    soulsOnBoard: z.string().trim().optional().nullable(),
+    aircraftColor: z.string().trim().optional().nullable(),
+    pilotName: z.string().trim().optional().nullable(),
+    remarks: z.string().trim().optional().nullable(),
+  });
+
+  app.post("/api/flight-plans/filing-preview", async (req: any, res) => {
+    try {
+      const result = filingPreviewSchema.safeParse(req.body ?? {});
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+
+      const packet = result.data;
+      const warnings: string[] = [];
+      if (!packet.departure) warnings.push("Departure airport is missing.");
+      if (!packet.destination) warnings.push("Destination airport is missing.");
+      if (!packet.aircraftId) warnings.push("Aircraft ID / tail number should be set before filing.");
+      if (!packet.pilotName) warnings.push("Pilot in command name is missing.");
+      if (!packet.soulsOnBoard) warnings.push("Souls on board should be entered.");
+      if ((packet.flightRules || "VFR").toUpperCase() === "IFR" && !packet.route) {
+        warnings.push("IFR filing should include a route string before handoff.");
+      }
+      if (!packet.plannedDepartureUtc) {
+        warnings.push("Planned departure time is missing or not convertible to UTC.");
+      }
+      if (!packet.enduranceMinutes || packet.enduranceMinutes <= 0) {
+        warnings.push("Endurance is not available yet. Review fuel on board before filing.");
+      }
+
+      const normalizedPacket = {
+        ...packet,
+        flightRules: (packet.flightRules || "VFR").toUpperCase(),
+        provider: "flight-service-handoff-staged",
+      };
+
+      const nextSteps = [
+        "Review aircraft ID, route, and departure time for filing accuracy.",
+        "Copy the staged packet or continue to Flight Service to complete the official filing.",
+        normalizedPacket.flightRules === "IFR"
+          ? "After filing, obtain your IFR clearance from ATC using the published airport procedure."
+          : "Activate and close the flight plan through Flight Service when appropriate.",
+      ];
+
+      res.json({
+        live: false,
+        provider: "Flight Service",
+        routeType: normalizedPacket.flightRules,
+        readyToFile: warnings.length === 0,
+        providerUrl: "https://www.1800wxbrief.com/",
+        warnings,
+        nextSteps,
+        packet: normalizedPacket,
+      });
+    } catch (error) {
+      console.error("Failed to build filing preview:", error);
+      res.status(500).json({ error: "Failed to build filing preview" });
+    }
+  });
+
   app.get("/api/flight-plans", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub || req.session?.userId;

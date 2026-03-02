@@ -379,34 +379,30 @@ export default function Landing() {
   
   return (
     <div className="min-h-screen">
-      <BannerAdRotation 
-        placement="home" 
-        className="container mx-auto px-4 pt-6 sm:pt-8 max-w-7xl mb-10 sm:mb-14"
-      />
-
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
-          <div className="max-w-4xl mx-auto text-center space-y-4 sm:space-y-6">
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_390px] xl:items-start">
+            <div className="max-w-4xl mx-auto xl:mx-0 xl:max-w-none text-center xl:text-left space-y-4 sm:space-y-6">
             <h1 className="bg-[linear-gradient(180deg,#f7f9fc_0%,#c9d2df_28%,#7e8da3_62%,#4f5f77_100%)] bg-clip-text text-4xl font-bold tracking-tight text-transparent drop-shadow-[0_1px_0_rgba(255,255,255,0.2)] sm:text-5xl md:text-6xl">
               Ready Set Fly
             </h1>
-            <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4">
+            <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4 xl:px-0">
               Making general aviation easier to navigate.
             </p>
-            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto px-4">
+            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto xl:mx-0 px-4 xl:px-0">
               From aircraft rentals to instructors and local services, we are bringing everything in General Aviation into one place — so pilots spend less time searching and more time flying.
             </p>
-            <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto px-4">
+            <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto xl:mx-0 px-4 xl:px-0">
               The built-in planner, digital logbook, current conditions, and training tools help pilots plan flights, track progress, and manage their flying workflow in one place.
             </p>
             <p className="text-sm sm:text-base font-semibold text-primary">
               Find first. Plan second. Train and track when you are ready.
             </p>
-            <Badge variant="outline" className="mx-auto text-xs px-3 py-1">
+            <Badge variant="outline" className="mx-auto xl:mx-0 text-xs px-3 py-1">
               Available for US Residents Only
             </Badge>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center xl:justify-start pt-4">
               <Button size="lg" asChild data-testid="button-marketplace">
                 <Link
                   href="/marketplace"
@@ -432,8 +428,26 @@ export default function Landing() {
                 </Link>
               </Button>
             </div>
+            </div>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 text-sm">
+                <div className="text-muted-foreground">
+                  Want information on becoming a sponsored business?
+                </div>
+                <Button asChild size="sm" variant="secondary" data-testid="button-banner-ad-info-public">
+                  <a href="/banner-advertise" target="_blank" rel="noreferrer">
+                    Click here
+                  </a>
+                </Button>
+              </div>
+              <BannerAdRotation
+                placement="home"
+                variant="compact"
+                showLeadIn={false}
+              />
+            </div>
           </div>
-      </div>
+        </div>
       </div>
 
       <div className="rsf-section-band py-8 sm:py-10">

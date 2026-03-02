@@ -52,6 +52,8 @@ interface BannerAdRotationProps {
   category?: string;
   rotationIntervalMs?: number;
   className?: string;
+  variant?: "default" | "compact";
+  showLeadIn?: boolean;
 }
 
 const resolveSocialUrl = (value?: string | null, network?: "instagram" | "facebook") => {
@@ -74,7 +76,9 @@ export function BannerAdRotation({
   placement, 
   category,
   rotationIntervalMs = 8000,
-  className = ""
+  className = "",
+  variant = "default",
+  showLeadIn = true,
 }: BannerAdRotationProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasTrackedImpression, setHasTrackedImpression] = useState(false);
@@ -187,6 +191,7 @@ export function BannerAdRotation({
   const instagramUrl = resolveSocialUrl(currentAd?.instagramUrl, "instagram");
   const facebookUrl = resolveSocialUrl(currentAd?.facebookUrl, "facebook");
   const hasSocialLinks = Boolean(instagramUrl || facebookUrl);
+  const isCompact = variant === "compact";
   const resolveObjectUrl = (value?: string | null) => {
     if (!value) return undefined;
     if (/^https?:\/\//i.test(value)) {
@@ -301,16 +306,18 @@ export function BannerAdRotation({
 
   return (
     <div className={`w-full ${className}`}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 text-sm">
-        <div className="text-muted-foreground">
-          Want information on becoming a sponsored business?
+      {showLeadIn && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 text-sm">
+          <div className="text-muted-foreground">
+            Want information on becoming a sponsored business?
+          </div>
+          <Button asChild size="sm" variant="secondary" data-testid="button-banner-ad-info-public">
+            <a href="/banner-advertise" target="_blank" rel="noreferrer">
+              Click here
+            </a>
+          </Button>
         </div>
-        <Button asChild size="sm" variant="secondary" data-testid="button-banner-ad-info-public">
-          <a href="/banner-advertise" target="_blank" rel="noreferrer">
-            Click here
-          </a>
-        </Button>
-      </div>
+      )}
       <Card
         className={`group relative overflow-hidden border-0 bg-gradient-to-br from-amber-50 via-white to-sky-50 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.45)] transition-all duration-500 ${
           isClickable ? "cursor-pointer hover:-translate-y-0.5" : "cursor-default"
@@ -330,8 +337,40 @@ export function BannerAdRotation({
         <div className="absolute inset-0 bg-[radial-gradient(90%_120%_at_0%_0%,rgba(14,165,233,0.18),transparent)]" />
         <div className="absolute inset-0 bg-[radial-gradient(110%_130%_at_100%_0%,rgba(249,115,22,0.22),transparent)]" />
 
-        <div className={`relative grid ${showHeroMedia ? "sm:grid-cols-[1.1fr_0.9fr]" : "sm:grid-cols-1"}`}>
-          <div className="flex flex-col justify-between gap-3 p-5 sm:p-6 min-h-[200px] sm:min-h-[220px]">
+        <div className={`relative ${isCompact ? "flex flex-col" : `grid ${showHeroMedia ? "sm:grid-cols-[1.1fr_0.9fr]" : "sm:grid-cols-1"}`}`}>
+          {isCompact && showHeroMedia && (
+            <div className="relative h-[160px] sm:h-[180px] overflow-hidden border-b border-white/50">
+              {hasVideo ? (
+                <div
+                  className={`h-full w-full ${isPortraitVideo ? "bg-slate-900/10 flex items-center justify-center" : ""}`}
+                  onClick={(event) => {
+                    if (!isVideoMuted) {
+                      event.stopPropagation();
+                    }
+                  }}
+                >
+                  <video
+                    src={resolveObjectUrl(currentAd.videoUrl)}
+                    className={`h-full w-full ${isPortraitVideo ? "object-contain" : "object-cover"}`}
+                    autoPlay
+                    loop
+                    muted
+                    poster={resolveObjectUrl(currentAd.imageUrl)}
+                    playsInline
+                    controls={!isVideoMuted}
+                  />
+                </div>
+              ) : (
+                <img
+                  src={resolveObjectUrl(currentAd.imageUrl)}
+                  alt={currentAd.title}
+                  className="h-full w-full object-cover"
+                />
+              )}
+            </div>
+          )}
+
+          <div className={`flex flex-col justify-between gap-3 p-5 sm:p-6 ${isCompact ? "min-h-[230px]" : "min-h-[200px] sm:min-h-[220px]"}`}>
             <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
               <span className="h-2 w-2 rounded-full bg-amber-400" />
               Sponsored
@@ -339,7 +378,7 @@ export function BannerAdRotation({
 
             <div className="flex items-start gap-4">
               {showThumbnail && (
-                <div className="h-32 w-32 sm:h-36 sm:w-36 rounded-xl overflow-hidden bg-white shadow-sm flex-shrink-0 flex items-center justify-center">
+                <div className={`${isCompact ? "h-20 w-20" : "h-32 w-32 sm:h-36 sm:w-36"} rounded-xl overflow-hidden bg-white shadow-sm flex-shrink-0 flex items-center justify-center`}>
                   <img
                     src={resolveObjectUrl(currentAd.imageUrl)}
                     alt={currentAd.title}
@@ -348,16 +387,16 @@ export function BannerAdRotation({
                 </div>
               )}
               <div>
-                <h3 className="font-display text-lg sm:text-xl text-foreground line-clamp-2">
+                <h3 className={`font-display text-foreground line-clamp-2 ${isCompact ? "text-xl" : "text-lg sm:text-xl"}`}>
                   {currentAd.title}
                 </h3>
                 {hasTagline && (
-                  <p className="mt-2 text-sm text-muted-foreground line-clamp-1">
+                  <p className={`mt-2 text-sm text-muted-foreground ${isCompact ? "line-clamp-2" : "line-clamp-1"}`}>
                     {currentAd.description}
                   </p>
                 )}
                 {hasAdCopy && (
-                  <p className={`text-sm text-muted-foreground line-clamp-2 ${hasTagline ? "mt-1" : "mt-2"}`}>
+                  <p className={`text-sm text-muted-foreground ${isCompact ? "line-clamp-3" : "line-clamp-2"} ${hasTagline ? "mt-1" : "mt-2"}`}>
                     {currentAd.adCopy}
                   </p>
                 )}
@@ -439,7 +478,7 @@ export function BannerAdRotation({
             )}
           </div>
 
-          {showHeroMedia && (
+          {!isCompact && showHeroMedia && (
             <div className="relative h-[200px] sm:h-[220px]">
               {hasVideo ? (
                 <div

@@ -14,6 +14,19 @@ export const leadStatuses = ["new", "contacted", "qualified", "proposal", "negot
 export const dealStages = ["lead", "prospect", "proposal", "negotiation", "closed_won", "closed_lost"] as const;
 export const activityTypes = ["call", "email", "meeting", "note", "task"] as const;
 export const leadSources = ["website", "referral", "social_media", "advertising", "cold_outreach", "event", "other"] as const;
+export const leadCategories = [
+  "aircraft_sales",
+  "aviation_jobs",
+  "flight_schools",
+  "rentals",
+  "cfi_services",
+  "charter_services",
+  "mechanic_services",
+  "banner_ads",
+  "marketplace_services",
+  "sponsorships",
+  "other",
+] as const;
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
 export const withdrawalStatuses = ["pending", "processing", "completed", "failed", "cancelled"] as const;
 export const approachPlateTypes = ["IAP", "SID", "STAR", "AIRPORT", "OTHER"] as const;
@@ -1124,6 +1137,7 @@ export const crmLeads = pgTable("crm_leads", {
   // Lead details
   status: text("status").notNull().default("new"),
   source: text("source"),
+  category: text("category").notNull().default("other"),
   value: decimal("value", { precision: 10, scale: 2 }),
   
   // Ownership & tracking
@@ -2130,6 +2144,7 @@ export const insertCrmLeadSchema = createInsertSchema(crmLeads).omit({
 }).extend({
   status: z.enum(leadStatuses).default("new"),
   source: z.enum(leadSources).optional(),
+  category: z.enum(leadCategories).default("other"),
   value: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
 });
 
@@ -2545,5 +2560,6 @@ export type LeadStatus = typeof leadStatuses[number];
 export type DealStage = typeof dealStages[number];
 export type ActivityType = typeof activityTypes[number];
 export type LeadSource = typeof leadSources[number];
+export type LeadCategory = typeof leadCategories[number];
 export type ExpenseCategory = typeof expenseCategories[number];
 export type WithdrawalStatus = typeof withdrawalStatuses[number];

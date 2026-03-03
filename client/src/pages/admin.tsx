@@ -20,7 +20,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric, type PartnerToolMetric } from "@shared/schema";
+import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, leadCategories, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric, type PartnerToolMetric, type LeadCategory } from "@shared/schema";
 import { ADMIN_ROLE_LABELS, ADMIN_ROLE_PERMISSIONS, type AdminRole, type AdminPermission } from "@shared/config/adminAccess";
 import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
 import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
@@ -67,6 +67,20 @@ const resolveObjectUrl = (value?: string | null) => {
     return apiUrl(`/objects/${value.slice(idx + 1)}`);
   }
   return value;
+};
+
+const CRM_LEAD_CATEGORY_LABELS: Record<LeadCategory, string> = {
+  aircraft_sales: "Aircraft Sales",
+  aviation_jobs: "Aviation Jobs",
+  flight_schools: "Flight Schools",
+  rentals: "Rentals",
+  cfi_services: "CFI Services",
+  charter_services: "Charter Services",
+  mechanic_services: "Mechanic Services",
+  banner_ads: "Banner Ads",
+  marketplace_services: "Marketplace Services",
+  sponsorships: "Sponsorships",
+  other: "Other",
 };
 
 const buildBannerTrackingUrl = (
@@ -239,6 +253,7 @@ export default function AdminDashboard() {
   
   // CRM state
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
+  const [leadCategoryFilter, setLeadCategoryFilter] = useState<LeadCategory | "all">("all");
   const [editingLead, setEditingLead] = useState<CrmLead | null>(null);
   
   // Expense management state
@@ -297,6 +312,7 @@ export default function AdminDashboard() {
       company: "",
       status: "new",
       source: undefined,
+      category: "other",
       notes: "",
     },
   });
@@ -528,6 +544,14 @@ export default function AdminDashboard() {
     queryKey: ["/api/crm/leads"],
     enabled: activeTab === "crm",
   });
+
+  const filteredLeads = useMemo(
+    () =>
+      leadCategoryFilter === "all"
+        ? leads
+        : leads.filter((lead) => (lead.category || "other") === leadCategoryFilter),
+    [leads, leadCategoryFilter],
+  );
 
   // Expenses query
   const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
@@ -1675,6 +1699,7 @@ export default function AdminDashboard() {
       company: lead.company || "",
       status: lead.status as any,
       source: lead.source as any,
+      category: (lead.category as LeadCategory) || "other",
       notes: lead.notes || "",
     });
     setLeadDialogOpen(true);
@@ -4076,19 +4101,44 @@ export default function AdminDashboard() {
               </Button>
             </CardHeader>
             <CardContent>
+              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Organize leads by category to keep outreach segmented and easier to review.
+                </div>
+                <div className="w-full md:w-64">
+                  <Select
+                    value={leadCategoryFilter}
+                    onValueChange={(value) => setLeadCategoryFilter(value as LeadCategory | "all")}
+                  >
+                    <SelectTrigger data-testid="select-crm-lead-category-filter">
+                      <SelectValue placeholder="Filter by category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {leadCategories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {CRM_LEAD_CATEGORY_LABELS[category]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               {leadsLoading && (
                 <div className="text-center py-8 text-muted-foreground">
                   Loading leads...
                 </div>
               )}
 
-              {!leadsLoading && leads.length === 0 && (
+              {!leadsLoading && filteredLeads.length === 0 && (
                 <div className="text-center py-8 text-muted-foreground">
-                  No leads yet. Add your first lead to get started.
+                  {leads.length === 0
+                    ? "No leads yet. Add your first lead to get started."
+                    : "No leads match the selected category."}
                 </div>
               )}
 
-              {!leadsLoading && leads.length > 0 && (
+              {!leadsLoading && filteredLeads.length > 0 && (
                 <div className="border rounded-lg overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-muted/50">
@@ -4096,13 +4146,14 @@ export default function AdminDashboard() {
                         <th className="text-left p-3 font-medium text-sm">Name</th>
                         <th className="text-left p-3 font-medium text-sm">Email</th>
                         <th className="text-left p-3 font-medium text-sm">Company</th>
+                        <th className="text-left p-3 font-medium text-sm">Category</th>
                         <th className="text-left p-3 font-medium text-sm">Status</th>
                         <th className="text-left p-3 font-medium text-sm">Source</th>
                         <th className="text-right p-3 font-medium text-sm">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {leads.map((lead) => (
+                      {filteredLeads.map((lead) => (
                         <tr key={lead.id} className="border-b last:border-b-0" data-testid={`row-lead-${lead.id}`}>
                           <td className="p-3">
                             <div className="font-medium">{lead.firstName} {lead.lastName}</div>
@@ -4120,6 +4171,11 @@ export default function AdminDashboard() {
                             </div>
                           </td>
                           <td className="p-3 text-sm">{lead.company || "-"}</td>
+                          <td className="p-3">
+                            <Badge variant="outline">
+                              {CRM_LEAD_CATEGORY_LABELS[(lead.category as LeadCategory) || "other"]}
+                            </Badge>
+                          </td>
                           <td className="p-3">
                             <Badge variant={
                               lead.status === "won" ? "default" :
@@ -4172,7 +4228,7 @@ export default function AdminDashboard() {
                 <UserPlus className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{leads.length}</div>
+                <div className="text-2xl font-bold">{filteredLeads.length}</div>
               </CardContent>
             </Card>
             <Card>
@@ -4181,7 +4237,7 @@ export default function AdminDashboard() {
                 <Activity className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{leads.filter(l => l.status === "new").length}</div>
+                <div className="text-2xl font-bold">{filteredLeads.filter(l => l.status === "new").length}</div>
               </CardContent>
             </Card>
             <Card>
@@ -4190,7 +4246,7 @@ export default function AdminDashboard() {
                 <CheckCircle className="h-4 w-4 text-chart-2" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{leads.filter(l => l.status === "won").length}</div>
+                <div className="text-2xl font-bold">{filteredLeads.filter(l => l.status === "won").length}</div>
               </CardContent>
             </Card>
             <Card>
@@ -4200,7 +4256,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {leads.filter(l => ["contacted", "qualified", "proposal", "negotiation"].includes(l.status)).length}
+                  {filteredLeads.filter(l => ["contacted", "qualified", "proposal", "negotiation"].includes(l.status)).length}
                 </div>
               </CardContent>
             </Card>
@@ -6491,6 +6547,32 @@ export default function AdminDashboard() {
 
               <FormField
                 control={leadForm.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || "other"}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-lead-category">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {leadCategories.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {CRM_LEAD_CATEGORY_LABELS[category]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>Group this lead by the market or service you are targeting.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={leadForm.control}
                 name="notes"
                 render={({ field }) => (
                   <FormItem>
@@ -7287,7 +7369,7 @@ export default function AdminDashboard() {
                 })} 
                 className="flex flex-col flex-1 min-h-0"
               >
-                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                <div className="flex-1 overflow-y-auto px-6 py-4 pb-28 space-y-4">
                   {/* Banner Creative */}
                   <div className="space-y-4 p-4 border rounded-md">
                     <h3 className="font-semibold text-sm">Banner Creative</h3>
@@ -8545,7 +8627,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
                 
-                <DialogFooter className="sticky bottom-0 border-t bg-background px-6 py-4">
+                <DialogFooter className="sticky bottom-0 z-10 border-t bg-background/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/85">
                   <Button
                     type="button"
                     variant="outline"

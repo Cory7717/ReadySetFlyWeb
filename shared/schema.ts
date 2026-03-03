@@ -27,6 +27,8 @@ export const leadCategories = [
   "sponsorships",
   "other",
 ] as const;
+export const flightPlanFilingStatuses = ["draft", "staged", "filed", "activated", "cancelled", "closed"] as const;
+export const flightPlanFilingActions = ["file", "amend", "activate", "cancel", "close"] as const;
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
 export const withdrawalStatuses = ["pending", "processing", "completed", "failed", "cancelled"] as const;
 export const approachPlateTypes = ["IAP", "SID", "STAR", "AIRPORT", "OTHER"] as const;
@@ -1742,6 +1744,19 @@ export const flightPlans = pgTable("flight_plans", {
   tailNumber: text("tail_number"),
   fuelOnBoard: decimal("fuel_on_board", { precision: 8, scale: 2 }),
   fuelRequired: decimal("fuel_required", { precision: 8, scale: 2 }),
+  filingProvider: text("filing_provider").default("leidos_flight_service"),
+  filingProviderPlanId: text("filing_provider_plan_id"),
+  filingFlightRules: text("filing_flight_rules").default("VFR"),
+  filingStatus: text("filing_status").notNull().default("draft"),
+  filingPendingAction: text("filing_pending_action"),
+  filingIsLive: boolean("filing_is_live").notNull().default(false),
+  filedAt: timestamp("filed_at"),
+  activatedAt: timestamp("activated_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  closedAt: timestamp("closed_at"),
+  filingLastProviderSyncAt: timestamp("filing_last_provider_sync_at"),
+  filingRaw: jsonb("filing_raw"),
+  filingActionHistory: jsonb("filing_action_history").$type<Array<Record<string, unknown>>>().default(sql`'[]'::jsonb`),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -2020,6 +2035,15 @@ export const insertStudentProfileSchema = createInsertSchema(studentProfiles).om
 export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   id: true,
   userId: true,
+  filingProviderPlanId: true,
+  filingPendingAction: true,
+  filedAt: true,
+  activatedAt: true,
+  cancelledAt: true,
+  closedAt: true,
+  filingLastProviderSyncAt: true,
+  filingRaw: true,
+  filingActionHistory: true,
   createdAt: true,
   updatedAt: true,
 }).extend({
@@ -2027,6 +2051,8 @@ export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   plannedArrivalAt: z.coerce.date().optional().nullable(),
   fuelOnBoard: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   fuelRequired: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  filingFlightRules: z.enum(["VFR", "IFR", "DVFR"]).optional(),
+  filingStatus: z.enum(flightPlanFilingStatuses).optional(),
 });
 
 export const insertAircraftTypeSchema = createInsertSchema(aircraftTypes).omit({
@@ -2561,5 +2587,7 @@ export type DealStage = typeof dealStages[number];
 export type ActivityType = typeof activityTypes[number];
 export type LeadSource = typeof leadSources[number];
 export type LeadCategory = typeof leadCategories[number];
+export type FlightPlanFilingStatus = typeof flightPlanFilingStatuses[number];
+export type FlightPlanFilingAction = typeof flightPlanFilingActions[number];
 export type ExpenseCategory = typeof expenseCategories[number];
 export type WithdrawalStatus = typeof withdrawalStatuses[number];

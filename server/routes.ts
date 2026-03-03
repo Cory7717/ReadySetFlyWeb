@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, type BannerAdOrder, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, type BannerAdOrder, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -42,6 +42,7 @@ import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
 import { createDbTfmsProvider } from "./services/tfms/providers/db";
 import { computeTfmsRisk } from "./services/tfms/risk";
 import { partners } from "./config/partners";
+import { flightPlanFilingProvider } from "./services/flight-plan-filing/provider";
 import {
   fetchMetar,
   fetchTaf,
@@ -15776,6 +15777,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     remarks: z.string().trim().optional().nullable(),
   });
 
+  const filingLifecycleActionSchema = z.object({
+    action: z.enum(flightPlanFilingActions),
+  });
+
   app.post("/api/flight-plans/filing-preview", async (req: any, res) => {
     try {
       const result = filingPreviewSchema.safeParse(req.body ?? {});
@@ -15827,6 +15832,63 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to build filing preview:", error);
       res.status(500).json({ error: "Failed to build filing preview" });
+    }
+  });
+
+  app.post("/api/flight-plans/:id/filing-action", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const plan = await storage.getFlightPlanById(req.params.id);
+      if (!plan) {
+        return res.status(404).json({ error: "Flight plan not found" });
+      }
+      if (plan.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const parsed = filingLifecycleActionSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.format() });
+      }
+
+      const action = parsed.data.action as FlightPlanFilingAction;
+      const flightRules = (plan.filingFlightRules || "VFR").toUpperCase();
+      if ((action === "activate" || action === "close") && flightRules !== "VFR") {
+        return res.status(400).json({ error: `${action} is only available for VFR flight plans.` });
+      }
+
+      const providerResult = await flightPlanFilingProvider.stageAction(plan, action);
+      const currentHistory = Array.isArray(plan.filingActionHistory) ? plan.filingActionHistory : [];
+      const historyEntry = {
+        action,
+        stagedAt: new Date().toISOString(),
+        live: false,
+        message: providerResult.message,
+        warnings: providerResult.warnings,
+      };
+
+      const updated = await storage.updateFlightPlan(plan.id, {
+        filingProvider: "leidos_flight_service",
+        filingProviderPlanId: providerResult.providerPlanId,
+        filingStatus: "staged",
+        filingPendingAction: action,
+        filingIsLive: false,
+        filingLastProviderSyncAt: new Date(),
+        filingRaw: providerResult.raw,
+        filingActionHistory: [...currentHistory, historyEntry],
+      } as any);
+
+      res.json({
+        ...providerResult,
+        plan: updated,
+      });
+    } catch (error) {
+      console.error("Failed to stage flight plan filing action:", error);
+      res.status(500).json({ error: "Failed to stage flight plan filing action" });
     }
   });
 

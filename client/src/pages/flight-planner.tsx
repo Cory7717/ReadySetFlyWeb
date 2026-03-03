@@ -223,6 +223,25 @@ type FilingPreviewResponse = {
   packet: Record<string, unknown>;
 };
 
+const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
+
+const filingStatusLabel = (status?: string | null) => {
+  switch ((status || "draft").toLowerCase()) {
+    case "staged":
+      return "Staged";
+    case "filed":
+      return "Filed";
+    case "activated":
+      return "Activated";
+    case "cancelled":
+      return "Cancelled";
+    case "closed":
+      return "Closed";
+    default:
+      return "Draft";
+  }
+};
+
 type WeatherResponse = {
   icao: string;
   metar: any;
@@ -587,6 +606,68 @@ export default function FlightPlanner() {
   useEffect(() => {
     localStorage.setItem("flightPlannerChecklist", JSON.stringify(checklist));
   }, [checklist]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(FLIGHT_PLANNER_DRAFT_KEY);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed?.form) setForm((current) => ({ ...current, ...parsed.form }));
+      if (typeof parsed?.waypointsInput === "string") setWaypointsInput(parsed.waypointsInput);
+      if (typeof parsed?.plannedStopsInput === "string") setPlannedStopsInput(parsed.plannedStopsInput);
+      if (typeof parsed?.departureRunway === "string") setDepartureRunway(parsed.departureRunway);
+      if (typeof parsed?.selectedProfileId === "string") setSelectedProfileId(parsed.selectedProfileId);
+      if (typeof parsed?.selectedTypeId === "string") setSelectedTypeId(parsed.selectedTypeId);
+      if (typeof parsed?.reserveMinutes === "string") setReserveMinutes(parsed.reserveMinutes);
+      if (typeof parsed?.headwind === "string") setHeadwind(parsed.headwind);
+      if (typeof parsed?.plannedAltitude === "string") setPlannedAltitude(parsed.plannedAltitude);
+      if (typeof parsed?.arrivalAuto === "boolean") setArrivalAuto(parsed.arrivalAuto);
+      if (parsed?.routeSuggestion === "direct" || parsed?.routeSuggestion === "midpoint") {
+        setRouteSuggestion(parsed.routeSuggestion);
+      }
+      if (parsed?.filingDraft) setFilingDraft((current) => ({ ...current, ...parsed.filingDraft }));
+      if (parsed?.customProfile) setCustomProfile((current) => ({ ...current, ...parsed.customProfile }));
+    } catch {
+      window.localStorage.removeItem(FLIGHT_PLANNER_DRAFT_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      FLIGHT_PLANNER_DRAFT_KEY,
+      JSON.stringify({
+        form,
+        waypointsInput,
+        plannedStopsInput,
+        departureRunway,
+        selectedProfileId,
+        selectedTypeId,
+        reserveMinutes,
+        headwind,
+        plannedAltitude,
+        arrivalAuto,
+        routeSuggestion,
+        filingDraft,
+        customProfile,
+      }),
+    );
+  }, [
+    arrivalAuto,
+    customProfile,
+    departureRunway,
+    filingDraft,
+    form,
+    headwind,
+    plannedAltitude,
+    plannedStopsInput,
+    reserveMinutes,
+    routeSuggestion,
+    selectedProfileId,
+    selectedTypeId,
+    waypointsInput,
+  ]);
 
   useEffect(() => {
     let wakeLock: any = null;
@@ -1654,6 +1735,9 @@ export default function FlightPlanner() {
     return risk;
   }, [weatherFindings]);
   const resetForm = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(FLIGHT_PLANNER_DRAFT_KEY);
+    }
     setEditingPlan(null);
       setForm({
         title: "",
@@ -1670,8 +1754,30 @@ export default function FlightPlanner() {
       });
       setWaypointsInput("");
       setPlannedStopsInput("");
+      setDepartureRunway("");
+      setSelectedProfileId("none");
+      setSelectedTypeId(FALLBACK_TYPE.id);
+      setReserveMinutes("45");
+      setHeadwind("0");
       setPlannedAltitude("");
       setArrivalAuto(true);
+      setRouteSuggestion("direct");
+      setCustomProfile({
+        name: "",
+        cruiseKtasOverride: "",
+        fuelBurnOverrideGph: "",
+        usableFuelOverrideGal: "",
+        maxGrossWeightOverrideLb: "",
+      });
+      setFilingDraft({
+        flightRules: "VFR",
+        aircraftId: "",
+        equipment: "S/C",
+        soulsOnBoard: "1",
+        aircraftColor: "",
+        pilotName: "",
+        remarks: "",
+      });
     };
 
   const copyFilingPacket = async () => {
@@ -1709,6 +1815,7 @@ export default function FlightPlanner() {
           route: routeString,
           aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
           fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
+          filingFlightRules: filingDraft.flightRules,
           plannedDepartureAt: form.plannedDepartureAt
             ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
             : null,
@@ -1741,6 +1848,7 @@ export default function FlightPlanner() {
         route: routeString,
         aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
         fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
+        filingFlightRules: filingDraft.flightRules,
         plannedDepartureAt: form.plannedDepartureAt
           ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
           : null,
@@ -1851,6 +1959,27 @@ export default function FlightPlanner() {
     },
   });
 
+  const filingActionMutation = useMutation({
+    mutationFn: async ({ planId, action }: { planId: string; action: "file" | "amend" | "activate" | "cancel" | "close" }) => {
+      const res = await apiRequest("POST", `/api/flight-plans/${planId}/filing-action`, { action });
+      return res.json();
+    },
+    onSuccess: (result: any, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      toast({
+        title: `${variables.action[0].toUpperCase()}${variables.action.slice(1)} staged`,
+        description: result?.message || "The provider handoff was staged for later live activation.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Staging failed",
+        description: error.message || "Unable to stage the filing action.",
+        variant: "destructive",
+      });
+    },
+  });
+
   savePlanActionRef.current = async () => {
     if (!isAuthenticated) return;
     if (planLimitReached) {
@@ -1914,6 +2043,12 @@ export default function FlightPlanner() {
       fuelOnBoard: editingPlan.fuelOnBoard ? String(editingPlan.fuelOnBoard) : "",
       notes: editingPlan.notes || "",
     });
+    setFilingDraft((current) => ({
+      ...current,
+      flightRules: editingPlan.filingFlightRules || current.flightRules,
+      aircraftId: editingPlan.tailNumber || current.aircraftId,
+      remarks: editingPlan.notes || current.remarks,
+    }));
     setWaypointsInput(editingPlan.route || "");
     setPlannedStopsInput("");
     setPlannedAltitude("");
@@ -2065,6 +2200,60 @@ export default function FlightPlanner() {
                 Add a runway to surface crosswind guidance in the route analysis.
               </p>
             </div>
+            <div className="md:col-span-2 rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+              <div className="flex flex-col gap-1">
+                <div className="font-semibold">Aircraft setup</div>
+                <div className="text-xs text-muted-foreground">
+                  Select an aircraft from the RSF library or a saved profile to prefill performance assumptions before you plan the route.
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>RSF Aircraft Library</Label>
+                  <Select
+                    value={selectedTypeId}
+                    onValueChange={(value) => {
+                      setSelectedTypeId(value);
+                      setSelectedProfileId("none");
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select aircraft type" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72 overflow-y-auto">
+                      <SelectItem value={CUSTOM_TYPE_ID}>Custom entry</SelectItem>
+                      <SelectItem value={FALLBACK_TYPE.id}>
+                        {FALLBACK_TYPE.make} {FALLBACK_TYPE.model}
+                      </SelectItem>
+                      {aircraftTypes.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>
+                          {type.make} {type.model}{type.icaoType ? ` (${type.icaoType})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Saved Profile</Label>
+                  <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select saved profile" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {savedProfiles.map((profile) => (
+                        <SelectItem key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Saved profiles override library values when selected. This prefill is one of RSF's strongest planning workflow advantages.
+              </div>
+            </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Waypoints (optional)</Label>
               <Input
@@ -2185,218 +2374,11 @@ export default function FlightPlanner() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Route Map</CardTitle>
-          <CardDescription>Route draws once valid airport coordinates are found.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {wakeLockError && (
-            <div className="mb-3 text-xs text-muted-foreground">
-              {wakeLockError}
-            </div>
-          )}
-          <div className="mb-3 flex flex-wrap gap-3 text-sm">
-            <a
-              href="/adsb-receiver-help"
-              className="text-primary hover:underline"
-              onClick={() => trackEvent("adsb_help_click", { target: "/adsb-receiver-help" })}
-            >
-              How to connect your ADS-B receiver
-            </a>
-            <span className="text-muted-foreground">
-              RSF Synthetic Vision Lab <span className="font-medium">(coming soon)</span>
-            </span>
-          </div>
-            {routeIcaos.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
-            ) : routePoints.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                Waiting for airport coordinates... Waypoints are optional. Check ICAO codes if this takes more than a few seconds.
-              </div>
-            ) : (
-              <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
-                {mapStyle === "globe" ? (
-                  <CesiumGlobe
-                    points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
-                    tfmsOverlayEnabled={tfmsTier === "pro_plus" && tfmsOverlayEnabled}
-                  />
-                ) : (
-                  <PlannerMap
-                    points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
-                    mapStyle={mapStyle}
-                    plannedAltitudeFt={plannedAltitudeValue}
-                    windsAltitudeFt={windsAltitudeFt}
-                  />
-                )}
-              </Suspense>
-            )}
-            {airportErrors.length > 0 && (
-              <div className="mt-3 text-xs text-destructive">
-                Airport lookup failed for: {airportErrors.map((item) => item.icao).join(", ")}. Check ICAO codes.
-              </div>
-            )}
-            {routeIcaos.length > 0 && routePoints.length === 1 && (
-              <div className="mt-3 text-xs text-muted-foreground">
-                Route map updates as additional points resolve. Waypoints and planned stops are optional.
-              </div>
-            )}
-            {airportErrors.length === 0 && missingIcaos.length > 0 && (
-              <div className="mt-3 text-xs text-muted-foreground">
-                Waiting on coordinates for: {missingIcaos.join(", ")}.
-              </div>
-            )}
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <div className="text-xs text-muted-foreground">Map style</div>
-              <Button
-                variant={mapStyle === "standard" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMapStyle("standard")}
-              >
-                Standard
-              </Button>
-              <Button
-                variant={mapStyle === "sectional" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMapStyle("sectional")}
-              >
-                Sectional (FAA)
-              </Button>
-              <Button
-                variant={mapStyle === "radar" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMapStyle("radar")}
-              >
-                Weather (Radar)
-              </Button>
-              <Button
-                variant={mapStyle === "clouds" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMapStyle("clouds")}
-              >
-                Clouds (Satellite)
-              </Button>
-              <Button
-                variant={mapStyle === "globe" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMapStyle("globe")}
-              >
-                3D Globe
-              </Button>
-              <Button
-                variant={mapStyle === "winds" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setMapStyle("winds")}
-              >
-                Winds Aloft (NOAA)
-              </Button>
-              {mapStyle === "winds" && (
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Winds altitude</span>
-                  <Select value={windsAltitudeChoice} onValueChange={setWindsAltitudeChoice}>
-                    <SelectTrigger className="h-8 w-[170px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="z-[1001]">
-                      <SelectItem value="planned">Use planned altitude</SelectItem>
-                      <SelectItem value="3000">3,000 ft</SelectItem>
-                      <SelectItem value="6000">6,000 ft</SelectItem>
-                      <SelectItem value="9000">9,000 ft</SelectItem>
-                      <SelectItem value="12000">12,000 ft</SelectItem>
-                      <SelectItem value="18000">18,000 ft</SelectItem>
-                      <SelectItem value="24000">24,000 ft</SelectItem>
-                      <SelectItem value="30000">30,000 ft</SelectItem>
-                      <SelectItem value="34000">34,000 ft</SelectItem>
-                      <SelectItem value="39000">39,000 ft</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-            {mapStyle === "sectional" && (
-              <div className="text-xs text-muted-foreground mt-2">
-                Sectional tiles appear at zoom 6+; zoom in for FAA chart detail.
-              </div>
-            )}
-            {(mapStyle === "radar" || mapStyle === "winds" || mapStyle === "clouds") && (
-              <div className="text-xs text-muted-foreground mt-2">
-                Weather layers are for situational awareness only. Radar shows precip; clouds are satellite IR.
-                Winds aloft uses NOAA AWC data near your planned altitude. Verify with official sources.
-              </div>
-            )}
-            {mapStyle === "globe" && (
-              <div className="text-xs text-muted-foreground mt-2">
-                3D globe view uses CesiumJS. Weather overlays are available in 2D for now.
-              </div>
-            )}
-            {mapStyle === "winds" && (
-              <div className="text-xs text-muted-foreground mt-1">
-                Wind arrows point in the direction the wind is blowing from; size scales with speed.
-              </div>
-            )}
-            {!isAuthenticated && routePoints.length > 0 && (
-              <Alert className="mt-3">
-                <AlertDescription className="flex flex-wrap items-center gap-3">
-                  <span>Save this route and get planning reminders with a free account.</span>
-                  <Button asChild size="sm">
-                    <Link href="/register">Create free account</Link>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href="/login">Sign in</Link>
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-      <Card>
-        <CardHeader>
           <CardTitle>Distance & Performance</CardTitle>
-          <CardDescription>Estimate time enroute and fuel required.</CardDescription>
+          <CardDescription>Estimate time enroute and fuel required. Aircraft library and saved profile selections above prefill these assumptions.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label>RSF Aircraft Library</Label>
-              <Select value={selectedTypeId} onValueChange={(value) => {
-                setSelectedTypeId(value);
-                setSelectedProfileId("none");
-              }}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select aircraft type" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72 overflow-y-auto">
-                  <SelectItem value={CUSTOM_TYPE_ID}>Custom entry</SelectItem>
-                  <SelectItem value={FALLBACK_TYPE.id}>
-                    {FALLBACK_TYPE.make} {FALLBACK_TYPE.model}
-                  </SelectItem>
-                  {aircraftTypes.map((type) => (
-                    <SelectItem key={type.id} value={type.id}>
-                      {type.make} {type.model}{type.icaoType ? ` (${type.icaoType})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Planning estimates only. Select a library type or choose Custom entry.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Saved Profile</Label>
-              <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select saved profile" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {savedProfiles.map((profile) => (
-                    <SelectItem key={profile.id} value={profile.id}>
-                      {profile.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">Overrides take priority when selected.</p>
-            </div>
             <div className="space-y-2">
               <Label>Reserve Fuel (minutes)</Label>
               <Select value={reserveMinutes} onValueChange={setReserveMinutes}>
@@ -2580,6 +2562,171 @@ export default function FlightPlanner() {
           ) : !isPro ? (
             <p className="text-xs text-muted-foreground">Upgrade to RSF Pro to save aircraft profiles.</p>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Route Map</CardTitle>
+          <CardDescription>Route draws once valid airport coordinates are found.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {wakeLockError && (
+            <div className="mb-3 text-xs text-muted-foreground">
+              {wakeLockError}
+            </div>
+          )}
+          <div className="mb-3 flex flex-wrap gap-3 text-sm">
+            <a
+              href="/adsb-receiver-help"
+              className="text-primary hover:underline"
+              onClick={() => trackEvent("adsb_help_click", { target: "/adsb-receiver-help" })}
+            >
+              How to connect your ADS-B receiver
+            </a>
+            <span className="text-muted-foreground">
+              RSF Synthetic Vision Lab <span className="font-medium">(coming soon)</span>
+            </span>
+          </div>
+          {routeIcaos.length === 0 ? (
+            <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
+          ) : routePoints.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              Waiting for airport coordinates... Waypoints are optional. Check ICAO codes if this takes more than a few seconds.
+            </div>
+          ) : (
+            <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
+              {mapStyle === "globe" ? (
+                <CesiumGlobe
+                  points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                  tfmsOverlayEnabled={tfmsTier === "pro_plus" && tfmsOverlayEnabled}
+                />
+              ) : (
+                <PlannerMap
+                  points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                  mapStyle={mapStyle}
+                  plannedAltitudeFt={plannedAltitudeValue}
+                  windsAltitudeFt={windsAltitudeFt}
+                />
+              )}
+            </Suspense>
+          )}
+          {airportErrors.length > 0 && (
+            <div className="mt-3 text-xs text-destructive">
+              Airport lookup failed for: {airportErrors.map((item) => item.icao).join(", ")}. Check ICAO codes.
+            </div>
+          )}
+          {routeIcaos.length > 0 && routePoints.length === 1 && (
+            <div className="mt-3 text-xs text-muted-foreground">
+              Route map updates as additional points resolve. Waypoints and planned stops are optional.
+            </div>
+          )}
+          {airportErrors.length === 0 && missingIcaos.length > 0 && (
+            <div className="mt-3 text-xs text-muted-foreground">
+              Waiting on coordinates for: {missingIcaos.join(", ")}.
+            </div>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="text-xs text-muted-foreground">Map style</div>
+            <Button
+              variant={mapStyle === "standard" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMapStyle("standard")}
+            >
+              Standard
+            </Button>
+            <Button
+              variant={mapStyle === "sectional" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMapStyle("sectional")}
+            >
+              Sectional (FAA)
+            </Button>
+            <Button
+              variant={mapStyle === "radar" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMapStyle("radar")}
+            >
+              Weather (Radar)
+            </Button>
+            <Button
+              variant={mapStyle === "clouds" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMapStyle("clouds")}
+            >
+              Clouds (Satellite)
+            </Button>
+            <Button
+              variant={mapStyle === "globe" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMapStyle("globe")}
+            >
+              3D Globe
+            </Button>
+            <Button
+              variant={mapStyle === "winds" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMapStyle("winds")}
+            >
+              Winds Aloft (NOAA)
+            </Button>
+            {mapStyle === "winds" && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Winds altitude</span>
+                <Select value={windsAltitudeChoice} onValueChange={setWindsAltitudeChoice}>
+                  <SelectTrigger className="h-8 w-[170px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="z-[1001]">
+                    <SelectItem value="planned">Use planned altitude</SelectItem>
+                    <SelectItem value="3000">3,000 ft</SelectItem>
+                    <SelectItem value="6000">6,000 ft</SelectItem>
+                    <SelectItem value="9000">9,000 ft</SelectItem>
+                    <SelectItem value="12000">12,000 ft</SelectItem>
+                    <SelectItem value="18000">18,000 ft</SelectItem>
+                    <SelectItem value="24000">24,000 ft</SelectItem>
+                    <SelectItem value="30000">30,000 ft</SelectItem>
+                    <SelectItem value="34000">34,000 ft</SelectItem>
+                    <SelectItem value="39000">39,000 ft</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          {mapStyle === "sectional" && (
+            <div className="text-xs text-muted-foreground mt-2">
+              Sectional tiles appear at zoom 6+; zoom in for FAA chart detail.
+            </div>
+          )}
+          {(mapStyle === "radar" || mapStyle === "winds" || mapStyle === "clouds") && (
+            <div className="text-xs text-muted-foreground mt-2">
+              Weather layers are for situational awareness only. Radar shows precip; clouds are satellite IR.
+              Winds aloft uses NOAA AWC data near your planned altitude. Verify with official sources.
+            </div>
+          )}
+          {mapStyle === "globe" && (
+            <div className="text-xs text-muted-foreground mt-2">
+              3D globe view uses CesiumJS. Weather overlays are available in 2D for now.
+            </div>
+          )}
+          {mapStyle === "winds" && (
+            <div className="text-xs text-muted-foreground mt-1">
+              Wind arrows point in the direction the wind is blowing from; size scales with speed.
+            </div>
+          )}
+          {!isAuthenticated && routePoints.length > 0 && (
+            <Alert className="mt-3">
+              <AlertDescription className="flex flex-wrap items-center gap-3">
+                <span>Save this route and get planning reminders with a free account.</span>
+                <Button asChild size="sm">
+                  <Link href="/register">Create free account</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/login">Sign in</Link>
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
         </CardContent>
       </Card>
 
@@ -3388,7 +3535,10 @@ export default function FlightPlanner() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">Planned</Badge>
+                    <Badge variant="outline">{filingStatusLabel(plan.filingStatus)}</Badge>
+                    {plan.filingPendingAction && (
+                      <Badge variant="secondary">Pending {plan.filingPendingAction}</Badge>
+                    )}
                     <Button size="sm" variant="outline" onClick={() => setEditingPlan(plan)}>
                       Edit
                     </Button>
@@ -3410,6 +3560,73 @@ export default function FlightPlanner() {
                     <div className="text-muted-foreground">Arrival</div>
                     <div>{plan.plannedArrivalAt ? new Date(plan.plannedArrivalAt).toLocaleString() : "-"}</div>
                   </div>
+                </div>
+                <div className="grid gap-2 md:grid-cols-4 text-sm">
+                  <div>
+                    <div className="text-muted-foreground">Flight rules</div>
+                    <div>{plan.filingFlightRules || "VFR"}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Provider</div>
+                    <div>{plan.filingProvider || "Leidos Flight Service"}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Live filing</div>
+                    <div>{plan.filingIsLive ? "Enabled" : "Disabled"}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Last sync</div>
+                    <div>{plan.filingLastProviderSyncAt ? new Date(plan.filingLastProviderSyncAt).toLocaleString() : "-"}</div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "file" })}
+                    disabled={filingActionMutation.isPending}
+                  >
+                    Stage file
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "amend" })}
+                    disabled={filingActionMutation.isPending}
+                  >
+                    Stage amend
+                  </Button>
+                  {(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "activate" })}
+                        disabled={filingActionMutation.isPending}
+                      >
+                        Stage activate
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "close" })}
+                        disabled={filingActionMutation.isPending}
+                      >
+                        Stage close
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "cancel" })}
+                    disabled={filingActionMutation.isPending}
+                  >
+                    Stage cancel
+                  </Button>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Filing lifecycle is staged only. Live provider submission remains disabled until Leidos vendor authorization and beta validation are complete.
                 </div>
                 {plan.notes && (
                   <div className="text-sm text-muted-foreground">Notes: {plan.notes}</div>

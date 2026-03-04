@@ -493,6 +493,10 @@ export default function OwnershipCostCalculator() {
                   <Badge variant="secondary">{selectedType.fuel_burn_gph_effective} GPH baseline</Badge>
                 )}
               </div>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Aircraft library selections load planning estimates only. Replace local-cost fields like fuel price, insurance,
+                hangar, taxes, and financing with your actual numbers.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -657,14 +661,23 @@ export default function OwnershipCostCalculator() {
 
             <section className="space-y-3">
               <h3 className="text-lg font-semibold">Variable Costs (per flight hour)</h3>
+              <p className="text-sm text-muted-foreground">
+                These hourly values are editable assumptions. Fuel price especially should be replaced with your actual local wet or dry fuel cost.
+              </p>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="fuelBurnGph">Fuel Burn (GPH)</Label>
                   <Input id="fuelBurnGph" type="number" min={0} step="0.1" value={inputs.fuelBurnGph} onChange={update("fuelBurnGph")} />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Prefilled from the selected aircraft or profile when available.
+                  </p>
                 </div>
                 <div>
                   <Label htmlFor="fuelPricePerGallon">Fuel Price ($/gal)</Label>
                   <Input id="fuelPricePerGallon" type="number" min={0} step="0.1" value={inputs.fuelPricePerGallon} onChange={update("fuelPricePerGallon")} />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Default estimate only. Enter the actual fuel price you pay in your market.
+                  </p>
                 </div>
                 <div>
                   <Label htmlFor="oilPerHour">Oil ($/hr)</Label>

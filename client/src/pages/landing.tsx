@@ -426,11 +426,11 @@ export default function Landing() {
             <div className="rsf-card-shell max-w-4xl text-left">
               <div className="flex items-center justify-between border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100">
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Live Ops Snapshot</div>
-                  <div className="text-sm text-slate-100">RSF capability in view, not hidden in copy</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Current Conditions</div>
+                  <div className="text-sm text-slate-100">Live weather, runway context, and NOTAM awareness</div>
                 </div>
                 <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">
-                  FAA-connected workflow
+                  Live FAA data
                 </Badge>
               </div>
               <div className="grid gap-4 p-4 md:grid-cols-[1.1fr_0.9fr]">

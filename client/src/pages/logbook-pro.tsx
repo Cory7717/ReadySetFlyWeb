@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { PageShell } from "@/components/layout/PageShell";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, type MembershipTier } from "@shared/membership-plans";
@@ -22,7 +23,7 @@ export default function LogbookProPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="container mx-auto py-10 px-4">
+      <div className="container mx-auto px-4 py-10">
         <Card>
           <CardHeader>
             <CardTitle>RSF Pro Membership</CardTitle>
@@ -103,152 +104,183 @@ export default function LogbookProPage() {
   };
 
   return (
-    <div className="container mx-auto py-10 px-4 space-y-6">
-      <Card>
-          <CardHeader>
-            <CardTitle>RSF Pro Membership</CardTitle>
-            <CardDescription>
-            Start with a free account for marketplace access and open tools. Upgrade when you want saved workflow, tracked records, and a 14-day paid-tier trial before billing starts.
-            </CardDescription>
-          </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <div className="text-sm font-semibold">Save workflow</div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                Keep flight plans, favorites, aircraft profiles, and training history tied together after users find what they need in RSF.
-                </p>
+    <PageShell
+      kicker="Membership"
+      title="Choose the RSF plan that fits how you fly."
+      description="Start with free tools and marketplace access. Upgrade when you want saved plans, digital logbook continuity, training history, and currency tracking in one place."
+      actions={
+        <>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">14-day monthly trial</Badge>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">PayPal Business/Commerce</Badge>
+        </>
+      }
+      contentClassName="space-y-8"
+    >
+      <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
+        <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">Save plans</Badge>
+              <Badge variant="outline">Track currency</Badge>
+              <Badge variant="outline">Logbook continuity</Badge>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Save your work</div>
+                <div className="mt-2 text-sm text-slate-700">Keep routes, aircraft profiles, favorites, and training history tied together.</div>
               </div>
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <div className="text-sm font-semibold">Stay current</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Track landings, IFR recency, medical, flight review, and IPC dates without manual spreadsheets.
-              </p>
+              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Stay current</div>
+                <div className="mt-2 text-sm text-slate-700">Track landings, IFR recency, medical, flight review, and IPC dates without a spreadsheet.</div>
+              </div>
+              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Train with context</div>
+                <div className="mt-2 text-sm text-slate-700">Keep logbook records, saved trainer history, and guided workflows in one system.</div>
+              </div>
             </div>
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <div className="text-sm font-semibold">Train smarter</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Unlock saved trainer history, guided workflows, and instructor-friendly records.
-              </p>
+
+            <div className="rounded-[1.25rem] border border-white/12 bg-white/80 p-4 shadow-[0_12px_26px_rgba(15,23,42,0.08)] sm:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <span className="rsf-kicker">Your current plan</span>
+                  <h2 className="mt-2 text-2xl font-semibold text-slate-900">{currentTierLabel}</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {hasAccess
+                      ? isTrialing
+                        ? "Your trial is active now."
+                        : "Your paid membership is active."
+                      : "You are currently on the free plan."}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant={hasAccess ? "default" : "outline"}>
+                    Status: {hasAccess ? (isTrialing ? "trialing" : "active") : membershipStatus}
+                  </Badge>
+                  {membershipInterval && hasAccess ? (
+                    <Badge variant="outline">Billing: {membershipInterval}</Badge>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-[1rem] border border-primary/14 bg-white/72 p-4">
+                <div className="text-sm font-semibold">Included with {membershipTierInfo[selectedTier].title}</div>
+                <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+                  {membershipTierInfo[selectedTier].features.map((feature) => (
+                    <li key={feature}>{feature}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {hasAccess ? (
+                <div className="mt-4 space-y-2">
+                  {isTrialing && membershipTrialEndsAt ? (
+                    <p className="text-xs text-muted-foreground">
+                      Trial ends {new Date(membershipTrialEndsAt).toLocaleDateString()}.
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-3">
+                    <Button variant="destructive" onClick={handleCancel} disabled={loading}>Cancel membership</Button>
+                    <Badge variant="outline">Free tools remain available if you cancel</Badge>
+                  </div>
+                </div>
+              ) : null}
             </div>
-          </div>
-          <div className="rounded-lg border bg-muted/30 p-4">
-            <div className="text-sm font-semibold mb-2">
-              Included with {membershipTierInfo[selectedTier].title}
-            </div>
-            <ul className="space-y-2 text-sm text-muted-foreground list-disc pl-5">
-              {membershipTierInfo[selectedTier].features.map((feature) => (
-                <li key={feature}>{feature}</li>
-              ))}
-            </ul>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant={hasAccess ? "default" : "outline"}>
-              Status: {hasAccess ? (isTrialing ? "trialing" : "active") : membershipStatus}
-            </Badge>
-            <Badge variant="secondary">Tier: {currentTierLabel}</Badge>
-            {membershipInterval && hasAccess && (
-              <Badge variant="outline">Billing: {membershipInterval}</Badge>
-            )}
           </div>
 
-          {hasAccess ? (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">
-                {isTrialing ? "Your RSF trial is active." : "Your RSF Pro membership is active."}
-              </p>
-              {isTrialing && membershipTrialEndsAt && (
-                <p className="text-xs text-muted-foreground">
-                  Trial ends {new Date(membershipTrialEndsAt).toLocaleDateString()}.
-                </p>
-              )}
-              <Button variant="destructive" onClick={handleCancel} disabled={loading}>Cancel RSF Pro</Button>
-              <p className="text-xs text-muted-foreground">
-                Cancel anytime. Your free tools remain available.
-              </p>
+          <div className="space-y-4 rounded-[1.4rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.78),rgba(255,255,255,0.56))] p-5 shadow-[0_18px_38px_rgba(15,23,42,0.12)]">
+            <div>
+              <span className="rsf-kicker">Choose a plan</span>
+              <h3 className="mt-2 text-2xl font-semibold text-slate-900">Pick the RSF plan that fits your workflow.</h3>
             </div>
-          ) : (
-            <>
-              <div className="flex flex-wrap gap-3">
-                {(Object.keys(membershipTierInfo) as MembershipTier[]).map((tier) => {
-                  const monthly = membershipPlanOptions[tier].find((plan) => plan.interval === "monthly")?.price;
-                  return (
+            <div className="flex flex-wrap gap-3">
+              {(Object.keys(membershipTierInfo) as MembershipTier[]).map((tier) => {
+                const monthly = membershipPlanOptions[tier].find((plan) => plan.interval === "monthly")?.price;
+                return (
                   <button
                     key={tier}
-                    className={`rounded-xl border px-4 py-3 text-left transition-all ${
-                      selectedTier === tier ? "border-primary bg-primary/5" : "border-border"
+                    className={`rounded-[1rem] border px-4 py-3 text-left transition-all ${
+                      selectedTier === tier
+                        ? "border-primary/50 bg-primary/10 shadow-[0_12px_24px_rgba(15,23,42,0.10)]"
+                        : "border-primary/14 bg-white/70"
                     }`}
                     onClick={() => setSelectedTier(tier)}
                   >
-                    <div className="text-sm text-muted-foreground">{membershipTierInfo[tier].title}</div>
+                    <div className="text-sm font-semibold text-slate-900">{membershipTierInfo[tier].title}</div>
                     <div className="text-xs text-muted-foreground">{membershipTierInfo[tier].subtitle}</div>
-                    {monthly !== undefined && (
-                      <div className="text-xs text-muted-foreground mt-2">From ${monthly.toFixed(2)}/mo</div>
-                    )}
+                    {monthly !== undefined ? (
+                      <div className="mt-2 text-xs text-muted-foreground">From ${monthly.toFixed(2)}/mo</div>
+                    ) : null}
                   </button>
                 );
               })}
-              </div>
+            </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
-                {planOptions.map((plan) => {
-                  const isSelected = plan.interval === selectedInterval;
-                  return (
-                    <button
-                      key={plan.interval}
-                      className={`rounded-xl border p-4 text-left transition-all ${
-                        isSelected ? "border-primary bg-primary/5" : "border-border"
-                      }`}
-                      onClick={() => setSelectedInterval(plan.interval)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm text-muted-foreground">{plan.label}</div>
-                        {plan.badge && <Badge variant="outline">{plan.badge}</Badge>}
-                      </div>
-                      <div className="text-2xl font-semibold">${plan.price.toFixed(2)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {membershipTierInfo[selectedTier].subtitle}
-                      </div>
-                      {plan.trialDays && (
-                        <div className="text-xs text-emerald-600 mt-2">
-                          {plan.trialDays}-day free trial
+            {hasAccess ? null : (
+              <>
+                <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
+                  {planOptions.map((plan) => {
+                    const isSelected = plan.interval === selectedInterval;
+                    return (
+                      <button
+                        key={plan.interval}
+                        className={`rounded-[1rem] border p-4 text-left transition-all ${
+                          isSelected
+                            ? "border-primary/50 bg-primary/10 shadow-[0_12px_24px_rgba(15,23,42,0.10)]"
+                            : "border-primary/14 bg-white/72"
+                        }`}
+                        onClick={() => setSelectedInterval(plan.interval)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-medium text-slate-700">{plan.label}</div>
+                          {plan.badge ? <Badge variant="outline">{plan.badge}</Badge> : null}
                         </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <Separator />
-
-              <div className="flex items-center justify-between text-sm">
-                <div>
-                  <div className="text-muted-foreground">Selected plan</div>
-                  <div className="font-medium">{selectedPlan.label}</div>
-                  {hasTrial && (
-                    <div className="text-xs text-muted-foreground">
-                      {selectedPlan.trialDays}-day free trial - cancel before day {selectedPlan.trialDays}
-                    </div>
-                  )}
+                        <div className="mt-2 text-2xl font-semibold text-slate-900">${plan.price.toFixed(2)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {membershipTierInfo[selectedTier].subtitle}
+                        </div>
+                        {plan.trialDays ? (
+                          <div className="mt-2 text-xs text-emerald-600">{plan.trialDays}-day free trial</div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
-                <div className="text-right">
-                  <div className="text-muted-foreground">Total today</div>
-                  <div className="font-semibold">${selectedPlanTotal.toFixed(2)}</div>
-                </div>
-              </div>
 
-              <Button onClick={handleSubscribe} disabled={loading}>
-                {loading ? "Redirecting..." : hasTrial ? "Start free trial with PayPal Business/Commerce" : "Become a Member with PayPal Business/Commerce"}
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                By subscribing you agree to recurring billing at the selected interval.
-                {hasTrial && " Monthly subscriptions start with a 14-day trial and convert automatically unless canceled."}
-              </p>
-            </>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+                <Separator />
+
+                <div className="flex items-center justify-between text-sm">
+                  <div>
+                    <div className="text-muted-foreground">Selected plan</div>
+                    <div className="font-medium">{selectedPlan.label}</div>
+                    {hasTrial ? (
+                      <div className="text-xs text-muted-foreground">
+                        {selectedPlan.trialDays}-day free trial — cancel before day {selectedPlan.trialDays}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-muted-foreground">Total today</div>
+                    <div className="font-semibold">${selectedPlanTotal.toFixed(2)}</div>
+                  </div>
+                </div>
+
+                <Button onClick={handleSubscribe} disabled={loading}>
+                  {loading
+                    ? "Redirecting..."
+                    : hasTrial
+                      ? "Start free trial with PayPal Business/Commerce"
+                      : "Subscribe with PayPal Business/Commerce"}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Recurring billing applies at the selected interval.
+                  {hasTrial ? " Monthly billing begins automatically after the 14-day trial unless canceled first." : ""}
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+    </PageShell>
   );
 }
 

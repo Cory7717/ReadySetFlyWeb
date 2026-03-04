@@ -427,10 +427,10 @@ export default function Landing() {
               <div className="flex items-center justify-between border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100">
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Current Conditions</div>
-                  <div className="text-sm text-slate-100">Live weather, runway context, and NOTAM awareness</div>
+                  <div className="text-sm text-slate-100">Live weather, runway details, and current NOTAMs</div>
                 </div>
                 <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">
-                  Live FAA data
+                  FAA live data
                 </Badge>
               </div>
               <div className="grid gap-4 p-4 md:grid-cols-[1.1fr_0.9fr]">
@@ -456,7 +456,7 @@ export default function Landing() {
                   <div>
                     <div className="text-2xl font-semibold">{searchIcao}</div>
                     <div className="text-sm text-muted-foreground">
-                      {airportDescriptor || "Live airport briefing, runway context, and NOTAM awareness"}
+                      {airportDescriptor || "Live airport briefing, runway details, and current NOTAMs"}
                     </div>
                   </div>
                   <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 font-mono text-xs text-slate-700 dark:text-slate-200">
@@ -486,7 +486,7 @@ export default function Landing() {
                   <div className="rounded-xl border border-white/10 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.08))] p-4">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">NOTAM / Brief</div>
                     <div className="mt-2 text-lg font-semibold">{heroNotamCount} active NOTAM{heroNotamCount === 1 ? "" : "s"}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">Powered by FAA SWIM with route and airport briefing context.</div>
+                    <div className="mt-1 text-sm text-muted-foreground">Powered by FAA SWIM for airport and route briefing.</div>
                   </div>
                 </div>
               </div>
@@ -519,17 +519,17 @@ export default function Landing() {
             <section className="rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6">
                 <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
                     <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Operations Deck</div>
-                    <div className="text-sm text-slate-200">Marketplace entry points first, support tools second</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Quick Start</div>
+                    <div className="text-sm text-slate-200">Marketplace, rentals, planning, and logbook in one place</div>
                   </div>
-                  <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">Find • Plan • Track</Badge>
+                  <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">Find • Plan • Fly</Badge>
                 </div>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                   <div className="space-y-2">
-                    <span className="rsf-kicker">Quick Start Index</span>
+                    <span className="rsf-kicker">Start Here</span>
                     <h2 className="text-2xl sm:text-3xl font-semibold">Start With What You Need Right Now</h2>
                     <p className="text-sm sm:text-base text-muted-foreground max-w-3xl">
-                      Use RSF to find aviation services first, then keep planning, logging, and training in the same workflow.
+                      Use RSF to find aviation services, plan flights, and keep your logbook and training in one place.
                     </p>
                   </div>
                   <Button asChild variant="outline">
@@ -672,8 +672,8 @@ export default function Landing() {
 
                 <div className="mt-4 overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,hsl(221_52%_19%),hsl(221_34%_15%))] shadow-[var(--shadow-rsf-panel)]">
                   <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
-                    <span>RSF walkthrough</span>
-                    <span className="text-slate-400">Muted overview</span>
+                    <span>RSF overview</span>
+                    <span className="text-slate-400">Muted video</span>
                   </div>
                   <video
                     autoPlay
@@ -694,7 +694,7 @@ export default function Landing() {
                   <span className="rsf-kicker mx-auto">RSF Memberships</span>
                   <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
                   <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto">
-                    Start with a free account for marketplace browsing and open tools. Upgrade when you want saved workflow, tracked records, and two full weeks to test the paid tier before billing.
+                    Start with a free account for marketplace browsing and open tools. Upgrade when you want saved plans, digital logbook features, and two full weeks to try the paid tier before billing.
                   </p>
                 </div>
 
@@ -786,13 +786,13 @@ export default function Landing() {
             <CardContent className="p-5 sm:p-6">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-2">
-                  <span className="rsf-kicker border-white/12 bg-white/8 text-slate-100">Operational Modules</span>
-                  <h2 className="text-2xl sm:text-3xl font-semibold">Open the next section when you need it</h2>
+                  <span className="rsf-kicker border-white/12 bg-white/8 text-slate-100">More to Explore</span>
+                  <h2 className="text-2xl sm:text-3xl font-semibold">Open the section you want next</h2>
                   <p className="max-w-3xl text-sm text-slate-200/85 sm:text-base">
-                    Open the next section when you want more detail.
+                    Current conditions, CFI setup, featured tools, and aviation events are available below.
                   </p>
                 </div>
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-300">Reveal workflow</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-300">Choose a section</div>
               </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
+import { PageShell } from "@/components/layout/PageShell";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
@@ -74,116 +75,199 @@ export default function CfiDirectory() {
   const hasFilters = search.trim() || state.trim() || airport.trim();
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-10 space-y-8">
-        <div className="space-y-2">
-          <Badge variant="outline">CFI Directory</Badge>
-          <h1 className="text-3xl font-bold">Find a Certified Flight Instructor</h1>
-          <p className="text-muted-foreground max-w-2xl">
-            Browse instructors by location, ratings, and availability. Book a training session directly with the CFI.
-          </p>
-          <div className="flex flex-wrap gap-3 pt-2">
-            <Button asChild>
-              <Link href="/dashboard/cfi">Become a CFI on RSF</Link>
-            </Button>
-            {isAuthenticated && !canUseCfi && (
-              <Button asChild variant="secondary">
-                <Link href="/dashboard/cfi">Start 30-day CFI trial</Link>
-              </Button>
-            )}
-            {!isAuthenticated && (
-              <Button asChild variant="outline">
-                <Link href="/register">Create a CFI account</Link>
-              </Button>
-            )}
-            <Button asChild variant="outline">
-              <Link href="/cfi/student-terms">Student terms</Link>
-            </Button>
+    <PageShell
+      kicker="CFI Directory"
+      title="Find a flight instructor by airport, rating, and training fit."
+      description="Search instructors, review rates and ratings held, then contact the CFI that matches the training you need next."
+      actions={
+        <>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Instructor search</Badge>
+          <Button asChild variant="outline" className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10">
+            <Link href="/cfi/student-terms">Student terms</Link>
+          </Button>
+        </>
+      }
+      contentClassName="space-y-8"
+    >
+      <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
+        <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">Students</Badge>
+              <Badge variant="outline">Ratings</Badge>
+              <Badge variant="outline">Local search</Badge>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">1. Search by airport</div>
+                <div className="mt-2 text-sm text-slate-700">Start with your home airport or the area where you want to train.</div>
+              </div>
+              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">2. Review training fit</div>
+                <div className="mt-2 text-sm text-slate-700">Compare hourly rate, ratings held, aircraft types, and language support.</div>
+              </div>
+              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">3. Publish or contact</div>
+                <div className="mt-2 text-sm text-slate-700">CFIs can create profiles. Students can browse and reach the right instructor faster.</div>
+              </div>
+            </div>
+
+            <div className="rounded-[1.25rem] border border-white/12 bg-white/80 p-4 shadow-[0_12px_26px_rgba(15,23,42,0.08)] sm:p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <span className="rsf-kicker">Search instructors</span>
+                  <h2 className="mt-2 text-2xl font-semibold text-slate-900">Find the CFI that matches the rating or lesson you need.</h2>
+                </div>
+                <p className="max-w-xl text-sm text-muted-foreground">
+                  Filter by name, home airport, or state, then narrow to the instructor profile that fits your next step.
+                </p>
+              </div>
+              <div className="mt-5 grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Search</label>
+                  <Input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Name, rating, or headline"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">State</label>
+                  <Input
+                    value={state}
+                    onChange={(event) => setState(event.target.value)}
+                    placeholder="e.g. TX"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Home airport</label>
+                  <Input
+                    value={airport}
+                    onChange={(event) => setAirport(event.target.value)}
+                    placeholder="e.g. KDAL"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline">{profiles.length} instructors</Badge>
+                  <Badge variant="outline">Direct profile view</Badge>
+                  <Badge variant="outline">Student-friendly search</Badge>
+                </div>
+                {hasFilters ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearch("");
+                      setState("");
+                      setAirport("");
+                      trackEvent("cfi_directory_filter_reset");
+                    }}
+                  >
+                    Clear search
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           </div>
-          {!isAuthenticated && (
-            <p className="text-xs text-muted-foreground">
-              Already have an RSF account? <Link href="/login" className="text-primary underline">Sign in</Link> to publish your profile.
+
+          <div className="space-y-4 rounded-[1.4rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.78),rgba(255,255,255,0.56))] p-5 shadow-[0_18px_38px_rgba(15,23,42,0.12)]">
+            <div>
+              <span className="rsf-kicker">For instructors</span>
+              <h3 className="mt-2 text-2xl font-semibold text-slate-900">Create your RSF profile and show students how you teach.</h3>
+            </div>
+            <p className="text-sm leading-6 text-muted-foreground">
+              Publish your home airport, training specialties, aircraft types, and hourly rate so students can find the right instructor without back-and-forth guessing.
             </p>
-          )}
+            <div className="grid gap-3">
+              <div className="rounded-[1rem] border border-primary/14 bg-white/72 px-4 py-3">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Publish your profile</div>
+                <div className="mt-1 text-sm text-slate-700">List ratings, aircraft experience, languages, and availability.</div>
+              </div>
+              <div className="rounded-[1rem] border border-primary/14 bg-white/72 px-4 py-3">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Reach the right students</div>
+                <div className="mt-1 text-sm text-slate-700">Show up in airport and state searches where students are already looking.</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3 pt-1">
+              <Button asChild>
+                <Link href="/dashboard/cfi">Create your profile</Link>
+              </Button>
+              {isAuthenticated && !canUseCfi ? (
+                <Button asChild variant="outline">
+                  <Link href="/dashboard/cfi">Start 30-day CFI trial</Link>
+                </Button>
+              ) : null}
+              {!isAuthenticated ? (
+                <Button asChild variant="outline">
+                  <Link href="/register">Create an account</Link>
+                </Button>
+              ) : null}
+            </div>
+            {!isAuthenticated ? (
+              <p className="text-xs text-muted-foreground">
+                Already have an RSF account? <Link href="/login" className="text-primary underline">Sign in</Link> to publish your instructor profile.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      <BannerAdRotation placement="cfi-directory" className="mt-2" />
+
+      <section className="rounded-[1.45rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.85),rgba(255,255,255,0.62))] p-5 shadow-sm sm:p-6">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <span className="rsf-kicker">Available instructors</span>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">Browse instructors by training fit, location, and availability.</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {profiles.length} instructor{profiles.length === 1 ? "" : "s"} match the current search.
+            </p>
+          </div>
+          <Badge variant="outline">{hasFilters ? "Filtered search" : "All instructors"}</Badge>
         </div>
 
-        <BannerAdRotation
-          placement="cfi-directory"
-          className="mt-2"
-        />
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Search filters</CardTitle>
-            <CardDescription>Filter by instructor name, airport, or state.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Search</label>
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Name, rating, or headline"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">State</label>
-              <Input
-                value={state}
-                onChange={(event) => setState(event.target.value)}
-                placeholder="e.g. TX"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Home airport</label>
-              <Input
-                value={airport}
-                onChange={(event) => setAirport(event.target.value)}
-                placeholder="e.g. KDAL"
-              />
-            </div>
-            {hasFilters && (
-              <Button
-                variant="outline"
-                className="md:col-span-3"
-                onClick={() => {
-                  setSearch("");
-                  setState("");
-                  setAirport("");
-                  trackEvent("cfi_directory_filter_reset");
-                }}
-              >
-                Reset filters
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {isLoading && (
+          <div className="space-y-2">
+          {isLoading ? (
             <Card>
               <CardHeader>
                 <CardTitle>Loading profiles...</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">Fetching CFI directory data.</p>
+                <p className="text-sm text-muted-foreground">Fetching instructor profiles.</p>
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
-          {!isLoading && profiles.length === 0 && (
+          {!isLoading && profiles.length === 0 ? (
             <Card className="md:col-span-2 lg:col-span-3">
               <CardHeader>
                 <CardTitle>No instructors found</CardTitle>
-                <CardDescription>Try adjusting your filters or check back soon.</CardDescription>
+                <CardDescription>
+                  Try a different airport, state, or search term. If you are a CFI, you can also publish the first profile for this area.
+                </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-wrap gap-3">
                 <Button asChild>
-                  <Link href="/dashboard/cfi">Create the first CFI profile</Link>
+                  <Link href="/dashboard/cfi">Create your CFI profile</Link>
                 </Button>
+                {hasFilters ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearch("");
+                      setState("");
+                      setAirport("");
+                      trackEvent("cfi_directory_filter_reset");
+                    }}
+                  >
+                    Clear search
+                  </Button>
+                ) : null}
               </CardContent>
             </Card>
-          )}
+          ) : null}
 
           {profiles.map((profile) => {
             const ratings = normalizeList(profile.ratingsHeld);
@@ -245,14 +329,14 @@ export default function CfiDirectory() {
                     </p>
                   )}
                   <Button asChild className="w-full">
-                    <Link href={`/cfi/${profile.slug}`}>View profile</Link>
+                    <Link href={`/cfi/${profile.slug}`}>Review instructor</Link>
                   </Button>
                 </CardContent>
               </Card>
             );
           })}
         </div>
-      </div>
-    </div>
+      </section>
+    </PageShell>
   );
 }

@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { MarketplaceListing, PromoAlert } from "@shared/schema";
 import { MarketplaceCard } from "@/components/marketplace-card";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { Search, SlidersHorizontal, Gift, X } from "lucide-react";
@@ -28,6 +28,39 @@ const categories = [
   { id: "mechanic", label: "Mechanics", fee: "$40/mo" },
   { id: "charter", label: "Charter Services", fee: "$250/mo" },
 ];
+
+const categoryDetails: Record<string, { title: string; summary: string; helper: string }> = {
+  "aircraft-sale": {
+    title: "Aircraft For Sale",
+    summary: "Browse listings, compare aircraft, and connect with sellers in one place.",
+    helper: "Use filters for city, price, and engine type to narrow the list quickly.",
+  },
+  job: {
+    title: "Aviation Jobs",
+    summary: "Search flying, maintenance, and aviation support roles by location and keyword.",
+    helper: "Keyword and distance filters are the fastest way to narrow job results.",
+  },
+  cfi: {
+    title: "CFI Directory",
+    summary: "Find instructors, compare qualifications, and reach out directly through RSF.",
+    helper: "Filter by rating and city to find the right instructor match faster.",
+  },
+  "flight-school": {
+    title: "Flight Schools",
+    summary: "Explore schools and discovery-flight opportunities as new listings come online.",
+    helper: "Use city and keyword filters to check what is available in your area.",
+  },
+  mechanic: {
+    title: "Mechanic Services",
+    summary: "Browse A&P and maintenance-focused listings by service and location.",
+    helper: "Search by service type or city to narrow the maintenance options.",
+  },
+  charter: {
+    title: "Charter Services",
+    summary: "Review charter operators and service listings from one marketplace view.",
+    helper: "Use city and keyword filters to refine the charter results.",
+  },
+};
 
 export default function Marketplace() {
   const { isAuthenticated } = useAuth();
@@ -159,6 +192,12 @@ export default function Marketplace() {
     setHasShownSchoolEmptyModal(true);
   }, [selectedCategory, isLoading, categoryListings.length, appliedQueryParams, cityFilter, keywordFilter, hasShownSchoolEmptyModal]);
 
+  const currentCategory = categories.find((category) => category.id === selectedCategory) ?? categories[0];
+  const currentCategoryDetail = categoryDetails[selectedCategory] ?? categoryDetails["aircraft-sale"];
+  const hasActiveFilters = Boolean(
+    cityFilter || minPrice || maxPrice || engineTypeFilter !== "all" || keywordFilter || radiusFilter !== "100" || cfiRatingFilter !== "all"
+  );
+
   return (
     <PageShell
       kicker="Marketplace"
@@ -209,11 +248,10 @@ export default function Marketplace() {
         </div>
       )}
 
-      {/* Category Navigation */}
       <section className="sticky top-16 z-40 border-b border-white/10 bg-[hsl(var(--card)/0.9)] backdrop-blur-md">
         <div className="container mx-auto px-4">
-          <ScrollArea className="w-full whitespace-nowrap">
-            <div className="flex gap-2 py-4">
+          <div className="overflow-x-auto">
+            <div className="flex min-w-max gap-2 py-4">
               {categories.map((category) => (
                 <Button
                   key={category.id}
@@ -227,12 +265,10 @@ export default function Marketplace() {
                 </Button>
               ))}
             </div>
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
+          </div>
         </div>
       </section>
 
-      {/* Listings */}
       <section className="container mx-auto px-4 py-12">
         {/* Promotional Alerts Banner */}
         {mainPageAlerts.map((alert) => (
@@ -273,10 +309,56 @@ export default function Marketplace() {
           className="mb-8"
         />
 
+        <div className="mb-8 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="rounded-[1.2rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] p-5 shadow-[var(--shadow-rsf-panel)]">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary/80">Browse category</div>
+            <h2 className="font-display text-2xl font-bold">{currentCategoryDetail.title}</h2>
+            <p className="mt-2 text-sm text-muted-foreground sm:text-base">{currentCategoryDetail.summary}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowFilters((current) => !current)}
+                data-testid="button-toggle-filters-summary"
+              >
+                <SlidersHorizontal className="mr-2 h-4 w-4" />
+                {showFilters ? "Hide filters" : "Refine results"}
+              </Button>
+              <Badge variant="outline">{categoryListings.length} active listings</Badge>
+              {hasActiveFilters ? <Badge variant="secondary">Filters applied</Badge> : null}
+            </div>
+          </div>
+
+          <div className="rounded-[1.2rem] border border-white/10 bg-white/75 p-5 shadow-[var(--shadow-rsf-soft)]">
+            <div className="text-sm font-semibold">How to use this page</div>
+            <p className="mt-2 text-sm text-muted-foreground">{currentCategoryDetail.helper}</p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <Button
+                variant="default"
+                onClick={() => {
+                  trackEvent("marketplace_create_listing_click", { category: selectedCategory });
+                  navigate("/create-marketplace-listing");
+                }}
+                data-testid="button-create-listing-summary"
+              >
+                Create Listing
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  trackEvent("cta_click", { label: "marketplace_to_rentals", target: "/rentals" });
+                  navigate("/rentals");
+                }}
+              >
+                Browse Rentals
+              </Button>
+            </div>
+          </div>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex-1">
             <h2 className="font-display text-xl sm:text-2xl font-bold mb-1">
-              {categories.find(c => c.id === selectedCategory)?.label}
+              {currentCategory.label}
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground">
               <span data-testid="text-marketplace-count">{categoryListings.length}</span> active listings
@@ -308,7 +390,7 @@ export default function Marketplace() {
 
         {/* Filter Panel */}
         {showFilters && (
-          <Card className="mb-6">
+          <Card className="mb-6 border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(255,255,255,0.74))]">
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* Aviation Jobs Filters */}
@@ -525,7 +607,7 @@ export default function Marketplace() {
               </div>
 
               {/* Clear Filters */}
-              {(cityFilter || minPrice || maxPrice || engineTypeFilter !== 'all' || keywordFilter || radiusFilter !== '100' || cfiRatingFilter !== 'all') && (
+              {hasActiveFilters && (
                 <div className="mt-4 flex justify-end">
                   <Button 
                     variant="ghost" 
@@ -556,8 +638,25 @@ export default function Marketplace() {
             ))}
           </div>
         ) : categoryListings.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">No listings in this category yet</p>
+          <div className="rounded-[1.2rem] border border-dashed border-white/14 bg-white/70 px-6 py-12 text-center shadow-[var(--shadow-rsf-soft)]">
+            <h3 className="text-xl font-semibold">{currentCategoryDetail.title} are still building out</h3>
+            <p className="mt-2 text-muted-foreground">
+              No listings match this category yet. Try another category, widen your filters, or create the first listing here.
+            </p>
+            <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row">
+              <Button
+                variant="default"
+                onClick={() => {
+                  trackEvent("marketplace_create_listing_click", { category: selectedCategory, source: "empty_state" });
+                  navigate("/create-marketplace-listing");
+                }}
+              >
+                Create Listing
+              </Button>
+              <Button variant="outline" onClick={() => setSelectedCategory("aircraft-sale")}>
+                Browse another category
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

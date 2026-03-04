@@ -493,57 +493,90 @@ export default function Logbook() {
           "Upgrade for currency alerts, endorsements, analytics, and full history.",
         ]}
       />
-      {/* Signing requirement callout */}
-      {entries.some(e => !e.isLocked) && (
-        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Unsigned entries are drafts. Click <span className="font-semibold">Sign</span> to lock and finalize.
-        </div>
-      )}
-      {/* FREE FOREVER Badge */}
-      <div className="text-center mb-6">
-        <Badge variant="outline" className="text-sm px-4 py-2 bg-green-50 border-green-200">
-          ✈️ FREE Digital Logbook - No Credit Card Required
-        </Badge>
-        <p className="text-xs text-muted-foreground mt-2">
-          Your data, always accessible. Export anytime.
-        </p>
-      </div>
+      <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
+        <div className="grid gap-5 xl:grid-cols-[1.3fr_0.9fr]">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="border-green-200 bg-green-50 text-green-800">
+                Free digital logbook
+              </Badge>
+              <Badge variant="outline">Export anytime</Badge>
+              <Badge variant="outline">{entries.length} entries</Badge>
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold text-slate-900">Keep flights, endorsements, and totals in one working logbook.</h2>
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                Add entries as you fly, export records anytime, and move into RSF Pro only when you want alerts, endorsements, or deeper currency tracking.
+              </p>
+            </div>
+            {entries.some((e) => !e.isLocked) && (
+              <div className="rounded-[1rem] border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900">
+                Unsigned entries are still drafts. Use <span className="font-semibold">Sign</span> when an entry is final.
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              {[
+                { label: "Total Time", value: totals.totalTime.toFixed(1) },
+                { label: "PIC", value: totals.pic.toFixed(1) },
+                { label: "Night", value: totals.night.toFixed(1) },
+                { label: "Instrument", value: totals.instrumentActual.toFixed(1) },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]"
+                >
+                  <div className="text-2xl font-semibold text-primary">{item.value}</div>
+                  <div className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">{item.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-      {/* Totals Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-primary">{totals.totalTime.toFixed(1)}</p>
-              <p className="text-xs text-muted-foreground">Total Time</p>
+          <div className="rounded-[1.3rem] border border-primary/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(255,255,255,0.58))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
+            <span className="rsf-kicker">Start here</span>
+            <h3 className="mt-3 text-xl font-semibold text-slate-900">Most pilots use this page for three things.</h3>
+            <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+              <div>
+                <div className="font-semibold text-slate-900">Add a flight</div>
+                <div>Record the route, aircraft, time, landings, and instrument work.</div>
+              </div>
+              <div>
+                <div className="font-semibold text-slate-900">Lock the entry when it is final</div>
+                <div>Signed entries stay protected while draft entries can still be edited.</div>
+              </div>
+              <div>
+                <div className="font-semibold text-slate-900">Export or add Pro later</div>
+                <div>Keep the free logbook or add alerts, endorsements, and currency tracking when you need them.</div>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-primary">{totals.pic.toFixed(1)}</p>
-              <p className="text-xs text-muted-foreground">PIC</p>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row xl:flex-col">
+              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="w-full">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add flight entry
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <LogbookEntryForm
+                    onSubmit={(data) => createMutation.mutate(data)}
+                    isPending={createMutation.isPending}
+                  />
+                </DialogContent>
+              </Dialog>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => exportToCSV(entries)}
+                disabled={entries.length === 0}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-primary">{totals.night.toFixed(1)}</p>
-              <p className="text-xs text-muted-foreground">Night</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-primary">{totals.instrumentActual.toFixed(1)}</p>
-              <p className="text-xs text-muted-foreground">Instrument</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </div>
+      </section>
 
       {/* Additional Totals */}
       <Card className="mb-6">
@@ -589,29 +622,7 @@ export default function Logbook() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => exportToCSV(entries)}
-                disabled={entries.length === 0}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export CSV
-              </Button>
-              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Entry
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                  <LogbookEntryForm
-                    onSubmit={(data) => createMutation.mutate(data)}
-                    isPending={createMutation.isPending}
-                  />
-                </DialogContent>
-              </Dialog>
+              <Badge variant="outline">{entries.length} logged flights</Badge>
             </div>
           </div>
         </CardHeader>

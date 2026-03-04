@@ -69,7 +69,7 @@ const DEFAULTS: Inputs = {
   cleaningAndManagement: 0,
   otherFixed: 0,
   fuelBurnGph: 8,
-  fuelPricePerGallon: 10,
+  fuelPricePerGallon: 0,
   oilPerHour: 3,
   maintenanceReservePerHour: 20,
   engineReservePerHour: 25,
@@ -182,16 +182,6 @@ function deriveFuelBurn(base: number, type?: AircraftType | null, profile?: Airc
   return roundCurrency(burn);
 }
 
-function deriveFuelPrice(base: number, type?: AircraftType | null, profile?: AircraftProfile | null) {
-  const burn =
-    profile?.fuel_burn_gph_effective ??
-    type?.fuel_burn_gph_effective ??
-    0;
-  if (!burn || burn <= 0) return base;
-  const suggestedFuelPrice = burn <= 10 ? 8.5 : burn <= 18 ? 9.5 : burn <= 40 ? 12 : 14;
-  return roundCurrency(suggestedFuelPrice);
-}
-
 function resolvePresetKey(type?: AircraftType | null) {
   if (!type?.category) return null;
   const normalized = type.category.toLowerCase().replace(/[\s-]+/g, "_");
@@ -207,12 +197,10 @@ function buildAircraftBaseline(type?: AircraftType | null, profile?: AircraftPro
   };
 
   const fuelBurn = deriveFuelBurn(base.fuelBurnGph, type, profile);
-  const fuelPrice = deriveFuelPrice(base.fuelPricePerGallon, type, profile);
-
   return {
     ...base,
     fuelBurnGph: fuelBurn,
-    fuelPricePerGallon: fuelPrice,
+    fuelPricePerGallon: base.fuelPricePerGallon,
     annualHours:
       presetKey === "trainer" ? 140 :
       presetKey === "single_engine" ? 120 :
@@ -307,6 +295,7 @@ export default function OwnershipCostCalculator() {
     if (!selectedType && !selectedProfile) return;
     setInputs((prev) => ({
       ...buildAircraftBaseline(selectedType, selectedProfile),
+      fuelPricePerGallon: prev.fuelPricePerGallon,
       loanPaymentAnnual: prev.loanPaymentAnnual,
       cleaningAndManagement: prev.cleaningAndManagement,
       otherFixed: prev.otherFixed,
@@ -605,7 +594,9 @@ export default function OwnershipCostCalculator() {
         <Card>
           <CardHeader>
             <CardTitle>Inputs</CardTitle>
-            <CardDescription>Adjust assumptions to match your aircraft, market, and ownership model.</CardDescription>
+            <CardDescription>
+              Review every input before using the result. Aircraft library values are starting estimates only, and your local costs should replace them.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-8">
             <section className="space-y-3">
@@ -617,6 +608,9 @@ export default function OwnershipCostCalculator() {
 
             <section className="space-y-3">
               <h3 className="text-lg font-semibold">Fixed Annual Costs</h3>
+              <p className="text-sm text-muted-foreground">
+                Hangar, insurance, taxes, subscriptions, and financing should be replaced with your actual annual costs or quotes.
+              </p>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="hangar">Hangar / Tie-Down (annual)</Label>
@@ -673,10 +667,18 @@ export default function OwnershipCostCalculator() {
                   </p>
                 </div>
                 <div>
-                  <Label htmlFor="fuelPricePerGallon">Fuel Price ($/gal)</Label>
-                  <Input id="fuelPricePerGallon" type="number" min={0} step="0.1" value={inputs.fuelPricePerGallon} onChange={update("fuelPricePerGallon")} />
+                  <Label htmlFor="fuelPricePerGallon">Estimated Fuel Price ($/gal)</Label>
+                  <Input
+                    id="fuelPricePerGallon"
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    placeholder="Estimated cost per gallon"
+                    value={inputs.fuelPricePerGallon === 0 ? "" : inputs.fuelPricePerGallon}
+                    onChange={update("fuelPricePerGallon")}
+                  />
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Default estimate only. Enter the actual fuel price you pay in your market.
+                    Enter the actual fuel price for your airport or local market. This is not loaded from the aircraft library.
                   </p>
                 </div>
                 <div>

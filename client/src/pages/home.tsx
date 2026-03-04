@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Search, MapPin, Calendar, Shield } from "lucide-react";
-import type { AircraftListing, BannerAd as BannerAdType } from "@shared/schema";
+import type { AircraftListing } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,6 +18,7 @@ import { AircraftCard } from "@/components/aircraft-card";
 import { AircraftFilters } from "@/components/aircraft-filters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
+import { PageShell } from "@/components/layout/PageShell";
 import wingtipImage from "@assets/wingtip_featured_1761494838973.jpg";
 import { trackEvent } from "@/lib/analytics";
 
@@ -43,8 +44,7 @@ export default function Home() {
       setSelectedAircraftId(aircraftIdParam);
     }
   }, []);
-  
-  // Filter state
+
   const [keyword, setKeyword] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
@@ -54,7 +54,6 @@ export default function Home() {
     queryKey: ["/api/aircraft"],
   });
 
-  // Filter aircraft based on search criteria
   const filteredAircraft = aircraft.filter((item) => {
     if (keyword) {
       const searchText = `${item.make} ${item.model} ${item.registration}`.toLowerCase();
@@ -83,123 +82,160 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen">
-      {/* Hero Section */}
-      <section className="relative h-[500px] sm:h-[600px] bg-gradient-to-r from-primary/20 to-secondary/20 flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-transparent z-10" />
-        <img
-          src={wingtipImage}
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        
-        <div className="relative z-20 w-full max-w-5xl mx-auto px-3 sm:px-4 lg:px-8">
-          <div className="text-center mb-6 sm:mb-8">
-            <h1 className="font-display text-3xl sm:text-5xl md:text-6xl font-bold text-white mb-3 sm:mb-4" data-testid="text-hero-title">
-              Find Your Perfect Aircraft
-            </h1>
-            <p className="text-base sm:text-xl text-white/90 max-w-2xl mx-auto px-4">
-              Rent from certified aircraft owners. Fly with confidence.
-            </p>
-          </div>
-
-          {/* Search Card */}
-          <div className="bg-background/95 backdrop-blur-lg rounded-xl sm:rounded-2xl shadow-2xl p-4 sm:p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
-              <div>
-                <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">Aircraft Type</label>
-                <Select data-testid="select-aircraft-type">
-                  <SelectTrigger className="text-sm">
-                    <SelectValue placeholder="Any type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="single">Single-Engine</SelectItem>
-                    <SelectItem value="multi">Multi-Engine</SelectItem>
-                    <SelectItem value="jet">Jet</SelectItem>
-                    <SelectItem value="turboprop">Turboprop</SelectItem>
-                    <SelectItem value="helicopter">Helicopter</SelectItem>
-                  </SelectContent>
-                </Select>
+    <PageShell
+      kicker="Rentals"
+      title="Find rental aircraft without leaving the rest of your planning behind."
+      description="Browse available aircraft, compare access options, then use the planner, conditions, and TFR tools in the same workflow."
+      actions={
+        <>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Verified listings</Badge>
+          <Button asChild variant="outline" className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10">
+            <Link href="/marketplace">Explore Marketplace</Link>
+          </Button>
+        </>
+      }
+      contentClassName="space-y-8"
+    >
+      <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
+        <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="space-y-5">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">Aircraft access</Badge>
+              <Badge variant="outline">Training friendly</Badge>
+              <Badge variant="outline">Plan in RSF</Badge>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">1. Search by mission</div>
+                <div className="mt-2 text-sm text-slate-700">Filter by aircraft type, location, and training needs before you compare listings.</div>
               </div>
-
-              <div>
-                <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">Certification Required</label>
-                <Select data-testid="select-certification">
-                  <SelectTrigger className="text-sm">
-                    <SelectValue placeholder="Select certification" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ppl">PPL</SelectItem>
-                    <SelectItem value="ir">IR</SelectItem>
-                    <SelectItem value="cpl">CPL</SelectItem>
-                    <SelectItem value="multi">Multi-Engine</SelectItem>
-                    <SelectItem value="atp">ATP</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">2. Check the aircraft</div>
+                <div className="mt-2 text-sm text-slate-700">Review rates, avionics, insurance, and location before you request access.</div>
               </div>
-
-              <div>
-                <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">Location</label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="City or airport code"
-                    className="pl-10 text-sm"
-                    data-testid="input-location"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs sm:text-sm font-medium mb-1.5 sm:mb-2 block">Dates</label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="date"
-                    className="pl-10 text-sm"
-                    data-testid="input-dates"
-                  />
-                </div>
+              <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">3. Plan the trip</div>
+                <div className="mt-2 text-sm text-slate-700">Move into route planning, airport conditions, and airspace review once you know what you want to fly.</div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-              <div className="flex flex-wrap gap-2 flex-1">
-                {quickFilters.map((filter) => (
-                  <Badge
-                    key={filter.value}
-                    variant="outline"
-                    className="cursor-pointer hover-elevate text-xs sm:text-sm"
-                    data-testid={`badge-filter-${filter.value}`}
-                  >
-                    {filter.label}
-                  </Badge>
-                ))}
+            <div className="rounded-[1.25rem] border border-white/12 bg-white/80 p-4 shadow-[0_12px_26px_rgba(15,23,42,0.08)] sm:p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <span className="rsf-kicker">Search rentals</span>
+                  <h2 className="mt-2 text-2xl font-semibold text-slate-900">Start with the aircraft that matches the mission.</h2>
+                </div>
+                <p className="max-w-xl text-sm text-muted-foreground">
+                  Use the quick search below, then narrow the results with filters once you see what is available.
+                </p>
               </div>
-              <Button
-                className="bg-accent text-accent-foreground hover:bg-accent rounded-full w-full sm:w-auto"
-                size="lg"
-                data-testid="button-search"
-                onClick={() => trackEvent("rentals_search_click", { keyword, city, state, radius })}
-              >
-                <Search className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                Find Aircraft
-              </Button>
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 sm:gap-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium sm:mb-2 sm:text-sm">Aircraft Type</label>
+                  <Select data-testid="select-aircraft-type">
+                    <SelectTrigger className="text-sm">
+                      <SelectValue placeholder="Any type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single">Single-Engine</SelectItem>
+                      <SelectItem value="multi">Multi-Engine</SelectItem>
+                      <SelectItem value="jet">Jet</SelectItem>
+                      <SelectItem value="turboprop">Turboprop</SelectItem>
+                      <SelectItem value="helicopter">Helicopter</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium sm:mb-2 sm:text-sm">Certification Required</label>
+                  <Select data-testid="select-certification">
+                    <SelectTrigger className="text-sm">
+                      <SelectValue placeholder="Select certification" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ppl">PPL</SelectItem>
+                      <SelectItem value="ir">IR</SelectItem>
+                      <SelectItem value="cpl">CPL</SelectItem>
+                      <SelectItem value="multi">Multi-Engine</SelectItem>
+                      <SelectItem value="atp">ATP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium sm:mb-2 sm:text-sm">Location</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="City or airport code"
+                      className="pl-10 text-sm"
+                      data-testid="input-location"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium sm:mb-2 sm:text-sm">Dates</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="date"
+                      className="pl-10 text-sm"
+                      data-testid="input-dates"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                <div className="flex flex-wrap gap-2">
+                  {quickFilters.map((filter) => (
+                    <Badge
+                      key={filter.value}
+                      variant="outline"
+                      className="cursor-pointer hover-elevate text-xs sm:text-sm"
+                      data-testid={`badge-filter-${filter.value}`}
+                    >
+                      {filter.label}
+                    </Badge>
+                  ))}
+                </div>
+                <Button
+                  className="w-full rounded-full bg-accent text-accent-foreground hover:bg-accent sm:w-auto"
+                  size="lg"
+                  data-testid="button-search"
+                  onClick={() => trackEvent("rentals_search_click", { keyword, city, state, radius })}
+                >
+                  <Search className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                  Find aircraft
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-[1.4rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.76),rgba(255,255,255,0.5))] shadow-[0_18px_38px_rgba(15,23,42,0.12)]">
+            <img
+              src={wingtipImage}
+              alt="Wingtip view from a rental aircraft"
+              className="h-64 w-full object-cover xl:h-full"
+            />
+            <div className="space-y-2 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Rental access</div>
+              <h3 className="text-xl font-semibold text-slate-900">Find the aircraft first, then use the rest of RSF around it.</h3>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Compare aircraft, then move into route planning, current conditions, and TFR review without starting from scratch on another site.
+              </p>
             </div>
           </div>
         </div>
       </section>
 
-      <BannerAdRotation 
-        placement="rentals" 
-        className="container mx-auto px-4 py-8"
-      />
+      <BannerAdRotation placement="rentals" className="container mx-auto px-4 py-2" />
 
       <section className="container mx-auto px-4">
         <div className="grid gap-4 md:grid-cols-2">
           <Card className="border-primary/20 bg-primary/5">
-            <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div>
                 <div className="text-sm font-semibold">Need training or services?</div>
                 <p className="text-sm text-muted-foreground">
@@ -225,14 +261,14 @@ export default function Home() {
           </Card>
 
           <Card className="border-sky-500/20 bg-sky-500/5">
-            <CardContent className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   RSF GPS Simulators
                   <Badge variant="secondary">Coming soon</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  IFR GPS workflows stay visible here, but this training stack is intentionally held until the simulator workflows are fully production-ready.
+                  IFR GPS workflows stay visible here, but this training stack stays on hold until the simulator workflows are fully ready.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -245,15 +281,15 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Filters & Results */}
       <section className="container mx-auto px-4 py-12">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex-1">
-            <h2 className="font-display text-2xl sm:text-3xl font-bold mb-2" data-testid="text-results-title">
-              Rental Aircraft Avaiable 
+            <span className="rsf-kicker">Available aircraft</span>
+            <h2 className="mt-2 font-display text-2xl font-bold sm:text-3xl" data-testid="text-results-title">
+              Browse aircraft that match your mission
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground">
-              <span data-testid="text-results-count">{filteredAircraft.length}</span> aircraft match your search
+              <span data-testid="text-results-count">{filteredAircraft.length}</span> aircraft match your current search
             </p>
           </div>
           <Button
@@ -262,12 +298,11 @@ export default function Home() {
             className="w-full sm:w-auto"
             data-testid="button-toggle-filters"
           >
-            {showFilters ? "Hide" : "Show"} Filters
+            {showFilters ? "Hide" : "Show"} filters
           </Button>
         </div>
 
         <div className="flex gap-8">
-          {/* Filters Sidebar */}
           {showFilters && (
             <aside className="w-80 flex-shrink-0">
               <AircraftFilters
@@ -284,20 +319,19 @@ export default function Home() {
             </aside>
           )}
 
-          {/* Results Grid */}
           <div className="flex-1">
             {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {[1, 2, 3].map((i) => (
                   <div key={i} className="h-96 rounded-xl bg-muted animate-pulse" />
                 ))}
               </div>
             ) : filteredAircraft.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">No aircraft found matching your filters</p>
+              <div className="rounded-[1.4rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.95),rgba(255,255,255,0.7))] px-6 py-10 text-center shadow-sm">
+                <p className="text-muted-foreground">No aircraft match your current filters.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filteredAircraft.map((listing) => (
                   <AircraftCard
                     key={listing.id}
@@ -333,52 +367,50 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Trust Section */}
       <section className="bg-muted py-16">
         <div className="container mx-auto px-4">
-          <h2 className="font-display text-3xl font-bold text-center mb-12">
-            Why Pilots Trust Ready Set Fly
+          <h2 className="mb-12 text-center font-display text-3xl font-bold">
+            Why pilots use RSF rentals
           </h2>
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid gap-8 md:grid-cols-3">
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
                 <Shield className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="font-display text-xl font-semibold mb-2">Verified Pilots</h3>
+              <h3 className="mb-2 font-display text-xl font-semibold">Verified pilots</h3>
               <p className="text-muted-foreground">
-                All pilots are verified with license checks and insurance checks
+                All pilots are verified with license and insurance checks before they rent through the platform.
               </p>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
                 <Shield className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="font-display text-xl font-semibold mb-2">Comprehensive Insurance</h3>
+              <h3 className="mb-2 font-display text-xl font-semibold">Insurance required</h3>
               <p className="text-muted-foreground">
-                Owenrs and renters are required to carry comprehensive insurance
+                Owners and renters are required to carry the coverage needed for responsible aircraft access.
               </p>
             </div>
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <Shield className="h-8 w-8 text-primary" />
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                <Search className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="font-display text-xl font-semibold mb-2">Support Available</h3>
+              <h3 className="mb-2 font-display text-xl font-semibold">Built for planning</h3>
               <p className="text-muted-foreground">
-                Our support experts are avaialble to assist you from 8am - 8pm (Central Standard Time) - 7 days a week
+                Once you find the aircraft, RSF keeps you in the same workflow for weather, routes, and airspace review.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Aircraft Detail Modal */}
       {selectedAircraftId && (
         <AircraftDetailModal
           aircraftId={selectedAircraftId}
-          open={!!selectedAircraftId}
-          onOpenChange={(open) => !open && setSelectedAircraftId(null)}
+          isOpen={!!selectedAircraftId}
+          onClose={() => setSelectedAircraftId(null)}
         />
       )}
-    </div>
+    </PageShell>
   );
 }

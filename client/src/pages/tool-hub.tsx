@@ -50,7 +50,7 @@ const calculatorLinks = [
 const toolSections: ToolHubSection[] = [
   {
     title: "Find",
-    description: "Start with the marketplace and directory entry points. These are the reasons many users land on RSF first.",
+    description: "Start with the marketplace and directory entry points that bring most users into RSF first.",
     cards: [
       {
         title: "Marketplace",
@@ -101,7 +101,7 @@ const toolSections: ToolHubSection[] = [
   },
   {
     title: "Plan",
-    description: "Once users find what they need, these are the core planning and briefing tools that keep them on RSF.",
+    description: "After discovery, these are the core planning and briefing tools pilots use most often.",
     cards: [
       {
         title: "Flight Planner",
@@ -155,7 +155,7 @@ const toolSections: ToolHubSection[] = [
   },
   {
     title: "Train & Track",
-    description: "These tools keep pilots coming back after discovery and planning: logging, training, IFR prep, and practice history.",
+    description: "These tools cover logging, training, IFR prep, and practice history after the planning work is done.",
     cards: [
       {
         title: "Digital Logbook",
@@ -205,7 +205,7 @@ const toolSections: ToolHubSection[] = [
   },
   {
     title: "Advanced & Coming Soon",
-    description: "Power-user tools stay visible here, but unfinished IFR-critical features remain clearly marked until they are production-ready.",
+    description: "Power-user tools stay visible here, while unfinished IFR-critical features remain clearly marked until they are ready.",
     cards: [
       {
         title: "Ownership Cost Calculator",
@@ -258,15 +258,41 @@ export default function ToolHub() {
     trackEvent("tool_hub_view");
   }, []);
 
+  const featuredStarts = [
+    {
+      title: "Find aircraft, schools, and instructors",
+      description: "Start with the marketplace, rentals, or CFI directory when you need access, training, or services.",
+      href: "/marketplace",
+      cta: "Start with listings",
+    },
+    {
+      title: "Build a route before you go",
+      description: "Check conditions, review airspace, and work through the planner before the flight leaves the page.",
+      href: "/flight-planner",
+      cta: "Build route",
+    },
+    {
+      title: "Keep your flying records current",
+      description: "Use the digital logbook to keep flights, training history, and endorsements together.",
+      href: "/logbook",
+      cta: "Open logbook",
+    },
+  ];
+
   return (
     <div className="min-h-screen">
       <section className="border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_66%_19%),hsl(221_74%_34%))] py-10 text-slate-100 shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)]">
-        <div className="container mx-auto px-4 space-y-3">
-          <span className="rsf-kicker border-white/10 bg-white/10 text-slate-100">Tool Hub</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold">RSF Tools &amp; Features Hub</h1>
+        <div className="container mx-auto px-4 space-y-4">
+          <span className="rsf-kicker border-white/10 bg-white/10 text-slate-100">Pilot guide</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold">Find what you need, then use the right RSF tool next.</h1>
           <p className="max-w-3xl text-slate-300">
-            Use RSF in the same order pilots actually work: find what you need in aviation, plan the flight, then train and track the work that follows.
+            Use RSF in the same order pilots actually work: find aircraft or people first, plan the flight, then train or keep records without jumping between products.
           </p>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/90">
+            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">Marketplace first</span>
+            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">Planning support</span>
+            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">Training and records</span>
+          </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button
               asChild
@@ -299,14 +325,42 @@ export default function ToolHub() {
       </section>
 
       <section className="container mx-auto px-4 py-8 sm:py-10 space-y-8 sm:space-y-10">
+        <div className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.7))] p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <span className="rsf-kicker">Most pilots start here</span>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">Three ways to use RSF without hunting through every page.</h2>
+            </div>
+            <p className="max-w-xl text-sm text-muted-foreground">
+              These are the three fastest paths through the site: find listings, build a route, or go straight to the logbook.
+            </p>
+          </div>
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            {featuredStarts.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-[1.25rem] border border-primary/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(255,255,255,0.58))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)]"
+              >
+                <h3 className="text-lg font-semibold text-slate-900">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.description}</p>
+                <Button
+                  asChild
+                  className="mt-4 w-full sm:w-auto"
+                  onClick={() => trackEvent("tool_hub_click", { target: item.href })}
+                >
+                  <Link href={item.href}>{item.cta}</Link>
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {toolSections.map((section) => (
           <div key={section.title} className="space-y-4">
-            <div className="rounded-[1.2rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.68))] p-4 sm:p-5 shadow-sm">
-              <div className="space-y-1 border-l-4 border-primary pl-4">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">RSF workflow group</div>
-                <h2 className="text-2xl font-semibold">{section.title}</h2>
-                <p className="text-sm text-muted-foreground">{section.description}</p>
-              </div>
+            <div className="space-y-2 border-l-4 border-primary pl-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-500">RSF guide section</div>
+              <h2 className="text-2xl font-semibold">{section.title}</h2>
+              <p className="max-w-3xl text-sm text-muted-foreground">{section.description}</p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

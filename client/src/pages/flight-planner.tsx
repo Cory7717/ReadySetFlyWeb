@@ -2081,14 +2081,14 @@ export default function FlightPlanner() {
 
   return (
     <PageShell
-      kicker="Core Workflow"
+      kicker="Plan"
       title="Plan a Flight"
       description={
         <>
-          Build a route and get route analysis before you fly.
+          Build the route, check the conditions, and keep the trip ready to save or file.
           {!isPro ? (
             <span className="block pt-2 text-xs text-slate-200/80 sm:text-sm">
-              Free accounts can save your first plan. RSF Pro adds unlimited saved plans, aircraft profiles, alerts, and analytics.
+              Free accounts can save the first plan. RSF Pro adds unlimited saved plans, aircraft profiles, alerts, and planning history.
             </span>
           ) : null}
         </>
@@ -2120,16 +2120,73 @@ export default function FlightPlanner() {
           "Upgrade for unlimited saved plans, alerts, and advanced analytics.",
         ]}
       />
-      <Alert>
-        <AlertDescription>
-          Planning estimates only. Always verify against the aircraft POH/AFM and current conditions.
-        </AlertDescription>
-      </Alert>
+      <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
+        <div className="grid gap-5 xl:grid-cols-[1.25fr_0.95fr]">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">Planner support</Badge>
+              <Badge variant="outline">TFR + NOTAM aware</Badge>
+              <Badge variant="outline">Save-ready workflow</Badge>
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold text-slate-900">Most pilots use this planner to map the route, review the briefing, and keep a flight ready to save or file.</h2>
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                This is a working planning tool. Use it to compare airports, review runway and weather context, check airspace, and carry the trip forward into your saved workflow.
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">1. Build the route</div>
+                <div className="mt-2 text-sm text-slate-700">Enter departure, destination, waypoints, stops, and your aircraft profile up front.</div>
+              </div>
+              <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">2. Review conditions</div>
+                <div className="mt-2 text-sm text-slate-700">Check weather, runway guidance, NOTAMs, and TFR or special-use airspace before you go.</div>
+              </div>
+              <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">3. Save or stage filing</div>
+                <div className="mt-2 text-sm text-slate-700">Keep the trip in RSF, stage a filing packet, and move into the next step when the plan is ready.</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[1.3rem] border border-primary/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(255,255,255,0.58))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
+            <span className="rsf-kicker">Before you start</span>
+            <h3 className="mt-3 text-xl font-semibold text-slate-900">Use your aircraft selection first.</h3>
+            <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+              <div>
+                <div className="font-semibold text-slate-900">Pick from the RSF aircraft library</div>
+                <div>Selecting an aircraft or saved profile fills in cruise speed, fuel burn, and usable fuel for planning.</div>
+              </div>
+              <div>
+                <div className="font-semibold text-slate-900">Leave the page without losing the trip</div>
+                <div>Your draft route stays in place if you jump out to the TFR map or another planning page and return.</div>
+              </div>
+              <div className="rounded-[1rem] border border-amber-200 bg-amber-50/90 px-4 py-3 text-amber-900">
+                Planning estimates only. Always verify with the POH/AFM, official briefings, and current conditions before departure.
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row xl:flex-col">
+              <Button asChild className="w-full" onClick={() => trackEvent("planner_intro_click", { target: "/tfr-map" })}>
+                <Link href="/tfr-map">Review airspace first</Link>
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                asChild
+                onClick={() => trackEvent("planner_intro_click", { target: "/pilot-tools#airport-weather" })}
+              >
+                <Link href="/pilot-tools#airport-weather">Check airport conditions</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <Card>
         <CardHeader>
-          <CardTitle>Route Builder</CardTitle>
-          <CardDescription>Enter airports and optional waypoints to plot your route.</CardDescription>
+          <CardTitle>Route Setup</CardTitle>
+          <CardDescription>Enter airports, pick your aircraft, and add waypoints or stops before you plot the trip.</CardDescription>
         </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
@@ -2376,7 +2433,7 @@ export default function FlightPlanner() {
       <Card>
         <CardHeader>
           <CardTitle>Distance & Performance</CardTitle>
-          <CardDescription>Estimate time enroute and fuel required. Aircraft library and saved profile selections above prefill these assumptions.</CardDescription>
+          <CardDescription>Review trip distance, time, and fuel after your aircraft selection fills in the planning assumptions above.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">

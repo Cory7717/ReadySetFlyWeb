@@ -42,7 +42,7 @@ import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
 import { createDbTfmsProvider } from "./services/tfms/providers/db";
 import { computeTfmsRisk } from "./services/tfms/risk";
 import { partners } from "./config/partners";
-import { flightPlanFilingProvider } from "./services/flight-plan-filing/provider";
+import { flightPlanFilingProvider, validateFlightPlanForAction } from "./services/flight-plan-filing/provider";
 import {
   fetchMetar,
   fetchTaf,
@@ -15789,25 +15789,37 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       const packet = result.data;
+      const flightRules = (packet.flightRules || "VFR").toUpperCase();
+      const errors: string[] = [];
       const warnings: string[] = [];
-      if (!packet.departure) warnings.push("Departure airport is missing.");
-      if (!packet.destination) warnings.push("Destination airport is missing.");
-      if (!packet.aircraftId) warnings.push("Aircraft ID / tail number should be set before filing.");
-      if (!packet.pilotName) warnings.push("Pilot in command name is missing.");
-      if (!packet.soulsOnBoard) warnings.push("Souls on board should be entered.");
-      if ((packet.flightRules || "VFR").toUpperCase() === "IFR" && !packet.route) {
-        warnings.push("IFR filing should include a route string before handoff.");
+      if (!packet.departure) errors.push("Departure airport is required.");
+      if (!packet.destination) errors.push("Destination airport is required.");
+      if (!packet.aircraftId) errors.push("Aircraft ID / tail number is required.");
+      if (!packet.aircraftType) errors.push("Aircraft type is required.");
+      if (!packet.pilotName) errors.push("Pilot in command name is required.");
+      if (!packet.soulsOnBoard) errors.push("Souls on board must be entered.");
+      if (flightRules === "IFR" && !packet.route) {
+        errors.push("IFR filing requires a route before handoff.");
       }
       if (!packet.plannedDepartureUtc) {
-        warnings.push("Planned departure time is missing or not convertible to UTC.");
+        errors.push("Planned departure time is missing or not convertible to UTC.");
       }
       if (!packet.enduranceMinutes || packet.enduranceMinutes <= 0) {
         warnings.push("Endurance is not available yet. Review fuel on board before filing.");
       }
+      if (flightRules === "IFR" && !packet.alternate) {
+        warnings.push("Consider adding an alternate before filing IFR.");
+      }
+      if (flightRules !== "IFR" && !packet.route) {
+        warnings.push("VFR handoff can proceed direct, but route detail improves the filing packet.");
+      }
+      if (!packet.equipment) {
+        warnings.push("Equipment code is blank. Verify equipment capability before filing.");
+      }
 
       const normalizedPacket = {
         ...packet,
-        flightRules: (packet.flightRules || "VFR").toUpperCase(),
+        flightRules,
         provider: "flight-service-handoff-staged",
       };
 
@@ -15823,8 +15835,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         live: false,
         provider: "Flight Service",
         routeType: normalizedPacket.flightRules,
-        readyToFile: warnings.length === 0,
+        readyToFile: errors.length === 0,
         providerUrl: "https://www.1800wxbrief.com/",
+        errors,
         warnings,
         nextSteps,
         packet: normalizedPacket,
@@ -15861,6 +15874,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(400).json({ error: `${action} is only available for VFR flight plans.` });
       }
 
+      const validation = validateFlightPlanForAction(plan, action);
+      if (!validation.ready) {
+        return res.status(400).json({
+          error: "Flight plan is not ready for this action.",
+          validation,
+        });
+      }
+
       const providerResult = await flightPlanFilingProvider.stageAction(plan, action);
       const currentHistory = Array.isArray(plan.filingActionHistory) ? plan.filingActionHistory : [];
       const historyEntry = {
@@ -15869,6 +15890,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         live: false,
         message: providerResult.message,
         warnings: providerResult.warnings,
+        validation,
       };
 
       const updated = await storage.updateFlightPlan(plan.id, {

@@ -218,6 +218,7 @@ type FilingPreviewResponse = {
   routeType: string;
   readyToFile: boolean;
   providerUrl: string;
+  errors: string[];
   warnings: string[];
   nextSteps: string[];
   packet: Record<string, unknown>;
@@ -1947,7 +1948,7 @@ export default function FlightPlanner() {
         title: result.readyToFile ? "Filing preview ready" : "Filing preview generated",
         description: result.readyToFile
           ? "RSF validated the packet and staged the non-live auto-file handoff."
-          : "Review the warnings before filing through Flight Service.",
+          : "Review the filing errors and warnings before continuing to Flight Service.",
       });
     },
     onError: (error: any) => {
@@ -3020,6 +3021,16 @@ export default function FlightPlanner() {
                     <div className="font-semibold">Disabled</div>
                   </div>
                 </div>
+                {filingPreview.errors.length > 0 && (
+                  <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-red-900">
+                    <div className="font-semibold">Required fixes before filing</div>
+                    <ul className="mt-2 list-disc space-y-1 pl-5">
+                      {filingPreview.errors.map((error) => (
+                        <li key={error}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {filingPreview.warnings.length > 0 && (
                   <Alert>
                     <AlertDescription>
@@ -3628,6 +3639,36 @@ export default function FlightPlanner() {
                 <div className="text-xs text-muted-foreground">
                   Filing lifecycle is staged only. Live provider submission remains disabled until Leidos vendor authorization and beta validation are complete.
                 </div>
+                {Array.isArray(plan.filingActionHistory) && plan.filingActionHistory.length > 0 && (
+                  <div className="rounded-lg border bg-muted/20 p-3">
+                    <div className="mb-2 font-semibold">Filing history</div>
+                    <div className="space-y-2">
+                      {[...plan.filingActionHistory]
+                        .slice()
+                        .reverse()
+                        .map((entry: any, index: number) => (
+                          <div key={`${entry?.action || "entry"}-${entry?.stagedAt || index}`} className="rounded-md border bg-background/80 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="font-medium capitalize">{String(entry?.action || "Unknown action")}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {entry?.stagedAt ? new Date(entry.stagedAt).toLocaleString() : "Unknown time"}
+                              </div>
+                            </div>
+                            {entry?.message && (
+                              <div className="mt-1 text-sm text-muted-foreground">{String(entry.message)}</div>
+                            )}
+                            {Array.isArray(entry?.warnings) && entry.warnings.length > 0 && (
+                              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                                {entry.warnings.map((warning: string) => (
+                                  <li key={warning}>{warning}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
                 {plan.notes && (
                   <div className="text-sm text-muted-foreground">Notes: {plan.notes}</div>
                 )}

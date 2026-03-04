@@ -70,12 +70,26 @@ export default function OwnershipCostCalculator() {
     return fuelPerHour + oilPerHour + maintenanceReservePerHour + engineReservePerHour + otherVariablePerHour;
   }, [inputs]);
 
+  const fixedPerHour = useMemo(() => {
+    if (inputs.annualHours <= 0) return 0;
+    return fixedAnnual / inputs.annualHours;
+  }, [fixedAnnual, inputs.annualHours]);
+
+  const dryOwnershipCostPerHour = useMemo(() => {
+    const { oilPerHour, maintenanceReservePerHour, engineReservePerHour, otherVariablePerHour } = inputs;
+    return fixedPerHour + oilPerHour + maintenanceReservePerHour + engineReservePerHour + otherVariablePerHour;
+  }, [fixedPerHour, inputs]);
+
   const ownershipCostPerHour = useMemo(() => {
     if (inputs.annualHours <= 0) return 0;
     return fixedAnnual / inputs.annualHours + variablePerHour;
   }, [fixedAnnual, variablePerHour, inputs.annualHours]);
 
-  const recommendedRentalPerHour = useMemo(() => {
+  const recommendedDryRentalPerHour = useMemo(() => {
+    return Math.round(dryOwnershipCostPerHour * 1.15 * 100) / 100; // 15% markup
+  }, [dryOwnershipCostPerHour]);
+
+  const recommendedWetRentalPerHour = useMemo(() => {
     return Math.round(ownershipCostPerHour * 1.15 * 100) / 100; // 15% markup
   }, [ownershipCostPerHour]);
 
@@ -93,12 +107,12 @@ export default function OwnershipCostCalculator() {
             Ownership Cost per Hour
           </h1>
           <p className="text-muted-foreground">
-            Estimate aircraft ownership cost per flight hour and a suggested rental price (+15%).
+            Estimate aircraft ownership cost per flight hour and suggested dry and wet rental rates (+15%).
           </p>
         </div>
 
         {/* Key Results */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Ownership Cost/hr</CardTitle>
@@ -113,14 +127,27 @@ export default function OwnershipCostCalculator() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Recommended Rental/hr</CardTitle>
-              <CardDescription>+15% markup</CardDescription>
+              <CardTitle className="text-base">Recommended Dry Rate/hr</CardTitle>
+              <CardDescription>Excludes fuel, +15% markup</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-baseline gap-2">
-                <Badge variant="secondary" className="text-xs">Markup</Badge>
+                <Badge variant="secondary" className="text-xs">Dry</Badge>
                 <DollarSign className="h-5 w-5 text-primary" />
-                <span className="text-2xl font-semibold">{recommendedRentalPerHour.toFixed(2)}</span>
+                <span className="text-2xl font-semibold">{recommendedDryRentalPerHour.toFixed(2)}</span>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Recommended Wet Rate/hr</CardTitle>
+              <CardDescription>Includes fuel, +15% markup</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-baseline gap-2">
+                <Badge variant="secondary" className="text-xs">Wet</Badge>
+                <DollarSign className="h-5 w-5 text-primary" />
+                <span className="text-2xl font-semibold">{recommendedWetRentalPerHour.toFixed(2)}</span>
               </div>
             </CardContent>
           </Card>
@@ -225,7 +252,7 @@ export default function OwnershipCostCalculator() {
               Ownership cost per hour = (annual fixed costs ÷ annual hours) + variable per-hour costs.
             </p>
             <p>
-              Recommended rental price is ownership cost per hour plus a 15% margin. Adjust the inputs to fit your aircraft and local prices.
+              Dry rate uses ownership cost minus fuel, then adds a 15% margin. Wet rate uses full ownership cost including fuel, then adds the same 15% margin.
             </p>
           </CardContent>
         </Card>

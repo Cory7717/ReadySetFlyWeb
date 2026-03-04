@@ -126,7 +126,7 @@ export default function Landing() {
   const autoScrollActiveRef = useRef(false);
   const [eventsHovering, setEventsHovering] = useState(false);
   const [autoPauseUntil, setAutoPauseUntil] = useState(0);
-  const [openLandingModules, setOpenLandingModules] = useState<LandingModuleId[]>([]);
+  const [openLandingModules, setOpenLandingModules] = useState<LandingModuleId[]>(["conditions"]);
   const [icaoInput, setIcaoInput] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
@@ -263,6 +263,7 @@ export default function Landing() {
   } - Current Conditions`;
   const proMonthly = membershipPlanOptions.pro.find((plan) => plan.interval === "monthly")?.price;
   const proPlusMonthly = membershipPlanOptions.pro_plus.find((plan) => plan.interval === "monthly")?.price;
+  const heroNotamCount = notams?.notams?.length ?? 0;
 
   const submitIcao = () => {
     const normalized = icaoInput.trim().toUpperCase();
@@ -380,35 +381,29 @@ export default function Landing() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <div className="relative overflow-hidden bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
+      <div className="relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
           <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_390px] xl:items-start">
             <div className="max-w-4xl mx-auto xl:mx-0 xl:max-w-none text-center xl:text-left space-y-4 sm:space-y-6">
-            <h1 className="bg-[linear-gradient(180deg,#f7f9fc_0%,#c9d2df_28%,#7e8da3_62%,#4f5f77_100%)] bg-clip-text text-4xl font-bold tracking-tight text-transparent drop-shadow-[0_1px_0_rgba(255,255,255,0.2)] sm:text-5xl md:text-6xl">
+            <h1 className="bg-[linear-gradient(180deg,#f8fbff_0%,#d5deea_24%,#94a5bc_58%,#556781_100%)] bg-clip-text text-4xl font-bold tracking-tight text-transparent drop-shadow-[0_2px_0_rgba(11,18,32,0.35)] sm:text-5xl md:text-6xl">
               Ready Set Fly
             </h1>
-            <p className="text-lg sm:text-xl md:text-2xl text-muted-foreground px-4 xl:px-0">
-              Making general aviation easier to navigate.
+            <p className="text-lg sm:text-xl md:text-2xl text-slate-50 px-4 xl:px-0 font-semibold">
+              Find aircraft, instructors, and tools that keep you flying.
             </p>
-            <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto xl:mx-0 px-4 xl:px-0">
+            <p className="text-base sm:text-lg text-slate-200/88 max-w-2xl mx-auto xl:mx-0 px-4 xl:px-0">
               From aircraft rentals to instructors and local services, we are bringing everything in General Aviation into one place — so pilots spend less time searching and more time flying.
             </p>
-            <p className="text-sm sm:text-base text-muted-foreground max-w-3xl mx-auto xl:mx-0 px-4 xl:px-0">
-              The built-in planner, digital logbook, current conditions, and training tools help pilots plan flights, track progress, and manage their flying workflow in one place.
-            </p>
             <p className="text-sm sm:text-base font-semibold text-primary">
-              Find first. Plan second. Train and track when you are ready.
+              Find first. Plan second. Track continuity when you need it.
             </p>
-            <Badge variant="outline" className="mx-auto xl:mx-0 text-xs px-3 py-1">
-              Available for US Residents Only
-            </Badge>
             <div className="flex flex-col sm:flex-row gap-4 justify-center xl:justify-start pt-4">
               <Button size="lg" asChild data-testid="button-marketplace">
                 <Link
                   href="/marketplace"
                   onClick={() => trackEvent("cta_click", { label: "landing_marketplace", target: "/marketplace" })}
                 >
-                  Explore marketplace
+                  Browse listings
                 </Link>
               </Button>
               <Button size="lg" variant="outline" asChild data-testid="button-rentals">
@@ -416,7 +411,7 @@ export default function Landing() {
                   href="/rentals"
                   onClick={() => trackEvent("cta_click", { label: "landing_rentals", target: "/rentals" })}
                 >
-                  Browse rentals
+                  Find rentals
                 </Link>
               </Button>
               <Button size="lg" variant="outline" asChild data-testid="button-plan-flight">
@@ -424,9 +419,77 @@ export default function Landing() {
                   href="/flight-planner"
                   onClick={() => trackEvent("cta_click", { label: "landing_plan_flight", target: "/flight-planner" })}
                 >
-                  Open flight planner
+                  Build a route
                 </Link>
               </Button>
+            </div>
+            <div className="rsf-card-shell max-w-4xl text-left">
+              <div className="flex items-center justify-between border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Live Ops Snapshot</div>
+                  <div className="text-sm text-slate-100">RSF capability in view, not hidden in copy</div>
+                </div>
+                <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">
+                  FAA-connected workflow
+                </Badge>
+              </div>
+              <div className="grid gap-4 p-4 md:grid-cols-[1.1fr_0.9fr]">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rsf-kicker">Current Conditions</span>
+                    <Badge
+                      variant="secondary"
+                      className={`text-white ${
+                        flightCategory.color === "green"
+                          ? "bg-green-600"
+                          : flightCategory.color === "blue"
+                            ? "bg-blue-600"
+                            : flightCategory.color === "red"
+                              ? "bg-red-600"
+                              : "bg-purple-600"
+                      }`}
+                    >
+                      {flightCategory.category}
+                    </Badge>
+                    {weather?.cached ? <Badge variant="outline">Cached</Badge> : null}
+                  </div>
+                  <div>
+                    <div className="text-2xl font-semibold">{searchIcao}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {airportDescriptor || "Live airport briefing, runway context, and NOTAM awareness"}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 font-mono text-xs text-slate-700 dark:text-slate-200">
+                    {weather?.metar?.rawOb || "METAR preview unavailable. Select an airport below to load live conditions."}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (!openLandingModules.includes("conditions")) toggleLandingModule("conditions");
+                        document.getElementById("airport-weather")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                    >
+                      View conditions
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/tfr-map">Review airspace</Link>
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1">
+                  <div className="rounded-xl border border-white/10 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] p-4">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Runway / ATIS</div>
+                    <div className="mt-2 text-lg font-semibold">{runwayInUseDisplay ? `RWY ${runwayInUseDisplay}` : "Runway pending"}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">{atisInfo || "ATIS not parsed from current report"}</div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.08))] p-4">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">NOTAM / Brief</div>
+                    <div className="mt-2 text-lg font-semibold">{heroNotamCount} active NOTAM{heroNotamCount === 1 ? "" : "s"}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">Powered by FAA SWIM with route and airport briefing context.</div>
+                  </div>
+                </div>
+              </div>
             </div>
             </div>
             <div className="space-y-3">
@@ -453,8 +516,7 @@ export default function Landing() {
       <div className="rsf-section-band py-8 sm:py-10">
         <div className="container mx-auto px-4">
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <Card className="overflow-hidden border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))]">
-              <CardContent className="p-5 sm:p-6">
+            <section className="rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6">
                 <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
                     <div>
                       <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Operations Deck</div>
@@ -496,7 +558,7 @@ export default function Landing() {
                           href="/marketplace"
                           onClick={() => trackEvent("cta_click", { label: "quick_index_marketplace", target: "/marketplace" })}
                         >
-                          Open
+                          Browse listings
                         </Link>
                       </Button>
                     </CardContent>
@@ -517,7 +579,7 @@ export default function Landing() {
                           href="/rentals"
                           onClick={() => trackEvent("cta_click", { label: "quick_index_rentals", target: "/rentals" })}
                         >
-                          Open
+                          Browse rentals
                         </Link>
                       </Button>
                     </CardContent>
@@ -538,7 +600,7 @@ export default function Landing() {
                           href="/cfi"
                           onClick={() => trackEvent("cta_click", { label: "quick_index_cfi_directory", target: "/cfi" })}
                         >
-                          Open
+                          Find a CFI
                         </Link>
                       </Button>
                     </CardContent>
@@ -559,7 +621,7 @@ export default function Landing() {
                           href="/flight-planner"
                           onClick={() => trackEvent("cta_click", { label: "quick_index_flight_planner", target: "/flight-planner" })}
                         >
-                          Open
+                          Build route
                         </Link>
                       </Button>
                     </CardContent>
@@ -580,7 +642,7 @@ export default function Landing() {
                           href="/logbook"
                           onClick={() => trackEvent("cta_click", { label: "quick_index_digital_logbook", target: "/logbook" })}
                         >
-                          Open
+                          Open logbook
                         </Link>
                       </Button>
                     </CardContent>
@@ -601,7 +663,7 @@ export default function Landing() {
                           href="/tfr-map"
                           onClick={() => trackEvent("cta_click", { label: "quick_index_tfr_map", target: "/tfr-map" })}
                         >
-                          Open
+                          Check airspace
                         </Link>
                       </Button>
                     </CardContent>
@@ -625,11 +687,9 @@ export default function Landing() {
                     <source src={rsfPromoVideo} type="video/mp4" />
                   </video>
                 </div>
-              </CardContent>
-            </Card>
+            </section>
 
-            <Card className="border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))]">
-              <CardContent className="p-5 sm:p-6">
+            <section className="rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6">
                 <div className="text-center space-y-3">
                   <span className="rsf-kicker mx-auto">RSF Memberships</span>
                   <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
@@ -684,7 +744,7 @@ export default function Landing() {
                         ))}
                       </ul>
                       <Button asChild className="w-full">
-                        <Link href="/logbook/pro">Upgrade to Pro</Link>
+                        <Link href="/logbook/pro">Start Pro trial</Link>
                       </Button>
                     </CardContent>
                   </Card>
@@ -710,13 +770,12 @@ export default function Landing() {
                         ))}
                       </ul>
                       <Button asChild variant="outline" className="w-full">
-                        <Link href="/logbook/pro">Upgrade to Pro+</Link>
+                        <Link href="/logbook/pro">Start Pro+ trial</Link>
                       </Button>
                     </CardContent>
                   </Card>
                 </div>
-              </CardContent>
-            </Card>
+            </section>
           </div>
         </div>
       </div>
@@ -730,7 +789,7 @@ export default function Landing() {
                   <span className="rsf-kicker border-white/12 bg-white/8 text-slate-100">Operational Modules</span>
                   <h2 className="text-2xl sm:text-3xl font-semibold">Open the next section when you need it</h2>
                   <p className="max-w-3xl text-sm text-slate-200/85 sm:text-base">
-                    Where do you want to go next?.
+                    Open the next section when you want more detail.
                   </p>
                 </div>
                 <div className="text-xs uppercase tracking-[0.18em] text-slate-300">Reveal workflow</div>

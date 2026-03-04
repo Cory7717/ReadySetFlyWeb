@@ -11,21 +11,26 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle, CheckCircle2, Plane, Scale } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, ChevronsUpDown, Plane, Scale } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
 type AircraftType = {
   id: string;
   make: string;
   model: string;
   icaoType?: string | null;
+  category?: string | null;
   maxGrossWeightLb: number | string;
   usableFuelGal: number | string;
   emptyArmIn?: number | string | null;
@@ -109,6 +114,7 @@ function StatusBadge({ status, label }: { status: ReturnType<typeof statusFromEn
 
 export default function WeightBalance() {
   const [selectedTypeId, setSelectedTypeId] = useState("");
+  const [aircraftLibraryOpen, setAircraftLibraryOpen] = useState(false);
   const [fuelDensity, setFuelDensity] = useState("6.0");
 
   const [emptyWeight, setEmptyWeight] = useState("0");
@@ -143,6 +149,9 @@ export default function WeightBalance() {
     () => aircraftTypes.find((type) => type.id === selectedTypeId) ?? null,
     [aircraftTypes, selectedTypeId]
   );
+  const selectedAircraftLabel = selectedType
+    ? `${selectedType.make} ${selectedType.model}${selectedType.icaoType ? ` (${selectedType.icaoType})` : ""}`
+    : "Type to search aircraft";
 
   useEffect(() => {
     if (!selectedType) return;
@@ -294,25 +303,56 @@ export default function WeightBalance() {
         <CardContent className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label>RSF Aircraft Library</Label>
-            <Select
-              value={selectedTypeId}
-              onValueChange={(value) => {
-                setSelectedTypeId(value);
-                setMaxGrossOverride("");
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select aircraft type" />
-              </SelectTrigger>
-              <SelectContent>
-                {aircraftTypes.map((type) => (
-                  <SelectItem key={type.id} value={type.id}>
-                    {type.make} {type.model}
-                    {type.icaoType ? ` (${type.icaoType})` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={aircraftLibraryOpen} onOpenChange={setAircraftLibraryOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={aircraftLibraryOpen}
+                  className="w-full justify-between font-normal"
+                >
+                  <span className="truncate">{selectedAircraftLabel}</span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search make or model..." />
+                  <CommandList>
+                    <CommandEmpty>No aircraft found.</CommandEmpty>
+                    <CommandGroup>
+                      {aircraftTypes.map((type) => {
+                        const label = `${type.make} ${type.model}`.trim();
+                        return (
+                          <CommandItem
+                            key={type.id}
+                            value={`${label} ${type.icaoType ?? ""} ${type.category ?? ""}`}
+                            onSelect={() => {
+                              setSelectedTypeId(type.id);
+                              setMaxGrossOverride("");
+                              setAircraftLibraryOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedTypeId === type.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {label}
+                            {type.icaoType ? ` (${type.icaoType})` : ""}
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            <p className="text-xs text-muted-foreground">
+              Start typing your aircraft make or model to filter the list.
+            </p>
             {selectedType && (
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <Badge variant="outline">
@@ -625,4 +665,3 @@ export default function WeightBalance() {
     </div>
   );
 }
-

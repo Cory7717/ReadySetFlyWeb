@@ -186,7 +186,7 @@ export default function ApproachPlates() {
                 </div>
               </div>
               <Button asChild variant="outline" size="sm">
-                <a href={apiUrl(`/api/plates/proxy?url=${encodeURIComponent(plate.url)}`)} target="_blank" rel="noreferrer">
+                <a href={apiUrl(`/api/plates/proxy?url=${encodeURIComponent(plate.url)}`)} target="_blank" rel="noopener noreferrer">
                   <FileText className="h-4 w-4 mr-2" />
                   View Plate
                 </a>

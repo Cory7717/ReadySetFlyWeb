@@ -553,7 +553,7 @@ export default function EventsPage() {
               <p>{selectedEvent.description}</p>
               {selectedEvent.eventUrl && (
                 <Button asChild variant="outline">
-                  <a href={selectedEvent.eventUrl} target="_blank" rel="noreferrer">
+                  <a href={selectedEvent.eventUrl} target="_blank" rel="noopener noreferrer">
                     Visit event site
                   </a>
                 </Button>

@@ -964,7 +964,7 @@ export default function PilotTools() {
                   <Button
                     variant="outline"
                     className="justify-start"
-                    onClick={() => window.open(`https://tfr.faa.gov/tfr2/list.html`, '_blank')}
+                    onClick={() => window.open(`https://tfr.faa.gov/tfr2/list.html`, "_blank", "noopener,noreferrer")}
                   >
                     <AlertTriangle className="h-4 w-4 mr-2" />
                     TFRs
@@ -974,7 +974,7 @@ export default function PilotTools() {
                   <Button
                     variant="outline"
                     className="justify-start"
-                    onClick={() => window.open(`https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/dafd/`, '_blank')}
+                    onClick={() => window.open(`https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/dafd/`, "_blank", "noopener,noreferrer")}
                   >
                     <FileText className="h-4 w-4 mr-2" />
                     Chart Supplement
@@ -984,7 +984,7 @@ export default function PilotTools() {
                   <Button
                     variant="outline"
                     className="justify-start"
-                    onClick={() => window.open(`https://www.1800wxbrief.com/`, '_blank')}
+                    onClick={() => window.open(`https://www.1800wxbrief.com/`, "_blank", "noopener,noreferrer")}
                   >
                     <Radio className="h-4 w-4 mr-2" />
                     1800WXBRIEF
@@ -994,7 +994,7 @@ export default function PilotTools() {
                   <Button
                     variant="outline"
                     className="justify-start"
-                    onClick={() => window.open(`https://skyvector.com/airport/${weather.icao}`, '_blank')}
+                    onClick={() => window.open(`https://skyvector.com/airport/${weather.icao}`, "_blank", "noopener,noreferrer")}
                   >
                     <FileText className="h-4 w-4 mr-2" />
                     SkyVector

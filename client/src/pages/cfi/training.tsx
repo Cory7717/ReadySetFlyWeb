@@ -1292,7 +1292,7 @@ export default function CfiTrainingCenter() {
                       <div className="text-xs text-muted-foreground">{file.mimeType || "document"}</div>
                     </div>
                     <Button variant="outline" size="sm" asChild>
-                      <a href={apiUrl(`/api/cfi/students/files/${file.id}/download`)} target="_blank" rel="noreferrer">
+                      <a href={apiUrl(`/api/cfi/students/files/${file.id}/download`)} target="_blank" rel="noopener noreferrer">
                         Download
                       </a>
                     </Button>

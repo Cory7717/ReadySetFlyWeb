@@ -225,6 +225,20 @@ type FilingPreviewResponse = {
 };
 
 const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
+const FLIGHT_PLANNER_INTRO_DISMISSED_KEY = "rsf_flight_planner_intro_dismissed_v1";
+const FILING_LIVE_ENABLED = false;
+
+const MAP_STYLE_OPTIONS: Array<{
+  value: "standard" | "sectional" | "radar" | "winds" | "clouds" | "globe";
+  label: string;
+}> = [
+  { value: "standard", label: "Standard" },
+  { value: "sectional", label: "Sectional" },
+  { value: "radar", label: "Radar" },
+  { value: "clouds", label: "Clouds" },
+  { value: "globe", label: "3D Globe" },
+  { value: "winds", label: "Winds" },
+];
 
 const filingStatusLabel = (status?: string | null) => {
   switch ((status || "draft").toLowerCase()) {
@@ -481,6 +495,10 @@ export default function FlightPlanner() {
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
+  const [showPlannerIntro, setShowPlannerIntro] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem(FLIGHT_PLANNER_INTRO_DISMISSED_KEY) !== "1";
+  });
 
   useEffect(() => {
     trackEvent("planner_page_view", { page: "flight-planner" });
@@ -494,6 +512,14 @@ export default function FlightPlanner() {
     sessionStorage.setItem(key, "1");
     setShowUpgradePrompt(true);
   }, [isPro]);
+
+  const dismissPlannerIntro = (reason: "manual" | "first-use") => {
+    setShowPlannerIntro(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(FLIGHT_PLANNER_INTRO_DISMISSED_KEY, "1");
+    }
+    trackEvent("planner_intro_collapsed", { reason });
+  };
 
   const [editingPlan, setEditingPlan] = useState<FlightPlan | null>(null);
   const [form, setForm] = useState({
@@ -556,6 +582,15 @@ export default function FlightPlanner() {
   const windsAltitudeFt = windsAltitudeChoice === "planned"
     ? plannedAltitudeValue
     : Number(windsAltitudeChoice);
+  const hasResolvedCoreRoute =
+    ICAO_REGEX.test(departureResolved.trim().toUpperCase()) &&
+    ICAO_REGEX.test(destinationResolved.trim().toUpperCase());
+
+  useEffect(() => {
+    if (!showPlannerIntro) return;
+    if (!hasResolvedCoreRoute) return;
+    dismissPlannerIntro("first-use");
+  }, [showPlannerIntro, hasResolvedCoreRoute]);
 
   useEffect(() => {
     if (tfmsTier !== "pro_plus" && tfmsOverlayEnabled) {
@@ -1790,6 +1825,34 @@ export default function FlightPlanner() {
     }
   };
 
+  const exportNavLogCsv = () => {
+    if (!legNavRows.length) return;
+    const header = ["Leg", "CourseDeg", "DistanceNm", "LegMinutes", "LegFuelGal", "CumulativeNm"];
+    const rows = legNavRows.map((leg) => [
+      `${leg.from} to ${leg.to}`,
+      String(leg.course),
+      leg.distanceNm.toFixed(1),
+      Math.round(leg.legMinutes).toString(),
+      leg.legFuel.toFixed(1),
+      leg.cumulativeNm.toFixed(1),
+    ]);
+    const csv = [header, ...rows].map((row) => row.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `rsf-nav-log-${(departureResolved || "dep").toLowerCase()}-${(destinationResolved || "dest").toLowerCase()}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    trackEvent("planner_navlog_export", {
+      departure: departureResolved || undefined,
+      destination: destinationResolved || undefined,
+      legs: legNavRows.length,
+    });
+  };
+
   const openFlightServiceHandoff = () => {
     trackEvent("planner_filing_preview", {
       flightRules: filingPacket.flightRules,
@@ -2120,68 +2183,80 @@ export default function FlightPlanner() {
           "Upgrade for unlimited saved plans, alerts, and advanced analytics.",
         ]}
       />
-      <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
-        <div className="grid gap-5 xl:grid-cols-[1.25fr_0.95fr]">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">Planner support</Badge>
-              <Badge variant="outline">TFR + NOTAM aware</Badge>
-              <Badge variant="outline">Save-ready workflow</Badge>
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold text-slate-900">Most pilots use this planner to map the route, review the briefing, and keep a flight ready to save or file.</h2>
-              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-                This is a working planning tool. Use it to compare airports, review runway and weather context, check airspace, and carry the trip forward into your saved workflow.
-              </p>
-            </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">1. Build the route</div>
-                <div className="mt-2 text-sm text-slate-700">Enter departure, destination, waypoints, stops, and your aircraft profile up front.</div>
+      {showPlannerIntro && (
+        <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
+          <div className="grid gap-5 xl:grid-cols-[1.25fr_0.95fr]">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">Planner support</Badge>
+                  <Badge variant="outline">TFR + NOTAM aware</Badge>
+                  <Badge variant="outline">Save-ready workflow</Badge>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => dismissPlannerIntro("manual")}
+                >
+                  Hide intro
+                </Button>
               </div>
-              <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">2. Review conditions</div>
-                <div className="mt-2 text-sm text-slate-700">Check weather, runway guidance, NOTAMs, and TFR or special-use airspace before you go.</div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-semibold text-slate-900">Most pilots use this planner to map the route, review the briefing, and keep a flight ready to save or file.</h2>
+                <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                  This is a working planning tool. Use it to compare airports, review runway and weather context, check airspace, and carry the trip forward into your saved workflow.
+                </p>
               </div>
-              <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">3. Save or stage filing</div>
-                <div className="mt-2 text-sm text-slate-700">Keep the trip in RSF, stage a filing packet, and move into the next step when the plan is ready.</div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">1. Build the route</div>
+                  <div className="mt-2 text-sm text-slate-700">Enter departure, destination, waypoints, stops, and your aircraft profile up front.</div>
+                </div>
+                <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">2. Review conditions</div>
+                  <div className="mt-2 text-sm text-slate-700">Check weather, runway guidance, NOTAMs, and TFR or special-use airspace before you go.</div>
+                </div>
+                <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">3. Save or stage filing</div>
+                  <div className="mt-2 text-sm text-slate-700">Keep the trip in RSF, stage a filing packet, and move into the next step when the plan is ready.</div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="rounded-[1.3rem] border border-primary/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(255,255,255,0.58))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
-            <span className="rsf-kicker">Before you start</span>
-            <h3 className="mt-3 text-xl font-semibold text-slate-900">Use your aircraft selection first.</h3>
-            <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <div>
-                <div className="font-semibold text-slate-900">Pick from the RSF aircraft library</div>
-                <div>Selecting an aircraft or saved profile fills in cruise speed, fuel burn, and usable fuel for planning.</div>
+            <div className="rounded-[1.3rem] border border-primary/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(255,255,255,0.58))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
+              <span className="rsf-kicker">Before you start</span>
+              <h3 className="mt-3 text-xl font-semibold text-slate-900">Use your aircraft selection first.</h3>
+              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
+                <div>
+                  <div className="font-semibold text-slate-900">Pick from the RSF aircraft library</div>
+                  <div>Selecting an aircraft or saved profile fills in cruise speed, fuel burn, and usable fuel for planning.</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-slate-900">Leave the page without losing the trip</div>
+                  <div>Your draft route stays in place if you jump out to the TFR map or another planning page and return.</div>
+                </div>
+                <div className="rounded-[1rem] border border-amber-200 bg-amber-50/90 px-4 py-3 text-amber-900">
+                  Planning estimates only. Always verify with the POH/AFM, official briefings, and current conditions before departure.
+                </div>
               </div>
-              <div>
-                <div className="font-semibold text-slate-900">Leave the page without losing the trip</div>
-                <div>Your draft route stays in place if you jump out to the TFR map or another planning page and return.</div>
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row xl:flex-col">
+                <Button asChild className="w-full" onClick={() => trackEvent("planner_intro_click", { target: "/tfr-map" })}>
+                  <Link href="/tfr-map">Review airspace first</Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  asChild
+                  onClick={() => trackEvent("planner_intro_click", { target: "/pilot-tools#airport-weather" })}
+                >
+                  <Link href="/pilot-tools#airport-weather">Check airport conditions</Link>
+                </Button>
               </div>
-              <div className="rounded-[1rem] border border-amber-200 bg-amber-50/90 px-4 py-3 text-amber-900">
-                Planning estimates only. Always verify with the POH/AFM, official briefings, and current conditions before departure.
-              </div>
-            </div>
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row xl:flex-col">
-              <Button asChild className="w-full" onClick={() => trackEvent("planner_intro_click", { target: "/tfr-map" })}>
-                <Link href="/tfr-map">Review airspace first</Link>
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
-                asChild
-                onClick={() => trackEvent("planner_intro_click", { target: "/pilot-tools#airport-weather" })}
-              >
-                <Link href="/pilot-tools#airport-weather">Check airport conditions</Link>
-              </Button>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <Card>
         <CardHeader>
@@ -2511,44 +2586,6 @@ export default function FlightPlanner() {
             Usable fuel: {planningFuel ? `${planningFuel} gal` : "-"} | Max gross weight: {planningMaxWeight ? `${planningMaxWeight} lb` : "-"}
           </div>
 
-          {legNavRows.length > 0 && (
-            <div className="rounded-lg border p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="font-semibold">Navigation Log</div>
-                  <div className="text-xs text-muted-foreground">Leg-by-leg course, time, and fuel planning.</div>
-                </div>
-                {isPro && <Badge variant="secondary">Enhanced planning</Badge>}
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[620px] text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <th className="py-2 pr-3">Leg</th>
-                      <th className="py-2 pr-3">Course</th>
-                      <th className="py-2 pr-3">Dist</th>
-                      <th className="py-2 pr-3">ETE</th>
-                      <th className="py-2 pr-3">Fuel</th>
-                      <th className="py-2">Cum</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {legNavRows.map((leg) => (
-                      <tr key={leg.key} className="border-b last:border-b-0">
-                        <td className="py-2 pr-3 font-medium">{leg.from}{" to "}{leg.to}</td>
-                        <td className="py-2 pr-3">{String(leg.course).padStart(3, "0")}°</td>
-                        <td className="py-2 pr-3">{leg.distanceNm.toFixed(1)} NM</td>
-                        <td className="py-2 pr-3">{formatMinutesLabel(leg.legMinutes)}</td>
-                        <td className="py-2 pr-3">{leg.legFuel.toFixed(1)} gal</td>
-                        <td className="py-2">{leg.cumulativeNm.toFixed(1)} NM</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
           <Separator />
 
           <div className="grid gap-4 md:grid-cols-3">
@@ -2623,6 +2660,60 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
 
+      <Card id="planner-nav-log">
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>Navigation Log</CardTitle>
+              <CardDescription>Leg-by-leg course, time, and fuel summary.</CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={exportNavLogCsv}
+              disabled={legNavRows.length === 0}
+            >
+              Export CSV
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {legNavRows.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              Enter a valid route to generate the nav log.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[620px] text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-2 pr-3">Leg</th>
+                    <th className="py-2 pr-3">Course</th>
+                    <th className="py-2 pr-3">Dist</th>
+                    <th className="py-2 pr-3">ETE</th>
+                    <th className="py-2 pr-3">Fuel</th>
+                    <th className="py-2">Cum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {legNavRows.map((leg) => (
+                    <tr key={leg.key} className="border-b last:border-b-0">
+                      <td className="py-2 pr-3 font-medium">{leg.from}{" to "}{leg.to}</td>
+                      <td className="py-2 pr-3">{String(leg.course).padStart(3, "0")}°</td>
+                      <td className="py-2 pr-3">{leg.distanceNm.toFixed(1)} NM</td>
+                      <td className="py-2 pr-3">{formatMinutesLabel(leg.legMinutes)}</td>
+                      <td className="py-2 pr-3">{leg.legFuel.toFixed(1)} gal</td>
+                      <td className="py-2">{leg.cumulativeNm.toFixed(1)} NM</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Route Map</CardTitle>
@@ -2684,50 +2775,26 @@ export default function FlightPlanner() {
               Waiting on coordinates for: {missingIcaos.join(", ")}.
             </div>
           )}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-4 space-y-2">
             <div className="text-xs text-muted-foreground">Map style</div>
-            <Button
-              variant={mapStyle === "standard" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMapStyle("standard")}
-            >
-              Standard
-            </Button>
-            <Button
-              variant={mapStyle === "sectional" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMapStyle("sectional")}
-            >
-              Sectional (FAA)
-            </Button>
-            <Button
-              variant={mapStyle === "radar" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMapStyle("radar")}
-            >
-              Weather (Radar)
-            </Button>
-            <Button
-              variant={mapStyle === "clouds" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMapStyle("clouds")}
-            >
-              Clouds (Satellite)
-            </Button>
-            <Button
-              variant={mapStyle === "globe" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMapStyle("globe")}
-            >
-              3D Globe
-            </Button>
-            <Button
-              variant={mapStyle === "winds" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setMapStyle("winds")}
-            >
-              Winds Aloft (NOAA)
-            </Button>
+            <div className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-slate-200 bg-white/70 p-1">
+              {MAP_STYLE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setMapStyle(option.value)}
+                  className={cn(
+                    "h-8 rounded-lg px-3 text-xs font-medium transition-colors",
+                    mapStyle === option.value
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100"
+                  )}
+                  aria-pressed={mapStyle === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
             {mapStyle === "winds" && (
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground">Winds altitude</span>
@@ -3122,7 +3189,7 @@ export default function FlightPlanner() {
                     Send to Flight Service (Not live yet)
                   </Button>
                   <Button type="button" variant="ghost" asChild>
-                    <a href={filingPreview.providerUrl} target="_blank" rel="noreferrer">
+                    <a href={filingPreview.providerUrl} target="_blank" rel="noopener noreferrer">
                       Continue with Flight Service
                     </a>
                   </Button>
@@ -3439,7 +3506,7 @@ export default function FlightPlanner() {
               Auto-file with Flight Service (Coming soon)
             </Button>
             <Button type="button" variant="ghost" asChild>
-              <a href="https://www.1800wxbrief.com/" target="_blank" rel="noreferrer">
+              <a href="https://www.1800wxbrief.com/" target="_blank" rel="noopener noreferrer">
                 Open Flight Service
               </a>
             </Button>

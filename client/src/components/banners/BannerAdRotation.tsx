@@ -312,7 +312,7 @@ export function BannerAdRotation({
             Want information on becoming a sponsored business?
           </div>
           <Button asChild size="sm" variant="secondary" data-testid="button-banner-ad-info-public">
-            <a href="/banner-advertise" target="_blank" rel="noreferrer">
+            <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
               Click here
             </a>
           </Button>
@@ -438,7 +438,7 @@ export function BannerAdRotation({
                     <a
                       href={instagramUrl}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       onClick={(event) => event.stopPropagation()}
                       className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                       data-testid="link-banner-instagram"
@@ -451,7 +451,7 @@ export function BannerAdRotation({
                     <a
                       href={facebookUrl}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       onClick={(event) => event.stopPropagation()}
                       className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                       data-testid="link-banner-facebook"

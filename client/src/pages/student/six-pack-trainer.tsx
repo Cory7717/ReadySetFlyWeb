@@ -1245,7 +1245,7 @@ export default function StudentSixPackTrainer() {
                 Verify the S3 object is public and the URL is correct.
               </p>
               <Button asChild variant="secondary">
-                <a href={panelSrc} target="_blank" rel="noreferrer">
+                <a href={panelSrc} target="_blank" rel="noopener noreferrer">
                   Open image URL
                 </a>
               </Button>

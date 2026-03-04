@@ -447,7 +447,7 @@ export default function StudentTraining() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" asChild>
-                      <a href={apiUrl(`/api/student/training/files/${file.id}/download`)} target="_blank" rel="noreferrer">
+                      <a href={apiUrl(`/api/student/training/files/${file.id}/download`)} target="_blank" rel="noopener noreferrer">
                         Download
                       </a>
                     </Button>

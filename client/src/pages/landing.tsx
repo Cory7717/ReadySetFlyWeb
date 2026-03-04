@@ -498,7 +498,7 @@ export default function Landing() {
                   Want information on becoming a sponsored business?
                 </div>
                 <Button asChild size="sm" variant="secondary" data-testid="button-banner-ad-info-public">
-                  <a href="/banner-advertise" target="_blank" rel="noreferrer">
+                  <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
                     Click here
                   </a>
                 </Button>

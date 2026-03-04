@@ -792,7 +792,7 @@ export default function Logbook() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" asChild>
-                        <a href={apiUrl(`/api/logbook/archives/${archive.id}/download`)} target="_blank" rel="noreferrer">
+                        <a href={apiUrl(`/api/logbook/archives/${archive.id}/download`)} target="_blank" rel="noopener noreferrer">
                           Download
                         </a>
                       </Button>

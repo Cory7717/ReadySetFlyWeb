@@ -3415,7 +3415,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="flex items-end">
                   <Button asChild className="w-full">
-                    <a href={hkPdfUrl} target="_blank" rel="noreferrer">Export PDF</a>
+                    <a href={hkPdfUrl} target="_blank" rel="noopener noreferrer">Export PDF</a>
                   </Button>
                 </div>
               </div>
@@ -5525,7 +5525,7 @@ export default function AdminDashboard() {
                 </p>
               </div>
               <Button asChild variant="secondary" data-testid="button-banner-ad-info">
-                <a href="/banner-advertise" target="_blank" rel="noreferrer">
+                <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
                   Click here
                 </a>
               </Button>

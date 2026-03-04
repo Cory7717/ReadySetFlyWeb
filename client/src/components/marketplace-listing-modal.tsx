@@ -719,7 +719,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                             <a
                               href={instagramUrl}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                               data-testid="link-listing-instagram"
                             >
@@ -731,7 +731,7 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
                             <a
                               href={facebookUrl}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
                               data-testid="link-listing-facebook"
                             >

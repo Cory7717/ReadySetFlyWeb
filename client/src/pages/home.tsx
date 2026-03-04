@@ -407,8 +407,10 @@ export default function Home() {
       {selectedAircraftId && (
         <AircraftDetailModal
           aircraftId={selectedAircraftId}
-          isOpen={!!selectedAircraftId}
-          onClose={() => setSelectedAircraftId(null)}
+          open={!!selectedAircraftId}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setSelectedAircraftId(null);
+          }}
         />
       )}
     </PageShell>

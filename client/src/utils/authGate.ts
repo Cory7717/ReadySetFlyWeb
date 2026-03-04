@@ -23,7 +23,9 @@ export const setAuthState = (next: boolean) => {
 export const subscribeAuthGate = (listener: AuthGateListener) => {
   listeners.add(listener);
   listener(pendingRequest);
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 };
 
 export const runWithAuth = async (actionName: string, fn: () => Promise<void>) => {

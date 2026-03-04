@@ -130,6 +130,16 @@ const MapBoundsTracker = ({ enabled, onBoundsChange }: { enabled: boolean; onBou
   return null;
 };
 
+const MapInstanceBridge = ({ onReady }: { onReady: (map: L.Map) => void }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    onReady(map);
+  }, [map, onReady]);
+
+  return null;
+};
+
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 type BasemapMode = "standard" | "sectional" | "ifr";
 
@@ -346,6 +356,16 @@ export default function TfrMap() {
     setSuaBbox(bbox);
   }, []);
 
+  const handleMapReady = useCallback(
+    (map: L.Map) => {
+      mapRef.current = map;
+      if (bounds) {
+        map.fitBounds(bounds.pad(0.2));
+      }
+    },
+    [bounds]
+  );
+
   const suaGeoJson: FeatureCollection = {
     type: "FeatureCollection",
     features: suaFeatures,
@@ -480,13 +500,8 @@ export default function TfrMap() {
                   zoom={4}
                   scrollWheelZoom
                   className="h-full w-full"
-                  whenReady={(map) => {
-                    mapRef.current = map.target;
-                    if (bounds) {
-                      map.target.fitBounds(bounds.pad(0.2));
-                    }
-                  }}
                 >
+                  <MapInstanceBridge onReady={handleMapReady} />
                   <AviationBasemapLayer mode={basemapMode} />
                   <TfrGeoJsonLayer data={geoJson} selectedId={selectedId} onSelect={handleFeatureClick} />
                   {showSUA && <SuaGeoJsonLayer data={suaGeoJson} />}

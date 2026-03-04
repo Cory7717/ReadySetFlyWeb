@@ -209,7 +209,7 @@ export default function Eb6Calculator() {
         descriptionElement.remove();
         return;
       }
-      if (descriptionElement && previousDescription !== null) {
+      if (descriptionElement && typeof previousDescription === "string") {
         descriptionElement.setAttribute("content", previousDescription);
       }
     };

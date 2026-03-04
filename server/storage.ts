@@ -187,6 +187,47 @@ import {
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray, isNull, arrayOverlaps } from "drizzle-orm";
 
+function normalizeDateOnly(value: string | Date | null | undefined): string | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "string") return value;
+  return value.toISOString().slice(0, 10);
+}
+
+function toRequiredDateOnly(value: string | Date | null | undefined, fieldName: string): string {
+  const normalized = normalizeDateOnly(value);
+  if (!normalized) {
+    throw new Error(`${fieldName} is required`);
+  }
+  return normalized;
+}
+
+function normalizeTimestampInput(value: string | Date | null | undefined): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
+function toDecimalString(value: number | string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  return typeof value === "number" ? String(value) : value;
+}
+
+function toRequiredDecimalString(value: number | string, fieldName: string): string {
+  const normalized = toDecimalString(value);
+  if (!normalized) {
+    throw new Error(`${fieldName} is required`);
+  }
+  return normalized;
+}
+
+function normalizeBannerVideoOrientation(
+  value: string | null | undefined
+): "landscape" | "portrait" | null | undefined {
+  if (value == null || value === "") return undefined;
+  return value === "portrait" ? "portrait" : "landscape";
+}
+
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
@@ -592,7 +633,7 @@ export interface IStorage {
   getCfiLessonsByStudent(studentId: string): Promise<CfiLesson[]>;
   getCfiLessonById(id: string): Promise<CfiLesson | undefined>;
   createCfiLesson(lesson: InsertCfiLesson & { cfiProfileId: string; studentId: string }): Promise<CfiLesson>;
-  updateCfiLesson(id: string, profileId: string, updates: Partial<CfiLesson>): Promise<CfiLesson | undefined>;
+  updateCfiLesson(id: string, profileId: string, updates: Partial<InsertCfiLesson>): Promise<CfiLesson | undefined>;
   deleteCfiLesson(id: string, profileId: string): Promise<boolean>;
   getCfiStudentFiles(studentId: string): Promise<CfiStudentFile[]>;
   getCfiStudentFileById(id: string): Promise<CfiStudentFile | undefined>;
@@ -2568,7 +2609,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertHkDailyMetric(metric: InsertHkDailyMetric & { createdBy?: string | null }): Promise<HkDailyMetric> {
-    const payload = { ...metric, updatedAt: new Date() };
+    const metricDate = toRequiredDateOnly(metric.metricDate, "metricDate");
+    const payload = {
+      ...metric,
+      metricDate,
+      updatedAt: new Date(),
+    };
     const [saved] = await db
       .insert(hkDailyMetrics)
       .values(payload)
@@ -2650,7 +2696,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertHkAttendantMetric(metric: InsertHkAttendantMetric & { createdBy?: string | null }): Promise<HkAttendantMetric> {
-    const payload = { ...metric, updatedAt: new Date() };
+    const metricDate = toRequiredDateOnly(metric.metricDate, "metricDate");
+    const payload = {
+      ...metric,
+      metricDate,
+      updatedAt: new Date(),
+    };
     const [saved] = await db
       .insert(hkAttendantMetrics)
       .values(payload)
@@ -2956,7 +3007,7 @@ export class DatabaseStorage implements IStorage {
       imageUrl: order.imageUrl,
       videoUrl: order.videoUrl ?? undefined,
       videoMuted: order.videoMuted ?? true,
-      videoOrientation: order.videoOrientation ?? "landscape",
+      videoOrientation: normalizeBannerVideoOrientation(order.videoOrientation) ?? "landscape",
       link: order.link,
       placements: order.placements,
       category: order.category,
@@ -3586,14 +3637,28 @@ export class DatabaseStorage implements IStorage {
   async createCfiLesson(
     lesson: InsertCfiLesson & { cfiProfileId: string; studentId: string }
   ): Promise<CfiLesson> {
-    const [created] = await db.insert(cfiLessons).values(lesson).returning();
+    const payload = {
+      ...lesson,
+      scheduledAt: normalizeTimestampInput(lesson.scheduledAt),
+      completedAt: normalizeTimestampInput(lesson.completedAt),
+    };
+    const [created] = await db.insert(cfiLessons).values(payload).returning();
     return created;
   }
 
-  async updateCfiLesson(id: string, profileId: string, updates: Partial<CfiLesson>): Promise<CfiLesson | undefined> {
+  async updateCfiLesson(
+    id: string,
+    profileId: string,
+    updates: Partial<InsertCfiLesson>
+  ): Promise<CfiLesson | undefined> {
     const [updated] = await db
       .update(cfiLessons)
-      .set({ ...updates, updatedAt: new Date() })
+      .set({
+        ...updates,
+        scheduledAt: normalizeTimestampInput(updates.scheduledAt),
+        completedAt: normalizeTimestampInput(updates.completedAt),
+        updatedAt: new Date(),
+      })
       .where(and(eq(cfiLessons.id, id), eq(cfiLessons.cfiProfileId, profileId)))
       .returning();
     return updated;
@@ -3649,7 +3714,11 @@ export class DatabaseStorage implements IStorage {
   async createCfiStudentMilestone(
     milestone: InsertCfiStudentMilestone & { studentId: string }
   ): Promise<CfiStudentMilestone> {
-    const [created] = await db.insert(cfiStudentMilestones).values(milestone).returning();
+    const payload = {
+      ...milestone,
+      completedAt: normalizeTimestampInput(milestone.completedAt),
+    };
+    const [created] = await db.insert(cfiStudentMilestones).values(payload).returning();
     return created;
   }
 
@@ -3919,7 +3988,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEndorsement(endorsement: InsertEndorsement & { userId: string }): Promise<Endorsement> {
-    const [created] = await db.insert(endorsements).values(endorsement).returning();
+    const payload = {
+      ...endorsement,
+      issuedAt: toRequiredDateOnly(endorsement.issuedAt, "issuedAt"),
+      expiresAt: normalizeDateOnly(endorsement.expiresAt),
+    };
+    const [created] = await db.insert(endorsements).values(payload).returning();
     return created;
   }
 
@@ -4054,7 +4128,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAircraftType(type: InsertAircraftType): Promise<AircraftType> {
-    const [created] = await db.insert(aircraftTypes).values(type).returning();
+    const payload = {
+      ...type,
+      cruiseKtas: toRequiredDecimalString(type.cruiseKtas, "cruiseKtas"),
+      fuelBurnGph: toRequiredDecimalString(type.fuelBurnGph, "fuelBurnGph"),
+      usableFuelGal: toRequiredDecimalString(type.usableFuelGal, "usableFuelGal"),
+      maxGrossWeightLb: toRequiredDecimalString(type.maxGrossWeightLb, "maxGrossWeightLb"),
+      emptyArmIn: toDecimalString(type.emptyArmIn),
+      frontArmIn: toDecimalString(type.frontArmIn),
+      rearArmIn: toDecimalString(type.rearArmIn),
+      baggageArmIn: toDecimalString(type.baggageArmIn),
+      fuelArmIn: toDecimalString(type.fuelArmIn),
+    };
+    const [created] = await db.insert(aircraftTypes).values(payload).returning();
     return created;
   }
 
@@ -4087,7 +4173,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAircraftProfile(profile: InsertAircraftProfile & { userId: string }): Promise<AircraftProfile> {
-    const [created] = await db.insert(aircraftProfiles).values(profile).returning();
+    const payload = {
+      ...profile,
+      cruiseKtasOverride: toDecimalString(profile.cruiseKtasOverride),
+      fuelBurnOverrideGph: toDecimalString(profile.fuelBurnOverrideGph),
+      usableFuelOverrideGal: toDecimalString(profile.usableFuelOverrideGal),
+      maxGrossWeightOverrideLb: toDecimalString(profile.maxGrossWeightOverrideLb),
+    };
+    const [created] = await db.insert(aircraftProfiles).values(payload).returning();
     return created;
   }
 

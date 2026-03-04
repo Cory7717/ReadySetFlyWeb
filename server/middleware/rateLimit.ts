@@ -23,14 +23,14 @@ const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 setInterval(() => {
   const now = Date.now();
   const windowMs = readNumber(process.env.RATE_LIMIT_ANON_WINDOW_MS, 10 * 60 * 1000);
-  for (const [key, timestamps] of buckets.entries()) {
-    const recent = timestamps.filter((t) => now - t < windowMs);
+  buckets.forEach((timestamps, key) => {
+    const recent = timestamps.filter((t: number) => now - t < windowMs);
     if (recent.length === 0) {
       buckets.delete(key);
     } else {
       buckets.set(key, recent);
     }
-  }
+  });
 }, CLEANUP_INTERVAL_MS);
 
 export const createSoftAuthRateLimiter = (config: RateLimitConfig = {}) => {

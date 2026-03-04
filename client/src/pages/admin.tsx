@@ -20,7 +20,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, leadCategories, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric, type PartnerToolMetric, type LeadCategory } from "@shared/schema";
+import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, leadCategories, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric, type PartnerToolMetric, type LeadCategory, type BannerVideoOrientation } from "@shared/schema";
 import { ADMIN_ROLE_LABELS, ADMIN_ROLE_PERMISSIONS, type AdminRole, type AdminPermission } from "@shared/config/adminAccess";
 import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
 import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
@@ -105,7 +105,7 @@ const buildBannerTrackingUrl = (
   }
 };
 
-const normalizeSocialUrl = (value: string | undefined, network: "instagram" | "facebook") => {
+const normalizeSocialUrl = (value: string | null | undefined, network: "instagram" | "facebook") => {
   if (!value) return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
@@ -121,6 +121,10 @@ const normalizeSocialUrl = (value: string | undefined, network: "instagram" | "f
     : "https://facebook.com/";
   return `${base}${cleaned}`;
 };
+
+const normalizeBannerVideoOrientation = (
+  value: string | null | undefined
+): BannerVideoOrientation => (value === "portrait" ? "portrait" : "landscape");
 
 type HkSettings = {
   checkoutMinutes: number;
@@ -2456,7 +2460,7 @@ export default function AdminDashboard() {
 
     try {
       const dailyPayload: InsertHkDailyMetric = {
-        metricDate: new Date(dateKey),
+        metricDate: dateKey,
         property: hkProperty,
         occupiedRooms: meta.roomsSold === "" ? 0 : toNumber(meta.roomsSold),
         roomsSold: meta.roomsSold === "" ? null : toNumber(meta.roomsSold),
@@ -2483,7 +2487,7 @@ export default function AdminDashboard() {
         if (!entry.attendantName) return;
         const stats = computeEntryStats(entry);
         const attendantPayload: InsertHkAttendantMetric = {
-          metricDate: new Date(dateKey),
+          metricDate: dateKey,
           property: hkProperty,
           attendantName: entry.attendantName,
           checkoutsCleaned: toNumber(entry.checkoutsCleaned),
@@ -5770,7 +5774,7 @@ export default function AdminDashboard() {
                                     imageUrl: order.imageUrl ?? "",
                                     videoUrl: order.videoUrl ?? "",
                                     videoMuted: order.videoMuted ?? true,
-                                    videoOrientation: order.videoOrientation ?? "landscape",
+                                    videoOrientation: normalizeBannerVideoOrientation(order.videoOrientation),
                                     link: order.link ?? "",
                                     placements: order.placements ?? [],
                                     category: order.category ?? undefined,
@@ -6037,7 +6041,7 @@ export default function AdminDashboard() {
                                   imageUrl: banner.imageUrl || "",
                                   videoUrl: banner.videoUrl || "",
                                   videoMuted: banner.videoMuted ?? true,
-                                  videoOrientation: banner.videoOrientation ?? "landscape",
+                                  videoOrientation: normalizeBannerVideoOrientation(banner.videoOrientation),
                                   link: banner.link ?? "",
                                   instagramUrl: banner.instagramUrl ?? "",
                                   facebookUrl: banner.facebookUrl ?? "",
@@ -7331,7 +7335,7 @@ export default function AdminDashboard() {
                     imageUrl: bannerImageUrl || data.imageUrl,
                     videoUrl: bannerVideoUrl || data.videoUrl,
                     videoMuted: data.videoMuted ?? true,
-                    videoOrientation: data.videoOrientation ?? "landscape",
+                    videoOrientation: normalizeBannerVideoOrientation(data.videoOrientation),
                     link: data.link,
                     instagramUrl: normalizedInstagram,
                     facebookUrl: normalizedFacebook,

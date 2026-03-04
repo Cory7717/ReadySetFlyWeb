@@ -3400,7 +3400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
           req.body.imageURL,
           {
-            owner: userId,
+            owner: requesterId,
             visibility: "public", // Listing images are public
           },
         );
@@ -3813,7 +3813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!tier || !interval) {
         return res.status(400).json({ error: "Invalid membership tier or interval" });
       }
-      const { subscription, approveUrl } = await createMembershipSubscription(userId, tier, interval);
+      const { subscription, approveUrl } = await createMembershipSubscription(requesterId, tier, interval);
       res.json({ id: subscription.id, approveUrl });
     } catch (error: any) {
       console.error("Membership subscription create error:", error);
@@ -12769,11 +12769,18 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const radiusNm = Number(req.query?.radiusNm);
       const hasRadiusFilter = Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(radiusNm);
 
+      type TfrFetchMeta = {
+        attempted: boolean;
+        ok: boolean;
+        error?: string;
+        attempts?: Array<{ url: string; ok: boolean; status?: number; error?: string }>;
+      };
+
       let arcgisMeta:
-        | { attempted: boolean; ok: boolean; error?: string; attempts?: Array<{ url: string; ok: boolean; status?: number; error?: string }> }
+        | TfrFetchMeta
         | null = null;
       let wfsMeta:
-        | { attempted: boolean; ok: boolean; error?: string; attempts?: Array<{ url: string; ok: boolean; status?: number; error?: string }> }
+        | TfrFetchMeta
         | null = null;
 
       const buildPayload = async () => {
@@ -12971,13 +12978,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         );
       }
 
-      if (wfsMeta && wfsMeta.attempted && !wfsMeta.ok) {
+      const wfsMetaSnapshot = wfsMeta as TfrFetchMeta | null;
+      const failedWfsMeta = wfsMetaSnapshot && wfsMetaSnapshot.attempted && !wfsMetaSnapshot.ok ? wfsMetaSnapshot : null;
+      if (failedWfsMeta) {
         console.error(
           JSON.stringify({
             event: "tfr_wfs_upstream_error",
             requestId,
-            error: wfsMeta.error,
-            attempts: wfsMeta.attempts,
+            error: failedWfsMeta.error,
+            attempts: failedWfsMeta.attempts,
           })
         );
       }

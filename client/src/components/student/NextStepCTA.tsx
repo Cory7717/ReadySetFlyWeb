@@ -10,7 +10,9 @@ interface NextStepCTAProps {
   tags?: string[];
 }
 
-function buildMarketplaceUrl(params: NextStepCTAProps) {
+type NextStepQueryParams = Omit<NextStepCTAProps, "label">;
+
+function buildMarketplaceUrl(params: NextStepQueryParams) {
   const search = new URLSearchParams();
   if (params.type) search.set("type", params.type);
   if (params.location) search.set("location", params.location);

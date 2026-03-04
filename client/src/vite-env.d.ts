@@ -1,5 +1,10 @@
 interface ImportMetaEnv {
+  readonly DEV: boolean;
+  readonly BASE_URL: string;
   readonly VITE_API_BASE_URL?: string;
+  readonly VITE_CESIUM_ION_TOKEN?: string;
+  readonly VITE_GPS_PANEL_BASE_URL?: string;
+  readonly VITE_SIX_PACK_PANEL_URL?: string;
   readonly VITE_SOFT_AUTH_ENABLED?: string;
   readonly VITE_PARTNER_AV8MAPS_ACTIVE?: string;
   readonly VITE_AV8MAPS_BASE_URL?: string;

@@ -126,7 +126,7 @@ export default function Landing() {
   const autoScrollActiveRef = useRef(false);
   const [eventsHovering, setEventsHovering] = useState(false);
   const [autoPauseUntil, setAutoPauseUntil] = useState(0);
-  const [openLandingModules, setOpenLandingModules] = useState<LandingModuleId[]>(["conditions"]);
+  const [openLandingModules, setOpenLandingModules] = useState<LandingModuleId[]>(["conditions", "partner"]);
   const [icaoInput, setIcaoInput] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
@@ -395,7 +395,7 @@ export default function Landing() {
               From aircraft rentals to instructors and local services, we are bringing everything in General Aviation into one place — so pilots spend less time searching and more time flying.
             </p>
             <p className="text-sm sm:text-base font-semibold text-primary">
-              Find first. Plan second. Track continuity when you need it.
+              Find first. Plan second. Fly with confidence.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center xl:justify-start pt-4">
               <Button size="lg" asChild data-testid="button-marketplace">

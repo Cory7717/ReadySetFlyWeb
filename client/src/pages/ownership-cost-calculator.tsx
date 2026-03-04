@@ -7,9 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DollarSign, Calculator, Plane } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { DollarSign, Calculator, Plane, Check, ChevronsUpDown } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
 
 type AircraftType = {
   id: string;
@@ -241,6 +244,7 @@ export default function OwnershipCostCalculator() {
   const { isAuthenticated } = useAuth();
   const [selectedTypeId, setSelectedTypeId] = useState<string>(DEFAULT_TYPE_ID);
   const [selectedProfileId, setSelectedProfileId] = useState<string>(DEFAULT_PROFILE_ID);
+  const [aircraftLibraryOpen, setAircraftLibraryOpen] = useState(false);
   const [inputs, setInputs] = useState<Inputs>(() => {
     try {
       const saved = localStorage.getItem("ownership-cost-inputs");
@@ -427,25 +431,72 @@ export default function OwnershipCostCalculator() {
           <CardContent className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label>RSF Aircraft Library</Label>
-              <Select
-                value={selectedTypeId}
-                onValueChange={(value) => {
-                  setSelectedProfileId(DEFAULT_PROFILE_ID);
-                  setSelectedTypeId(value);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select aircraft type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={DEFAULT_TYPE_ID}>Manual assumptions</SelectItem>
-                  {aircraftTypes.map((type) => (
-                    <SelectItem key={type.id} value={type.id}>
-                      {type.make} {type.model}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={aircraftLibraryOpen} onOpenChange={setAircraftLibraryOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={aircraftLibraryOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {selectedType ? `${selectedType.make} ${selectedType.model}` : "Type to search aircraft"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search aircraft in the RSF library..." />
+                    <CommandList>
+                      <CommandEmpty>No aircraft found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="Manual assumptions"
+                          onSelect={() => {
+                            setSelectedProfileId(DEFAULT_PROFILE_ID);
+                            setSelectedTypeId(DEFAULT_TYPE_ID);
+                            setAircraftLibraryOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              selectedTypeId === DEFAULT_TYPE_ID ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          Manual assumptions
+                        </CommandItem>
+                        {aircraftTypes.map((type) => {
+                          const label = `${type.make} ${type.model}`.trim();
+                          return (
+                            <CommandItem
+                              key={type.id}
+                              value={`${label} ${type.icaoType ?? ""} ${type.category ?? ""}`}
+                              onSelect={() => {
+                                setSelectedProfileId(DEFAULT_PROFILE_ID);
+                                setSelectedTypeId(type.id);
+                                setAircraftLibraryOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  selectedTypeId === type.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {label}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground">
+                Start typing your make or model to filter the RSF aircraft library.
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Saved Profile</Label>

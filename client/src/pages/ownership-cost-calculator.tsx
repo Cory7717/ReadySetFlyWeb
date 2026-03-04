@@ -139,6 +139,26 @@ const AIRCRAFT_CATEGORY_PRESETS: Record<string, Partial<Inputs>> = {
   },
 };
 
+const CATEGORY_ALIASES: Record<string, keyof typeof AIRCRAFT_CATEGORY_PRESETS> = {
+  trainer: "trainer",
+  piston_single: "single_engine",
+  single_engine: "single_engine",
+  singleengine: "single_engine",
+  single_engine_piston: "single_engine",
+  high_performance_single: "single_engine",
+  complex_single: "single_engine",
+  multi_engine: "multi_engine",
+  multiengine: "multi_engine",
+  piston_multi: "multi_engine",
+  light_twin: "multi_engine",
+  twin: "multi_engine",
+  turboprop: "turboprop",
+  turbo_prop: "turboprop",
+  jet: "jet",
+  helicopter: "helicopter",
+  rotorcraft: "helicopter",
+};
+
 function toNumber(v: string): number {
   const n = Number(v.replace(/[^0-9.\-]/g, ""));
   return Number.isFinite(n) ? n : 0;
@@ -170,6 +190,63 @@ function deriveFuelPrice(base: number, type?: AircraftType | null, profile?: Air
   if (!burn || burn <= 0) return base;
   const suggestedFuelPrice = burn <= 10 ? 8.5 : burn <= 18 ? 9.5 : burn <= 40 ? 12 : 14;
   return roundCurrency(suggestedFuelPrice);
+}
+
+function resolvePresetKey(type?: AircraftType | null) {
+  if (!type?.category) return null;
+  const normalized = type.category.toLowerCase().replace(/[\s-]+/g, "_");
+  return CATEGORY_ALIASES[normalized] || null;
+}
+
+function buildAircraftBaseline(type?: AircraftType | null, profile?: AircraftProfile | null): Inputs {
+  const presetKey = resolvePresetKey(type);
+  const preset = presetKey ? AIRCRAFT_CATEGORY_PRESETS[presetKey] : {};
+  const base: Inputs = {
+    ...DEFAULTS,
+    ...preset,
+  };
+
+  const fuelBurn = deriveFuelBurn(base.fuelBurnGph, type, profile);
+  const fuelPrice = deriveFuelPrice(base.fuelPricePerGallon, type, profile);
+
+  return {
+    ...base,
+    fuelBurnGph: fuelBurn,
+    fuelPricePerGallon: fuelPrice,
+    annualHours:
+      presetKey === "trainer" ? 140 :
+      presetKey === "single_engine" ? 120 :
+      presetKey === "multi_engine" ? 90 :
+      presetKey === "turboprop" ? 160 :
+      presetKey === "jet" ? 180 :
+      presetKey === "helicopter" ? 120 :
+      DEFAULTS.annualHours,
+    chartSubscriptions:
+      presetKey === "jet" || presetKey === "turboprop" ? 600 : DEFAULTS.chartSubscriptions,
+    avionicsSubscriptions:
+      presetKey === "jet" ? 1200 :
+      presetKey === "turboprop" ? 850 :
+      presetKey === "multi_engine" ? 450 :
+      DEFAULTS.avionicsSubscriptions,
+    registrationAndTaxes:
+      presetKey === "jet" ? 8500 :
+      presetKey === "turboprop" ? 3500 :
+      presetKey === "multi_engine" ? 1200 :
+      presetKey === "single_engine" ? 650 :
+      presetKey === "trainer" ? 500 :
+      DEFAULTS.registrationAndTaxes,
+    hangar:
+      presetKey === "jet" ? 18000 :
+      presetKey === "turboprop" ? 9600 :
+      presetKey === "multi_engine" ? 5400 :
+      presetKey === "single_engine" ? 4200 :
+      presetKey === "trainer" ? 3600 :
+      DEFAULTS.hangar,
+    insurance:
+      presetKey === "single_engine" && fuelBurn <= 14 ? 2800 : base.insurance,
+    annualInspection:
+      presetKey === "single_engine" && fuelBurn <= 14 ? 2200 : base.annualInspection,
+  };
 }
 
 export default function OwnershipCostCalculator() {
@@ -228,15 +305,12 @@ export default function OwnershipCostCalculator() {
 
   useEffect(() => {
     if (!selectedType && !selectedProfile) return;
-
-    const presetKey = (selectedType?.category || "").toLowerCase();
-    const preset = AIRCRAFT_CATEGORY_PRESETS[presetKey] || {};
-
     setInputs((prev) => ({
-      ...prev,
-      ...preset,
-      fuelBurnGph: deriveFuelBurn(prev.fuelBurnGph, selectedType, selectedProfile),
-      fuelPricePerGallon: deriveFuelPrice(prev.fuelPricePerGallon, selectedType, selectedProfile),
+      ...buildAircraftBaseline(selectedType, selectedProfile),
+      loanPaymentAnnual: prev.loanPaymentAnnual,
+      cleaningAndManagement: prev.cleaningAndManagement,
+      otherFixed: prev.otherFixed,
+      otherVariablePerHour: prev.otherVariablePerHour,
     }));
   }, [selectedType, selectedProfile]);
 

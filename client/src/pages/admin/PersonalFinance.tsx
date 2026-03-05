@@ -151,6 +151,8 @@ type EntryFormState = {
   notifyDaysBefore: string;
   isRsfRelated: boolean;
   rsfCategory: string;
+  saveAsDraft: boolean;
+  markAsPaid: boolean;
 };
 
 const DEFAULT_FORM = (month: string): EntryFormState => ({
@@ -171,6 +173,8 @@ const DEFAULT_FORM = (month: string): EntryFormState => ({
   notifyDaysBefore: "3",
   isRsfRelated: false,
   rsfCategory: "",
+  saveAsDraft: false,
+  markAsPaid: false,
 });
 
 const monthLabel = (month: string) => {
@@ -364,11 +368,15 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
 
   const entries = entriesQuery.data ?? [];
   const summary = summaryQuery.data;
-  const budgetChartData = (summary?.byCategory ?? []).filter((row) => row.budgeted > 0 || row.actual > 0);
+  const personalEntries = useMemo(() => entries.filter((entry) => !entry.rsfCategory), [entries]);
+  const rsfEntries = useMemo(() => entries.filter((entry) => Boolean(entry.rsfCategory)), [entries]);
   const today = new Date();
   const dayMs = 24 * 60 * 60 * 1000;
 
   const statusForEntry = (entry: FinanceEntry): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } => {
+    if (Number(entry.amount || 0) <= 0 && !entry.dueDate && !entry.isPaid) {
+      return { label: "Draft", variant: "secondary" };
+    }
     if (entry.isPaid) {
       return { label: "Paid", variant: "default" };
     }
@@ -383,18 +391,43 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
     return { label: "Upcoming", variant: "secondary" };
   };
 
-  const incomeEntries = entries.filter((entry) => entry.type === "income");
-  const coryIncome = incomeEntries.filter((entry) => entry.owner === "cory");
-  const amyIncome = incomeEntries.filter((entry) => entry.owner === "amy");
-  const combinedIncome = incomeEntries.reduce((sum, entry) => sum + asNumber(entry.amount), 0);
+  const incomeEntries = personalEntries.filter((entry) => entry.type === "income");
+  const expectedIncomeEntries = incomeEntries.filter((entry) => !entry.isPaid);
+  const receivedIncomeEntries = incomeEntries.filter((entry) => Boolean(entry.isPaid));
+  const coryExpectedIncome = expectedIncomeEntries.filter((entry) => entry.owner === "cory");
+  const amyExpectedIncome = expectedIncomeEntries.filter((entry) => entry.owner === "amy");
+  const coryReceivedIncome = receivedIncomeEntries.filter((entry) => entry.owner === "cory");
+  const amyReceivedIncome = receivedIncomeEntries.filter((entry) => entry.owner === "amy");
+  const combinedExpectedIncome = expectedIncomeEntries.reduce((sum, entry) => sum + asNumber(entry.amount), 0);
+  const combinedReceivedIncome = receivedIncomeEntries.reduce((sum, entry) => sum + asNumber(entry.amount), 0);
 
-  const actualByCategory = useMemo(() => {
+  const personalActualByCategory = useMemo(() => {
     const map = new Map<string, number>();
-    for (const row of summary?.byCategory ?? []) {
-      map.set(row.category, row.actual);
+    for (const entry of personalEntries) {
+      if (entry.type !== "expense") continue;
+      map.set(entry.category, (map.get(entry.category) || 0) + asNumber(entry.amount));
     }
     return map;
-  }, [summary?.byCategory]);
+  }, [personalEntries]);
+
+  const budgetAmountByCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const budget of budgetsQuery.data ?? []) {
+      if (budget.owner !== budgetOwner) continue;
+      map.set(budget.category, asNumber(budget.budgetAmount));
+    }
+    return map;
+  }, [budgetsQuery.data, budgetOwner]);
+
+  const budgetChartData = useMemo(
+    () =>
+      EXPENSE_CATEGORIES.map((category) => {
+        const budgeted = budgetAmountByCategory.get(category) || 0;
+        const actual = personalActualByCategory.get(category) || 0;
+        return { category, budgeted, actual, remaining: budgeted - actual };
+      }).filter((row) => row.budgeted > 0 || row.actual > 0),
+    [budgetAmountByCategory, personalActualByCategory],
+  );
 
   const selectedCategorySubcategories = entryForm.type === "expense"
     ? EXPENSE_SUBCATEGORIES[entryForm.category] ?? []
@@ -430,6 +463,8 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       notifyDaysBefore: entry.notifyDaysBefore ? String(entry.notifyDaysBefore) : "3",
       isRsfRelated: Boolean(entry.rsfCategory),
       rsfCategory: entry.rsfCategory || "",
+      saveAsDraft: Number(entry.amount || 0) <= 0 && !entry.dueDate && !entry.isPaid,
+      markAsPaid: Boolean(entry.isPaid),
     });
     setDialogOpen(true);
   };
@@ -438,6 +473,10 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
     const normalizedSubcategory = entryForm.subcategory === "__other__"
       ? entryForm.customSubcategory.trim()
       : entryForm.subcategory.trim();
+    const normalizedAmount = entryForm.amount.trim();
+    const parsedAmount = normalizedAmount === "" ? 0 : Number(normalizedAmount);
+    const hasValidAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
+    const shouldSaveAsDraft = entryForm.saveAsDraft || !hasValidAmount;
     const payload = {
       month: entryForm.month,
       owner: entryForm.owner,
@@ -445,8 +484,8 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       category: entryForm.category,
       subcategory: normalizedSubcategory || null,
       description: entryForm.description.trim() || null,
-      amount: Number(entryForm.amount || 0).toFixed(2),
-      dueDate: entryForm.type === "expense" && entryForm.dueDate ? entryForm.dueDate : null,
+      amount: hasValidAmount ? parsedAmount.toFixed(2) : "0.00",
+      dueDate: entryForm.dueDate ? entryForm.dueDate : null,
       isRecurring: entryForm.isRecurring,
       recurringFrequency: entryForm.isRecurring ? entryForm.recurringFrequency : null,
       recurringDayOfMonth:
@@ -463,13 +502,13 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
           : null,
       notifyDaysBefore: entryForm.isRecurring ? Number(entryForm.notifyDaysBefore || 3) : 3,
       rsfCategory: entryForm.isRsfRelated ? entryForm.rsfCategory || null : null,
-      isPaid: false,
-      paidDate: null,
+      isPaid: shouldSaveAsDraft ? false : entryForm.markAsPaid,
+      paidDate: shouldSaveAsDraft ? null : entryForm.markAsPaid ? new Date().toISOString().slice(0, 10) : null,
       notificationSent: false,
     };
 
-    if (!entryForm.amount || Number(entryForm.amount) <= 0) {
-      toast({ title: "Amount is required", variant: "destructive" });
+    if (!hasValidAmount && !shouldSaveAsDraft) {
+      toast({ title: "Enter an amount or save as draft", variant: "destructive" });
       return;
     }
     if (!payload.category) {
@@ -507,7 +546,6 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
 
   const loading = entriesQuery.isLoading || summaryQuery.isLoading || budgetsQuery.isLoading;
   const hasNoEntries = !loading && entries.length === 0;
-
   return (
     <div className="space-y-6">
       <Card>
@@ -543,9 +581,17 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                 <Calendar className="mr-2 h-4 w-4" />
                 Generate Recurring
               </Button>
-              <Button onClick={() => openNewEntryDialog()} data-testid="button-add-entry">
+              <Button
+                variant="outline"
+                onClick={() => openNewEntryDialog({ isRsfRelated: true, type: "expense", category: EXPENSE_CATEGORIES[0], rsfCategory: RSF_CATEGORIES[0] })}
+                data-testid="button-add-rsf-entry"
+              >
                 <Plus className="mr-2 h-4 w-4" />
-                Add Entry
+                Add RSF Entry
+              </Button>
+              <Button onClick={() => openNewEntryDialog()} data-testid="button-add-personal-entry">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Personal Entry
               </Button>
             </div>
           </div>
@@ -583,7 +629,10 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                 {summary.overdue.map((entry) => (
                   <div key={entry.id} className="flex items-center justify-between gap-3 rounded border border-red-200 bg-white px-3 py-2">
                     <div>
-                      <div className="font-medium">{entry.subcategory || entry.category} — {asCurrency(asNumber(entry.amount))}</div>
+                      <div className="font-medium">
+                        {entry.subcategory || entry.category} - {asCurrency(asNumber(entry.amount))}
+                        {entry.rsfCategory ? <Badge variant="outline" className="ml-2 border-blue-300 text-blue-700">RSF</Badge> : null}
+                      </div>
                       <div className="text-xs text-muted-foreground">Due {entry.dueDate}</div>
                     </div>
                     <Button size="sm" onClick={() => markPaidMutation.mutate(entry.id)} data-testid={`button-mark-paid-${entry.id}`}>
@@ -599,7 +648,10 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                 {summary.upcomingDue.map((entry) => (
                   <div key={entry.id} className="flex items-center justify-between gap-3 rounded border border-amber-200 bg-white px-3 py-2">
                     <div>
-                      <div className="font-medium">{entry.subcategory || entry.category} — {asCurrency(asNumber(entry.amount))}</div>
+                      <div className="font-medium">
+                        {entry.subcategory || entry.category} - {asCurrency(asNumber(entry.amount))}
+                        {entry.rsfCategory ? <Badge variant="outline" className="ml-2 border-blue-300 text-blue-700">RSF</Badge> : null}
+                      </div>
                       <div className="text-xs text-muted-foreground">Due {entry.dueDate}</div>
                     </div>
                     <Button size="sm" variant="outline" onClick={() => markPaidMutation.mutate(entry.id)} data-testid={`button-mark-paid-${entry.id}`}>
@@ -614,10 +666,10 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       ) : null}
 
       <Card>
-        <CardHeader><CardTitle>Budget vs Actual</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Personal Budget vs Actual</CardTitle></CardHeader>
         <CardContent>
           {budgetChartData.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No budget or expense activity for this month yet.</p>
+            <p className="text-sm text-muted-foreground">No personal budget or personal expense activity for this month yet.</p>
           ) : (
             <div className="h-[360px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -638,48 +690,105 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       <Card>
         <CardHeader><CardTitle>Income This Month</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded border p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="font-semibold">Cory</h4>
-                <Button size="sm" variant="outline" onClick={() => openNewEntryDialog({ owner: "cory", type: "income", category: INCOME_CATEGORIES[0] })}>
-                  + Add Income
-                </Button>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-4 rounded border p-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold">Expected Income</h4>
               </div>
-              <div className="space-y-1 text-sm">
-                {coryIncome.length ? coryIncome.map((entry) => (
-                  <div key={entry.id} className="flex items-center justify-between">
-                    <span>{entry.subcategory || entry.category}</span>
-                    <span>{asCurrency(asNumber(entry.amount))}</span>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded border p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h5 className="font-medium">Cory</h5>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openNewEntryDialog({ owner: "cory", type: "income", category: INCOME_CATEGORIES[0], isRecurring: true, recurringFrequency: "weekly" })}
+                    >
+                      + Add Expected
+                    </Button>
                   </div>
-                )) : <span className="text-muted-foreground">No income entries</span>}
+                  <div className="space-y-1 text-sm">
+                    {coryExpectedIncome.length ? coryExpectedIncome.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between gap-2">
+                        <span>{entry.subcategory || entry.category}{entry.dueDate ? ` (${entry.dueDate})` : ""}</span>
+                        <span>{asCurrency(asNumber(entry.amount))}</span>
+                      </div>
+                    )) : <span className="text-muted-foreground">No expected entries</span>}
+                  </div>
+                  <div className="mt-3 border-t pt-2 font-semibold">
+                    Total: {asCurrency(coryExpectedIncome.reduce((sum, entry) => sum + asNumber(entry.amount), 0))}
+                  </div>
+                </div>
+                <div className="rounded border p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h5 className="font-medium">Amy</h5>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openNewEntryDialog({ owner: "amy", type: "income", category: INCOME_CATEGORIES[0], isRecurring: true, recurringFrequency: "every_x_days", recurringIntervalDays: "14" })}
+                    >
+                      + Add Expected
+                    </Button>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    {amyExpectedIncome.length ? amyExpectedIncome.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between gap-2">
+                        <span>{entry.subcategory || entry.category}{entry.dueDate ? ` (${entry.dueDate})` : ""}</span>
+                        <span>{asCurrency(asNumber(entry.amount))}</span>
+                      </div>
+                    )) : <span className="text-muted-foreground">No expected entries</span>}
+                  </div>
+                  <div className="mt-3 border-t pt-2 font-semibold">
+                    Total: {asCurrency(amyExpectedIncome.reduce((sum, entry) => sum + asNumber(entry.amount), 0))}
+                  </div>
+                </div>
               </div>
-              <div className="mt-3 border-t pt-2 font-semibold">
-                Total: {asCurrency(coryIncome.reduce((sum, entry) => sum + asNumber(entry.amount), 0))}
+              <div className="rounded border bg-muted/30 p-3 font-semibold">
+                Combined Expected Income: {asCurrency(combinedExpectedIncome)}
               </div>
             </div>
-            <div className="rounded border p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="font-semibold">Amy</h4>
-                <Button size="sm" variant="outline" onClick={() => openNewEntryDialog({ owner: "amy", type: "income", category: INCOME_CATEGORIES[0] })}>
-                  + Add Income
+
+            <div className="space-y-4 rounded border p-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold">Received Income</h4>
+                <Button size="sm" variant="outline" onClick={() => openNewEntryDialog({ owner: "joint", type: "income", category: INCOME_CATEGORIES[0], markAsPaid: true })}>
+                  + Add Received
                 </Button>
               </div>
-              <div className="space-y-1 text-sm">
-                {amyIncome.length ? amyIncome.map((entry) => (
-                  <div key={entry.id} className="flex items-center justify-between">
-                    <span>{entry.subcategory || entry.category}</span>
-                    <span>{asCurrency(asNumber(entry.amount))}</span>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded border p-3">
+                  <h5 className="mb-2 font-medium">Cory</h5>
+                  <div className="space-y-1 text-sm">
+                    {coryReceivedIncome.length ? coryReceivedIncome.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between">
+                        <span>{entry.subcategory || entry.category}</span>
+                        <span>{asCurrency(asNumber(entry.amount))}</span>
+                      </div>
+                    )) : <span className="text-muted-foreground">No received entries</span>}
                   </div>
-                )) : <span className="text-muted-foreground">No income entries</span>}
+                  <div className="mt-3 border-t pt-2 font-semibold">
+                    Total: {asCurrency(coryReceivedIncome.reduce((sum, entry) => sum + asNumber(entry.amount), 0))}
+                  </div>
+                </div>
+                <div className="rounded border p-3">
+                  <h5 className="mb-2 font-medium">Amy</h5>
+                  <div className="space-y-1 text-sm">
+                    {amyReceivedIncome.length ? amyReceivedIncome.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between">
+                        <span>{entry.subcategory || entry.category}</span>
+                        <span>{asCurrency(asNumber(entry.amount))}</span>
+                      </div>
+                    )) : <span className="text-muted-foreground">No received entries</span>}
+                  </div>
+                  <div className="mt-3 border-t pt-2 font-semibold">
+                    Total: {asCurrency(amyReceivedIncome.reduce((sum, entry) => sum + asNumber(entry.amount), 0))}
+                  </div>
+                </div>
               </div>
-              <div className="mt-3 border-t pt-2 font-semibold">
-                Total: {asCurrency(amyIncome.reduce((sum, entry) => sum + asNumber(entry.amount), 0))}
+              <div className="rounded border bg-muted/30 p-3 font-semibold">
+                Combined Received Income: {asCurrency(combinedReceivedIncome)}
               </div>
             </div>
-          </div>
-          <div className="rounded border bg-muted/30 p-3 font-semibold">
-            Combined Household Income: {asCurrency(combinedIncome)}
           </div>
         </CardContent>
       </Card>
@@ -697,16 +806,22 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       )}
 
       <Card>
-        <CardHeader><CardTitle>Entries</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle>Personal Entries</CardTitle>
+          <Button size="sm" onClick={() => openNewEntryDialog({ isRsfRelated: false })}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Personal
+          </Button>
+        </CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full min-w-[1024px] text-sm">
             <thead>
               <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">Owner</th><th className="py-2 pr-3">Type</th><th className="py-2 pr-3">Category</th><th className="py-2 pr-3">Subcategory</th><th className="py-2 pr-3">Description</th><th className="py-2 pr-3">Amount</th><th className="py-2 pr-3">Due Date</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">RSF</th><th className="py-2 pr-3">Actions</th>
+                <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">Owner</th><th className="py-2 pr-3">Type</th><th className="py-2 pr-3">Category</th><th className="py-2 pr-3">Subcategory</th><th className="py-2 pr-3">Description</th><th className="py-2 pr-3">Amount</th><th className="py-2 pr-3">Due Date</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => {
+              {personalEntries.map((entry) => {
                 const status = statusForEntry(entry);
                 return (
                   <tr key={entry.id} className="border-b align-top">
@@ -714,12 +829,11 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                     <td className="py-3 pr-3 capitalize">{entry.owner}</td>
                     <td className="py-3 pr-3 capitalize">{entry.type}</td>
                     <td className="py-3 pr-3">{entry.category}</td>
-                    <td className="py-3 pr-3">{entry.subcategory || "—"}</td>
-                    <td className="py-3 pr-3">{entry.description || "—"}</td>
+                    <td className="py-3 pr-3">{entry.subcategory || "-"}</td>
+                    <td className="py-3 pr-3">{entry.description || "-"}</td>
                     <td className="py-3 pr-3 font-medium">{asCurrency(asNumber(entry.amount))}</td>
-                    <td className="py-3 pr-3">{entry.dueDate || "—"}</td>
+                    <td className="py-3 pr-3">{entry.dueDate || "-"}</td>
                     <td className="py-3 pr-3"><Badge variant={status.variant}>{status.label}</Badge></td>
-                    <td className="py-3 pr-3">{entry.rsfCategory ? <Badge variant="outline" className="border-blue-300 text-blue-700" title={entry.rsfCategory}>RSF</Badge> : "—"}</td>
                     <td className="py-3 pr-3">
                       <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" onClick={() => openEditEntryDialog(entry)}><Pencil className="h-4 w-4" /></Button>
@@ -734,8 +848,74 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                   </tr>
                 );
               })}
-              {!entries.length && (
-                <tr><td className="py-6 text-center text-muted-foreground" colSpan={11}>No entries found for {monthLabel(selectedMonth)}.</td></tr>
+              {!personalEntries.length && (
+                <tr><td className="py-6 text-center text-muted-foreground" colSpan={10}>No personal entries found for {monthLabel(selectedMonth)}.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle>RSF Business Entries</CardTitle>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => openNewEntryDialog({ isRsfRelated: true, type: "expense", category: EXPENSE_CATEGORIES[0], rsfCategory: RSF_CATEGORIES[0] })}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add RSF
+          </Button>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full min-w-[1024px] text-sm">
+            <thead>
+              <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 pr-3">Date</th>
+                <th className="py-2 pr-3">Owner</th>
+                <th className="py-2 pr-3">Type</th>
+                <th className="py-2 pr-3">Category</th>
+                <th className="py-2 pr-3">Subcategory</th>
+                <th className="py-2 pr-3">Description</th>
+                <th className="py-2 pr-3">Amount</th>
+                <th className="py-2 pr-3">Due Date</th>
+                <th className="py-2 pr-3">Status</th>
+                <th className="py-2 pr-3">RSF Category</th>
+                <th className="py-2 pr-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rsfEntries.map((entry) => {
+                const status = statusForEntry(entry);
+                return (
+                  <tr key={entry.id} className="border-b align-top">
+                    <td className="py-3 pr-3">{entry.month}</td>
+                    <td className="py-3 pr-3 capitalize">{entry.owner}</td>
+                    <td className="py-3 pr-3 capitalize">{entry.type}</td>
+                    <td className="py-3 pr-3">{entry.category}</td>
+                    <td className="py-3 pr-3">{entry.subcategory || "-"}</td>
+                    <td className="py-3 pr-3">{entry.description || "-"}</td>
+                    <td className="py-3 pr-3 font-medium">{asCurrency(asNumber(entry.amount))}</td>
+                    <td className="py-3 pr-3">{entry.dueDate || "-"}</td>
+                    <td className="py-3 pr-3"><Badge variant={status.variant}>{status.label}</Badge></td>
+                    <td className="py-3 pr-3">{entry.rsfCategory || "-"}</td>
+                    <td className="py-3 pr-3">
+                      <div className="flex items-center gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => openEditEntryDialog(entry)}><Pencil className="h-4 w-4" /></Button>
+                        {!entry.isPaid && (
+                          <Button size="icon" variant="ghost" onClick={() => markPaidMutation.mutate(entry.id)} data-testid={`button-mark-paid-${entry.id}`}>
+                            <Check className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button size="icon" variant="ghost" onClick={() => deleteEntryMutation.mutate(entry.id)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!rsfEntries.length && (
+                <tr><td className="py-6 text-center text-muted-foreground" colSpan={11}>No RSF entries found for {monthLabel(selectedMonth)}.</td></tr>
               )}
             </tbody>
           </table>
@@ -764,7 +944,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
             </div>
             <div className="space-y-2">
               {EXPENSE_CATEGORIES.map((category) => {
-                const actual = actualByCategory.get(category) || 0;
+                const actual = personalActualByCategory.get(category) || 0;
                 const budget = Number(budgetDrafts[category] || 0);
                 const difference = budget - actual;
                 return (
@@ -830,8 +1010,41 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
               </div>
             )}
             <div className="space-y-2 md:col-span-2"><Label>Description (optional)</Label><Input value={entryForm.description} onChange={(event) => setEntryForm((current) => ({ ...current, description: event.target.value }))} /></div>
-            <div className="space-y-2"><Label>Amount</Label><Input type="number" step="0.01" value={entryForm.amount} onChange={(event) => setEntryForm((current) => ({ ...current, amount: event.target.value }))} /></div>
-            {entryForm.type === "expense" && <div className="space-y-2"><Label>Due Date</Label><Input type="date" value={entryForm.dueDate} onChange={(event) => setEntryForm((current) => ({ ...current, dueDate: event.target.value }))} /></div>}
+            <div className="space-y-2">
+              <Label>Amount {entryForm.saveAsDraft ? "(optional draft)" : ""}</Label>
+              <Input type="number" step="0.01" value={entryForm.amount} onChange={(event) => setEntryForm((current) => ({ ...current, amount: event.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>{entryForm.type === "income" ? "Pay Date (optional)" : "Due Date (optional)"}</Label>
+              <Input type="date" value={entryForm.dueDate} onChange={(event) => setEntryForm((current) => ({ ...current, dueDate: event.target.value }))} />
+            </div>
+            <div className="md:col-span-2 rounded border p-3">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="save-as-draft"
+                  checked={entryForm.saveAsDraft}
+                  onCheckedChange={(checked) =>
+                    setEntryForm((current) => ({
+                      ...current,
+                      saveAsDraft: Boolean(checked),
+                      markAsPaid: Boolean(checked) ? false : current.markAsPaid,
+                    }))
+                  }
+                />
+                <Label htmlFor="save-as-draft">Save as draft (amount/date can be filled later)</Label>
+              </div>
+            </div>
+            <div className="md:col-span-2 rounded border p-3">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="mark-as-paid"
+                  checked={entryForm.markAsPaid}
+                  onCheckedChange={(checked) => setEntryForm((current) => ({ ...current, markAsPaid: Boolean(checked) }))}
+                  disabled={entryForm.saveAsDraft}
+                />
+                <Label htmlFor="mark-as-paid">{entryForm.type === "income" ? "Mark as received now" : "Mark as paid now"}</Label>
+              </div>
+            </div>
             <div className="md:col-span-2 space-y-3 rounded border p-3">
               <div className="flex items-center gap-2">
                 <Checkbox

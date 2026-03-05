@@ -456,10 +456,18 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
   const incomeEntries = personalEntries.filter((entry) => entry.type === "income");
   const expectedIncomeEntries = incomeEntries.filter((entry) => !entry.isPaid);
   const receivedIncomeEntries = incomeEntries.filter((entry) => Boolean(entry.isPaid));
-  const coryExpectedIncome = expectedIncomeEntries.filter((entry) => entry.owner === "cory");
-  const amyExpectedIncome = expectedIncomeEntries.filter((entry) => entry.owner === "amy");
-  const coryReceivedIncome = receivedIncomeEntries.filter((entry) => entry.owner === "cory");
-  const amyReceivedIncome = receivedIncomeEntries.filter((entry) => entry.owner === "amy");
+  const coryExpectedIncome = expectedIncomeEntries
+    .filter((entry) => entry.owner === "cory")
+    .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")));
+  const amyExpectedIncome = expectedIncomeEntries
+    .filter((entry) => entry.owner === "amy")
+    .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")));
+  const coryReceivedIncome = receivedIncomeEntries
+    .filter((entry) => entry.owner === "cory")
+    .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")));
+  const amyReceivedIncome = receivedIncomeEntries
+    .filter((entry) => entry.owner === "amy")
+    .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")));
   const combinedExpectedIncome = expectedIncomeEntries.reduce((sum, entry) => sum + asNumber(entry.amount), 0);
   const combinedReceivedIncome = receivedIncomeEntries.reduce((sum, entry) => sum + asNumber(entry.amount), 0);
 
@@ -682,6 +690,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
 
     const recurringPayloads = sortedDueDates.map((dueDate) => ({
       ...payload,
+      month: dueDate.slice(0, 7),
       dueDate,
       isRecurring: false,
       recurringFrequency: null,
@@ -848,7 +857,19 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Income This Month</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+          <CardTitle>Income This Month</CardTitle>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground">Viewing month</Label>
+            <Input
+              type="month"
+              className="w-[170px]"
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              data-testid="selector-income-month"
+            />
+          </div>
+        </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-4 rounded border p-4">
@@ -988,11 +1009,20 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle>Personal Entries</CardTitle>
-          <Button size="sm" onClick={() => openNewEntryDialog({ isRsfRelated: false })}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Personal
-          </Button>
+          <CardTitle>Personal Entries ({monthLabel(selectedMonth)})</CardTitle>
+          <div className="flex items-center gap-2">
+            <Input
+              type="month"
+              className="w-[170px]"
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              data-testid="selector-personal-entries-month"
+            />
+            <Button size="sm" onClick={() => openNewEntryDialog({ isRsfRelated: false })}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Personal
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full min-w-[1024px] text-sm">

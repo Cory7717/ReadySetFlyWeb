@@ -19,6 +19,7 @@ import { AircraftFilters } from "@/components/aircraft-filters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { PageShell } from "@/components/layout/PageShell";
+import { useAuth } from "@/hooks/useAuth";
 import wingtipImage from "@assets/wingtip_featured_1761494838973.jpg";
 import { trackEvent } from "@/lib/analytics";
 
@@ -29,6 +30,7 @@ const quickFilters = [
 ];
 
 export default function Home() {
+  const { isAuthenticated, user } = useAuth();
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | null>(null);
 
@@ -80,6 +82,9 @@ export default function Home() {
     setState("");
     setRadius("100");
   };
+  const isVerifiedOwner = Boolean(user?.isVerified);
+  const listAircraftHref = !isAuthenticated ? "/register" : "/list-aircraft";
+  const verificationHref = !isAuthenticated ? "/register" : "/verify-identity";
 
   return (
     <PageShell
@@ -89,6 +94,9 @@ export default function Home() {
       actions={
         <>
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Verified listings</Badge>
+          <Button asChild className="bg-white/90 text-slate-900 hover:bg-white">
+            <Link href={listAircraftHref}>Create Rental Listing</Link>
+          </Button>
           <Button asChild variant="outline" className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10">
             <Link href="/marketplace">Explore Marketplace</Link>
           </Button>
@@ -230,54 +238,56 @@ export default function Home() {
         </div>
       </section>
 
-      <BannerAdRotation placement="rentals" className="container mx-auto px-4 py-2" />
-
       <section className="container mx-auto px-4">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
           <Card className="border-primary/20 bg-primary/5">
-            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <CardContent className="space-y-4 p-5 sm:p-6">
               <div>
-                <div className="text-sm font-semibold">Need training or services?</div>
-                <p className="text-sm text-muted-foreground">
-                  Explore CFIs, flight schools, mechanics, and aviation services in the marketplace.
+                <div className="text-sm font-semibold">List your aircraft on RSF rentals</div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Owners need an RSF account and verification before publishing live rental listings.
                 </p>
+              </div>
+              <div className="rounded-lg border border-primary/20 bg-white/70 px-4 py-3 text-xs text-muted-foreground">
+                {!isAuthenticated
+                  ? "Create your free account first, then complete owner verification and publish your listing."
+                  : isVerifiedOwner
+                    ? "Your account is verified. You can create a rental listing now."
+                    : "Finish verification first so your rental listing can be approved and shown to pilots."}
               </div>
               <div className="flex flex-wrap gap-3">
                 <Button
-                  variant="outline"
-                  onClick={() => trackEvent("cta_click", { label: "rentals_to_marketplace", target: "/marketplace" })}
+                  onClick={() => trackEvent("cta_click", { label: "rentals_create_listing", target: listAircraftHref })}
                   asChild
                 >
-                  <Link href="/marketplace">Explore Marketplace</Link>
+                  <Link href={listAircraftHref}>Create rental listing</Link>
                 </Button>
-                <Button
-                  onClick={() => trackEvent("cta_click", { label: "rentals_post_listing", target: "/create-marketplace-listing" })}
-                  asChild
-                >
-                  <Link href="/create-marketplace-listing">Post a Listing</Link>
-                </Button>
+                {!isVerifiedOwner && (
+                  <Button
+                    variant="outline"
+                    onClick={() => trackEvent("cta_click", { label: "rentals_verify_owner", target: verificationHref })}
+                    asChild
+                  >
+                    <Link href={verificationHref}>{isAuthenticated ? "Complete verification" : "Create account"}</Link>
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-sky-500/20 bg-sky-500/5">
-            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-              <div>
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  RSF GPS Simulators
-                  <Badge variant="secondary">Coming soon</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  IFR GPS workflows stay visible here, but this training stack stays on hold until the simulator workflows are fully ready.
-                </p>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 text-sm">
+              <div className="text-muted-foreground">
+                Want information on becoming a sponsored business?
               </div>
-              <div className="flex flex-wrap gap-3">
-                <Button disabled aria-disabled>
-                  Coming soon
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              <Button asChild size="sm" variant="secondary" data-testid="button-banner-ad-info-rentals">
+                <a href="/banner-advertise" target="_blank" rel="noopener noreferrer">
+                  Click here
+                </a>
+              </Button>
+            </div>
+            <BannerAdRotation placement="rentals" variant="compact" showLeadIn={false} />
+          </div>
         </div>
       </section>
 

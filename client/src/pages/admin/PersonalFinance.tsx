@@ -432,6 +432,15 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
   const summary = summaryQuery.data;
   const personalEntries = useMemo(() => entries.filter((entry) => !entry.rsfCategory), [entries]);
   const rsfEntries = useMemo(() => entries.filter((entry) => Boolean(entry.rsfCategory)), [entries]);
+  const totalReceivedIncome = useMemo(
+    () => entries.filter((entry) => entry.type === "income" && Boolean(entry.isPaid)).reduce((sum, entry) => sum + asNumber(entry.amount), 0),
+    [entries],
+  );
+  const totalEnteredExpenses = useMemo(
+    () => entries.filter((entry) => entry.type === "expense").reduce((sum, entry) => sum + asNumber(entry.amount), 0),
+    [entries],
+  );
+  const netCashFlowFromReceived = totalReceivedIncome - totalEnteredExpenses;
   const today = new Date();
   const dayMs = 24 * 60 * 60 * 1000;
 
@@ -454,8 +463,10 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
   };
 
   const incomeEntries = personalEntries.filter((entry) => entry.type === "income");
-  const expectedIncomeEntries = incomeEntries.filter((entry) => !entry.isPaid);
-  const receivedIncomeEntries = incomeEntries.filter((entry) => Boolean(entry.isPaid));
+  const incomeEntryMonth = (entry: FinanceEntry) => (entry.dueDate?.slice(0, 7) || entry.month);
+  const incomeEntriesForSelectedMonth = incomeEntries.filter((entry) => incomeEntryMonth(entry) === selectedMonth);
+  const expectedIncomeEntries = incomeEntriesForSelectedMonth.filter((entry) => !entry.isPaid);
+  const receivedIncomeEntries = incomeEntriesForSelectedMonth.filter((entry) => Boolean(entry.isPaid));
   const coryExpectedIncome = expectedIncomeEntries
     .filter((entry) => entry.owner === "cory")
     .sort((a, b) => String(a.dueDate || "").localeCompare(String(b.dueDate || "")));
@@ -777,9 +788,9 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
           <CardContent className="text-2xl font-semibold text-red-600">{asCurrency(summary?.totalExpenses.combined ?? 0)}</CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Net Cash Flow</CardTitle></CardHeader>
-          <CardContent className={`text-2xl font-semibold ${(summary?.netCashFlow ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
-            {asCurrency(summary?.netCashFlow ?? 0)}
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Net Cash Flow (Received)</CardTitle></CardHeader>
+          <CardContent className={`text-2xl font-semibold ${netCashFlowFromReceived >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+            {asCurrency(netCashFlowFromReceived)}
           </CardContent>
         </Card>
         <Card>

@@ -32,7 +32,10 @@ type FinanceEntry = {
   isPaid: boolean | null;
   paidDate: string | null;
   isRecurring: boolean | null;
+  recurringFrequency: "monthly" | "weekly" | "every_x_days" | null;
   recurringDayOfMonth: number | null;
+  recurringDayOfWeek: number | null;
+  recurringIntervalDays: number | null;
   notifyDaysBefore: number | null;
   notificationSent: boolean | null;
   createdAt: string | null;
@@ -141,7 +144,10 @@ type EntryFormState = {
   amount: string;
   dueDate: string;
   isRecurring: boolean;
+  recurringFrequency: "monthly" | "weekly" | "every_x_days";
   recurringDayOfMonth: string;
+  recurringDayOfWeek: string;
+  recurringIntervalDays: string;
   notifyDaysBefore: string;
   isRsfRelated: boolean;
   rsfCategory: string;
@@ -158,7 +164,10 @@ const DEFAULT_FORM = (month: string): EntryFormState => ({
   amount: "",
   dueDate: "",
   isRecurring: false,
+  recurringFrequency: "monthly",
   recurringDayOfMonth: "",
+  recurringDayOfWeek: "",
+  recurringIntervalDays: "",
   notifyDaysBefore: "3",
   isRsfRelated: false,
   rsfCategory: "",
@@ -414,7 +423,10 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       amount: String(entry.amount || ""),
       dueDate: entry.dueDate || "",
       isRecurring: Boolean(entry.isRecurring),
+      recurringFrequency: (entry.recurringFrequency || "monthly") as "monthly" | "weekly" | "every_x_days",
       recurringDayOfMonth: entry.recurringDayOfMonth ? String(entry.recurringDayOfMonth) : "",
+      recurringDayOfWeek: entry.recurringDayOfWeek !== null && entry.recurringDayOfWeek !== undefined ? String(entry.recurringDayOfWeek) : "",
+      recurringIntervalDays: entry.recurringIntervalDays ? String(entry.recurringIntervalDays) : "",
       notifyDaysBefore: entry.notifyDaysBefore ? String(entry.notifyDaysBefore) : "3",
       isRsfRelated: Boolean(entry.rsfCategory),
       rsfCategory: entry.rsfCategory || "",
@@ -436,7 +448,19 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       amount: Number(entryForm.amount || 0).toFixed(2),
       dueDate: entryForm.type === "expense" && entryForm.dueDate ? entryForm.dueDate : null,
       isRecurring: entryForm.isRecurring,
-      recurringDayOfMonth: entryForm.isRecurring && entryForm.recurringDayOfMonth ? Number(entryForm.recurringDayOfMonth) : null,
+      recurringFrequency: entryForm.isRecurring ? entryForm.recurringFrequency : null,
+      recurringDayOfMonth:
+        entryForm.isRecurring && entryForm.recurringFrequency === "monthly" && entryForm.recurringDayOfMonth
+          ? Number(entryForm.recurringDayOfMonth)
+          : null,
+      recurringDayOfWeek:
+        entryForm.isRecurring && (entryForm.recurringFrequency === "weekly" || entryForm.recurringFrequency === "every_x_days") && entryForm.recurringDayOfWeek !== ""
+          ? Number(entryForm.recurringDayOfWeek)
+          : null,
+      recurringIntervalDays:
+        entryForm.isRecurring && entryForm.recurringFrequency === "every_x_days" && entryForm.recurringIntervalDays
+          ? Number(entryForm.recurringIntervalDays)
+          : null,
       notifyDaysBefore: entryForm.isRecurring ? Number(entryForm.notifyDaysBefore || 3) : 3,
       rsfCategory: entryForm.isRsfRelated ? entryForm.rsfCategory || null : null,
       isPaid: false,
@@ -455,6 +479,23 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
     if (entryForm.type === "expense" && entryForm.isRsfRelated && !entryForm.rsfCategory) {
       toast({ title: "Choose an RSF category", variant: "destructive" });
       return;
+    }
+    if (entryForm.isRecurring) {
+      if (entryForm.recurringFrequency === "monthly" && !entryForm.recurringDayOfMonth) {
+        toast({ title: "Enter recurring day of month", variant: "destructive" });
+        return;
+      }
+      if (
+        (entryForm.recurringFrequency === "weekly" || entryForm.recurringFrequency === "every_x_days") &&
+        entryForm.recurringDayOfWeek === ""
+      ) {
+        toast({ title: "Select day of week", variant: "destructive" });
+        return;
+      }
+      if (entryForm.recurringFrequency === "every_x_days" && !entryForm.recurringIntervalDays) {
+        toast({ title: "Enter interval days", variant: "destructive" });
+        return;
+      }
     }
 
     if (editingEntry) {
@@ -792,11 +833,93 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
             <div className="space-y-2"><Label>Amount</Label><Input type="number" step="0.01" value={entryForm.amount} onChange={(event) => setEntryForm((current) => ({ ...current, amount: event.target.value }))} /></div>
             {entryForm.type === "expense" && <div className="space-y-2"><Label>Due Date</Label><Input type="date" value={entryForm.dueDate} onChange={(event) => setEntryForm((current) => ({ ...current, dueDate: event.target.value }))} /></div>}
             <div className="md:col-span-2 space-y-3 rounded border p-3">
-              <div className="flex items-center gap-2"><Checkbox id="is-recurring" checked={entryForm.isRecurring} onCheckedChange={(checked) => setEntryForm((current) => ({ ...current, isRecurring: Boolean(checked) }))} /><Label htmlFor="is-recurring">Is recurring?</Label></div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="is-recurring"
+                  checked={entryForm.isRecurring}
+                  onCheckedChange={(checked) => setEntryForm((current) => ({ ...current, isRecurring: Boolean(checked) }))}
+                />
+                <Label htmlFor="is-recurring">Is recurring?</Label>
+              </div>
               {entryForm.isRecurring && (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div className="space-y-2"><Label>Recurring Day of Month</Label><Input type="number" min={1} max={31} value={entryForm.recurringDayOfMonth} onChange={(event) => setEntryForm((current) => ({ ...current, recurringDayOfMonth: event.target.value }))} /></div>
-                  <div className="space-y-2"><Label>Notify X days before</Label><Input type="number" min={0} max={31} value={entryForm.notifyDaysBefore} onChange={(event) => setEntryForm((current) => ({ ...current, notifyDaysBefore: event.target.value }))} /></div>
+                  <div className="space-y-2">
+                    <Label>Recurring cadence</Label>
+                    <Select
+                      value={entryForm.recurringFrequency}
+                      onValueChange={(value) =>
+                        setEntryForm((current) => ({
+                          ...current,
+                          recurringFrequency: value as "monthly" | "weekly" | "every_x_days",
+                        }))
+                      }
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="every_x_days">Every X days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Notify X days before</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={31}
+                      value={entryForm.notifyDaysBefore}
+                      onChange={(event) => setEntryForm((current) => ({ ...current, notifyDaysBefore: event.target.value }))}
+                    />
+                  </div>
+
+                  {entryForm.recurringFrequency === "monthly" && (
+                    <div className="space-y-2">
+                      <Label>Recurring Day of Month</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={entryForm.recurringDayOfMonth}
+                        onChange={(event) => setEntryForm((current) => ({ ...current, recurringDayOfMonth: event.target.value }))}
+                      />
+                    </div>
+                  )}
+
+                  {(entryForm.recurringFrequency === "weekly" || entryForm.recurringFrequency === "every_x_days") && (
+                    <div className="space-y-2">
+                      <Label>Day of week</Label>
+                      <Select
+                        value={entryForm.recurringDayOfWeek}
+                        onValueChange={(value) => setEntryForm((current) => ({ ...current, recurringDayOfWeek: value }))}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Select day" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">Sunday</SelectItem>
+                          <SelectItem value="1">Monday</SelectItem>
+                          <SelectItem value="2">Tuesday</SelectItem>
+                          <SelectItem value="3">Wednesday</SelectItem>
+                          <SelectItem value="4">Thursday</SelectItem>
+                          <SelectItem value="5">Friday</SelectItem>
+                          <SelectItem value="6">Saturday</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {entryForm.recurringFrequency === "every_x_days" && (
+                    <div className="space-y-2">
+                      <Label>Recurring every X days</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={entryForm.recurringIntervalDays}
+                        onChange={(event) => setEntryForm((current) => ({ ...current, recurringIntervalDays: event.target.value }))}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>

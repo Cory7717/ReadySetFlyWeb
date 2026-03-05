@@ -11,11 +11,13 @@ import {
   personalFinanceEntries,
   personalFinanceExpenseCategories,
   type PersonalFinanceOwner,
+  type PersonalFinanceRecurringFrequency,
 } from "@shared/schema";
 
 const FINANCE_EMAILS = ["coryarmer@gmail.com", "bentley.amy24@gmail.com"] as const;
 const ALLOWED_FINANCE_EMAILS = new Set(FINANCE_EMAILS.map((email) => email.toLowerCase()));
 const OWNER_FILTERS = ["all", "cory", "amy", "joint"] as const;
+const RECURRING_FREQUENCIES = ["monthly", "weekly", "every_x_days"] as const;
 const MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const monthQuerySchema = z.object({
@@ -35,7 +37,10 @@ const entryPatchSchema = z.object({
   isPaid: z.boolean().optional(),
   paidDate: z.string().nullable().optional(),
   isRecurring: z.boolean().optional(),
+  recurringFrequency: z.enum(RECURRING_FREQUENCIES).nullable().optional(),
   recurringDayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  recurringDayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
+  recurringIntervalDays: z.number().int().min(1).max(365).nullable().optional(),
   notifyDaysBefore: z.number().int().min(0).max(31).optional(),
   notificationSent: z.boolean().optional(),
 }).partial();
@@ -81,7 +86,10 @@ function normalizeEntryInsertPayload(payload: z.infer<typeof insertPersonalFinan
     isPaid: payload.isPaid ?? false,
     paidDate: toNullableDate(payload.paidDate ?? null),
     isRecurring: payload.isRecurring ?? false,
+    recurringFrequency: payload.isRecurring ? payload.recurringFrequency ?? "monthly" : null,
     recurringDayOfMonth: payload.recurringDayOfMonth ?? null,
+    recurringDayOfWeek: payload.recurringDayOfWeek ?? null,
+    recurringIntervalDays: payload.recurringIntervalDays ?? null,
     notifyDaysBefore: payload.notifyDaysBefore ?? 3,
     notificationSent: payload.notificationSent ?? false,
     updatedAt: new Date(),
@@ -102,9 +110,18 @@ function normalizeEntryPatchPayload(payload: z.infer<typeof entryPatchSchema>) {
   if (payload.isPaid !== undefined) updates.isPaid = payload.isPaid;
   if (payload.paidDate !== undefined) updates.paidDate = toNullableDate(payload.paidDate);
   if (payload.isRecurring !== undefined) updates.isRecurring = payload.isRecurring;
+  if (payload.recurringFrequency !== undefined) updates.recurringFrequency = payload.recurringFrequency;
   if (payload.recurringDayOfMonth !== undefined) updates.recurringDayOfMonth = payload.recurringDayOfMonth;
+  if (payload.recurringDayOfWeek !== undefined) updates.recurringDayOfWeek = payload.recurringDayOfWeek;
+  if (payload.recurringIntervalDays !== undefined) updates.recurringIntervalDays = payload.recurringIntervalDays;
   if (payload.notifyDaysBefore !== undefined) updates.notifyDaysBefore = payload.notifyDaysBefore;
   if (payload.notificationSent !== undefined) updates.notificationSent = payload.notificationSent;
+  if (payload.isRecurring === false) {
+    updates.recurringFrequency = null;
+    updates.recurringDayOfMonth = null;
+    updates.recurringDayOfWeek = null;
+    updates.recurringIntervalDays = null;
+  }
   if (payload.isPaid === true && payload.paidDate === undefined) {
     updates.paidDate = new Date().toISOString().slice(0, 10);
   }
@@ -139,6 +156,91 @@ function resolveRecurringDueDate(targetMonth: string, recurringDayOfMonth?: numb
   const lastDay = new Date(year, monthIndex + 1, 0).getDate();
   const clampedDay = Math.max(1, Math.min(dayFromSource, lastDay));
   return `${targetMonth}-${String(clampedDay).padStart(2, "0")}`;
+}
+
+function parseDateOnly(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function startOfMonthFor(targetMonth: string): Date {
+  return new Date(`${targetMonth}-01T00:00:00`);
+}
+
+function endOfMonthFor(targetMonth: string): Date {
+  const start = startOfMonthFor(targetMonth);
+  return new Date(start.getFullYear(), start.getMonth() + 1, 0);
+}
+
+function formatDateOnly(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function firstDayOfWeekInMonth(targetMonth: string, dayOfWeek: number): Date {
+  const start = startOfMonthFor(targetMonth);
+  const offset = (dayOfWeek - start.getDay() + 7) % 7;
+  const date = new Date(start);
+  date.setDate(start.getDate() + offset);
+  return date;
+}
+
+function buildRecurringDueDatesForMonth(
+  source: typeof personalFinanceEntries.$inferSelect,
+  targetMonth: string,
+): (string | null)[] {
+  if (!source.isRecurring) return [];
+  const frequency = (source.recurringFrequency || "monthly") as PersonalFinanceRecurringFrequency;
+
+  if (frequency === "monthly") {
+    return [resolveRecurringDueDate(targetMonth, source.recurringDayOfMonth, source.dueDate)];
+  }
+
+  if (frequency === "weekly") {
+    const dayOfWeek =
+      source.recurringDayOfWeek ??
+      parseDateOnly(source.dueDate)?.getDay() ??
+      0;
+    const dates: string[] = [];
+    const cursor = firstDayOfWeekInMonth(targetMonth, dayOfWeek);
+    const monthEnd = endOfMonthFor(targetMonth);
+    while (cursor <= monthEnd) {
+      dates.push(formatDateOnly(cursor));
+      cursor.setDate(cursor.getDate() + 7);
+    }
+    return dates.length ? dates : [null];
+  }
+
+  const interval = Math.max(1, source.recurringIntervalDays ?? 14);
+  const monthStart = startOfMonthFor(targetMonth);
+  const monthEnd = endOfMonthFor(targetMonth);
+  const dates: string[] = [];
+
+  let cursor: Date;
+  if (source.recurringDayOfWeek !== null && source.recurringDayOfWeek !== undefined) {
+    cursor = firstDayOfWeekInMonth(targetMonth, source.recurringDayOfWeek);
+  } else {
+    const anchor =
+      parseDateOnly(source.dueDate) ??
+      parseDateOnly(`${source.month}-01`) ??
+      monthStart;
+    cursor = new Date(anchor);
+    while (cursor < monthStart) {
+      cursor.setDate(cursor.getDate() + interval);
+    }
+  }
+
+  while (cursor <= monthEnd) {
+    if (cursor >= monthStart) {
+      dates.push(formatDateOnly(cursor));
+    }
+    cursor.setDate(cursor.getDate() + interval);
+  }
+
+  return dates.length ? dates : [null];
 }
 
 const requireFinanceAccess: RequestHandler = async (req, res, next) => {
@@ -423,32 +525,42 @@ export function registerAdminFinanceRoutes(app: Express) {
       ]);
 
       const existingKeys = new Set(
-        existingTargetMonthEntries.map((entry) => `${entry.owner}::${String(entry.subcategory || "").toLowerCase()}`)
+        existingTargetMonthEntries.map(
+          (entry) =>
+            `${entry.owner}::${entry.type}::${String(entry.subcategory || "").toLowerCase()}::${entry.dueDate || "none"}`,
+        ),
       );
 
       const inserts: typeof personalFinanceEntries.$inferInsert[] = [];
       for (const source of sources) {
-        const key = `${source.owner}::${String(source.subcategory || "").toLowerCase()}`;
-        if (existingKeys.has(key)) continue;
+        const dueDates = buildRecurringDueDatesForMonth(source, targetMonth);
+        for (const dueDate of dueDates) {
+          const key = `${source.owner}::${source.type}::${String(source.subcategory || "").toLowerCase()}::${dueDate || "none"}`;
+          if (existingKeys.has(key)) continue;
+          existingKeys.add(key);
 
-        inserts.push({
-          owner: source.owner,
-          month: targetMonth,
-          type: source.type,
-          category: source.category,
-          rsfCategory: source.rsfCategory,
-          subcategory: source.subcategory,
-          description: source.description,
-          amount: String(source.amount ?? "0"),
-          dueDate: resolveRecurringDueDate(targetMonth, source.recurringDayOfMonth, source.dueDate),
-          isPaid: false,
-          paidDate: null,
-          isRecurring: source.isRecurring ?? false,
-          recurringDayOfMonth: source.recurringDayOfMonth,
-          notifyDaysBefore: source.notifyDaysBefore ?? 3,
-          notificationSent: false,
-          updatedAt: new Date(),
-        });
+          inserts.push({
+            owner: source.owner,
+            month: targetMonth,
+            type: source.type,
+            category: source.category,
+            rsfCategory: source.rsfCategory,
+            subcategory: source.subcategory,
+            description: source.description,
+            amount: String(source.amount ?? "0"),
+            dueDate,
+            isPaid: false,
+            paidDate: null,
+            isRecurring: source.isRecurring ?? false,
+            recurringFrequency: source.recurringFrequency ?? "monthly",
+            recurringDayOfMonth: source.recurringDayOfMonth,
+            recurringDayOfWeek: source.recurringDayOfWeek,
+            recurringIntervalDays: source.recurringIntervalDays,
+            notifyDaysBefore: source.notifyDaysBefore ?? 3,
+            notificationSent: false,
+            updatedAt: new Date(),
+          });
+        }
       }
 
       if (inserts.length) {

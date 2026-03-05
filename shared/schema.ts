@@ -32,6 +32,7 @@ export const flightPlanFilingActions = ["file", "amend", "activate", "cancel", "
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
 export const personalFinanceOwners = ["cory", "amy", "joint"] as const;
 export const personalFinanceEntryTypes = ["expense", "income"] as const;
+export const personalFinanceRecurringFrequencies = ["monthly", "weekly", "every_x_days"] as const;
 export const personalFinanceExpenseCategories = [
   "Housing",
   "Utilities",
@@ -890,7 +891,10 @@ export const personalFinanceEntries = pgTable("personal_finance_entries", {
   isPaid: boolean("is_paid").default(false),
   paidDate: date("paid_date"),
   isRecurring: boolean("is_recurring").default(false),
+  recurringFrequency: text("recurring_frequency"),
   recurringDayOfMonth: integer("recurring_day_of_month"),
+  recurringDayOfWeek: integer("recurring_day_of_week"),
+  recurringIntervalDays: integer("recurring_interval_days"),
   notifyDaysBefore: integer("notify_days_before").default(3),
   notificationSent: boolean("notification_sent").default(false),
   createdAt: timestamp("created_at").defaultNow(),
@@ -2342,7 +2346,10 @@ export const insertPersonalFinanceEntrySchema = createInsertSchema(personalFinan
   paidDate: z.union([z.string(), z.null()]).optional(),
   isPaid: z.boolean().optional(),
   isRecurring: z.boolean().optional(),
+  recurringFrequency: z.enum(personalFinanceRecurringFrequencies).nullable().optional(),
   recurringDayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  recurringDayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
+  recurringIntervalDays: z.number().int().min(1).max(365).nullable().optional(),
   notifyDaysBefore: z.number().int().min(0).max(31).optional(),
   notificationSent: z.boolean().optional(),
 });
@@ -2723,6 +2730,7 @@ export type FlightPlanFilingAction = typeof flightPlanFilingActions[number];
 export type ExpenseCategory = typeof expenseCategories[number];
 export type PersonalFinanceOwner = typeof personalFinanceOwners[number];
 export type PersonalFinanceEntryType = typeof personalFinanceEntryTypes[number];
+export type PersonalFinanceRecurringFrequency = typeof personalFinanceRecurringFrequencies[number];
 export type PersonalFinanceExpenseCategory = typeof personalFinanceExpenseCategories[number];
 export type PersonalFinanceIncomeCategory = typeof personalFinanceIncomeCategories[number];
 export type PersonalFinanceRsfCategory = typeof personalFinanceRsfCategories[number];

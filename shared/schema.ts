@@ -2339,6 +2339,7 @@ export const insertPersonalFinanceEntrySchema = createInsertSchema(personalFinan
   category: z.union([
     z.enum(personalFinanceExpenseCategories),
     z.enum(personalFinanceIncomeCategories),
+    z.enum(personalFinanceRsfCategories),
   ]),
   rsfCategory: z.union([z.enum(personalFinanceRsfCategories), z.null()]).optional(),
   subcategory: z.union([z.string(), z.null()]).optional(),

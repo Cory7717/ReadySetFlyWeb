@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertMessageSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, type BannerAdOrder, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, type BannerAdOrder, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -6482,8 +6482,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Aircraft Listings
   app.get("/api/aircraft", async (req, res) => {
     try {
+      const parseCsv = (value: unknown) =>
+        typeof value === "string"
+          ? value
+              .split(",")
+              .map((entry) => entry.trim())
+              .filter(Boolean)
+          : [];
+
+      const certifications = parseCsv(req.query.certifications);
+      const categories = parseCsv(req.query.category);
+      const avionics = parseCsv(req.query.avionics).map((suite) => suite.toLowerCase());
+      const insuranceIncluded = String(req.query.insuranceIncluded || "").toLowerCase() === "true";
+      const wetRateOnly = String(req.query.wetRate || "").toLowerCase() === "true";
+
       const listings = await storage.getAllAircraftListings();
-      res.json([SAMPLE_AIRCRAFT_LISTING, ...listings]);
+      const filteredListings = listings.filter((listing) => {
+        if (certifications.length > 0) {
+          const hasCertifications = certifications.every((cert) => listing.requiredCertifications.includes(cert));
+          if (!hasCertifications) return false;
+        }
+
+        if (categories.length > 0 && !categories.includes(listing.category)) {
+          return false;
+        }
+
+        if (avionics.length > 0) {
+          const listingAvionics = (listing.avionicsSuite || "").toLowerCase();
+          const matchesAvionics = avionics.some((suite) => listingAvionics.includes(suite));
+          if (!matchesAvionics) return false;
+        }
+
+        if (insuranceIncluded && !listing.insuranceIncluded) {
+          return false;
+        }
+
+        if (wetRateOnly && !listing.wetRate) {
+          return false;
+        }
+
+        return true;
+      });
+
+      res.json([SAMPLE_AIRCRAFT_LISTING, ...filteredListings]);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch aircraft listings" });
     }
@@ -7507,8 +7548,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/messages", async (req, res) => {
+  app.get("/api/messages/conversations", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
+      const [ownerRentals, renterRentals] = await Promise.all([
+        storage.getRentalsByOwner(userId),
+        storage.getRentalsByRenter(userId),
+      ]);
+
+      const rentalsById = new Map([...ownerRentals, ...renterRentals].map((rental) => [rental.id, rental]));
+      const conversations = await Promise.all(
+        Array.from(rentalsById.values()).map(async (rental) => {
+          const [messages, aircraft, otherUser] = await Promise.all([
+            storage.getMessagesByRental(rental.id),
+            storage.getAircraftListing(rental.aircraftId),
+            storage.getUser(rental.ownerId === userId ? rental.renterId : rental.ownerId),
+          ]);
+
+          const latestMessage = messages[0];
+          const unreadCount = messages.filter((message) => !message.isRead && message.receiverId === userId).length;
+
+          return {
+            id: rental.id,
+            rentalId: rental.id,
+            userId: otherUser?.id || "",
+            userName: `${otherUser?.firstName || ""} ${otherUser?.lastName || ""}`.trim() || "RSF Member",
+            userAvatar: otherUser?.profileImageUrl || null,
+            aircraftName: aircraft ? `${aircraft.year} ${aircraft.make} ${aircraft.model}` : "Aircraft",
+            lastMessage: latestMessage?.content || "No messages yet",
+            lastMessageTime: latestMessage?.createdAt || rental.updatedAt || rental.createdAt,
+            unreadCount,
+          };
+        }),
+      );
+
+      conversations.sort(
+        (a, b) => new Date(b.lastMessageTime || 0).getTime() - new Date(a.lastMessageTime || 0).getTime(),
+      );
+      res.json(conversations);
+    } catch (error) {
+      console.error("Failed to fetch message conversations:", error);
+      res.status(500).json({ error: "Failed to fetch conversations" });
+    }
+  });
+
+  app.get("/api/messages/conversation/:rentalId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const rental = await storage.getRental(req.params.rentalId);
+      if (!rental) {
+        return res.status(404).json({ error: "Rental not found" });
+      }
+
+      if (rental.ownerId !== userId && rental.renterId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const [messages, ownerUser, renterUser] = await Promise.all([
+        storage.getMessagesByRental(rental.id),
+        storage.getUser(rental.ownerId),
+        storage.getUser(rental.renterId),
+      ]);
+
+      for (const message of messages) {
+        if (!message.isRead && message.receiverId === userId) {
+          await storage.markMessageAsRead(message.id);
+        }
+      }
+
+      res.json(
+        messages.map((message) => ({
+          ...message,
+          timestamp: message.createdAt,
+          senderName:
+            message.senderId === rental.ownerId
+              ? `${ownerUser?.firstName || ""} ${ownerUser?.lastName || ""}`.trim() || "Owner"
+              : `${renterUser?.firstName || ""} ${renterUser?.lastName || ""}`.trim() || "Renter",
+        })),
+      );
+    } catch (error) {
+      console.error("Failed to fetch message thread:", error);
+      res.status(500).json({ error: "Failed to fetch conversation" });
+    }
+  });
+
+  app.post("/api/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
       // Verify rental exists and is active
       const rental = await storage.getRental(req.body.rentalId);
       if (!rental) {
@@ -7517,9 +7643,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (rental.status !== "active") {
         return res.status(403).json({ error: "Messaging only available for active rentals" });
       }
+      if (rental.ownerId !== userId && rental.renterId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
 
-      const validatedData = insertMessageSchema.parse(req.body);
-      const message = await storage.createMessage(validatedData);
+      const content = typeof req.body.content === "string" ? req.body.content.trim() : "";
+      if (!content) {
+        return res.status(400).json({ error: "Message content is required" });
+      }
+
+      const receiverId = rental.ownerId === userId ? rental.renterId : rental.ownerId;
+      const message = await storage.createMessage({
+        rentalId: rental.id,
+        senderId: userId,
+        receiverId,
+        content,
+      });
       res.status(201).json(message);
     } catch (error: any) {
       res.status(400).json({ error: error.message || "Invalid message data" });
@@ -7759,6 +7898,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     upload.fields([
       { name: 'governmentIdFront', maxCount: 1 },
       { name: 'governmentIdBack', maxCount: 1 },
+      { name: 'medicalCertificateFile', maxCount: 1 },
+      { name: 'pilotLicenseFile', maxCount: 1 },
       { name: 'pilotCertificatePhoto', maxCount: 1 },
     ]), 
     async (req: any, res) => {
@@ -7780,9 +7921,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (files.governmentIdBack) {
           documentUrls.push(`/uploads/id-back-${userId}-${Date.now()}.jpg`);
         }
+        if (files.medicalCertificateFile) {
+          documentUrls.push(`/uploads/medical-cert-${userId}-${Date.now()}.pdf`);
+        }
+        if (files.pilotLicenseFile) {
+          documentUrls.push(`/uploads/pilot-license-${userId}-${Date.now()}.pdf`);
+        }
         if (files.pilotCertificatePhoto) {
           documentUrls.push(`/uploads/pilot-cert-${userId}-${Date.now()}.jpg`);
         }
+
+        const medicalCertExpiresAt =
+          req.body.medicalCertExpiresAt && !Number.isNaN(Date.parse(req.body.medicalCertExpiresAt))
+            ? new Date(req.body.medicalCertExpiresAt)
+            : null;
         
         // Create verification submission
         const submission = await storage.createVerificationSubmission({
@@ -7802,7 +7954,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sources: [],
           fileHashes: [],
           pilotLicenseExpiresAt: null,
-          medicalCertExpiresAt: null,
+          medicalCertExpiresAt,
           insuranceExpiresAt: null,
           governmentIdExpiresAt: null,
           expirationNotificationSent: false,

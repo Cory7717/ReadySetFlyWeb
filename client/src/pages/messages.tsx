@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Send, Search, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,14 +9,19 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/api";
 
 interface Message {
   id: string;
   senderId: string;
   senderName: string;
   content: string;
-  timestamp: string;
-  read: boolean;
+  timestamp?: string;
+  createdAt?: string;
+  isRead?: boolean;
 }
 
 interface Conversation {
@@ -31,32 +37,94 @@ interface Conversation {
 }
 
 export default function Messages() {
+  const [location] = useLocation();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const rentalIdFromUrl = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("rentalId");
+  }, [location]);
+
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/messages/conversations"],
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/api/messages/conversations"), {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch conversations");
+      }
+      return response.json();
+    },
   });
 
   const { data: messages = [] } = useQuery<Message[]>({
-    queryKey: ["/api/messages", selectedConversation],
+    queryKey: ["/api/messages/conversation", selectedConversation],
     enabled: !!selectedConversation,
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/messages/conversation/${selectedConversation}`), {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch conversation messages");
+      }
+      return response.json();
+    },
   });
+
+  useEffect(() => {
+    if (rentalIdFromUrl) {
+      setSelectedConversation(rentalIdFromUrl);
+    }
+  }, [rentalIdFromUrl]);
+
+  useEffect(() => {
+    if (!selectedConversation && conversations.length > 0) {
+      setSelectedConversation(conversations[0].rentalId || conversations[0].id);
+    }
+  }, [conversations, selectedConversation]);
 
   const filteredConversations = conversations.filter(conv =>
     conv.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     conv.aircraftName?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const sendMessageMutation = useMutation({
+    mutationFn: async (content: string) => {
+      if (!selectedConversation) {
+        throw new Error("Select a conversation first");
+      }
+      return apiRequest("POST", "/api/messages", {
+        rentalId: selectedConversation,
+        content,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages/conversation", selectedConversation] });
+      setMessageText("");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Message failed",
+        description: error?.message || "Could not send your message.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSendMessage = () => {
     if (!messageText.trim() || !selectedConversation) return;
-    
-    // TODO: Implement send message mutation
-    setMessageText("");
+    sendMessageMutation.mutate(messageText.trim());
   };
 
-  const selectedConv = conversations.find(c => c.id === selectedConversation);
+  const selectedConv = conversations.find(
+    (c) => (c.rentalId || c.id) === selectedConversation,
+  );
 
   return (
     <div className="container mx-auto px-4 py-8 h-[calc(100vh-4rem)]">
@@ -101,7 +169,7 @@ export default function Messages() {
                     {filteredConversations.map((conv) => (
                       <div
                         key={conv.id}
-                        onClick={() => setSelectedConversation(conv.id)}
+                        onClick={() => setSelectedConversation(conv.rentalId || conv.id)}
                         className={`
                           p-4 border-b cursor-pointer hover-elevate transition-colors
                           ${selectedConversation === conv.id ? "bg-accent/10" : ""}
@@ -178,13 +246,13 @@ export default function Messages() {
                           <div
                             key={message.id}
                             className={`flex ${
-                              message.senderId === "current-user" ? "justify-end" : "justify-start"
+                              message.senderId === user?.id ? "justify-end" : "justify-start"
                             }`}
                           >
                             <div
                               className={`
                                 max-w-[70%] rounded-lg p-3
-                                ${message.senderId === "current-user"
+                                ${message.senderId === user?.id
                                   ? "bg-primary text-primary-foreground"
                                   : "bg-muted"}
                               `}
@@ -192,11 +260,11 @@ export default function Messages() {
                               <p className="text-sm">{message.content}</p>
                               <p className={`
                                 text-xs mt-1
-                                ${message.senderId === "current-user" 
+                                ${message.senderId === user?.id 
                                   ? "text-primary-foreground/70" 
                                   : "text-muted-foreground"}
                               `}>
-                                {new Date(message.timestamp).toLocaleTimeString()}
+                                {new Date(message.timestamp || message.createdAt || "").toLocaleTimeString()}
                               </p>
                             </div>
                           </div>
@@ -224,7 +292,7 @@ export default function Messages() {
                     />
                     <Button
                       onClick={handleSendMessage}
-                      disabled={!messageText.trim()}
+                      disabled={!messageText.trim() || sendMessageMutation.isPending}
                       className="self-end"
                       data-testid="button-send-message"
                     >

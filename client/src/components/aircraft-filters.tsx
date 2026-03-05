@@ -30,6 +30,16 @@ interface AircraftFiltersProps {
   setState: (value: string) => void;
   radius: string;
   setRadius: (value: string) => void;
+  selectedCertifications: string[];
+  onCertificationsChange: (values: string[]) => void;
+  selectedCategories: string[];
+  onCategoriesChange: (values: string[]) => void;
+  selectedAvionics: string[];
+  onAvionicsChange: (values: string[]) => void;
+  insuranceIncluded: boolean;
+  onInsuranceIncludedChange: (value: boolean) => void;
+  wetRateOnly: boolean;
+  onWetRateOnlyChange: (value: boolean) => void;
   onClearAll: () => void;
 }
 
@@ -42,8 +52,32 @@ export function AircraftFilters({
   setState,
   radius,
   setRadius,
+  selectedCertifications,
+  onCertificationsChange,
+  selectedCategories,
+  onCategoriesChange,
+  selectedAvionics,
+  onAvionicsChange,
+  insuranceIncluded,
+  onInsuranceIncludedChange,
+  wetRateOnly,
+  onWetRateOnlyChange,
   onClearAll,
 }: AircraftFiltersProps) {
+  const toggleValue = (
+    value: string,
+    selectedValues: string[],
+    onChange: (values: string[]) => void,
+    checked: boolean,
+  ) => {
+    if (checked) {
+      if (!selectedValues.includes(value)) {
+        onChange([...selectedValues, value]);
+      }
+      return;
+    }
+    onChange(selectedValues.filter((entry) => entry !== value));
+  };
 
   return (
     <div className="space-y-6" data-testid="aircraft-filters">
@@ -130,7 +164,14 @@ export function AircraftFilters({
         <CollapsibleContent className="space-y-3 mt-3">
           {certifications.map((cert) => (
             <div key={cert} className="flex items-center space-x-2">
-              <Checkbox id={`cert-${cert}`} data-testid={`checkbox-cert-${cert}`} />
+              <Checkbox
+                id={`cert-${cert}`}
+                checked={selectedCertifications.includes(cert)}
+                onCheckedChange={(checked) =>
+                  toggleValue(cert, selectedCertifications, onCertificationsChange, checked === true)
+                }
+                data-testid={`checkbox-cert-${cert}`}
+              />
               <label
                 htmlFor={`cert-${cert}`}
                 className="text-sm cursor-pointer"
@@ -153,7 +194,14 @@ export function AircraftFilters({
         <CollapsibleContent className="space-y-3 mt-3">
           {categories.map((category) => (
             <div key={category} className="flex items-center space-x-2">
-              <Checkbox id={`cat-${category}`} data-testid={`checkbox-category-${category}`} />
+              <Checkbox
+                id={`cat-${category}`}
+                checked={selectedCategories.includes(category)}
+                onCheckedChange={(checked) =>
+                  toggleValue(category, selectedCategories, onCategoriesChange, checked === true)
+                }
+                data-testid={`checkbox-category-${category}`}
+              />
               <label
                 htmlFor={`cat-${category}`}
                 className="text-sm cursor-pointer"
@@ -176,7 +224,14 @@ export function AircraftFilters({
         <CollapsibleContent className="space-y-3 mt-3">
           {avionicsSuites.map((avionics) => (
             <div key={avionics} className="flex items-center space-x-2">
-              <Checkbox id={`avionics-${avionics}`} data-testid={`checkbox-avionics-${avionics}`} />
+              <Checkbox
+                id={`avionics-${avionics}`}
+                checked={selectedAvionics.includes(avionics)}
+                onCheckedChange={(checked) =>
+                  toggleValue(avionics, selectedAvionics, onAvionicsChange, checked === true)
+                }
+                data-testid={`checkbox-avionics-${avionics}`}
+              />
               <label
                 htmlFor={`avionics-${avionics}`}
                 className="text-sm cursor-pointer"
@@ -194,13 +249,23 @@ export function AircraftFilters({
       <div className="space-y-3">
         <Label className="text-sm font-semibold">Additional Options</Label>
         <div className="flex items-center space-x-2">
-          <Checkbox id="insurance" data-testid="checkbox-insurance" />
+          <Checkbox
+            id="insurance"
+            checked={insuranceIncluded}
+            onCheckedChange={(checked) => onInsuranceIncludedChange(checked === true)}
+            data-testid="checkbox-insurance"
+          />
           <label htmlFor="insurance" className="text-sm cursor-pointer">
             Insurance Included
           </label>
         </div>
         <div className="flex items-center space-x-2">
-          <Checkbox id="wet-rate" data-testid="checkbox-wet-rate" />
+          <Checkbox
+            id="wet-rate"
+            checked={wetRateOnly}
+            onCheckedChange={(checked) => onWetRateOnlyChange(checked === true)}
+            data-testid="checkbox-wet-rate"
+          />
           <label htmlFor="wet-rate" className="text-sm cursor-pointer">
             Wet Rate (Fuel Included)
           </label>

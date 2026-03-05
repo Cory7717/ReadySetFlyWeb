@@ -16,9 +16,53 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StarRating } from "@/components/star-rating";
+import { VerificationBadges } from "@/components/verification-badges";
+import { ReviewDialog } from "@/components/review-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { apiUrl } from "@/lib/api";
+
+function RentalReviewAction({
+  rentalId,
+  revieweeId,
+  revieweeName,
+}: {
+  rentalId: string;
+  revieweeId: string;
+  revieweeName: string;
+}) {
+  const { data } = useQuery<{ canReview: boolean; reason?: string }>({
+    queryKey: ["/api/rentals", rentalId, "can-review"],
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/rentals/${rentalId}/can-review`), {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        return { canReview: false };
+      }
+      return response.json();
+    },
+  });
+
+  if (!data?.canReview) {
+    return null;
+  }
+
+  return (
+    <ReviewDialog
+      rentalId={rentalId}
+      revieweeId={revieweeId}
+      revieweeName={revieweeName}
+      trigger={
+        <Button variant="outline" size="sm" data-testid={`button-leave-review-${rentalId}`}>
+          Leave Review
+        </Button>
+      }
+    />
+  );
+}
 
 export default function Dashboard() {
   const [, navigate] = useLocation();
@@ -65,6 +109,10 @@ export default function Dashboard() {
   // Calculate stats from actual rentals
   const completedRentals = ownerRentals.filter(r => r.status === "completed");
   const activeRentalsArray = ownerRentals.filter(r => r.status === "active");
+  const upcomingRentals = ownerRentals.filter(
+    (r) => r.status === "approved" && new Date(r.startDate) > new Date(),
+  );
+  const pastRentals = ownerRentals.filter((r) => r.status === "completed");
   const pendingRequests = ownerRentals.filter(r => r.status === "pending");
   
   // Renter's rental requests
@@ -321,6 +369,54 @@ export default function Dashboard() {
                               </p>
                             </div>
                           </div>
+                          {renter && (
+                            <div className="rounded-lg border bg-muted/20 p-3 space-y-3" data-testid={`renter-profile-${rental.id}`}>
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-10 w-10">
+                                  <AvatarImage src={renter.profileImageUrl || undefined} />
+                                  <AvatarFallback>
+                                    {`${renter.firstName?.[0] || ""}${renter.lastName?.[0] || ""}` || "RS"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-sm font-medium">
+                                    {renter.firstName} {renter.lastName}
+                                  </p>
+                                  {!renter.identityVerified && (
+                                    <Badge variant="destructive" data-testid={`badge-unverified-renter-${rental.id}`}>
+                                      Unverified Renter
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <VerificationBadges user={renter} type="renter" size="sm" />
+                              <div className="grid gap-2 sm:grid-cols-3 text-xs text-muted-foreground">
+                                <div>
+                                  <p className="font-semibold text-foreground">{renter.totalFlightHours ?? 0} hrs</p>
+                                  <p>Total flight time</p>
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-foreground">
+                                    {renter.averageRating ? Number(renter.averageRating).toFixed(1) : "N/A"}
+                                  </p>
+                                  <p>{renter.totalReviews || 0} reviews</p>
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {renter.certifications && renter.certifications.length > 0 ? (
+                                    renter.certifications.map((cert) => (
+                                      <Badge key={cert} variant="secondary" className="text-[10px]">
+                                        {cert}
+                                      </Badge>
+                                    ))
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px]">
+                                      No certs listed
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                               <p className="font-bold">${parseFloat(rental.totalCostRenter).toFixed(2)}</p>
@@ -449,8 +545,111 @@ export default function Dashboard() {
                               <p className="text-sm text-muted-foreground">Your payout: ${parseFloat(rental.ownerPayout).toFixed(2)}</p>
                             </div>
                             <Badge className="bg-chart-2 text-white text-center">Active</Badge>
-                            <Button size="sm" className="w-full sm:w-auto" data-testid={`button-message-${rental.id}`}>Message</Button>
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              data-testid={`button-message-${rental.id}`}
+                              onClick={() => navigate(`/messages?rentalId=${rental.id}`)}
+                            >
+                              Message
+                            </Button>
                           </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="upcoming" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Upcoming Rentals</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {upcomingRentals.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">No upcoming approved rentals yet</div>
+                  ) : (
+                    upcomingRentals.map((rental) => {
+                      const aircraft = allAircraft.find((a) => a.id === rental.aircraftId);
+                      return (
+                        <div
+                          key={rental.id}
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg hover-elevate"
+                          data-testid={`rental-upcoming-${rental.id}`}
+                        >
+                          <div className="flex-1 space-y-1">
+                            <h4 className="font-semibold">
+                              {aircraft?.year || ""} {aircraft?.make || "Unknown"} {aircraft?.model || ""}
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(rental.startDate).toLocaleDateString()} -{" "}
+                              {new Date(rental.endDate).toLocaleDateString()}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Estimated total: ${parseFloat(rental.totalCostRenter).toFixed(2)}
+                            </p>
+                          </div>
+                          {!rental.isPaid && (
+                            <Button
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              onClick={() => navigate(`/rental-payment/${rental.id}`)}
+                              data-testid={`button-complete-payment-${rental.id}`}
+                            >
+                              Complete Payment
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="past" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Past Rentals</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {pastRentals.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">No completed rentals yet</div>
+                  ) : (
+                    pastRentals.map((rental) => {
+                      const aircraft = allAircraft.find((a) => a.id === rental.aircraftId);
+                      const renter = allUsers.find((u) => u.id === rental.renterId);
+                      return (
+                        <div
+                          key={rental.id}
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg hover-elevate"
+                          data-testid={`rental-past-${rental.id}`}
+                        >
+                          <div className="flex-1 space-y-1">
+                            <h4 className="font-semibold">
+                              {aircraft?.year || ""} {aircraft?.make || "Unknown"} {aircraft?.model || ""}
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              Dates flown: {new Date(rental.startDate).toLocaleDateString()} -{" "}
+                              {new Date(rental.endDate).toLocaleDateString()}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Total paid: ${parseFloat(rental.totalCostRenter).toFixed(2)}
+                            </p>
+                          </div>
+                          {renter && (
+                            <RentalReviewAction
+                              rentalId={rental.id}
+                              revieweeId={renter.id}
+                              revieweeName={`${renter.firstName || ""} ${renter.lastName || ""}`.trim() || "Renter"}
+                            />
+                          )}
                         </div>
                       );
                     })

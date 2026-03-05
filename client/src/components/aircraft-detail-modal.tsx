@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { X, MapPin, Gauge, Shield, Calendar, DollarSign, Plane, Star, Edit, Info } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useLocation, Link } from "wouter";
+import { Gauge, Shield, Calendar, Plane, Star, Edit } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,7 +17,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import type { AircraftListing } from "@shared/schema";
 import { VerificationBadges } from "./verification-badges";
-import { Link } from "wouter";
 
 interface AircraftDetailModalProps {
   aircraftId: string;
@@ -26,17 +26,10 @@ interface AircraftDetailModalProps {
 
 export function AircraftDetailModal({ aircraftId, open, onOpenChange }: AircraftDetailModalProps) {
   const { user } = useAuth();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
-  const [showRequestForm, setShowRequestForm] = useState(false);
-  const [showBestPractices, setShowBestPractices] = useState(false);
   const [adminNotes, setAdminNotes] = useState("");
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    startDate: "",
-    endDate: "",
-    estimatedHours: "",
-    message: "",
-  });
 
   const { data: aircraft, isLoading, error } = useQuery<AircraftListing>({
     queryKey: ["/api/aircraft", aircraftId],
@@ -66,36 +59,6 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
       // Silent fail
     });
   }, [aircraft?.id, open]);
-
-  const requestRentalMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      if (!aircraft) return;
-      
-      return await apiRequest("POST", "/api/rentals", {
-        aircraftId: aircraft.id,
-        ownerId: aircraft.ownerId,
-        ...data,
-        hourlyRate: aircraft.hourlyRate,
-      });
-    },
-    onSuccess: () => {
-      toast({
-        title: "Rental Request Sent",
-        description: "The aircraft owner will review your request and respond shortly.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/rentals"] });
-      setShowRequestForm(false);
-      setFormData({ startDate: "", endDate: "", estimatedHours: "", message: "" });
-      onOpenChange(false);
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Request Failed",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
 
   const deleteAircraftMutation = useMutation({
     mutationFn: async (aircraftId: string) => {
@@ -168,36 +131,6 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
     ? aircraft.images 
     : ["https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=1200"];
 
-  const handleSampleRedirect = async () => {
-    toast({
-      title: "Sample listing",
-      description: "This is a demo rental listing. Redirecting you to a live listing next.",
-    });
-    let listings = queryClient.getQueryData<AircraftListing[]>(["/api/aircraft"]);
-    if (!listings) {
-      try {
-        const response = await fetch(apiUrl("/api/aircraft"));
-        if (response.ok) {
-          listings = await response.json();
-        }
-      } catch (error) {
-        listings = undefined;
-      }
-    }
-    const liveListing = listings?.find((item) => !(item as any).isExample);
-    setShowRequestForm(false);
-    setShowBestPractices(false);
-    onOpenChange(false);
-    if (liveListing) {
-      window.location.href = `/rentals?aircraftId=${liveListing.id}`;
-      return;
-    }
-    toast({
-      title: "No live rentals yet",
-      description: "We will list live rental aircraft here as soon as they are available.",
-    });
-  };
-
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -261,7 +194,28 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                     </div>
                   </div>
               
-              {!showRequestForm && (
+              {user && !user.identityVerified ? (
+                <Alert className="max-w-sm border-amber-300 bg-amber-50/80" data-testid="alert-verification-required-modal">
+                  <AlertTitle>Pilot Verification Required</AlertTitle>
+                  <AlertDescription className="space-y-3">
+                    <p className="text-xs">
+                      You must complete identity and pilot verification before requesting an aircraft rental. This
+                      protects both you and the aircraft owner.
+                    </p>
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        onOpenChange(false);
+                        navigate("/verify-identity");
+                      }}
+                      data-testid="button-complete-verification-modal"
+                    >
+                      Complete Verification →
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              ) : (
                 <Button
                   size="lg"
                   className="bg-accent text-accent-foreground hover:bg-accent"
@@ -270,98 +224,16 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
                       setLoginPromptOpen(true);
                       return;
                     }
-                    if (user.id === aircraft.ownerId) {
-                      return; // Owner can't rent their own aircraft
-                    }
-                    setShowBestPractices(true);
+                    onOpenChange(false);
+                    navigate(`/aircraft/${aircraft.id}`);
                   }}
-                  disabled={user?.id === aircraft.ownerId}
-                  data-testid="button-request-rental"
+                  data-testid="button-view-full-listing-book"
                 >
                   <Calendar className="h-5 w-5 mr-2" />
-                  Request to Rent
+                  View Full Listing & Book
                 </Button>
               )}
             </div>
-
-            {/* Rental Request Form */}
-            {showRequestForm && (
-              <div className="bg-muted/50 p-6 rounded-xl space-y-4">
-                <h3 className="font-display text-xl font-semibold">Request Rental</h3>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="startDate">Start Date</Label>
-                    <Input
-                      id="startDate"
-                      type="date"
-                      value={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                      data-testid="input-start-date"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="endDate">End Date</Label>
-                    <Input
-                      id="endDate"
-                      type="date"
-                      value={formData.endDate}
-                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                      data-testid="input-end-date"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="estimatedHours">Estimated Flight Hours</Label>
-                  <Input
-                    id="estimatedHours"
-                    type="number"
-                    step="0.1"
-                    placeholder="5.0"
-                    value={formData.estimatedHours}
-                    onChange={(e) => setFormData({ ...formData, estimatedHours: e.target.value })}
-                    data-testid="input-estimated-hours"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="message">Message to Owner (Optional)</Label>
-                  <Textarea
-                    id="message"
-                    placeholder="Tell the owner about your flight plans..."
-                    value={formData.message}
-                    onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                    rows={3}
-                    data-testid="textarea-message"
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <Button
-                    className="flex-1"
-                    onClick={() => {
-                      if ((aircraft as any).isExample) {
-                        handleSampleRedirect();
-                        return;
-                      }
-                      requestRentalMutation.mutate(formData);
-                    }}
-                    disabled={!formData.startDate || !formData.endDate || !formData.estimatedHours || requestRentalMutation.isPending}
-                    data-testid="button-submit-request"
-                  >
-                    {requestRentalMutation.isPending ? "Sending..." : "Send Request"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowRequestForm(false)}
-                    data-testid="button-cancel-request"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
 
             {/* Aircraft Details */}
             <div className="grid md:grid-cols-2 gap-6">
@@ -554,76 +426,10 @@ export function AircraftDetailModal({ aircraftId, open, onOpenChange }: Aircraft
         <AlertDialogFooter>
           <AlertDialogCancel data-testid="button-cancel-login">Continue Browsing</AlertDialogCancel>
           <AlertDialogAction
-            onClick={() => window.location.href = apiUrl('/api/auth/google')}
+            onClick={() => (window.location.href = apiUrl('/api/auth/google'))}
             data-testid="button-go-login"
           >
             Sign In / Create Account
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-
-    {/* Rental Best Practices Dialog */}
-    <AlertDialog open={showBestPractices} onOpenChange={setShowBestPractices}>
-      <AlertDialogContent className="max-w-2xl">
-        <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <Info className="h-5 w-5 text-primary" />
-            Aircraft Rental Best Practices
-          </AlertDialogTitle>
-          <AlertDialogDescription className="text-left space-y-4 pt-4">
-            <div className="space-y-3">
-              <div>
-                <h4 className="font-semibold text-foreground mb-2">Advance Notice Requirements</h4>
-                <p className="text-sm text-muted-foreground">
-                  We recommend booking aircraft rentals <strong>3-5 days in advance</strong> to ensure 
-                  availability and give aircraft owners adequate time to prepare the aircraft for your flight. 
-                  Last-minute bookings may be subject to owner approval and availability.
-                </p>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-foreground mb-2">Weather Policy & Disclaimer</h4>
-                <p className="text-sm text-muted-foreground">
-                  <strong>Important:</strong> Ready Set Fly is not responsible for weather or weather-related 
-                  cancellations. <strong>No refunds will be issued for weather-related cancellations.</strong> 
-                  We strongly recommend checking weather forecasts 24-48 hours before your scheduled flight 
-                  and coordinating with the aircraft owner. Always prioritize safety and follow all FAA regulations 
-                  when making go/no-go decisions.
-                </p>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-foreground mb-2">Communication</h4>
-                <p className="text-sm text-muted-foreground">
-                  Please maintain open communication with the aircraft owner regarding your flight plans, 
-                  any changes to your schedule, and any concerns you may have. The owner may require a 
-                  pre-flight briefing or checkout depending on the aircraft and your experience level.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-muted p-3 rounded-lg mt-4">
-              <p className="text-xs text-muted-foreground">
-                By continuing, you acknowledge that you understand these best practices and will communicate 
-                with the aircraft owner regarding any questions or concerns.
-              </p>
-            </div>
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel data-testid="button-cancel-best-practices">
-            Cancel
-          </AlertDialogCancel>
-          <AlertDialogAction 
-            onClick={() => {
-              setShowBestPractices(false);
-              setShowRequestForm(true);
-            }}
-            className="bg-accent text-accent-foreground hover:bg-accent"
-            data-testid="button-confirm-best-practices"
-          >
-            I Understand - Continue to Request
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

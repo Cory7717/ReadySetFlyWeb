@@ -1,7 +1,7 @@
-import { Heart, Clock, CheckCircle2, Gauge } from "lucide-react";
+import { Clock, CheckCircle2, Gauge } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { FavoriteButton } from "@/components/favorite-button";
 
 interface AircraftCardProps {
   id: string;
@@ -66,15 +66,13 @@ export function AircraftCard({
             </Badge>
           ))}
         </div>
-        <Button
+        <FavoriteButton
+          listingId={id}
+          listingType="aircraft"
           variant="ghost"
           size="icon"
           className="absolute top-3 right-3 bg-background/80 backdrop-blur hover:bg-background"
-          data-testid={`button-favorite-${id}`}
-          aria-label="Add to favorites"
-        >
-          <Heart className="h-5 w-5" />
-        </Button>
+        />
         <div className="absolute bottom-3 left-3">
           <Badge variant="outline" className="bg-background/80 backdrop-blur">
             <CheckCircle2 className="h-3 w-3 mr-1 text-chart-2" />

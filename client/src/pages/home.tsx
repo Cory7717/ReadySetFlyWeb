@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Search, MapPin, Calendar, Shield } from "lucide-react";
+import { Search, MapPin, Calendar, Shield, X } from "lucide-react";
 import type { AircraftListing } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AircraftCard } from "@/components/aircraft-card";
 import { AircraftFilters } from "@/components/aircraft-filters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
@@ -22,6 +23,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { useAuth } from "@/hooks/useAuth";
 import wingtipImage from "@assets/wingtip_featured_1761494838973.jpg";
 import { trackEvent } from "@/lib/analytics";
+import { apiUrl } from "@/lib/api";
 
 const quickFilters = [
   { label: "IFR Equipped", value: "ifr" },
@@ -37,6 +39,7 @@ export default function Home() {
   const { isAuthenticated, user } = useAuth();
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | null>(null);
+  const [showVerificationNudge, setShowVerificationNudge] = useState(false);
 
   useEffect(() => {
     trackEvent("rentals_view", { page: "/rentals" });
@@ -81,13 +84,68 @@ export default function Home() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!isAuthenticated || user?.identityVerified || typeof window === "undefined") {
+      setShowVerificationNudge(false);
+      return;
+    }
+
+    const sessionKey = "rsf_verification_nudge_session";
+    let sessionId = window.sessionStorage.getItem(sessionKey);
+    if (!sessionId) {
+      sessionId = String(Date.now());
+      window.sessionStorage.setItem(sessionKey, sessionId);
+    }
+    const dismissedForSession = window.localStorage.getItem("rsf_verification_nudge_dismissed") === sessionId;
+    setShowVerificationNudge(!dismissedForSession);
+  }, [isAuthenticated, user?.identityVerified]);
+
   const [keyword, setKeyword] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [radius, setRadius] = useState("100");
+  const [selectedCertifications, setSelectedCertifications] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedAvionics, setSelectedAvionics] = useState<string[]>([]);
+  const [insuranceIncluded, setInsuranceIncluded] = useState(false);
+  const [wetRateOnly, setWetRateOnly] = useState(false);
 
   const { data: aircraft = [], isLoading } = useQuery<AircraftListing[]>({
-    queryKey: ["/api/aircraft"],
+    queryKey: [
+      "/api/aircraft",
+      {
+        certifications: selectedCertifications.join(","),
+        category: selectedCategories.join(","),
+        avionics: selectedAvionics.join(","),
+        insuranceIncluded,
+        wetRateOnly,
+      },
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedCertifications.length > 0) {
+        params.set("certifications", selectedCertifications.join(","));
+      }
+      if (selectedCategories.length > 0) {
+        params.set("category", selectedCategories.join(","));
+      }
+      if (selectedAvionics.length > 0) {
+        params.set("avionics", selectedAvionics.join(","));
+      }
+      if (insuranceIncluded) {
+        params.set("insuranceIncluded", "true");
+      }
+      if (wetRateOnly) {
+        params.set("wetRate", "true");
+      }
+      const response = await fetch(apiUrl(`/api/aircraft${params.toString() ? `?${params.toString()}` : ""}`), {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch aircraft listings");
+      }
+      return response.json();
+    },
   });
 
   const filteredAircraft = aircraft.filter((item) => {
@@ -107,6 +165,30 @@ export default function Home() {
         return false;
       }
     }
+    if (selectedCertifications.length > 0) {
+      const hasRequiredCert = selectedCertifications.every((cert) =>
+        item.requiredCertifications?.includes(cert),
+      );
+      if (!hasRequiredCert) {
+        return false;
+      }
+    }
+    if (selectedCategories.length > 0 && !selectedCategories.includes(item.category)) {
+      return false;
+    }
+    if (selectedAvionics.length > 0) {
+      const listingAvionics = (item.avionicsSuite || "").toLowerCase();
+      const matchesAvionics = selectedAvionics.some((suite) => listingAvionics.includes(suite.toLowerCase()));
+      if (!matchesAvionics) {
+        return false;
+      }
+    }
+    if (insuranceIncluded && !item.insuranceIncluded) {
+      return false;
+    }
+    if (wetRateOnly && !item.wetRate) {
+      return false;
+    }
     return true;
   });
 
@@ -115,6 +197,11 @@ export default function Home() {
     setCity("");
     setState("");
     setRadius("100");
+    setSelectedCertifications([]);
+    setSelectedCategories([]);
+    setSelectedAvionics([]);
+    setInsuranceIncluded(false);
+    setWetRateOnly(false);
   };
   const isVerifiedOwner = Boolean(user?.isVerified);
   const listAircraftHref = !isAuthenticated ? "/register" : "/list-aircraft";
@@ -138,6 +225,41 @@ export default function Home() {
       }
       contentClassName="space-y-8"
     >
+      {showVerificationNudge && (
+        <Alert className="border-primary/30 bg-primary/5" data-testid="alert-verification-nudge">
+          <Shield className="h-4 w-4" />
+          <AlertTitle>Complete Verification to Book</AlertTitle>
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Verified pilots get faster approvals and build trust with aircraft owners. Verification takes about 5
+              minutes.
+            </span>
+            <div className="flex items-center gap-2">
+              <Button asChild size="sm" data-testid="button-verify-now">
+                <Link href="/verify-identity">Verify Now →</Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    const sessionId = window.sessionStorage.getItem("rsf_verification_nudge_session");
+                    if (sessionId) {
+                      window.localStorage.setItem("rsf_verification_nudge_dismissed", sessionId);
+                    }
+                  }
+                  setShowVerificationNudge(false);
+                }}
+                data-testid="button-dismiss-verification-nudge"
+                aria-label="Dismiss verification reminder"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
         <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-5">
@@ -358,6 +480,16 @@ export default function Home() {
                 setState={setState}
                 radius={radius}
                 setRadius={setRadius}
+                selectedCertifications={selectedCertifications}
+                onCertificationsChange={setSelectedCertifications}
+                selectedCategories={selectedCategories}
+                onCategoriesChange={setSelectedCategories}
+                selectedAvionics={selectedAvionics}
+                onAvionicsChange={setSelectedAvionics}
+                insuranceIncluded={insuranceIncluded}
+                onInsuranceIncludedChange={setInsuranceIncluded}
+                wetRateOnly={wetRateOnly}
+                onWetRateOnlyChange={setWetRateOnly}
                 onClearAll={handleClearFilters}
               />
             </aside>

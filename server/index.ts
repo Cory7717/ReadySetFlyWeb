@@ -17,6 +17,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { startFinanceAlertsJob } from "./jobs/financeAlerts";
 
 const app = express();
 // Behind Render's proxy; required for secure cookies/session in OAuth flows
@@ -96,6 +97,7 @@ app.use((req, res, next) => {
     reusePort: true,
   }, async () => {
     log(`serving on port ${port}`);
+    startFinanceAlertsJob();
     const shouldStartSwim = process.env.SWIM_RUN_MODE !== "worker";
     const swimRunInApi = String(process.env.SWIM_RUN_IN_API ?? "").toLowerCase();
     const nmsEnabled = String(process.env.NMS_ENABLED ?? "").toLowerCase() === "true";

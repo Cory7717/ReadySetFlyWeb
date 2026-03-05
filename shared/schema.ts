@@ -30,6 +30,46 @@ export const leadCategories = [
 export const flightPlanFilingStatuses = ["draft", "staged", "filed", "activated", "cancelled", "closed"] as const;
 export const flightPlanFilingActions = ["file", "amend", "activate", "cancel", "close"] as const;
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
+export const personalFinanceOwners = ["cory", "amy", "joint"] as const;
+export const personalFinanceEntryTypes = ["expense", "income"] as const;
+export const personalFinanceExpenseCategories = [
+  "Housing",
+  "Utilities",
+  "Groceries",
+  "Dining",
+  "Transportation",
+  "Health",
+  "Subscriptions",
+  "Entertainment",
+  "Personal Care",
+  "Education",
+  "Childcare",
+  "Savings",
+  "Debt",
+  "Gifts",
+  "Miscellaneous",
+] as const;
+export const personalFinanceIncomeCategories = [
+  "Primary Income",
+  "Side Income",
+  "Business Income",
+  "Passive Income",
+  "Government",
+  "Other Income",
+] as const;
+export const personalFinanceRsfCategories = [
+  "RSF - Marketing",
+  "RSF - Software & Subscriptions",
+  "RSF - Legal & Compliance",
+  "RSF - Hosting & Infrastructure",
+  "RSF - Contractor / Labor",
+  "RSF - Equipment",
+  "RSF - Travel",
+  "RSF - Banking & Fees",
+  "RSF - Revenue",
+  "RSF - Investor / Funding",
+  "RSF - Miscellaneous",
+] as const;
 export const withdrawalStatuses = ["pending", "processing", "completed", "failed", "cancelled"] as const;
 export const approachPlateTypes = ["IAP", "SID", "STAR", "AIRPORT", "OTHER"] as const;
 export const adminRoles = ["operations", "finance", "sales", "support", "content", "housekeeping"] as const;
@@ -835,6 +875,46 @@ export const expenses = pgTable("expenses", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+export const personalFinanceEntries = pgTable("personal_finance_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  owner: text("owner").notNull(), // "cory" | "amy" | "joint"
+  month: text("month").notNull(), // YYYY-MM
+  type: text("type").notNull(), // "expense" | "income"
+  category: text("category").notNull(),
+  rsfCategory: text("rsf_category"),
+  subcategory: text("subcategory"),
+  description: text("description"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  dueDate: date("due_date"),
+  isPaid: boolean("is_paid").default(false),
+  paidDate: date("paid_date"),
+  isRecurring: boolean("is_recurring").default(false),
+  recurringDayOfMonth: integer("recurring_day_of_month"),
+  notifyDaysBefore: integer("notify_days_before").default(3),
+  notificationSent: boolean("notification_sent").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_personal_finance_entries_month").on(table.month),
+  index("idx_personal_finance_entries_owner").on(table.owner),
+  index("idx_personal_finance_entries_type").on(table.type),
+  index("idx_personal_finance_entries_due_date").on(table.dueDate),
+  index("idx_personal_finance_entries_unpaid_due").on(table.isPaid, table.dueDate),
+]);
+
+export const personalFinanceBudgets = pgTable("personal_finance_budgets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  month: text("month").notNull(), // YYYY-MM
+  category: text("category").notNull(),
+  owner: text("owner").notNull(), // "cory" | "amy" | "joint"
+  budgetAmount: decimal("budget_amount", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_personal_finance_budgets_unique").on(table.month, table.category, table.owner),
+  index("idx_personal_finance_budgets_month").on(table.month),
+  index("idx_personal_finance_budgets_owner").on(table.owner),
+]);
 
 // Housekeeping metrics (daily and attendant rollups)
 export const hkDailyMetrics = pgTable("hk_daily_metrics", {
@@ -2242,6 +2322,41 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
   invoiceUrl: z.string().optional(),
 });
 
+export const insertPersonalFinanceEntrySchema = createInsertSchema(personalFinanceEntries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  owner: z.enum(personalFinanceOwners),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must be YYYY-MM"),
+  type: z.enum(personalFinanceEntryTypes),
+  category: z.union([
+    z.enum(personalFinanceExpenseCategories),
+    z.enum(personalFinanceIncomeCategories),
+  ]),
+  rsfCategory: z.union([z.enum(personalFinanceRsfCategories), z.null()]).optional(),
+  subcategory: z.union([z.string(), z.null()]).optional(),
+  description: z.union([z.string(), z.null()]).optional(),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  dueDate: z.union([z.string(), z.null()]).optional(),
+  paidDate: z.union([z.string(), z.null()]).optional(),
+  isPaid: z.boolean().optional(),
+  isRecurring: z.boolean().optional(),
+  recurringDayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  notifyDaysBefore: z.number().int().min(0).max(31).optional(),
+  notificationSent: z.boolean().optional(),
+});
+
+export const insertPersonalFinanceBudgetSchema = createInsertSchema(personalFinanceBudgets).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must be YYYY-MM"),
+  owner: z.enum(personalFinanceOwners),
+  category: z.enum(personalFinanceExpenseCategories),
+  budgetAmount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+});
+
 const hkCountSchema = z.coerce.number().int().min(0).default(0);
 const hkOptionalCountSchema = z.preprocess(
   (value) => (value === "" || value === null || value === undefined ? null : value),
@@ -2502,6 +2617,10 @@ export type InsertPromoCodeUsage = typeof promoCodeUsages.$inferInsert;
 
 export type Expense = typeof expenses.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type PersonalFinanceEntry = typeof personalFinanceEntries.$inferSelect;
+export type InsertPersonalFinanceEntry = z.infer<typeof insertPersonalFinanceEntrySchema>;
+export type PersonalFinanceBudget = typeof personalFinanceBudgets.$inferSelect;
+export type InsertPersonalFinanceBudget = z.infer<typeof insertPersonalFinanceBudgetSchema>;
 
 export type HkDailyMetric = typeof hkDailyMetrics.$inferSelect;
 export type InsertHkDailyMetric = z.infer<typeof insertHkDailyMetricSchema>;
@@ -2602,4 +2721,9 @@ export type LeadCategory = typeof leadCategories[number];
 export type FlightPlanFilingStatus = typeof flightPlanFilingStatuses[number];
 export type FlightPlanFilingAction = typeof flightPlanFilingActions[number];
 export type ExpenseCategory = typeof expenseCategories[number];
+export type PersonalFinanceOwner = typeof personalFinanceOwners[number];
+export type PersonalFinanceEntryType = typeof personalFinanceEntryTypes[number];
+export type PersonalFinanceExpenseCategory = typeof personalFinanceExpenseCategories[number];
+export type PersonalFinanceIncomeCategory = typeof personalFinanceIncomeCategories[number];
+export type PersonalFinanceRsfCategory = typeof personalFinanceRsfCategories[number];
 export type WithdrawalStatus = typeof withdrawalStatuses[number];

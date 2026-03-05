@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, X, Rocket, Tag, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, X, Rocket, Tag, ChevronDown, ChevronRight, Wallet } from "lucide-react";
 import { endOfMonth, format, parse, parseISO, startOfMonth, eachDayOfInterval, isSameMonth, startOfISOWeek, endOfISOWeek, getISOWeek, getISOWeekYear } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@s
 import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
 import { AdminUserModal } from "@/components/admin-user-modal";
 import { ObjectUploader } from "@/components/ObjectUploader";
+import PersonalFinance from "@/pages/admin/PersonalFinance";
 import type { UploadResult } from "@uppy/core";
 
 const resolveInvoiceUrl = (invoiceUrl?: string | null) => {
@@ -82,6 +83,8 @@ const CRM_LEAD_CATEGORY_LABELS: Record<LeadCategory, string> = {
   sponsorships: "Sponsorships",
   other: "Other",
 };
+
+const FINANCE_EMAILS = ["coryarmer@gmail.com", "bentley.amy24@gmail.com"];
 
 const buildBannerTrackingUrl = (
   link?: string | null,
@@ -160,6 +163,7 @@ type HkBudgetMap = Record<string, string>;
 export default function AdminDashboard() {
   const { user } = useAuth();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
+  const canSeeFinance = FINANCE_EMAILS.includes((user?.email ?? "").toLowerCase());
   const adminRole = (user?.adminRole as AdminRole | undefined) || undefined;
   const adminPermissions = (user?.adminPermissions || []) as AdminPermission[];
   const canAccess = (permission: AdminPermission) =>
@@ -247,13 +251,14 @@ export default function AdminDashboard() {
       canAccess("withdrawals") && "withdrawals",
       canAccess("notifications") && "notifications",
       canAccess("banners") && "banners",
+      canSeeFinance && "personal-finance",
       isSuperAdmin && "admins",
     ].filter(Boolean) as string[];
 
     if (!allowed.includes(activeTab) && allowed.length > 0) {
       setActiveTab(allowed[0]);
     }
-  }, [adminRole, adminPermissions, isSuperAdmin, activeTab]);
+  }, [adminRole, adminPermissions, canSeeFinance, isSuperAdmin, activeTab]);
   
   // CRM state
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
@@ -2655,6 +2660,12 @@ export default function AdminDashboard() {
             <TabsTrigger value="banners" data-testid="tab-banners" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
               <Image className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
               <span>Banners</span>
+            </TabsTrigger>
+          )}
+          {canSeeFinance && (
+            <TabsTrigger value="personal-finance" data-testid="tab-personal-finance" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Wallet className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Personal Finance</span>
             </TabsTrigger>
           )}
           {isSuperAdmin && (
@@ -6129,6 +6140,12 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canSeeFinance && (
+          <TabsContent value="personal-finance" className="space-y-6">
+            <PersonalFinance isActive={activeTab === "personal-finance"} />
+          </TabsContent>
+        )}
 
         {isSuperAdmin && (
           <TabsContent value="admins" className="space-y-6">

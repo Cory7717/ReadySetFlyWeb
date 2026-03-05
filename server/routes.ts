@@ -42,6 +42,7 @@ import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
 import { createDbTfmsProvider } from "./services/tfms/providers/db";
 import { computeTfmsRisk } from "./services/tfms/risk";
 import { partners } from "./config/partners";
+import { registerAdminFinanceRoutes } from "./routes/adminFinance";
 import { flightPlanFilingProvider, validateFlightPlanForAction } from "./services/flight-plan-filing/provider";
 import {
   fetchMetar,
@@ -3184,6 +3185,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Mobile app authentication routes (JWT-based for React Native) - DEPRECATED, use /api/auth instead
   app.use('/api/mobile/auth', registerMobileAuthRoutes(storage));
+
+  registerAdminFinanceRoutes(app);
 
   // Serve uploaded files
   app.use('/uploads', express.static('uploads'));

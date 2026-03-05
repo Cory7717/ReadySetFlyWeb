@@ -8,8 +8,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award, Bell, FileArchive } from "lucide-react";
+import { Loader2, Plus, Plane, Lock, Edit, Trash2, Download, TrendingUp, Award, Bell, FileArchive, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { LogbookEntry, InsertLogbookEntry, Endorsement, LogbookArchive } from "@shared/schema";
@@ -21,6 +22,47 @@ import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { PageShell } from "@/components/layout/PageShell";
 
+const AIRCRAFT_CATEGORY_OPTIONS = [
+  "Airplane",
+  "Rotorcraft",
+  "Glider",
+  "Lighter-Than-Air",
+  "Powered Lift",
+  "Powered Parachute",
+  "Weight-Shift-Control",
+] as const;
+
+const AIRCRAFT_CLASS_OPTIONS: Record<string, string[]> = {
+  Airplane: ["ASEL", "AMEL", "ASES", "AMES"],
+  Rotorcraft: ["Helicopter", "Gyroplane"],
+  Glider: ["Glider"],
+  "Lighter-Than-Air": ["Airship", "Balloon"],
+  "Powered Lift": ["Powered Lift"],
+  "Powered Parachute": ["Powered Parachute"],
+  "Weight-Shift-Control": ["Weight-Shift-Control"],
+};
+
+function getClassOptions(category?: string | null) {
+  if (!category) return [];
+  return AIRCRAFT_CLASS_OPTIONS[category] ?? [category];
+}
+
+function getAircraftDescriptor(entry: Pick<LogbookEntry, "aircraftType" | "aircraftCategory" | "aircraftClass" | "isSimulator">) {
+  const type = entry.aircraftType || (entry.isSimulator ? "Simulator device" : "-");
+  if (entry.aircraftCategory && entry.aircraftClass) {
+    return `${type} / ${entry.aircraftCategory} ${entry.aircraftClass}`;
+  }
+  return type;
+}
+
+function csvEscape(value: unknown) {
+  const stringValue = value == null ? "" : String(value);
+  if (/["\n,]/.test(stringValue)) {
+    return `"${stringValue.replace(/"/g, "\"\"")}"`;
+  }
+  return stringValue;
+}
+
 // Helper function to calculate totals from entries
 function calculateTotals(entries: LogbookEntry[]) {
   const totals = {
@@ -28,10 +70,11 @@ function calculateTotals(entries: LogbookEntry[]) {
     pic: 0,
     sic: 0,
     dual: 0,
+    solo: 0,
     night: 0,
     day: 0,
     instrumentActual: 0,
-    crossCountry: 0, // Will need XC field in schema later
+    crossCountry: 0,
     approaches: 0,
     landings: 0,
   };
@@ -40,17 +83,21 @@ function calculateTotals(entries: LogbookEntry[]) {
     const pic = parseFloat(entry.pic || "0");
     const sic = parseFloat(entry.sic || "0");
     const dual = parseFloat(entry.dual || "0");
+    const solo = parseFloat(entry.solo || "0");
     const night = parseFloat(entry.timeNight || "0");
     const day = parseFloat(entry.timeDay || "0");
     const inst = parseFloat(entry.instrumentActual || "0");
+    const xc = parseFloat(entry.crossCountry || "0");
 
     totals.totalTime += pic + sic;
     totals.pic += pic;
     totals.sic += sic;
     totals.dual += dual;
+    totals.solo += solo;
     totals.night += night;
     totals.day += day;
     totals.instrumentActual += inst;
+    totals.crossCountry += xc;
     totals.approaches += entry.approaches || 0;
     totals.landings += (entry.landingsDay || 0) + (entry.landingsNight || 0);
   });
@@ -63,13 +110,19 @@ function exportToCSV(entries: LogbookEntry[]) {
   const headers = [
     "Date",
     "Tail Number",
+    "Is Simulator",
+    "Device Type",
     "Aircraft Type",
+    "Aircraft Category",
+    "Aircraft Class",
     "Route",
     "Time Day",
     "Time Night",
     "PIC",
     "SIC",
     "Dual",
+    "Solo",
+    "Cross Country",
     "Instrument",
     "Approaches",
     "Landings Day",
@@ -81,13 +134,19 @@ function exportToCSV(entries: LogbookEntry[]) {
   const rows = entries.map((e) => [
     e.flightDate,
     e.tailNumber || "",
+    e.isSimulator ? "Yes" : "No",
+    e.deviceType || "",
     e.aircraftType || "",
+    e.aircraftCategory || "",
+    e.aircraftClass || "",
     e.route || "",
     e.timeDay || "0",
     e.timeNight || "0",
     e.pic || "0",
     e.sic || "0",
     e.dual || "0",
+    e.solo || "0",
+    e.crossCountry || "0",
     e.instrumentActual || "0",
     e.approaches || "0",
     e.landingsDay || "0",
@@ -96,7 +155,9 @@ function exportToCSV(entries: LogbookEntry[]) {
     e.remarks || "",
   ]);
 
-  const csv = [headers, ...rows].map((row) => row.join(",")).join("\n");
+  const csv = [headers, ...rows]
+    .map((row) => row.map((value) => csvEscape(value)).join(","))
+    .join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -104,6 +165,118 @@ function exportToCSV(entries: LogbookEntry[]) {
   a.download = `logbook-${new Date().toISOString().split("T")[0]}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+
+function exportToPDF(entries: LogbookEntry[]) {
+  const popup = window.open("", "_blank", "width=1200,height=900");
+  if (!popup) return;
+
+  const rowsHtml = entries
+    .map((entry) => {
+      const cfiSignedBlock = entry.cfiSignedAt
+        ? `
+          <div class="signature-group">
+            <div class="label">CFI: ${entry.cfiSignedByName || "—"} | Cert: ${entry.cfiCertNumber || "—"} | Exp: ${formatDisplayDate(entry.cfiCertExpires)}</div>
+            ${entry.cfiSignatureDataUrl ? `<img src="${entry.cfiSignatureDataUrl}" alt="CFI signature" />` : ""}
+          </div>
+        `
+        : "";
+
+      return `
+        <tr>
+          <td>${formatDisplayDate(entry.flightDate)}</td>
+          <td>${entry.tailNumber || "—"}</td>
+          <td>${entry.isSimulator ? "SIM" : "Aircraft"}</td>
+          <td>${entry.deviceType || "—"}</td>
+          <td>${getAircraftDescriptor(entry)}</td>
+          <td>${entry.route || "—"}</td>
+          <td>${entry.timeDay || "0"}</td>
+          <td>${entry.timeNight || "0"}</td>
+          <td>${entry.pic || "0"}</td>
+          <td>${entry.sic || "0"}</td>
+          <td>${entry.dual || "0"}</td>
+          <td>${entry.solo || "0"}</td>
+          <td>${entry.crossCountry || "0"}</td>
+          <td>${entry.instrumentActual || "0"}</td>
+          <td>${entry.approaches || 0}</td>
+          <td>${entry.landingsDay || 0}</td>
+          <td>${entry.landingsNight || 0}</td>
+          <td>${entry.holds || 0}</td>
+          <td>${entry.remarks || "—"}</td>
+          <td>
+            ${
+              entry.isLocked
+                ? `
+              <div class="signature-group">
+                <div class="label">Pilot: ${entry.signedByName || "—"}</div>
+                ${entry.signatureDataUrl ? `<img src="${entry.signatureDataUrl}" alt="Pilot signature" />` : ""}
+              </div>
+              ${cfiSignedBlock}
+            `
+                : "Draft"
+            }
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  popup.document.write(`
+    <html>
+      <head>
+        <title>RSF Logbook Export</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; color: #0f172a; }
+          h1 { margin: 0 0 8px; }
+          p { margin: 0 0 16px; color: #475569; }
+          table { width: 100%; border-collapse: collapse; font-size: 11px; }
+          th, td { border: 1px solid #cbd5e1; padding: 6px; vertical-align: top; text-align: left; }
+          th { background: #eff6ff; font-weight: 700; }
+          .signature-group { margin-bottom: 6px; }
+          .signature-group .label { font-size: 10px; margin-bottom: 2px; color: #1e293b; }
+          .signature-group img { max-height: 52px; max-width: 220px; display: block; border: 1px solid #e2e8f0; background: white; }
+          @media print { body { margin: 10px; } }
+        </style>
+      </head>
+      <body>
+        <h1>Ready Set Fly — Digital Logbook Export</h1>
+        <p>Generated ${new Date().toLocaleString()}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Tail / Device</th>
+              <th>Type</th>
+              <th>Device</th>
+              <th>Aircraft / Cat-Class</th>
+              <th>Route</th>
+              <th>Day</th>
+              <th>Night</th>
+              <th>PIC</th>
+              <th>SIC</th>
+              <th>Dual</th>
+              <th>Solo</th>
+              <th>XC</th>
+              <th>Inst</th>
+              <th>Appr</th>
+              <th>Ldg Day</th>
+              <th>Ldg Night</th>
+              <th>Holds</th>
+              <th>Remarks</th>
+              <th>Signatures</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `);
+  popup.document.close();
+  popup.focus();
+  popup.print();
 }
 
 function formatDateInput(value?: string | Date | null) {
@@ -114,14 +287,14 @@ function formatDateInput(value?: string | Date | null) {
 }
 
 function formatDisplayDate(value?: string | Date | null) {
-  if (!value) return "—";
+  if (!value) return "-";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString();
 }
 
 function formatBytes(value?: number | null) {
-  if (!value) return "â€”";
+  if (!value) return "-";
   const units = ["B", "KB", "MB", "GB"];
   let size = value;
   let idx = 0;
@@ -452,8 +625,25 @@ export default function Logbook() {
   });
 
   const countersignMutation = useMutation({
-    mutationFn: async ({ id, signatureDataUrl, signedByName }: { id: string; signatureDataUrl: string; signedByName: string }) => {
-      const res = await apiRequest("POST", `/api/logbook/${id}/countersign`, { signatureDataUrl, signedByName });
+    mutationFn: async ({
+      id,
+      signatureDataUrl,
+      signedByName,
+      cfiCertNumber,
+      cfiCertExpires,
+    }: {
+      id: string;
+      signatureDataUrl: string;
+      signedByName: string;
+      cfiCertNumber: string;
+      cfiCertExpires: string;
+    }) => {
+      const res = await apiRequest("POST", `/api/logbook/${id}/countersign`, {
+        signatureDataUrl,
+        signedByName,
+        cfiCertNumber,
+        cfiCertExpires,
+      });
       return res.json();
     },
     onSuccess: () => {
@@ -573,6 +763,15 @@ export default function Logbook() {
                 <Download className="mr-2 h-4 w-4" />
                 Export CSV
               </Button>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => exportToPDF(entries)}
+                disabled={entries.length === 0}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Export PDF
+              </Button>
             </div>
           </div>
         </div>
@@ -584,7 +783,7 @@ export default function Logbook() {
           <CardTitle className="text-lg">Flight Time Breakdown</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
             <div>
               <p className="text-muted-foreground">SIC</p>
               <p className="font-semibold">{totals.sic.toFixed(1)} hrs</p>
@@ -592,6 +791,14 @@ export default function Logbook() {
             <div>
               <p className="text-muted-foreground">Dual Received</p>
               <p className="font-semibold">{totals.dual.toFixed(1)} hrs</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Solo</p>
+              <p className="font-semibold">{totals.solo.toFixed(1)} hrs</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Cross-Country</p>
+              <p className="font-semibold">{totals.crossCountry.toFixed(1)} hrs</p>
             </div>
             <div>
               <p className="text-muted-foreground">Day</p>
@@ -641,7 +848,7 @@ export default function Logbook() {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Tail #</TableHead>
-                  <TableHead>Aircraft</TableHead>
+                  <TableHead>Aircraft / Class</TableHead>
                   <TableHead>Route</TableHead>
                   <TableHead>PIC</TableHead>
                   <TableHead>SIC</TableHead>
@@ -660,8 +867,17 @@ export default function Logbook() {
                     onClick={() => setViewingEntry(entry)}
                   >
                     <TableCell>{new Date(entry.flightDate).toLocaleDateString()}</TableCell>
-                    <TableCell>{entry.tailNumber || "-"}</TableCell>
-                    <TableCell>{entry.aircraftType || "-"}</TableCell>
+                    <TableCell>{entry.tailNumber || "—"}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>{getAircraftDescriptor(entry)}</span>
+                        {entry.isSimulator && (
+                          <Badge variant="outline" className="text-[10px] uppercase tracking-[0.12em]">
+                            SIM
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{entry.route || "-"}</TableCell>
                     <TableCell>{entry.pic || "0"}</TableCell>
                     <TableCell>{entry.sic || "0"}</TableCell>
@@ -787,7 +1003,7 @@ export default function Logbook() {
                     <div className="space-y-1">
                       <div className="text-sm font-semibold">{archive.fileName}</div>
                       <div className="text-xs text-muted-foreground">
-                        {formatBytes(archive.fileSizeBytes)} â€¢ Uploaded {formatDisplayDate(archive.createdAt)}
+                        {formatBytes(archive.fileSizeBytes)} • Uploaded {formatDisplayDate(archive.createdAt)}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -1198,11 +1414,18 @@ export default function Logbook() {
         <Dialog open={isSignDialogOpen} onOpenChange={setIsSignDialogOpen}>
           <DialogContent>
             <SignatureDialog
-              onSign={(signatureDataUrl, signedByName) => {
+              role={signRole}
+              onSign={(signatureDataUrl, signedByName, cfiCertNumber, cfiCertExpires) => {
                 if (signRole === "pilot") {
                   lockMutation.mutate({ id: selectedEntryId, signatureDataUrl, signedByName });
                 } else {
-                  countersignMutation.mutate({ id: selectedEntryId, signatureDataUrl, signedByName });
+                  countersignMutation.mutate({
+                    id: selectedEntryId,
+                    signatureDataUrl,
+                    signedByName,
+                    cfiCertNumber: cfiCertNumber || "",
+                    cfiCertExpires: cfiCertExpires || "",
+                  });
                 }
               }}
               isPending={lockMutation.isPending || countersignMutation.isPending}
@@ -1232,6 +1455,22 @@ export default function Logbook() {
                 <div>{viewingEntry.aircraftType || "—"}</div>
               </div>
               <div>
+                <div className="text-muted-foreground">Category / Class</div>
+                <div>
+                  {viewingEntry.aircraftCategory && viewingEntry.aircraftClass
+                    ? `${viewingEntry.aircraftCategory} ${viewingEntry.aircraftClass}`
+                    : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Entry Type</div>
+                <div>
+                  {viewingEntry.isSimulator
+                    ? `Simulator (${viewingEntry.deviceType || "Device"})`
+                    : "Actual flight"}
+                </div>
+              </div>
+              <div>
                 <div className="text-muted-foreground">Route</div>
                 <div>{viewingEntry.route || "—"}</div>
               </div>
@@ -1246,6 +1485,14 @@ export default function Logbook() {
               <div>
                 <div className="text-muted-foreground">Dual</div>
                 <div>{viewingEntry.dual || "0"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Solo</div>
+                <div>{viewingEntry.solo || "0"}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Cross-Country</div>
+                <div>{viewingEntry.crossCountry || "0"}</div>
               </div>
               <div>
                 <div className="text-muted-foreground">Instrument</div>
@@ -1270,6 +1517,17 @@ export default function Logbook() {
                 {viewingEntry.remarks || "—"}
               </div>
             </div>
+            {viewingEntry.cfiSignedAt && (
+              <div className="mt-3 rounded-md border border-blue-200 bg-blue-50/60 p-3 text-sm">
+                <div className="font-semibold text-blue-900">CFI Countersignature</div>
+                <div className="mt-1 text-blue-900/90">
+                  {viewingEntry.cfiSignedByName || "—"}
+                </div>
+                <div className="text-xs text-blue-900/80">
+                  Cert: {viewingEntry.cfiCertNumber || "—"} | Exp: {formatDisplayDate(viewingEntry.cfiCertExpires)}
+                </div>
+              </div>
+            )}
             <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
               <div>
                 Status: {viewingEntry.isLocked ? "Locked (signed)" : "Draft"}
@@ -1430,11 +1688,13 @@ function LogbookEntryForm({
   isPending: boolean;
 }) {
   // Form state allows strings for all numeric fields to handle empty inputs better
-  type FormData = Omit<InsertLogbookEntry, 'approaches' | 'landingsDay' | 'landingsNight' | 'holds'> & {
+  type FormData = Omit<InsertLogbookEntry, "approaches" | "landingsDay" | "landingsNight" | "holds"> & {
     approaches: number | string;
     landingsDay: number | string;
     landingsNight: number | string;
     holds: number | string;
+    solo: string;
+    crossCountry: string;
   };
   
   const [formData, setFormData] = useState<Partial<FormData>>(
@@ -1444,12 +1704,18 @@ function LogbookEntryForm({
         : initialData.flightDate,
       tailNumber: initialData.tailNumber,
       aircraftType: initialData.aircraftType,
+      aircraftCategory: initialData.aircraftCategory,
+      aircraftClass: initialData.aircraftClass,
+      isSimulator: initialData.isSimulator ?? false,
+      deviceType: initialData.deviceType,
       route: initialData.route,
       timeDay: initialData.timeDay?.toString() || "",
       timeNight: initialData.timeNight?.toString() || "",
       pic: initialData.pic?.toString() || "",
       sic: initialData.sic?.toString() || "",
       dual: initialData.dual?.toString() || "",
+      solo: initialData.solo?.toString() || "",
+      crossCountry: initialData.crossCountry?.toString() || "",
       instrumentActual: initialData.instrumentActual?.toString() || "",
       approaches: initialData.approaches ?? "",
       landingsDay: initialData.landingsDay ?? "",
@@ -1462,12 +1728,18 @@ function LogbookEntryForm({
       flightDate: new Date(),
       tailNumber: "",
       aircraftType: "",
+      aircraftCategory: "",
+      aircraftClass: "",
+      isSimulator: false,
+      deviceType: "",
       route: "",
       timeDay: "",
       timeNight: "",
       pic: "",
       sic: "",
       dual: "",
+      solo: "",
+      crossCountry: "",
       instrumentActual: "",
       approaches: "",
       landingsDay: "",
@@ -1484,6 +1756,12 @@ function LogbookEntryForm({
     // Clean up empty strings before submission
     const cleanedData = {
       ...formData,
+      tailNumber: formData.tailNumber?.trim() || undefined,
+      aircraftType: formData.aircraftType?.trim() || undefined,
+      aircraftCategory: formData.aircraftCategory?.trim() || undefined,
+      aircraftClass: formData.aircraftClass?.trim() || undefined,
+      route: formData.route?.trim() || undefined,
+      remarks: formData.remarks?.trim() || undefined,
       hobbsStart: formData.hobbsStart?.trim() || undefined,
       hobbsEnd: formData.hobbsEnd?.trim() || undefined,
       timeDay: formData.timeDay?.trim() || undefined,
@@ -1491,7 +1769,10 @@ function LogbookEntryForm({
       pic: formData.pic?.trim() || undefined,
       sic: formData.sic?.trim() || undefined,
       dual: formData.dual?.trim() || undefined,
+      solo: formData.solo?.trim() || undefined,
+      crossCountry: formData.crossCountry?.trim() || undefined,
       instrumentActual: formData.instrumentActual?.trim() || undefined,
+      deviceType: formData.isSimulator ? formData.deviceType?.trim() || undefined : undefined,
       // Convert empty strings to undefined for number fields
       approaches: formData.approaches === "" ? undefined : formData.approaches,
       landingsDay: formData.landingsDay === "" ? undefined : formData.landingsDay,
@@ -1519,11 +1800,28 @@ function LogbookEntryForm({
           />
         </div>
         <div>
-          <Label htmlFor="tailNumber">Tail Number</Label>
+          <Label htmlFor="tailNumber">{formData.isSimulator ? "Device Identifier" : "Tail Number"}</Label>
           <Input
             id="tailNumber"
             value={formData.tailNumber || ""}
             onChange={(e) => setFormData({ ...formData, tailNumber: e.target.value })}
+            placeholder={formData.isSimulator ? "e.g. SIM-42" : "e.g. N123AB"}
+          />
+        </div>
+        <div className="col-span-2 flex items-center justify-between rounded-md border border-border bg-muted/40 px-3 py-2">
+          <div>
+            <div className="text-sm font-medium">This is a simulator/ATD/FTD entry (not an actual flight)</div>
+            <div className="text-xs text-muted-foreground">Simulator time logged per Sec 61.51(g)</div>
+          </div>
+          <Switch
+            checked={Boolean(formData.isSimulator)}
+            onCheckedChange={(checked) =>
+              setFormData((prev) => ({
+                ...prev,
+                isSimulator: checked,
+                deviceType: checked ? prev.deviceType || "AATD" : "",
+              }))
+            }
           />
         </div>
         <div>
@@ -1532,7 +1830,70 @@ function LogbookEntryForm({
             id="aircraftType"
             value={formData.aircraftType || ""}
             onChange={(e) => setFormData({ ...formData, aircraftType: e.target.value })}
+            placeholder={formData.isSimulator ? "e.g. Redbird FMX" : "e.g. C172"}
           />
+        </div>
+        {formData.isSimulator && (
+          <div>
+            <Label htmlFor="deviceType">Device Type</Label>
+            <Select
+              value={formData.deviceType || "AATD"}
+              onValueChange={(value) => setFormData({ ...formData, deviceType: value })}
+            >
+              <SelectTrigger id="deviceType">
+                <SelectValue placeholder="Select device type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="AATD">AATD</SelectItem>
+                <SelectItem value="BATD">BATD</SelectItem>
+                <SelectItem value="FTD">FTD</SelectItem>
+                <SelectItem value="FFS">FFS (Full Flight Sim)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <div>
+          <Label htmlFor="aircraftCategory">Category</Label>
+          <Select
+            value={formData.aircraftCategory || ""}
+            onValueChange={(value) =>
+              setFormData((prev) => ({
+                ...prev,
+                aircraftCategory: value,
+                aircraftClass: getClassOptions(value)[0] || "",
+              }))
+            }
+          >
+            <SelectTrigger id="aircraftCategory">
+              <SelectValue placeholder="Select category" />
+            </SelectTrigger>
+            <SelectContent>
+              {AIRCRAFT_CATEGORY_OPTIONS.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {category}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="aircraftClass">Class</Label>
+          <Select
+            value={formData.aircraftClass || ""}
+            onValueChange={(value) => setFormData({ ...formData, aircraftClass: value })}
+            disabled={!formData.aircraftCategory}
+          >
+            <SelectTrigger id="aircraftClass">
+              <SelectValue placeholder="Select class" />
+            </SelectTrigger>
+            <SelectContent>
+              {getClassOptions(formData.aircraftCategory).map((classOption) => (
+                <SelectItem key={classOption} value={classOption}>
+                  {classOption}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <Label htmlFor="route">Route</Label>
@@ -1576,6 +1937,30 @@ function LogbookEntryForm({
             placeholder="0.0"
             value={formData.dual || ""}
             onChange={(e) => setFormData({ ...formData, dual: e.target.value })}
+            onFocus={(e) => e.target.select()}
+          />
+        </div>
+        <div>
+          <Label htmlFor="solo">Solo (hours)</Label>
+          <Input
+            id="solo"
+            type="number"
+            step="0.1"
+            placeholder="0.0"
+            value={formData.solo || ""}
+            onChange={(e) => setFormData({ ...formData, solo: e.target.value })}
+            onFocus={(e) => e.target.select()}
+          />
+        </div>
+        <div>
+          <Label htmlFor="crossCountry">XC Time (hours)</Label>
+          <Input
+            id="crossCountry"
+            type="number"
+            step="0.1"
+            placeholder="0.0"
+            value={formData.crossCountry || ""}
+            onChange={(e) => setFormData({ ...formData, crossCountry: e.target.value })}
             onFocus={(e) => e.target.select()}
           />
         </div>
@@ -1656,13 +2041,22 @@ function LogbookEntryForm({
 }
 
 function SignatureDialog({
+  role,
   onSign,
   isPending,
 }: {
-  onSign: (signatureDataUrl: string, signedByName: string) => void;
+  role: "pilot" | "cfi";
+  onSign: (
+    signatureDataUrl: string,
+    signedByName: string,
+    cfiCertNumber?: string,
+    cfiCertExpires?: string
+  ) => void;
   isPending: boolean;
 }) {
   const [signedByName, setSignedByName] = useState("");
+  const [cfiCertNumber, setCfiCertNumber] = useState("");
+  const [cfiCertExpires, setCfiCertExpires] = useState("");
   const [mode, setMode] = useState<"draw" | "type">("draw");
   const [typedSignature, setTypedSignature] = useState("");
   const [hasDrawn, setHasDrawn] = useState(false);
@@ -1749,6 +2143,16 @@ function SignatureDialog({
       alert("Please enter the signer name/title");
       return;
     }
+    if (role === "cfi") {
+      if (!cfiCertNumber.trim()) {
+        alert("Please enter the CFI certificate number");
+        return;
+      }
+      if (!cfiCertExpires) {
+        alert("Please enter the CFI certificate expiration date");
+        return;
+      }
+    }
 
     const dataUrl = mode === "draw" ? getDrawnDataUrl() : getTypedDataUrl();
     if (!dataUrl || (mode === "draw" && !hasDrawn)) {
@@ -1756,7 +2160,12 @@ function SignatureDialog({
       return;
     }
 
-    onSign(dataUrl, signedByName.trim());
+    onSign(
+      dataUrl,
+      signedByName.trim(),
+      role === "cfi" ? cfiCertNumber.trim() : undefined,
+      role === "cfi" ? cfiCertExpires : undefined
+    );
   };
 
   return (
@@ -1773,9 +2182,33 @@ function SignatureDialog({
             id="signedByName"
             value={signedByName}
             onChange={(e) => setSignedByName(e.target.value)}
-            placeholder="e.g. Jane Smith, CFI"
+            placeholder={role === "cfi" ? "e.g. Jane Smith, CFI" : "e.g. Jane Smith"}
           />
         </div>
+        {role === "cfi" && (
+          <>
+            <div className="grid gap-2">
+              <Label htmlFor="cfiCertNumber">CFI Certificate Number</Label>
+              <Input
+                id="cfiCertNumber"
+                value={cfiCertNumber}
+                onChange={(e) => setCfiCertNumber(e.target.value)}
+                placeholder="e.g. CFI-1234567"
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="cfiCertExpires">CFI Certificate Expiration</Label>
+              <Input
+                id="cfiCertExpires"
+                type="date"
+                value={cfiCertExpires}
+                onChange={(e) => setCfiCertExpires(e.target.value)}
+                required
+              />
+            </div>
+          </>
+        )}
 
         <div className="flex gap-2 text-sm">
           <Button
@@ -1830,7 +2263,7 @@ function SignatureDialog({
       <DialogFooter>
         <Button onClick={handleSign} disabled={isPending}>
           {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-          Sign & Lock
+          {role === "cfi" ? "CFI Countersign" : "Sign & Lock"}
         </Button>
       </DialogFooter>
     </>

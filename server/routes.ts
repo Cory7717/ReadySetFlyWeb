@@ -14034,13 +14034,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (existing.userId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
-      const { signatureDataUrl, signedByName } = req.body;
-      if (!signatureDataUrl || !signedByName) {
-        return res.status(400).json({ error: "signatureDataUrl and signedByName are required" });
+      const { signatureDataUrl, signedByName, cfiCertNumber, cfiCertExpires } = req.body;
+      if (!signatureDataUrl || !signedByName || !cfiCertNumber || !cfiCertExpires) {
+        return res.status(400).json({ error: "signatureDataUrl, signedByName, cfiCertNumber, and cfiCertExpires are required" });
       }
       const forwarded = (req.headers["x-forwarded-for"] as string) || "";
       const ip = forwarded.split(",")[0].trim() || req.ip;
-      const entry = await storage.countersignLogbookEntry(req.params.id, signatureDataUrl, signedByName, ip);
+      const entry = await storage.countersignLogbookEntry(
+        req.params.id,
+        signatureDataUrl,
+        signedByName,
+        ip,
+        cfiCertNumber,
+        cfiCertExpires
+      );
       res.json(entry);
     } catch (error: any) {
       console.error("Failed to countersign logbook entry:", error);

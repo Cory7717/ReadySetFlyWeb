@@ -4407,6 +4407,8 @@ export class DatabaseStorage implements IStorage {
         cfiSignedByName: null,
         cfiSignedAt: null,
         cfiSignatureIp: null,
+        cfiCertNumber: null,
+        cfiCertExpires: null,
         updatedAt: new Date(),
       })
       .where(eq(logbookEntries.id, id))
@@ -4433,7 +4435,14 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
-  async countersignLogbookEntry(id: string, signatureDataUrl: string, signedByName: string, signatureIp?: string): Promise<LogbookEntry | undefined> {
+  async countersignLogbookEntry(
+    id: string,
+    signatureDataUrl: string,
+    signedByName: string,
+    signatureIp?: string,
+    cfiCertNumber?: string,
+    cfiCertExpires?: string
+  ): Promise<LogbookEntry | undefined> {
     const existing = await this.getLogbookEntryById(id);
     if (!existing) {
       throw new Error("Logbook entry not found");
@@ -4444,6 +4453,8 @@ export class DatabaseStorage implements IStorage {
       cfiSignedByName: signedByName,
       cfiSignedAt: new Date(),
       cfiSignatureIp: signatureIp,
+      cfiCertNumber: cfiCertNumber || null,
+      cfiCertExpires: cfiCertExpires || null,
       updatedAt: new Date(),
     }).where(eq(logbookEntries.id, id)).returning();
     return entry;

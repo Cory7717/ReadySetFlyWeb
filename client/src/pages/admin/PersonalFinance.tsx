@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -461,6 +461,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
     if (diffDays <= 7) return { label: `Due in ${diffDays} day${diffDays === 1 ? "" : "s"}`, variant: "outline" };
     return { label: "Upcoming", variant: "secondary" };
   };
+  const getMarkActionLabel = (entry: FinanceEntry) => (entry.type === "income" ? "Mark Received" : "Mark Paid");
 
   const incomeEntries = personalEntries.filter((entry) => entry.type === "income");
   const incomeEntryMonth = (entry: FinanceEntry) => (entry.dueDate?.slice(0, 7) || entry.month);
@@ -730,8 +731,8 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
     <div className="space-y-6">
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2" data-testid="selector-month">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center justify-center gap-2 lg:justify-start" data-testid="selector-month">
               <Button variant="outline" size="icon" onClick={() => setSelectedMonth((current) => shiftMonth(current, -1))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -743,7 +744,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
               </Button>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2" data-testid="filter-owner">
+            <div className="flex flex-wrap items-center justify-center gap-2 lg:justify-start" data-testid="filter-owner">
               {(["all", "cory", "amy", "joint"] as const).map((owner) => (
                 <Button
                   key={owner}
@@ -756,12 +757,13 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
               ))}
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => recurringMutation.mutate()} data-testid="button-generate-recurring">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-3 lg:w-auto lg:flex lg:items-center lg:gap-2">
+              <Button className="w-full lg:w-auto" variant="outline" onClick={() => recurringMutation.mutate()} data-testid="button-generate-recurring">
                 <Calendar className="mr-2 h-4 w-4" />
                 Generate Recurring
               </Button>
               <Button
+                className="w-full lg:w-auto"
                 variant="outline"
                 onClick={() => openNewEntryDialog({ isRsfRelated: true, type: "expense", category: RSF_CATEGORIES[0], rsfCategory: RSF_CATEGORIES[0] })}
                 data-testid="button-add-rsf-entry"
@@ -769,7 +771,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                 <Plus className="mr-2 h-4 w-4" />
                 Add RSF Entry
               </Button>
-              <Button onClick={() => openNewEntryDialog()} data-testid="button-add-personal-entry">
+              <Button className="w-full lg:w-auto" onClick={() => openNewEntryDialog()} data-testid="button-add-personal-entry">
                 <Plus className="mr-2 h-4 w-4" />
                 Add Personal Entry
               </Button>
@@ -1035,8 +1037,44 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[1024px] text-sm">
+        <CardContent>
+          <div className="space-y-3 md:hidden">
+            {personalEntries.map((entry) => {
+              const status = statusForEntry(entry);
+              return (
+                <div key={entry.id} className="rounded-lg border p-3">
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{entry.subcategory || entry.category}</p>
+                      <p className="text-xs text-muted-foreground">{entry.owner.toUpperCase()} • {entry.month}</p>
+                    </div>
+                    <Badge variant={status.variant}>{status.label}</Badge>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    <p><span className="text-muted-foreground">Type:</span> {entry.type}</p>
+                    <p><span className="text-muted-foreground">Amount:</span> {asCurrency(asNumber(entry.amount))}</p>
+                    <p><span className="text-muted-foreground">Due/Pay Date:</span> {entry.dueDate || "-"}</p>
+                    <p><span className="text-muted-foreground">Description:</span> {entry.description || "-"}</p>
+                  </div>
+                  <div className="mt-3 flex items-center gap-1">
+                    <Button size="icon" variant="ghost" onClick={() => openEditEntryDialog(entry)}><Pencil className="h-4 w-4" /></Button>
+                    {!entry.isPaid && (
+                      <Button size="sm" variant="outline" onClick={() => markPaidMutation.mutate(entry.id)} data-testid={`button-mark-paid-${entry.id}`}>
+                        {getMarkActionLabel(entry)}
+                      </Button>
+                    )}
+                    <Button size="icon" variant="ghost" onClick={() => deleteEntryMutation.mutate(entry.id)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
+                  </div>
+                </div>
+              );
+            })}
+            {!personalEntries.length && (
+              <div className="py-6 text-center text-sm text-muted-foreground">No personal entries found for {monthLabel(selectedMonth)}.</div>
+            )}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[1024px] text-sm">
             <thead>
               <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="py-2 pr-3">Date</th><th className="py-2 pr-3">Owner</th><th className="py-2 pr-3">Type</th><th className="py-2 pr-3">Category</th><th className="py-2 pr-3">Subcategory</th><th className="py-2 pr-3">Description</th><th className="py-2 pr-3">Amount</th><th className="py-2 pr-3">Due Date</th><th className="py-2 pr-3">Status</th><th className="py-2 pr-3">Actions</th>
@@ -1060,8 +1098,8 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                       <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" onClick={() => openEditEntryDialog(entry)}><Pencil className="h-4 w-4" /></Button>
                         {!entry.isPaid && (
-                          <Button size="icon" variant="ghost" onClick={() => markPaidMutation.mutate(entry.id)} data-testid={`button-mark-paid-${entry.id}`}>
-                            <Check className="h-4 w-4" />
+                          <Button size="sm" variant="outline" onClick={() => markPaidMutation.mutate(entry.id)} data-testid={`button-mark-paid-${entry.id}`}>
+                            {getMarkActionLabel(entry)}
                           </Button>
                         )}
                         <Button size="icon" variant="ghost" onClick={() => deleteEntryMutation.mutate(entry.id)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
@@ -1074,7 +1112,8 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                 <tr><td className="py-6 text-center text-muted-foreground" colSpan={10}>No personal entries found for {monthLabel(selectedMonth)}.</td></tr>
               )}
             </tbody>
-          </table>
+            </table>
+          </div>
         </CardContent>
       </Card>
 
@@ -1090,8 +1129,45 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
             Add RSF
           </Button>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[1024px] text-sm">
+        <CardContent>
+          <div className="space-y-3 md:hidden">
+            {rsfEntries.map((entry) => {
+              const status = statusForEntry(entry);
+              return (
+                <div key={entry.id} className="rounded-lg border p-3">
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{entry.rsfCategory || entry.category}</p>
+                      <p className="text-xs text-muted-foreground">{entry.owner.toUpperCase()} • {entry.month}</p>
+                    </div>
+                    <Badge variant={status.variant}>{status.label}</Badge>
+                  </div>
+                  <div className="space-y-1 text-sm">
+                    <p><span className="text-muted-foreground">Type:</span> {entry.type}</p>
+                    <p><span className="text-muted-foreground">Subcategory:</span> {entry.subcategory || "-"}</p>
+                    <p><span className="text-muted-foreground">Amount:</span> {asCurrency(asNumber(entry.amount))}</p>
+                    <p><span className="text-muted-foreground">Due/Pay Date:</span> {entry.dueDate || "-"}</p>
+                    <p><span className="text-muted-foreground">Description:</span> {entry.description || "-"}</p>
+                  </div>
+                  <div className="mt-3 flex items-center gap-1">
+                    <Button size="icon" variant="ghost" onClick={() => openEditEntryDialog(entry)}><Pencil className="h-4 w-4" /></Button>
+                    {!entry.isPaid && (
+                      <Button size="sm" variant="outline" onClick={() => markPaidMutation.mutate(entry.id)} data-testid={`button-mark-paid-${entry.id}`}>
+                        {getMarkActionLabel(entry)}
+                      </Button>
+                    )}
+                    <Button size="icon" variant="ghost" onClick={() => deleteEntryMutation.mutate(entry.id)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
+                  </div>
+                </div>
+              );
+            })}
+            {!rsfEntries.length && (
+              <div className="py-6 text-center text-sm text-muted-foreground">No RSF entries found for {monthLabel(selectedMonth)}.</div>
+            )}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[1024px] text-sm">
             <thead>
               <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <th className="py-2 pr-3">Date</th>
@@ -1126,8 +1202,8 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                       <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" onClick={() => openEditEntryDialog(entry)}><Pencil className="h-4 w-4" /></Button>
                         {!entry.isPaid && (
-                          <Button size="icon" variant="ghost" onClick={() => markPaidMutation.mutate(entry.id)} data-testid={`button-mark-paid-${entry.id}`}>
-                            <Check className="h-4 w-4" />
+                          <Button size="sm" variant="outline" onClick={() => markPaidMutation.mutate(entry.id)} data-testid={`button-mark-paid-${entry.id}`}>
+                            {getMarkActionLabel(entry)}
                           </Button>
                         )}
                         <Button size="icon" variant="ghost" onClick={() => deleteEntryMutation.mutate(entry.id)}><Trash2 className="h-4 w-4 text-red-600" /></Button>
@@ -1140,7 +1216,8 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                 <tr><td className="py-6 text-center text-muted-foreground" colSpan={11}>No RSF entries found for {monthLabel(selectedMonth)}.</td></tr>
               )}
             </tbody>
-          </table>
+            </table>
+          </div>
         </CardContent>
       </Card>
 

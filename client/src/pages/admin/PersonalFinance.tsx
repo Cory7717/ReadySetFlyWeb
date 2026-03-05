@@ -67,6 +67,7 @@ type PersonalFinanceProps = {
 
 const EXPENSE_CATEGORIES = [
   "Housing",
+  "Insurance",
   "Utilities",
   "Groceries",
   "Dining",
@@ -78,6 +79,7 @@ const EXPENSE_CATEGORIES = [
   "Education",
   "Childcare",
   "Savings",
+  "Loans",
   "Debt",
   "Gifts",
   "Miscellaneous",
@@ -108,6 +110,7 @@ const RSF_CATEGORIES = [
 
 const EXPENSE_SUBCATEGORIES: Record<string, string[]> = {
   Housing: ["Rent/Mortgage", "HOA", "Renters Insurance"],
+  Insurance: ["Auto Insurance", "Health Insurance", "Home Insurance", "Life Insurance", "Umbrella Policy", "Other Insurance"],
   Utilities: ["Electric", "Gas", "Water", "Internet", "Phone", "Trash"],
   Groceries: ["Groceries", "Household Supplies"],
   Dining: ["Restaurants", "Coffee", "Fast Food", "Delivery"],
@@ -119,6 +122,7 @@ const EXPENSE_SUBCATEGORIES: Record<string, string[]> = {
   Education: ["Tuition", "Books", "Online Courses"],
   Childcare: ["Daycare", "Activities", "School Supplies"],
   Savings: ["Emergency Fund", "Retirement", "Investments"],
+  Loans: ["Personal Loan", "Auto Loan", "Mortgage Loan", "Business Loan", "Other Loan"],
   Debt: ["Credit Card", "Student Loan", "Personal Loan"],
   Gifts: ["Holidays", "Birthdays", "Charity"],
   Miscellaneous: ["Everything else"],
@@ -144,8 +148,9 @@ type EntryFormState = {
   amount: string;
   dueDate: string;
   isRecurring: boolean;
-  recurringFrequency: "monthly" | "weekly" | "every_x_days";
+  recurringFrequency: "monthly" | "weekly" | "every_x_days" | "bi_monthly";
   recurringDayOfMonth: string;
+  recurringSecondDayOfMonth: string;
   recurringDayOfWeek: string;
   recurringIntervalDays: string;
   notifyDaysBefore: string;
@@ -153,6 +158,7 @@ type EntryFormState = {
   rsfCategory: string;
   saveAsDraft: boolean;
   markAsPaid: boolean;
+  generateThroughYear: boolean;
 };
 
 const DEFAULT_FORM = (month: string): EntryFormState => ({
@@ -168,6 +174,7 @@ const DEFAULT_FORM = (month: string): EntryFormState => ({
   isRecurring: false,
   recurringFrequency: "monthly",
   recurringDayOfMonth: "",
+  recurringSecondDayOfMonth: "",
   recurringDayOfWeek: "",
   recurringIntervalDays: "",
   notifyDaysBefore: "3",
@@ -175,6 +182,7 @@ const DEFAULT_FORM = (month: string): EntryFormState => ({
   rsfCategory: "",
   saveAsDraft: false,
   markAsPaid: false,
+  generateThroughYear: false,
 });
 
 const monthLabel = (month: string) => {
@@ -187,6 +195,25 @@ const shiftMonth = (month: string, delta: number) => {
   const [year, monthPart] = month.split("-").map((value) => Number(value));
   const date = new Date(year, (monthPart || 1) - 1 + delta, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const monthToDate = (month: string, day: number) => {
+  const [year, monthPart] = month.split("-").map((value) => Number(value));
+  const lastDay = new Date(year, monthPart, 0).getDate();
+  const clampedDay = Math.min(Math.max(1, day), lastDay);
+  return new Date(year, monthPart - 1, clampedDay);
+};
+
+const dateToKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const monthsRemainingInYear = (month: string) => {
+  const [year, monthPart] = month.split("-").map((value) => Number(value));
+  return Array.from({ length: 12 - monthPart + 1 }, (_, idx) => `${year}-${String(monthPart + idx).padStart(2, "0")}`);
 };
 
 const asCurrency = (value: number) =>
@@ -217,6 +244,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
   const [entryForm, setEntryForm] = useState<EntryFormState>(DEFAULT_FORM(selectedMonth));
   const [showBudgetManager, setShowBudgetManager] = useState(false);
   const [budgetDrafts, setBudgetDrafts] = useState<Record<string, string>>({});
+  const [budgetCopyMonths, setBudgetCopyMonths] = useState<string[]>([]);
   const [hideGeneratePrompt, setHideGeneratePrompt] = useState(false);
 
   const entriesQuery = useQuery<FinanceEntry[]>({
@@ -345,6 +373,31 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
     onError: (error: unknown) => toast({ title: "Failed to save budgets", description: getErrorMessage(error), variant: "destructive" }),
   });
 
+  const copyBudgetsMutation = useMutation({
+    mutationFn: async (targetMonths: string[]) => {
+      const writes = targetMonths.flatMap((month) =>
+        EXPENSE_CATEGORIES.map((category) => {
+          const raw = budgetDrafts[category] ?? "0";
+          const value = Number(raw || 0);
+          const budgetAmount = Number.isFinite(value) ? value.toFixed(2) : "0.00";
+          return apiRequest("POST", "/api/admin/finance/budgets", {
+            month,
+            owner: budgetOwner,
+            category,
+            budgetAmount,
+          });
+        }),
+      );
+      await Promise.all(writes);
+      return targetMonths.length;
+    },
+    onSuccess: async (count) => {
+      await invalidateFinance();
+      toast({ title: `Copied budget to ${count} month${count === 1 ? "" : "s"}` });
+    },
+    onError: (error: unknown) => toast({ title: "Failed to copy budgets", description: getErrorMessage(error), variant: "destructive" }),
+  });
+
   useEffect(() => {
     setEntryForm(DEFAULT_FORM(selectedMonth));
     setEditingEntry(null);
@@ -356,6 +409,11 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
     setBudgetOwner(ownerFilter);
   }, [ownerFilter]);
 
+  const availableBudgetMonths = useMemo(() => {
+    const [year] = selectedMonth.split("-").map((value) => Number(value));
+    return Array.from({ length: 12 }, (_, idx) => `${year}-${String(idx + 1).padStart(2, "0")}`);
+  }, [selectedMonth]);
+
   useEffect(() => {
     const budgets = budgetsQuery.data ?? [];
     const next: Record<string, string> = {};
@@ -365,6 +423,10 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
     }
     setBudgetDrafts(next);
   }, [budgetsQuery.data, budgetOwner]);
+
+  useEffect(() => {
+    setBudgetCopyMonths([]);
+  }, [selectedMonth]);
 
   const entries = entriesQuery.data ?? [];
   const summary = summaryQuery.data;
@@ -430,7 +492,9 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
   );
 
   const selectedCategorySubcategories = entryForm.type === "expense"
-    ? EXPENSE_SUBCATEGORIES[entryForm.category] ?? []
+    ? entryForm.isRsfRelated
+      ? []
+      : EXPENSE_SUBCATEGORIES[entryForm.category] ?? []
     : INCOME_SUBCATEGORIES[entryForm.category] ?? [];
 
   const openNewEntryDialog = (prefill?: Partial<EntryFormState>) => {
@@ -449,15 +513,16 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       month: entry.month,
       owner: entry.owner,
       type: entry.type,
-      category: entry.category,
+      category: entry.rsfCategory || entry.category,
       subcategory: isKnownSubcategory ? entry.subcategory || "" : entry.subcategory ? "__other__" : "",
       customSubcategory: isKnownSubcategory ? "" : entry.subcategory || "",
       description: entry.description || "",
       amount: String(entry.amount || ""),
       dueDate: entry.dueDate || "",
       isRecurring: Boolean(entry.isRecurring),
-      recurringFrequency: (entry.recurringFrequency || "monthly") as "monthly" | "weekly" | "every_x_days",
+      recurringFrequency: (entry.recurringFrequency || "monthly") as "monthly" | "weekly" | "every_x_days" | "bi_monthly",
       recurringDayOfMonth: entry.recurringDayOfMonth ? String(entry.recurringDayOfMonth) : "",
+      recurringSecondDayOfMonth: "",
       recurringDayOfWeek: entry.recurringDayOfWeek !== null && entry.recurringDayOfWeek !== undefined ? String(entry.recurringDayOfWeek) : "",
       recurringIntervalDays: entry.recurringIntervalDays ? String(entry.recurringIntervalDays) : "",
       notifyDaysBefore: entry.notifyDaysBefore ? String(entry.notifyDaysBefore) : "3",
@@ -465,11 +530,12 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       rsfCategory: entry.rsfCategory || "",
       saveAsDraft: Number(entry.amount || 0) <= 0 && !entry.dueDate && !entry.isPaid,
       markAsPaid: Boolean(entry.isPaid),
+      generateThroughYear: false,
     });
     setDialogOpen(true);
   };
 
-  const submitEntry = () => {
+  const submitEntry = async () => {
     const normalizedSubcategory = entryForm.subcategory === "__other__"
       ? entryForm.customSubcategory.trim()
       : entryForm.subcategory.trim();
@@ -477,17 +543,20 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
     const parsedAmount = normalizedAmount === "" ? 0 : Number(normalizedAmount);
     const hasValidAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
     const shouldSaveAsDraft = entryForm.saveAsDraft || !hasValidAmount;
+    const normalizedRecurringFrequency = entryForm.recurringFrequency === "bi_monthly" ? "monthly" : entryForm.recurringFrequency;
     const payload = {
       month: entryForm.month,
       owner: entryForm.owner,
       type: entryForm.type,
-      category: entryForm.category,
+      category: entryForm.isRsfRelated && entryForm.type === "expense"
+        ? (entryForm.rsfCategory || entryForm.category)
+        : entryForm.category,
       subcategory: normalizedSubcategory || null,
       description: entryForm.description.trim() || null,
       amount: hasValidAmount ? parsedAmount.toFixed(2) : "0.00",
       dueDate: entryForm.dueDate ? entryForm.dueDate : null,
       isRecurring: entryForm.isRecurring,
-      recurringFrequency: entryForm.isRecurring ? entryForm.recurringFrequency : null,
+      recurringFrequency: entryForm.isRecurring ? normalizedRecurringFrequency : null,
       recurringDayOfMonth:
         entryForm.isRecurring && entryForm.recurringFrequency === "monthly" && entryForm.recurringDayOfMonth
           ? Number(entryForm.recurringDayOfMonth)
@@ -501,7 +570,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
           ? Number(entryForm.recurringIntervalDays)
           : null,
       notifyDaysBefore: entryForm.isRecurring ? Number(entryForm.notifyDaysBefore || 3) : 3,
-      rsfCategory: entryForm.isRsfRelated ? entryForm.rsfCategory || null : null,
+      rsfCategory: entryForm.isRsfRelated ? (entryForm.rsfCategory || entryForm.category || null) : null,
       isPaid: shouldSaveAsDraft ? false : entryForm.markAsPaid,
       paidDate: shouldSaveAsDraft ? null : entryForm.markAsPaid ? new Date().toISOString().slice(0, 10) : null,
       notificationSent: false,
@@ -524,6 +593,10 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
         toast({ title: "Enter recurring day of month", variant: "destructive" });
         return;
       }
+      if (entryForm.recurringFrequency === "bi_monthly" && (!entryForm.recurringDayOfMonth || !entryForm.recurringSecondDayOfMonth)) {
+        toast({ title: "Enter both bi-monthly pay days", variant: "destructive" });
+        return;
+      }
       if (
         (entryForm.recurringFrequency === "weekly" || entryForm.recurringFrequency === "every_x_days") &&
         entryForm.recurringDayOfWeek === ""
@@ -541,7 +614,94 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
       updateEntryMutation.mutate({ id: editingEntry.id, payload });
       return;
     }
-    createEntryMutation.mutate(payload);
+
+    const shouldExpandRecurringIncome =
+      entryForm.type === "income" &&
+      entryForm.isRecurring &&
+      (entryForm.generateThroughYear || entryForm.recurringFrequency === "bi_monthly") &&
+      !shouldSaveAsDraft;
+
+    if (!shouldExpandRecurringIncome) {
+      createEntryMutation.mutate(payload);
+      return;
+    }
+
+    if (!hasValidAmount) {
+      toast({ title: "Amount is required for recurring expected income", variant: "destructive" });
+      return;
+    }
+
+    const targetMonths = monthsRemainingInYear(entryForm.month);
+    const dueDateSet = new Set<string>();
+    const addDueDate = (date: Date) => {
+      const key = dateToKey(date);
+      if (key >= `${entryForm.month}-01`) {
+        dueDateSet.add(key);
+      }
+    };
+
+    if (entryForm.recurringFrequency === "monthly") {
+      const day = Number(entryForm.recurringDayOfMonth || "1");
+      for (const month of targetMonths) {
+        addDueDate(monthToDate(month, day));
+      }
+    } else if (entryForm.recurringFrequency === "bi_monthly") {
+      const firstDay = Number(entryForm.recurringDayOfMonth || "10");
+      const secondDay = Number(entryForm.recurringSecondDayOfMonth || "25");
+      for (const month of targetMonths) {
+        addDueDate(monthToDate(month, firstDay));
+        addDueDate(monthToDate(month, secondDay));
+      }
+    } else if (entryForm.recurringFrequency === "weekly") {
+      const dow = Number(entryForm.recurringDayOfWeek || "1");
+      for (const month of targetMonths) {
+        const [year, monthPart] = month.split("-").map((value) => Number(value));
+        const cursor = new Date(year, monthPart - 1, 1);
+        while (cursor.getMonth() === monthPart - 1) {
+          if (cursor.getDay() === dow) addDueDate(cursor);
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      }
+    } else {
+      const interval = Math.max(1, Number(entryForm.recurringIntervalDays || "14"));
+      const start = entryForm.dueDate ? new Date(`${entryForm.dueDate}T00:00:00`) : monthToDate(entryForm.month, 1);
+      const [year] = entryForm.month.split("-").map((value) => Number(value));
+      const end = new Date(year, 11, 31);
+      const cursor = new Date(start);
+      while (cursor <= end) {
+        addDueDate(cursor);
+        cursor.setDate(cursor.getDate() + interval);
+      }
+    }
+
+    const sortedDueDates = Array.from(dueDateSet).sort();
+    if (!sortedDueDates.length) {
+      toast({ title: "No recurring dates generated", variant: "destructive" });
+      return;
+    }
+
+    const recurringPayloads = sortedDueDates.map((dueDate) => ({
+      ...payload,
+      dueDate,
+      isRecurring: false,
+      recurringFrequency: null,
+      recurringDayOfMonth: null,
+      recurringDayOfWeek: null,
+      recurringIntervalDays: null,
+      notifyDaysBefore: Number(entryForm.notifyDaysBefore || 3),
+      isPaid: false,
+      paidDate: null,
+      notificationSent: false,
+    }));
+
+    try {
+      await Promise.all(recurringPayloads.map((row) => apiRequest("POST", "/api/admin/finance/entries", row)));
+      await invalidateFinance();
+      toast({ title: `Created ${recurringPayloads.length} expected income entries through year-end` });
+      setDialogOpen(false);
+    } catch (error) {
+      toast({ title: "Failed to create recurring entries", description: getErrorMessage(error), variant: "destructive" });
+    }
   };
 
   const loading = entriesQuery.isLoading || summaryQuery.isLoading || budgetsQuery.isLoading;
@@ -583,7 +743,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
               </Button>
               <Button
                 variant="outline"
-                onClick={() => openNewEntryDialog({ isRsfRelated: true, type: "expense", category: EXPENSE_CATEGORIES[0], rsfCategory: RSF_CATEGORIES[0] })}
+                onClick={() => openNewEntryDialog({ isRsfRelated: true, type: "expense", category: RSF_CATEGORIES[0], rsfCategory: RSF_CATEGORIES[0] })}
                 data-testid="button-add-rsf-entry"
               >
                 <Plus className="mr-2 h-4 w-4" />
@@ -702,7 +862,17 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => openNewEntryDialog({ owner: "cory", type: "income", category: INCOME_CATEGORIES[0], isRecurring: true, recurringFrequency: "weekly" })}
+                      onClick={() =>
+                        openNewEntryDialog({
+                          owner: "cory",
+                          type: "income",
+                          category: INCOME_CATEGORIES[0],
+                          isRecurring: true,
+                          recurringFrequency: "weekly",
+                          recurringDayOfWeek: "5",
+                          generateThroughYear: true,
+                        })
+                      }
                     >
                       + Add Expected
                     </Button>
@@ -725,7 +895,18 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => openNewEntryDialog({ owner: "amy", type: "income", category: INCOME_CATEGORIES[0], isRecurring: true, recurringFrequency: "every_x_days", recurringIntervalDays: "14" })}
+                      onClick={() =>
+                        openNewEntryDialog({
+                          owner: "amy",
+                          type: "income",
+                          category: INCOME_CATEGORIES[0],
+                          isRecurring: true,
+                          recurringFrequency: "bi_monthly",
+                          recurringDayOfMonth: "10",
+                          recurringSecondDayOfMonth: "25",
+                          generateThroughYear: true,
+                        })
+                      }
                     >
                       + Add Expected
                     </Button>
@@ -862,7 +1043,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => openNewEntryDialog({ isRsfRelated: true, type: "expense", category: EXPENSE_CATEGORIES[0], rsfCategory: RSF_CATEGORIES[0] })}
+            onClick={() => openNewEntryDialog({ isRsfRelated: true, type: "expense", category: RSF_CATEGORIES[0], rsfCategory: RSF_CATEGORIES[0] })}
           >
             <Plus className="mr-2 h-4 w-4" />
             Add RSF
@@ -941,6 +1122,13 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                   <SelectItem value="joint">Joint</SelectItem>
                 </SelectContent>
               </Select>
+              <Label className="ml-3">Budget Month</Label>
+              <Input
+                type="month"
+                className="w-[180px]"
+                value={selectedMonth}
+                onChange={(event) => setSelectedMonth(event.target.value)}
+              />
             </div>
             <div className="space-y-2">
               {EXPENSE_CATEGORIES.map((category) => {
@@ -956,6 +1144,34 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                   </div>
                 );
               })}
+            </div>
+            <div className="rounded border p-3 space-y-3">
+              <div className="text-sm font-medium">Duplicate this budget to other months</div>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
+                {availableBudgetMonths
+                  .filter((month) => month !== selectedMonth)
+                  .map((month) => (
+                    <label key={month} className="flex items-center gap-2 text-xs">
+                      <Checkbox
+                        checked={budgetCopyMonths.includes(month)}
+                        onCheckedChange={(checked) =>
+                          setBudgetCopyMonths((current) =>
+                            checked ? [...current, month] : current.filter((item) => item !== month),
+                          )
+                        }
+                      />
+                      {monthLabel(month)}
+                    </label>
+                  ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={() => copyBudgetsMutation.mutate(monthsRemainingInYear(selectedMonth).filter((month) => month !== selectedMonth))}>
+                  Duplicate to all remaining months
+                </Button>
+                <Button type="button" variant="outline" disabled={budgetCopyMonths.length === 0} onClick={() => copyBudgetsMutation.mutate(budgetCopyMonths)}>
+                  Duplicate to selected months
+                </Button>
+              </div>
             </div>
             <Button onClick={() => saveBudgetsMutation.mutate()}>Save Budgets</Button>
           </CardContent>
@@ -979,17 +1195,46 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
             </div>
             <div className="space-y-2">
               <Label>Type</Label>
-              <Select value={entryForm.type} onValueChange={(value) => setEntryForm((current) => ({ ...current, type: value as FinanceType, category: value === "expense" ? EXPENSE_CATEGORIES[0] : INCOME_CATEGORIES[0], subcategory: "", customSubcategory: "" }))}>
+              <Select
+                value={entryForm.type}
+                onValueChange={(value) =>
+                  setEntryForm((current) => ({
+                    ...current,
+                    type: value as FinanceType,
+                    category:
+                      value === "expense"
+                        ? (current.isRsfRelated ? RSF_CATEGORIES[0] : EXPENSE_CATEGORIES[0])
+                        : INCOME_CATEGORIES[0],
+                    subcategory: "",
+                    customSubcategory: "",
+                    rsfCategory: value === "expense" && current.isRsfRelated ? RSF_CATEGORIES[0] : current.rsfCategory,
+                  }))
+                }
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="expense">Expense</SelectItem><SelectItem value="income">Income</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Category</Label>
-              <Select value={entryForm.category} onValueChange={(value) => setEntryForm((current) => ({ ...current, category: value, subcategory: "", customSubcategory: "" }))}>
+              <Label>{entryForm.isRsfRelated && entryForm.type === "expense" ? "Business Category" : "Category"}</Label>
+              <Select
+                value={entryForm.category}
+                onValueChange={(value) =>
+                  setEntryForm((current) => ({
+                    ...current,
+                    category: value,
+                    rsfCategory: current.isRsfRelated && current.type === "expense" ? value : current.rsfCategory,
+                    subcategory: "",
+                    customSubcategory: "",
+                  }))
+                }
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {(entryForm.type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
+                  {(entryForm.type === "expense"
+                    ? (entryForm.isRsfRelated ? RSF_CATEGORIES : EXPENSE_CATEGORIES)
+                    : INCOME_CATEGORIES
+                  ).map((category) => <SelectItem key={category} value={category}>{category}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -1063,7 +1308,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                       onValueChange={(value) =>
                         setEntryForm((current) => ({
                           ...current,
-                          recurringFrequency: value as "monthly" | "weekly" | "every_x_days",
+                          recurringFrequency: value as "monthly" | "weekly" | "every_x_days" | "bi_monthly",
                         }))
                       }
                     >
@@ -1071,6 +1316,7 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                       <SelectContent>
                         <SelectItem value="monthly">Monthly</SelectItem>
                         <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="bi_monthly">Bi-Monthly (2x per month)</SelectItem>
                         <SelectItem value="every_x_days">Every X days</SelectItem>
                       </SelectContent>
                     </Select>
@@ -1098,6 +1344,33 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                         onChange={(event) => setEntryForm((current) => ({ ...current, recurringDayOfMonth: event.target.value }))}
                       />
                     </div>
+                  )}
+
+                  {entryForm.recurringFrequency === "bi_monthly" && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>First pay day of month</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={31}
+                          placeholder="10"
+                          value={entryForm.recurringDayOfMonth}
+                          onChange={(event) => setEntryForm((current) => ({ ...current, recurringDayOfMonth: event.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Second pay day of month</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={31}
+                          placeholder="25"
+                          value={entryForm.recurringSecondDayOfMonth}
+                          onChange={(event) => setEntryForm((current) => ({ ...current, recurringSecondDayOfMonth: event.target.value }))}
+                        />
+                      </div>
+                    </>
                   )}
 
                   {(entryForm.recurringFrequency === "weekly" || entryForm.recurringFrequency === "every_x_days") && (
@@ -1133,11 +1406,43 @@ export default function PersonalFinance({ isActive }: PersonalFinanceProps) {
                       />
                     </div>
                   )}
+
+                  {entryForm.type === "income" && (
+                    <div className="md:col-span-2 rounded border p-3">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="generate-through-year"
+                          checked={entryForm.generateThroughYear}
+                          onCheckedChange={(checked) => setEntryForm((current) => ({ ...current, generateThroughYear: Boolean(checked) }))}
+                        />
+                        <Label htmlFor="generate-through-year">Create expected income entries through end of year</Label>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
             <div className="md:col-span-2 space-y-3 rounded border p-3">
-              <div className="flex items-center gap-2"><Checkbox id="is-rsf-related" checked={entryForm.isRsfRelated} onCheckedChange={(checked) => setEntryForm((current) => ({ ...current, isRsfRelated: Boolean(checked) }))} /><Label htmlFor="is-rsf-related">RSF related?</Label></div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="is-rsf-related"
+                  checked={entryForm.isRsfRelated}
+                  onCheckedChange={(checked) =>
+                    setEntryForm((current) => ({
+                      ...current,
+                      isRsfRelated: Boolean(checked),
+                      category:
+                        current.type === "expense"
+                          ? (Boolean(checked) ? RSF_CATEGORIES[0] : EXPENSE_CATEGORIES[0])
+                          : current.category,
+                      rsfCategory: Boolean(checked) ? RSF_CATEGORIES[0] : "",
+                      subcategory: "",
+                      customSubcategory: "",
+                    }))
+                  }
+                />
+                <Label htmlFor="is-rsf-related">RSF related?</Label>
+              </div>
               {entryForm.isRsfRelated && (
                 <div className="space-y-2">
                   <Label>RSF Category</Label>

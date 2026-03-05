@@ -35,6 +35,7 @@ export const personalFinanceEntryTypes = ["expense", "income"] as const;
 export const personalFinanceRecurringFrequencies = ["monthly", "weekly", "every_x_days"] as const;
 export const personalFinanceExpenseCategories = [
   "Housing",
+  "Insurance",
   "Utilities",
   "Groceries",
   "Dining",
@@ -46,6 +47,7 @@ export const personalFinanceExpenseCategories = [
   "Education",
   "Childcare",
   "Savings",
+  "Loans",
   "Debt",
   "Gifts",
   "Miscellaneous",

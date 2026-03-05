@@ -154,7 +154,7 @@ const requireFinanceAccess: RequestHandler = async (req, res, next) => {
     }
 
     const user = await storage.getUser(String(userId));
-    const email = String(user?.email || "").toLowerCase();
+    const email = String(user?.email || "").trim().toLowerCase();
     if (!user || !ALLOWED_FINANCE_EMAILS.has(email)) {
       return res.status(403).json({ error: "Forbidden" });
     }

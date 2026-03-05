@@ -3478,6 +3478,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ message: "User not found" });
         }
       }
+
+      // Backfill email from auth claims for legacy users that may have a null email in DB.
+      const claimsEmail = String(req.user?.claims?.email || "").trim().toLowerCase();
+      if (user && !user.email && claimsEmail) {
+        await storage.updateUser(user.id, { email: claimsEmail });
+        user = await storage.getUser(user.id);
+      }
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
       
       // Grant Super Admin access to @readysetfly.us emails and allowed founders
       const email = user.email?.toLowerCase();

@@ -163,7 +163,8 @@ type HkBudgetMap = Record<string, string>;
 export default function AdminDashboard() {
   const { user } = useAuth();
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
-  const canSeeFinance = FINANCE_EMAILS.includes((user?.email ?? "").toLowerCase());
+  const normalizedAdminEmail = (user?.email ?? "").trim().toLowerCase();
+  const canSeeFinance = FINANCE_EMAILS.includes(normalizedAdminEmail);
   const adminRole = (user?.adminRole as AdminRole | undefined) || undefined;
   const adminPermissions = (user?.adminPermissions || []) as AdminPermission[];
   const canAccess = (permission: AdminPermission) =>

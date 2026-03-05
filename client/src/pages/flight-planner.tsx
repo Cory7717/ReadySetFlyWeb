@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
@@ -225,7 +226,6 @@ type FilingPreviewResponse = {
 };
 
 const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
-const FLIGHT_PLANNER_INTRO_DISMISSED_KEY = "rsf_flight_planner_intro_dismissed_v1";
 const FILING_LIVE_ENABLED = false;
 
 const MAP_STYLE_OPTIONS: Array<{
@@ -495,10 +495,6 @@ export default function FlightPlanner() {
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
-  const [showPlannerIntro, setShowPlannerIntro] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return window.localStorage.getItem(FLIGHT_PLANNER_INTRO_DISMISSED_KEY) !== "1";
-  });
 
   useEffect(() => {
     trackEvent("planner_page_view", { page: "flight-planner" });
@@ -512,14 +508,6 @@ export default function FlightPlanner() {
     sessionStorage.setItem(key, "1");
     setShowUpgradePrompt(true);
   }, [isPro]);
-
-  const dismissPlannerIntro = (reason: "manual" | "first-use") => {
-    setShowPlannerIntro(false);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(FLIGHT_PLANNER_INTRO_DISMISSED_KEY, "1");
-    }
-    trackEvent("planner_intro_collapsed", { reason });
-  };
 
   const [editingPlan, setEditingPlan] = useState<FlightPlan | null>(null);
   const [form, setForm] = useState({
@@ -582,15 +570,6 @@ export default function FlightPlanner() {
   const windsAltitudeFt = windsAltitudeChoice === "planned"
     ? plannedAltitudeValue
     : Number(windsAltitudeChoice);
-  const hasResolvedCoreRoute =
-    ICAO_REGEX.test(departureResolved.trim().toUpperCase()) &&
-    ICAO_REGEX.test(destinationResolved.trim().toUpperCase());
-
-  useEffect(() => {
-    if (!showPlannerIntro) return;
-    if (!hasResolvedCoreRoute) return;
-    dismissPlannerIntro("first-use");
-  }, [showPlannerIntro, hasResolvedCoreRoute]);
 
   useEffect(() => {
     if (tfmsTier !== "pro_plus" && tfmsOverlayEnabled) {
@@ -1825,6 +1804,15 @@ export default function FlightPlanner() {
     }
   };
 
+  const scrollToSection = (id: string, eventName: string) => {
+    if (typeof document === "undefined") return;
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+      trackEvent(eventName, { target: id });
+    }
+  };
+
   const exportNavLogCsv = () => {
     if (!legNavRows.length) return;
     const header = ["Leg", "CourseDeg", "DistanceNm", "LegMinutes", "LegFuelGal", "CumulativeNm"];
@@ -2183,80 +2171,52 @@ export default function FlightPlanner() {
           "Upgrade for unlimited saved plans, alerts, and advanced analytics.",
         ]}
       />
-      {showPlannerIntro && (
-        <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
-          <div className="grid gap-5 xl:grid-cols-[1.25fr_0.95fr]">
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">Planner support</Badge>
-                  <Badge variant="outline">TFR + NOTAM aware</Badge>
-                  <Badge variant="outline">Save-ready workflow</Badge>
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Planning References</CardTitle>
+          <CardDescription>Open and hide each reference as needed without leaving the planner workflow.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Accordion type="multiple" className="w-full space-y-2">
+            <AccordionItem value="airport-conditions" className="rounded-lg border px-3">
+              <AccordionTrigger className="text-sm">Airport conditions</AccordionTrigger>
+              <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
+                <p>Jump to the route weather summary already on this page.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => scrollToSection("route-weather-summary", "planner_jump_weather_summary")}>
+                    Go to weather summary
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => dismissPlannerIntro("manual")}
-                >
-                  Hide intro
-                </Button>
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-semibold text-slate-900">Most pilots use this planner to map the route, review the briefing, and keep a flight ready to save or file.</h2>
-                <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-                  This is a working planning tool. Use it to compare airports, review runway and weather context, check airspace, and carry the trip forward into your saved workflow.
-                </p>
-              </div>
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">1. Build the route</div>
-                  <div className="mt-2 text-sm text-slate-700">Enter departure, destination, waypoints, stops, and your aircraft profile up front.</div>
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="airspace-review" className="rounded-lg border px-3">
+              <AccordionTrigger className="text-sm">Airspace review</AccordionTrigger>
+              <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
+                <p>Review route conflicts in this page, or open the full TFR map in a new tab.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => scrollToSection("route-analysis", "planner_jump_route_analysis")}>
+                    Go to route analysis
+                  </Button>
+                  <Button type="button" size="sm" asChild>
+                    <a href="/tfr-map" target="_blank" rel="noopener noreferrer">Open full TFR map</a>
+                  </Button>
                 </div>
-                <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">2. Review conditions</div>
-                  <div className="mt-2 text-sm text-slate-700">Check weather, runway guidance, NOTAMs, and TFR or special-use airspace before you go.</div>
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="approach-plates" className="rounded-lg border px-3">
+              <AccordionTrigger className="text-sm">Approach plates</AccordionTrigger>
+              <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
+                <p>Open RSF approach plates in a new tab while keeping the planner route loaded here.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" asChild>
+                    <a href="/approach-plates" target="_blank" rel="noopener noreferrer">Open approach plates</a>
+                  </Button>
                 </div>
-                <div className="rounded-[1.1rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
-                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">3. Save or stage filing</div>
-                  <div className="mt-2 text-sm text-slate-700">Keep the trip in RSF, stage a filing packet, and move into the next step when the plan is ready.</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[1.3rem] border border-primary/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(255,255,255,0.58))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.08)]">
-              <span className="rsf-kicker">Before you start</span>
-              <h3 className="mt-3 text-xl font-semibold text-slate-900">Use your aircraft selection first.</h3>
-              <div className="mt-4 space-y-3 text-sm text-muted-foreground">
-                <div>
-                  <div className="font-semibold text-slate-900">Pick from the RSF aircraft library</div>
-                  <div>Selecting an aircraft or saved profile fills in cruise speed, fuel burn, and usable fuel for planning.</div>
-                </div>
-                <div>
-                  <div className="font-semibold text-slate-900">Leave the page without losing the trip</div>
-                  <div>Your draft route stays in place if you jump out to the TFR map or another planning page and return.</div>
-                </div>
-                <div className="rounded-[1rem] border border-amber-200 bg-amber-50/90 px-4 py-3 text-amber-900">
-                  Planning estimates only. Always verify with the POH/AFM, official briefings, and current conditions before departure.
-                </div>
-              </div>
-              <div className="mt-5 flex flex-col gap-2 sm:flex-row xl:flex-col">
-                <Button asChild className="w-full" onClick={() => trackEvent("planner_intro_click", { target: "/tfr-map" })}>
-                  <Link href="/tfr-map">Review airspace first</Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  asChild
-                  onClick={() => trackEvent("planner_intro_click", { target: "/pilot-tools#airport-weather" })}
-                >
-                  <Link href="/pilot-tools#airport-weather">Check airport conditions</Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -2789,7 +2749,6 @@ export default function FlightPlanner() {
                       ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-slate-600 hover:bg-slate-100"
                   )}
-                  aria-pressed={mapStyle === option.value}
                 >
                   {option.label}
                 </button>

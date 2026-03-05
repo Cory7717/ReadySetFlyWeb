@@ -29,6 +29,10 @@ const quickFilters = [
   { label: "Glass Cockpit", value: "glass" },
 ];
 
+const RENTALS_META_TITLE = "Find Aircraft Rentals Near You | ReadySetFly";
+const RENTALS_META_DESCRIPTION =
+  "Search verified aircraft rentals from flight schools, flying clubs, and independent operators near you and across the U.S. Compare aircraft types and rates nationwide.";
+
 export default function Home() {
   const { isAuthenticated, user } = useAuth();
   const [showFilters, setShowFilters] = useState(false);
@@ -36,6 +40,36 @@ export default function Home() {
 
   useEffect(() => {
     trackEvent("rentals_view", { page: "/rentals" });
+  }, []);
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    let descriptionElement = document.querySelector("meta[name='description']");
+    const previousDescription = descriptionElement?.getAttribute("content");
+    let createdDescription = false;
+
+    document.title = RENTALS_META_TITLE;
+    if (descriptionElement) {
+      descriptionElement.setAttribute("content", RENTALS_META_DESCRIPTION);
+    } else {
+      const meta = document.createElement("meta");
+      meta.setAttribute("name", "description");
+      meta.setAttribute("content", RENTALS_META_DESCRIPTION);
+      document.head.appendChild(meta);
+      descriptionElement = meta;
+      createdDescription = true;
+    }
+
+    return () => {
+      document.title = previousTitle;
+      if (createdDescription && descriptionElement) {
+        descriptionElement.remove();
+        return;
+      }
+      if (descriptionElement && typeof previousDescription === "string") {
+        descriptionElement.setAttribute("content", previousDescription);
+      }
+    };
   }, []);
 
   useEffect(() => {

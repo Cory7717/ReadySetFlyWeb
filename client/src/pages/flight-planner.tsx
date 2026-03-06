@@ -2381,7 +2381,7 @@ export default function FlightPlanner() {
           </Button>
         </>
       }
-      contentClassName="max-w-6xl space-y-6"
+      contentClassName="max-w-[1400px] space-y-6"
     >
       <UpgradePromptDialog
         open={showUpgradePrompt}
@@ -2395,75 +2395,76 @@ export default function FlightPlanner() {
           "Upgrade for unlimited saved plans, alerts, and advanced analytics.",
         ]}
       />
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_460px]">
-      <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)]">
-        <Card className="border-slate-700 bg-slate-950 text-slate-100 xl:sticky xl:top-4">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recent Flights</CardTitle>
-            <CardDescription className="text-slate-300">Load or edit an existing flight plan.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {plansLoading ? (
-              <div className="text-xs text-slate-300">Loading plans...</div>
-            ) : recentPlans.length === 0 ? (
-              <div className="text-xs text-slate-300">No saved plans yet.</div>
-            ) : (
-              recentPlans.map((plan) => (
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_540px]">
+      <div className="min-w-0 space-y-4">
+      <Card className="border-slate-700 bg-slate-950 text-slate-100">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Recent Flights</CardTitle>
+          <CardDescription className="text-slate-300">Open a saved route without leaving the planner.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {plansLoading ? (
+            <div className="text-sm text-slate-300">Loading plans...</div>
+          ) : recentPlans.length === 0 ? (
+            <div className="text-sm text-slate-300">No saved plans yet.</div>
+          ) : (
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {recentPlans.map((plan) => (
                 <button
                   key={`recent-${plan.id}`}
                   type="button"
                   onClick={() => setEditingPlan(plan)}
-                  className="w-full rounded-md border border-slate-700 bg-slate-900/70 px-2 py-2 text-left transition-colors hover:bg-slate-800"
+                  className="min-w-[230px] rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-left transition-colors hover:bg-slate-800"
                 >
-                  <div className="text-xs font-semibold text-slate-100">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
-                  <div className="text-[11px] text-slate-300">{plan.departure} to {plan.destination}</div>
+                  <div className="truncate text-sm font-semibold text-slate-100">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
+                  <div className="text-xs text-slate-300">{plan.departure} to {plan.destination}</div>
                 </button>
-              ))
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-2 w-full border-slate-600 text-slate-100 hover:bg-slate-800"
-              onClick={() => setActiveTab("file")}
-            >
-              Open saved plans
-            </Button>
-          </CardContent>
-        </Card>
-        <div className="min-w-0 space-y-3">
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-w-[170px] border-slate-600 text-slate-100 hover:bg-slate-800"
+                onClick={() => setActiveTab("file")}
+              >
+                Open saved plans
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
       <Card className="border-slate-700 bg-slate-950 text-slate-100">
         <CardContent className="pt-4">
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            <div className="min-w-[150px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Route</div>
-              <div className="truncate text-xs font-semibold text-slate-100">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-7">
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Route</div>
+              <div className="truncate text-base font-semibold text-slate-100">
                 {(form.departure || "---").toUpperCase()} to {(form.destination || "---").toUpperCase()}
               </div>
             </div>
-            <div className="min-w-[110px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Legs</div>
-              <div className="text-xs font-semibold text-slate-100">{legNavRows.length || 0}</div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Legs</div>
+              <div className="text-base font-semibold text-slate-100">{legNavRows.length || 0}</div>
             </div>
-            <div className="min-w-[120px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Distance</div>
-              <div className="text-xs font-semibold text-slate-100">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Distance</div>
+              <div className="text-base font-semibold text-slate-100">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
             </div>
-            <div className="min-w-[120px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Fuel</div>
-              <div className="text-xs font-semibold text-slate-100">{totalFuel ? `${totalFuel.toFixed(1)} gal` : "--"}</div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Fuel</div>
+              <div className="text-base font-semibold text-slate-100">{totalFuel ? `${totalFuel.toFixed(1)} gal` : "--"}</div>
             </div>
-            <div className="min-w-[120px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Weather</div>
-              <div className={cn("text-xs font-semibold", weatherStatusTone)}>{weatherStatusText}</div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Weather</div>
+              <div className={cn("text-base font-semibold", weatherStatusTone)}>{weatherStatusText}</div>
             </div>
-            <div className="min-w-[120px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Checklist</div>
-              <div className="text-xs font-semibold text-slate-100">{checklistCompletionCount}/6 complete</div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Checklist</div>
+              <div className="text-base font-semibold text-slate-100">{checklistCompletionCount}/6 complete</div>
             </div>
-            <div className="min-w-[150px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Briefing Sync</div>
-              <div className={cn("text-xs font-semibold", briefingUpdatedTone)}>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Briefing Sync</div>
+              <div className={cn("text-base font-semibold", briefingUpdatedTone)}>
                 {briefingUpdatedLabel}
                 {isBriefingStale ? " (stale)" : latestBriefingUpdatedAtMs > 0 ? " (fresh)" : ""}
               </div>
@@ -2472,12 +2473,12 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
-        <TabsList className="h-auto flex w-full flex-wrap items-stretch gap-1 rounded-xl border border-slate-700 bg-slate-950 p-1">
-          <TabsTrigger value="route" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Route</TabsTrigger>
-          <TabsTrigger value="weather" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Weather</TabsTrigger>
-          <TabsTrigger value="navlog" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Nav Log</TabsTrigger>
-          <TabsTrigger value="analysis" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Analysis</TabsTrigger>
-          <TabsTrigger value="file" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">File &amp; Save</TabsTrigger>
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-700 bg-slate-950 p-1 md:grid-cols-5">
+          <TabsTrigger value="route" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Route</TabsTrigger>
+          <TabsTrigger value="weather" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Weather</TabsTrigger>
+          <TabsTrigger value="navlog" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Nav Log</TabsTrigger>
+          <TabsTrigger value="analysis" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Analysis</TabsTrigger>
+          <TabsTrigger value="file" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">File &amp; Save</TabsTrigger>
         </TabsList>
         <TabsContent value="route" className="space-y-6">
       <Card>
@@ -3698,67 +3699,7 @@ export default function FlightPlanner() {
       </TabsContent>
       </Tabs>
         </div>
-      <div className="space-y-4 xl:sticky xl:top-4">
-        <Card className="border-slate-700 bg-slate-950 text-slate-100">
-          <CardContent className="pt-4">
-            <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Briefing Status
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Weather</div>
-                <div className={cn("font-semibold", weatherStatusTone)}>{weatherStatusText}</div>
-              </div>
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">NOTAMs</div>
-                <div className={cn("font-semibold", notamsSummaryQuery.isError ? "text-amber-300" : "text-slate-100")}>
-                  {notamsSummaryQuery.isError ? "Unavailable" : `${notamsCount} active`}
-                </div>
-              </div>
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">TFR Route</div>
-                <div className={cn("font-semibold", tfrStatusTone)}>{tfrStatusText}</div>
-              </div>
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Filing Packet</div>
-                <div className={cn("font-semibold", filingStateTone)}>{filingStateText}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-slate-700 bg-slate-950 text-slate-100">
-          <CardContent className="pt-4">
-            <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Flight Snapshot
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Distance</div>
-                <div className="font-semibold text-slate-100">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
-              </div>
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Trip Fuel</div>
-                <div className="font-semibold text-slate-100">{tripFuel ? `${tripFuel.toFixed(1)} gal` : "--"}</div>
-              </div>
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">ETE</div>
-                <div className="font-semibold text-slate-100">{eteHours ? formatMinutesLabel(Math.round(eteHours * 60)) : "--"}</div>
-              </div>
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Planned Alt</div>
-                <div className="font-semibold text-slate-100">{plannedAltitudeFt > 0 ? `${plannedAltitudeFt} ft` : "--"}</div>
-              </div>
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Avg Wind</div>
-                <div className="font-semibold text-slate-100">{windValue > 0 ? `${windValue} kt` : "0 kt"}</div>
-              </div>
-              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">ETD (Z)</div>
-                <div className="font-semibold text-slate-100">{plannedDepartureUtc ? `${plannedDepartureUtc.toISOString().slice(11, 16)}Z` : "--"}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="space-y-4">
         <Card id="planner-route-map" className="border-slate-700 bg-slate-950 text-slate-100">
           <CardHeader>
             <CardTitle>Route Map</CardTitle>
@@ -3777,7 +3718,7 @@ export default function FlightPlanner() {
                 RSF Synthetic Vision Lab <span className="font-medium">(coming soon)</span>
               </span>
             </div>
-            <div className="sticky top-0 z-20 mb-3 rounded-lg border border-slate-700 bg-slate-900/90 p-2 backdrop-blur">
+            <div className="mb-3 rounded-lg border border-slate-700 bg-slate-900/90 p-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
@@ -4037,7 +3978,6 @@ export default function FlightPlanner() {
             )}
           </CardContent>
         </Card>
-      </div>
       </div>
       </div>
 

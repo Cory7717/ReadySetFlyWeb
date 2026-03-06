@@ -80,6 +80,74 @@ export default function WindTriangleViz({ data, className }: WindTriangleVizProp
           </defs>
           <circle cx={center} cy={center} r={2} className="fill-muted-foreground/60" />
           <circle cx={center} cy={center} r={baseLength} className="stroke-muted-foreground/20 fill-none" />
+          <line
+            x1={center}
+            y1={center - baseLength}
+            x2={center}
+            y2={center - baseLength + 6}
+            className="stroke-muted-foreground/30"
+            strokeWidth="1"
+          />
+          <line
+            x1={center}
+            y1={center + baseLength}
+            x2={center}
+            y2={center + baseLength - 6}
+            className="stroke-muted-foreground/30"
+            strokeWidth="1"
+          />
+          <line
+            x1={center + baseLength}
+            y1={center}
+            x2={center + baseLength - 6}
+            y2={center}
+            className="stroke-muted-foreground/30"
+            strokeWidth="1"
+          />
+          <line
+            x1={center - baseLength}
+            y1={center}
+            x2={center - baseLength + 6}
+            y2={center}
+            className="stroke-muted-foreground/30"
+            strokeWidth="1"
+          />
+          <text
+            x={center}
+            y={center - baseLength - 12}
+            textAnchor="middle"
+            fontSize="11"
+            className="fill-muted-foreground/70 font-medium select-none"
+          >
+            N
+          </text>
+          <text
+            x={center}
+            y={center + baseLength + 14}
+            textAnchor="middle"
+            fontSize="11"
+            className="fill-muted-foreground/70 font-medium select-none"
+          >
+            S
+          </text>
+          <text
+            x={center + baseLength + 10}
+            y={center + 4}
+            textAnchor="middle"
+            fontSize="11"
+            className="fill-muted-foreground/70 font-medium select-none"
+          >
+            E
+          </text>
+          <text
+            x={center - baseLength - 10}
+            y={center + 4}
+            textAnchor="middle"
+            fontSize="11"
+            className="fill-muted-foreground/70 font-medium select-none"
+          >
+            W
+          </text>
           {courseVector && (
             <line
               x1={center}

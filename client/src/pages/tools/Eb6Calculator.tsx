@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
 import { OutputModeSelector, type OutputDefinition } from "@/components/tools/OutputModeSelector";
 import { ResultTiles, type ResultTile } from "@/components/tools/ResultTiles";
@@ -49,6 +50,7 @@ const ADVANCED_OUTPUTS = [
   ...QUICK_OUTPUTS,
   "wca",
   "true_heading",
+  "magnetic_heading",
   "range",
 ];
 
@@ -73,6 +75,7 @@ const OUTPUT_GROUPS: Array<{ title: string; outputs: OutputDefinition[] }> = [
       { id: "wind_components", label: "Headwind / Crosswind", group: "Wind" },
       { id: "wca", label: "Wind Correction Angle (WCA)", group: "Wind" },
       { id: "true_heading", label: "True Heading (TH)", group: "Wind" },
+      { id: "magnetic_heading", label: "Magnetic Heading (MH)", group: "Wind" },
     ],
   },
   {
@@ -131,17 +134,23 @@ const EXAMPLE_VALUES = {
   windDirection: "210",
   windSpeed: "15",
   trueCourse: "180",
+  magVar: "10",
+  fuelBurn: "8",
+  fuelAvailable: "40",
 };
 
 export default function Eb6Calculator() {
   const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
   const [altimeter, setAltimeter] = useState("29.92");
   const [fieldElevation, setFieldElevation] = useState("0");
   const [oat, setOat] = useState("15");
+  const [oatUnit, setOatUnit] = useState<"C" | "F">("C");
   const [kias, setKias] = useState("110");
   const [windDirection, setWindDirection] = useState("180");
   const [windSpeed, setWindSpeed] = useState("10");
   const [trueCourse, setTrueCourse] = useState("180");
+  const [magVar, setMagVar] = useState("0");
   const [fuelBurn, setFuelBurn] = useState("10");
   const [fuelAvailable, setFuelAvailable] = useState("30");
   const [outputMode, setOutputMode] = useState<Eb6OutputMode>("quick");
@@ -163,6 +172,7 @@ export default function Eb6Calculator() {
     windDirection,
     windSpeed,
     trueCourse,
+    magVar,
     fuelBurn,
     fuelAvailable,
   });
@@ -176,6 +186,7 @@ export default function Eb6Calculator() {
       windDirection,
       windSpeed,
       trueCourse,
+      magVar,
       fuelBurn,
       fuelAvailable,
     },
@@ -313,7 +324,8 @@ export default function Eb6Calculator() {
 
     const oatValue = toNumber(debouncedInputs.oat);
     if (oatValue === null) next.oat = "Required";
-    else if (oatValue < -60 || oatValue > 60) next.oat = "Use -60 to 60 C";
+    else if (oatUnit === "C" && (oatValue < -60 || oatValue > 60)) next.oat = "Use -60 to 60 C";
+    else if (oatUnit === "F" && (oatValue < -76 || oatValue > 140)) next.oat = "Use -76 to 140 F";
 
     const kiasValue = toNumber(debouncedInputs.kias);
     if (kiasValue === null) next.kias = "Required";
@@ -331,6 +343,9 @@ export default function Eb6Calculator() {
     if (courseValue === null) next.trueCourse = "Required";
     else if (courseValue < 0 || courseValue > 360) next.trueCourse = "Use 0 to 360";
 
+    const magVarValue = toNumber(debouncedInputs.magVar);
+    if (magVarValue !== null && (magVarValue < -30 || magVarValue > 30)) next.magVar = "Use -30 to 30 deg";
+
     const fuelBurnValue = toNumber(debouncedInputs.fuelBurn);
     if (fuelBurnValue !== null && (fuelBurnValue < 0 || fuelBurnValue > 100)) next.fuelBurn = "Use 0 to 100 GPH";
 
@@ -338,7 +353,7 @@ export default function Eb6Calculator() {
     if (fuelAvailableValue !== null && (fuelAvailableValue < 0 || fuelAvailableValue > 200)) next.fuelAvailable = "Use 0 to 200 gal";
 
     return next;
-  }, [debouncedInputs]);
+  }, [debouncedInputs, oatUnit]);
 
   const hasRequiredInputs = !errors.altimeter && !errors.fieldElevation && !errors.oat && !errors.kias && !errors.windDirection && !errors.windSpeed && !errors.trueCourse;
 
@@ -346,15 +361,20 @@ export default function Eb6Calculator() {
     const altimeterValue = toNumber(debouncedInputs.altimeter);
     const elevationValue = toNumber(debouncedInputs.fieldElevation);
     const oatValue = toNumber(debouncedInputs.oat);
+    const oatCelsius = oatValue === null
+      ? null
+      : oatUnit === "F"
+        ? ((oatValue - 32) * 5) / 9
+        : oatValue;
     const kiasValue = toNumber(debouncedInputs.kias);
     const windDirValue = toNumber(debouncedInputs.windDirection);
     const windSpeedValue = toNumber(debouncedInputs.windSpeed);
     const courseValue = toNumber(debouncedInputs.trueCourse);
 
     let tas: number | null = null;
-    if (altimeterValue !== null && elevationValue !== null && oatValue !== null && kiasValue !== null) {
+    if (altimeterValue !== null && elevationValue !== null && oatCelsius !== null && kiasValue !== null) {
       const pressureAltitude = calcPressureAltitude(altimeterValue, elevationValue);
-      const densityAltitude = calcDensityAltitude(pressureAltitude, oatValue, elevationValue);
+      const densityAltitude = calcDensityAltitude(pressureAltitude, oatCelsius, elevationValue);
       tas = calcTAS(kiasValue, densityAltitude);
     }
 
@@ -364,7 +384,7 @@ export default function Eb6Calculator() {
       windSpeed: windSpeedValue,
       course: courseValue,
     });
-  }, [debouncedInputs]);
+  }, [debouncedInputs, oatUnit]);
 
   const results = useMemo(() => {
     if (!hasRequiredInputs) return [] as ResultTile[];
@@ -372,20 +392,25 @@ export default function Eb6Calculator() {
     const altimeterValue = toNumber(debouncedInputs.altimeter) ?? 0;
     const elevationValue = toNumber(debouncedInputs.fieldElevation) ?? 0;
     const oatValue = toNumber(debouncedInputs.oat) ?? 0;
+    const oatCelsius = oatUnit === "F"
+      ? ((oatValue - 32) * 5) / 9
+      : oatValue;
     const kiasValue = toNumber(debouncedInputs.kias) ?? 0;
     const windDirValue = toNumber(debouncedInputs.windDirection) ?? 0;
     const windSpeedValue = toNumber(debouncedInputs.windSpeed) ?? 0;
     const courseValue = toNumber(debouncedInputs.trueCourse) ?? 0;
+    const magVarValue = toNumber(debouncedInputs.magVar) ?? 0;
     const fuelBurnValue = toNumber(debouncedInputs.fuelBurn) ?? null;
     const fuelAvailableValue = toNumber(debouncedInputs.fuelAvailable) ?? null;
 
     const pressureAltitude = calcPressureAltitude(altimeterValue, elevationValue);
-    const densityAltitude = calcDensityAltitude(pressureAltitude, oatValue, elevationValue);
+    const densityAltitude = calcDensityAltitude(pressureAltitude, oatCelsius, elevationValue);
     const tas = calcTAS(kiasValue, densityAltitude);
     const wind = calcWindComponents(windDirValue, windSpeedValue, courseValue);
     const gs = calcGroundSpeed(tas, wind.headwind);
     const wca = calcWca(wind.crosswind, tas);
     const trueHeading = calcTrueHeading(courseValue, wca);
+    const magneticHeading = ((trueHeading + magVarValue) % 360 + 360) % 360;
     const endurance = fuelBurnValue !== null && fuelAvailableValue !== null ? calcEnduranceHours(fuelAvailableValue, fuelBurnValue) : null;
     const range = calcRangeNm(gs, endurance);
 
@@ -438,6 +463,15 @@ export default function Eb6Calculator() {
         value: formatValue(trueHeading, 0),
         unit: "deg",
       },
+      magnetic_heading: {
+        id: "magnetic_heading",
+        label: "Magnetic Heading",
+        value: formatHeading(magneticHeading),
+        unit: "deg",
+        helper: magVarValue !== 0
+          ? `${Math.abs(magVarValue)} deg ${magVarValue > 0 ? "W" : "E"} variation applied`
+          : "No variation entered",
+      },
       endurance: {
         id: "endurance",
         label: "Endurance",
@@ -455,10 +489,28 @@ export default function Eb6Calculator() {
     };
 
     return selectedOutputs.filter((output) => map[output]).map((output) => map[output]);
-  }, [debouncedInputs, hasRequiredInputs, selectedOutputs]);
+  }, [debouncedInputs, hasRequiredInputs, oatUnit, selectedOutputs]);
 
   const missingMessage = !hasRequiredInputs ? "Enter required fields to compute results." : null;
   const interactiveVisible = isDesktop || interactiveAccordionValue === "interactive";
+
+  const handleCopyResults = async () => {
+    const lines = results.map(
+      (r) => `${r.label}: ${r.value} ${r.unit ?? ""}${r.helper ? ` (${r.helper})` : ""}`
+    );
+    const text = [
+      "RSF E6B Results",
+      `Course: ${trueCourse}deg | Wind: ${windDirection}deg@${windSpeed}kt | TAS: ${kias}kt`,
+      "",
+      ...lines,
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: "Results copied to clipboard" });
+    } catch {
+      toast({ title: "Copy failed", variant: "destructive" });
+    }
+  };
 
   useEffect(() => {
     if (!interactiveVisible) {
@@ -517,14 +569,45 @@ export default function Eb6Calculator() {
                   {errors.fieldElevation && <div className="text-xs text-destructive">{errors.fieldElevation}</div>}
                 </div>
                 <div className="space-y-1">
-                  <Label>OAT (C)</Label>
-                  <Input value={oat} onChange={(event) => setOat(event.target.value)} />
+                  <div className="flex items-center justify-between">
+                    <Label>OAT</Label>
+                    <div className="flex items-center gap-1 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (oatUnit === "C") {
+                            const c = toNumber(oat);
+                            if (c !== null) setOat(((c * 9 / 5) + 32).toFixed(1));
+                            setOatUnit("F");
+                          } else {
+                            const f = toNumber(oat);
+                            if (f !== null) setOat((((f - 32) * 5) / 9).toFixed(1));
+                            setOatUnit("C");
+                          }
+                        }}
+                        className="rounded border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted transition-colors"
+                      >
+                        {oatUnit === "C" ? "Switch to °F" : "Switch to °C"}
+                      </button>
+                    </div>
+                  </div>
+                  <Input
+                    value={oat}
+                    placeholder={oatUnit === "C" ? "e.g. 15 (°C)" : "e.g. 59 (°F)"}
+                    onChange={(event) => setOat(event.target.value)}
+                  />
                   {errors.oat && <div className="text-xs text-destructive">{errors.oat}</div>}
                 </div>
                 <div className="space-y-1">
                   <Label>Indicated airspeed (KIAS)</Label>
                   <Input value={kias} onChange={(event) => setKias(event.target.value)} />
                   {errors.kias && <div className="text-xs text-destructive">{errors.kias}</div>}
+                </div>
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                    Wind &amp; Navigation
+                  </div>
+                  <div className="flex-1 border-t" />
                 </div>
                 <div className="space-y-1">
                   <Label>Wind direction (deg)</Label>
@@ -540,6 +623,21 @@ export default function Eb6Calculator() {
                   <Label>True course (deg)</Label>
                   <Input value={trueCourse} onChange={(event) => setTrueCourse(event.target.value)} />
                   {errors.trueCourse && <div className="text-xs text-destructive">{errors.trueCourse}</div>}
+                </div>
+                <div className="space-y-1">
+                  <Label>Magnetic variation (deg, W positive)</Label>
+                  <Input
+                    value={magVar}
+                    placeholder="e.g. 10 for 10°W"
+                    onChange={(event) => setMagVar(event.target.value)}
+                  />
+                  {errors.magVar && <div className="text-xs text-destructive">{errors.magVar}</div>}
+                </div>
+                <div className="flex items-center gap-2 pt-2">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                    Fuel (optional)
+                  </div>
+                  <div className="flex-1 border-t" />
                 </div>
                 <div className="space-y-1">
                   <Label>Fuel burn (GPH)</Label>
@@ -558,11 +656,19 @@ export default function Eb6Calculator() {
                     onClick={() => {
                       setAltimeter(EXAMPLE_VALUES.altimeter);
                       setFieldElevation(EXAMPLE_VALUES.fieldElevation);
+                      setOatUnit("C");
                       setOat(EXAMPLE_VALUES.oat);
                       setKias(EXAMPLE_VALUES.kias);
                       setWindDirection(EXAMPLE_VALUES.windDirection);
                       setWindSpeed(EXAMPLE_VALUES.windSpeed);
                       setTrueCourse(EXAMPLE_VALUES.trueCourse);
+                      setFuelBurn(EXAMPLE_VALUES.fuelBurn);
+                      setFuelAvailable(EXAMPLE_VALUES.fuelAvailable);
+                      setMagVar(EXAMPLE_VALUES.magVar);
+                      toast({
+                        title: "Example inputs loaded",
+                        description: "Course 180°, Wind 210° @ 15kt, TAS 120kt, Var 10°W",
+                      });
                     }}
                   >
                     Load example inputs
@@ -574,25 +680,19 @@ export default function Eb6Calculator() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Results</CardTitle>
-              <CardDescription>Choose Quick, Advanced, or Custom outputs.</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Results</CardTitle>
+                  <CardDescription>Choose Quick, Advanced, or Custom outputs.</CardDescription>
+                </div>
+                {results.length > 0 && (
+                  <Button variant="outline" size="sm" onClick={handleCopyResults}>
+                    Copy results
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 md:grid-cols-3">
-                <div>
-                  <div className="text-xs uppercase text-muted-foreground">WCA</div>
-                  <div className="text-lg font-semibold">{formatWca(windTriangle.wcaDeg)}</div>
-                </div>
-                <div>
-                  <div className="text-xs uppercase text-muted-foreground">Heading</div>
-                  <div className="text-lg font-semibold">{formatHeading(windTriangle.headingDeg)}</div>
-                </div>
-                <div>
-                  <div className="text-xs uppercase text-muted-foreground">Ground Speed</div>
-                  <div className="text-lg font-semibold">{formatValue(windTriangle.groundSpeedKt, 1)} kt</div>
-                </div>
-              </div>
-
               <OutputModeSelector
                 mode={outputMode}
                 selectedOutputs={customOutputs}
@@ -660,11 +760,19 @@ export default function Eb6Calculator() {
         onLoadExample={() => {
           setAltimeter(EXAMPLE_VALUES.altimeter);
           setFieldElevation(EXAMPLE_VALUES.fieldElevation);
+          setOatUnit("C");
           setOat(EXAMPLE_VALUES.oat);
           setKias(EXAMPLE_VALUES.kias);
           setWindDirection(EXAMPLE_VALUES.windDirection);
           setWindSpeed(EXAMPLE_VALUES.windSpeed);
           setTrueCourse(EXAMPLE_VALUES.trueCourse);
+          setFuelBurn(EXAMPLE_VALUES.fuelBurn);
+          setFuelAvailable(EXAMPLE_VALUES.fuelAvailable);
+          setMagVar(EXAMPLE_VALUES.magVar);
+          toast({
+            title: "Example inputs loaded",
+            description: "Course 180°, Wind 210° @ 15kt, TAS 120kt, Var 10°W",
+          });
         }}
       />
     </div>

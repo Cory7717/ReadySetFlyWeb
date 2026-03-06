@@ -11772,8 +11772,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.json(responseData);
       }
 
-      return res.status(404).json({ 
-        error: `No weather data available for ${requestedIcao}. This airport may not report METAR/TAF data.`,
+      return res.json({
+        icao: requestedIcao,
+        metar: null,
+        taf: null,
+        timestamp: now,
+        cached: false,
+        unavailable: true,
+        message: `No weather data available for ${requestedIcao}. This airport may not report METAR/TAF data.`,
       });
     } catch (error) {
       console.error("Aviation weather fetch error:", error);

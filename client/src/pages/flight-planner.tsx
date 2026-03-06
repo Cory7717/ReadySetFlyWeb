@@ -2397,16 +2397,16 @@ export default function FlightPlanner() {
       />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_540px]">
       <div className="min-w-0 space-y-4">
-      <Card className="border-slate-700 bg-slate-950 text-slate-100">
+      <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Recent Flights</CardTitle>
-          <CardDescription className="text-slate-300">Open a saved route without leaving the planner.</CardDescription>
+          <CardDescription className="text-slate-600">Open a saved route without leaving the planner.</CardDescription>
         </CardHeader>
         <CardContent>
           {plansLoading ? (
-            <div className="text-sm text-slate-300">Loading plans...</div>
+            <div className="text-sm text-slate-600">Loading plans...</div>
           ) : recentPlans.length === 0 ? (
-            <div className="text-sm text-slate-300">No saved plans yet.</div>
+            <div className="text-sm text-slate-600">No saved plans yet.</div>
           ) : (
             <div className="flex gap-2 overflow-x-auto pb-1">
               {recentPlans.map((plan) => (
@@ -2414,17 +2414,17 @@ export default function FlightPlanner() {
                   key={`recent-${plan.id}`}
                   type="button"
                   onClick={() => setEditingPlan(plan)}
-                  className="min-w-[230px] rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2 text-left transition-colors hover:bg-slate-800"
+                  className="min-w-[230px] rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-left transition-colors hover:bg-slate-200"
                 >
-                  <div className="truncate text-sm font-semibold text-slate-100">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
-                  <div className="text-xs text-slate-300">{plan.departure} to {plan.destination}</div>
+                  <div className="truncate text-sm font-semibold text-slate-900">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
+                  <div className="text-xs text-slate-700">{plan.departure} to {plan.destination}</div>
                 </button>
               ))}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="min-w-[170px] border-slate-600 text-slate-100 hover:bg-slate-800"
+                className="min-w-[170px] border-slate-300 text-slate-800 hover:bg-slate-100"
                 onClick={() => setActiveTab("file")}
               >
                 Open saved plans
@@ -2433,37 +2433,37 @@ export default function FlightPlanner() {
           )}
         </CardContent>
       </Card>
-      <Card className="border-slate-700 bg-slate-950 text-slate-100">
+      <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">
         <CardContent className="pt-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-7">
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Route</div>
-              <div className="truncate text-base font-semibold text-slate-100">
+            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Route</div>
+              <div className="truncate text-base font-semibold text-slate-900">
                 {(form.departure || "---").toUpperCase()} to {(form.destination || "---").toUpperCase()}
               </div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Legs</div>
-              <div className="text-base font-semibold text-slate-100">{legNavRows.length || 0}</div>
+            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Legs</div>
+              <div className="text-base font-semibold text-slate-900">{legNavRows.length || 0}</div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Distance</div>
-              <div className="text-base font-semibold text-slate-100">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
+            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Distance</div>
+              <div className="text-base font-semibold text-slate-900">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Fuel</div>
-              <div className="text-base font-semibold text-slate-100">{totalFuel ? `${totalFuel.toFixed(1)} gal` : "--"}</div>
+            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Fuel</div>
+              <div className="text-base font-semibold text-slate-900">{totalFuel ? `${totalFuel.toFixed(1)} gal` : "--"}</div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Weather</div>
+            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Weather</div>
               <div className={cn("text-base font-semibold", weatherStatusTone)}>{weatherStatusText}</div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Checklist</div>
-              <div className="text-base font-semibold text-slate-100">{checklistCompletionCount}/6 complete</div>
+            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Checklist</div>
+              <div className="text-base font-semibold text-slate-900">{checklistCompletionCount}/6 complete</div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-2.5">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-400">Briefing Sync</div>
+            <div className="rounded-md border border-slate-300 bg-slate-100 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-slate-600">Briefing Sync</div>
               <div className={cn("text-base font-semibold", briefingUpdatedTone)}>
                 {briefingUpdatedLabel}
                 {isBriefingStale ? " (stale)" : latestBriefingUpdatedAtMs > 0 ? " (fresh)" : ""}
@@ -2473,12 +2473,12 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-700 bg-slate-950 p-1 md:grid-cols-5">
-          <TabsTrigger value="route" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Route</TabsTrigger>
-          <TabsTrigger value="weather" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Weather</TabsTrigger>
-          <TabsTrigger value="navlog" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Nav Log</TabsTrigger>
-          <TabsTrigger value="analysis" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Analysis</TabsTrigger>
-          <TabsTrigger value="file" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">File &amp; Save</TabsTrigger>
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-5">
+          <TabsTrigger value="route" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">Route</TabsTrigger>
+          <TabsTrigger value="weather" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">Weather</TabsTrigger>
+          <TabsTrigger value="navlog" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">Nav Log</TabsTrigger>
+          <TabsTrigger value="analysis" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">Analysis</TabsTrigger>
+          <TabsTrigger value="file" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">File &amp; Save</TabsTrigger>
         </TabsList>
         <TabsContent value="route" className="space-y-6">
       <Card>
@@ -3700,7 +3700,7 @@ export default function FlightPlanner() {
       </Tabs>
         </div>
       <div className="space-y-4">
-        <Card id="planner-route-map" className="border-slate-700 bg-slate-950 text-slate-100">
+        <Card id="planner-route-map" className="border-slate-200 bg-white text-slate-900 shadow-sm">
           <CardHeader>
             <CardTitle>Route Map</CardTitle>
             <CardDescription>Live route view while you build, brief, and file.</CardDescription>
@@ -3709,22 +3709,22 @@ export default function FlightPlanner() {
             <div className="mb-3 flex flex-wrap gap-3 text-sm">
               <a
                 href="/adsb-receiver-help"
-                className="text-blue-300 hover:underline"
+                className="text-blue-700 hover:underline"
                 onClick={() => trackEvent("adsb_help_click", { target: "/adsb-receiver-help" })}
               >
                 How to connect your ADS-B receiver
               </a>
-              <span className="text-slate-300">
+              <span className="text-slate-600">
                 RSF Synthetic Vision Lab <span className="font-medium">(coming soon)</span>
               </span>
             </div>
-            <div className="mb-3 rounded-lg border border-slate-700 bg-slate-900/90 p-2">
+            <div className="mb-3 rounded-lg border border-slate-300 bg-slate-100 p-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800"
+                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200"
                   onClick={() => setMapRenderVersion((value) => value + 1)}
                 >
                   Fit route
@@ -3733,7 +3733,7 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800"
+                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200"
                   onClick={() => {
                     setActiveTab("weather");
                     openWeatherDetail("metar");
@@ -3745,7 +3745,7 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800"
+                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200"
                   onClick={() => {
                     setActiveTab("weather");
                     openWeatherDetail("notams");
@@ -3757,7 +3757,7 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800"
+                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200"
                   onClick={() => setShowApproachOffer(true)}
                 >
                   Plates
@@ -3766,12 +3766,12 @@ export default function FlightPlanner() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800"
+                  className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200"
                   onClick={() => setShowAtcStrip((value) => !value)}
                 >
                   {showAtcStrip ? "Hide" : "Show"} nav strip
                 </Button>
-                <Button type="button" size="sm" variant="outline" className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800" asChild>
+                <Button type="button" size="sm" variant="outline" className="h-8 border-slate-300 text-slate-800 hover:bg-slate-200" asChild>
                   <a href="/tfr-map" target="_blank" rel="noopener noreferrer">Full TFR map</a>
                 </Button>
               </div>

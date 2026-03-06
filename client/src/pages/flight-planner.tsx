@@ -596,6 +596,7 @@ export default function FlightPlanner() {
   const [activeTab, setActiveTab] = useState<FlightPlannerTab>("route");
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
+  const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string } | null>(null);
   const [scratchPadOpen, setScratchPadOpen] = useState(false);
   const [scratchPad, setScratchPad] = useState<ScratchPadFields>(() => {
     if (typeof window === "undefined") return SCRATCH_PAD_DEFAULT;
@@ -634,6 +635,20 @@ export default function FlightPlanner() {
     if (!(FLIGHT_PLANNER_TABS as readonly string[]).includes(activeTab)) return;
     window.localStorage.setItem(FLIGHT_PLANNER_ACTIVE_TAB_KEY, activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!pendingSectionJump) return;
+    if (typeof window === "undefined") return;
+    const timer = window.setTimeout(() => {
+      const element = document.getElementById(pendingSectionJump.id);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+        trackEvent(pendingSectionJump.eventName, { target: pendingSectionJump.id });
+      }
+      setPendingSectionJump(null);
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [activeTab, pendingSectionJump]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2143,6 +2158,15 @@ export default function FlightPlanner() {
     }
   };
 
+  const jumpToSection = (id: string, eventName: string, tab: FlightPlannerTab) => {
+    if (activeTab !== tab) {
+      setPendingSectionJump({ id, eventName });
+      setActiveTab(tab);
+      return;
+    }
+    scrollToSection(id, eventName);
+  };
+
   const exportNavLogCsv = () => {
     if (!legNavRows.length) return;
     const header = ["Leg", "CourseDeg", "DistanceNm", "LegMinutes", "ETA (Z)", "LegFuelGal", "CumulativeNm"];
@@ -2622,7 +2646,7 @@ export default function FlightPlanner() {
               <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
                 <p>Jump to the route weather summary already on this page.</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => scrollToSection("route-weather-summary", "planner_jump_weather_summary")}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => jumpToSection("route-weather-summary", "planner_jump_weather_summary", "weather")}>
                     Go to weather summary
                   </Button>
                 </div>
@@ -2633,7 +2657,7 @@ export default function FlightPlanner() {
               <AccordionContent className="space-y-3 pb-3 text-sm text-muted-foreground">
                 <p>Review route conflicts in this page, or open the full TFR map in a new tab.</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => scrollToSection("route-analysis", "planner_jump_route_analysis")}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => jumpToSection("route-analysis", "planner_jump_route_analysis", "analysis")}>
                     Go to route analysis
                   </Button>
                   <Button type="button" size="sm" asChild>

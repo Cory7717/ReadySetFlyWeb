@@ -2434,32 +2434,34 @@ export default function FlightPlanner() {
         <div className="min-w-0 space-y-3">
       <Card className="border-slate-700 bg-slate-950 text-slate-100">
         <CardContent className="pt-4">
-          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="min-w-[150px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Route</div>
-              <div className="text-xs font-semibold text-slate-100">{form.departure || "---"} to {form.destination || "---"}</div>
+              <div className="truncate text-xs font-semibold text-slate-100">
+                {(form.departure || "---").toUpperCase()} to {(form.destination || "---").toUpperCase()}
+              </div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+            <div className="min-w-[110px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Legs</div>
               <div className="text-xs font-semibold text-slate-100">{legNavRows.length || 0}</div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+            <div className="min-w-[120px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Distance</div>
               <div className="text-xs font-semibold text-slate-100">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+            <div className="min-w-[120px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Fuel</div>
               <div className="text-xs font-semibold text-slate-100">{totalFuel ? `${totalFuel.toFixed(1)} gal` : "--"}</div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+            <div className="min-w-[120px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Weather</div>
               <div className={cn("text-xs font-semibold", weatherStatusTone)}>{weatherStatusText}</div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+            <div className="min-w-[120px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Checklist</div>
               <div className="text-xs font-semibold text-slate-100">{checklistCompletionCount}/6 complete</div>
             </div>
-            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+            <div className="min-w-[150px] rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Briefing Sync</div>
               <div className={cn("text-xs font-semibold", briefingUpdatedTone)}>
                 {briefingUpdatedLabel}
@@ -2470,7 +2472,7 @@ export default function FlightPlanner() {
         </CardContent>
       </Card>
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
-        <TabsList className="flex w-full flex-wrap gap-1 rounded-xl border border-slate-700 bg-slate-950 p-1">
+        <TabsList className="h-auto flex w-full flex-wrap items-stretch gap-1 rounded-xl border border-slate-700 bg-slate-950 p-1">
           <TabsTrigger value="route" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Route</TabsTrigger>
           <TabsTrigger value="weather" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Weather</TabsTrigger>
           <TabsTrigger value="navlog" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Nav Log</TabsTrigger>

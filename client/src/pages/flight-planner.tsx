@@ -579,7 +579,7 @@ export default function FlightPlanner() {
   const [plannedAltitude, setPlannedAltitude] = useState("");
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
-  const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds" | "clouds" | "globe">("standard");
+  const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds" | "clouds" | "globe">("sectional");
   const [mapRenderVersion, setMapRenderVersion] = useState(0);
   const [showAtcStrip, setShowAtcStrip] = useState(true);
   const [showApproachOffer, setShowApproachOffer] = useState(false);

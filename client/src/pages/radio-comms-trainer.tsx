@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { trackEvent } from "@/lib/analytics";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -25,6 +26,7 @@ type ScenarioAttempt = {
   expectedTokens: string[];
   hit: boolean;
   atcReply: string;
+  tokenResults: Array<{ token: string; hit: boolean }>;
 };
 
 type ScenarioStep = {
@@ -43,6 +45,11 @@ type Scenario = {
   steps: ScenarioStep[];
   examples: { pilot: string; atc: string }[];
 };
+
+type FeedbackState = {
+  type: "correct" | "needs_work" | "complete";
+  tokenResults?: Array<{ token: string; hit: boolean }>;
+} | null;
 
 const SCENARIOS: Scenario[] = [
   {
@@ -176,6 +183,104 @@ const SCENARIOS: Scenario[] = [
       },
     ],
   },
+  {
+    id: "ctaf-uncontrolled",
+    title: "CTAF (Uncontrolled)",
+    summary: "Self-announce position calls at a non-towered airport.",
+    steps: [
+      {
+        id: "ctaf-10-out",
+        role: "pilot",
+        prompt: "Announce 10 miles out inbound.",
+        expectedTokens: ["traffic", "inbound", "10"],
+        atcReply: "(No ATC — listen for traffic calls.)",
+        tips: "Use airport name + 'traffic' twice. Include altitude and intentions.",
+      },
+      {
+        id: "ctaf-downwind",
+        role: "pilot",
+        prompt: "Self-announce entering the 45 for downwind.",
+        expectedTokens: ["traffic", "downwind", "runway"],
+        atcReply: "(No ATC — listen for traffic calls.)",
+        tips: "State airport, position, runway, and tail number.",
+      },
+      {
+        id: "ctaf-final",
+        role: "pilot",
+        prompt: "Self-announce on final.",
+        expectedTokens: ["traffic", "final", "runway"],
+        atcReply: "(No ATC — listen for traffic calls.)",
+        tips: "Keep it brief. Airport name + traffic + final + runway.",
+      },
+      {
+        id: "ctaf-clear",
+        role: "pilot",
+        prompt: "Self-announce clear of the runway.",
+        expectedTokens: ["traffic", "clear", "runway"],
+        atcReply: "(No ATC — listen for traffic calls.)",
+        tips: "Announce when clear so others in the pattern know.",
+      },
+    ],
+    examples: [
+      {
+        pilot: "Smithville traffic, Cessna 123AB, ten miles south, inbound full stop runway 18, Smithville traffic.",
+        atc: "(No ATC — other aircraft in pattern self-announce.)",
+      },
+      {
+        pilot: "Smithville traffic, Cessna 123AB, left downwind runway 18, full stop, Smithville.",
+        atc: "(No ATC — continue self-announcing each leg.)",
+      },
+    ],
+  },
+  {
+    id: "emergency-mayday",
+    title: "Emergency (Mayday)",
+    summary: "Practice the Mayday distress call and ATC coordination.",
+    steps: [
+      {
+        id: "mayday-call",
+        role: "pilot",
+        prompt: "Declare a Mayday for engine failure.",
+        expectedTokens: ["mayday", "engine", "altitude"],
+        atcReply: "Cessna 123AB, roger Mayday, say souls on board and fuel remaining.",
+        tips: "Mayday x3, who you're calling, call sign, nature of emergency, position, altitude, intentions.",
+      },
+      {
+        id: "souls-fuel",
+        role: "pilot",
+        prompt: "Report souls on board and fuel remaining.",
+        expectedTokens: ["souls", "fuel"],
+        atcReply: "Cessna 123AB, squawk 7700, nearest airport is 8 miles southwest, runway 36.",
+        tips: "Give the number of people on board and fuel in hours and minutes.",
+      },
+      {
+        id: "squawk-7700",
+        role: "pilot",
+        prompt: "Confirm squawking 7700 and state intentions.",
+        expectedTokens: ["7700", "airport"],
+        atcReply: "Cessna 123AB, radar contact, 7 miles from runway 36. Winds 350 at 10.",
+        tips: "Confirm the squawk code and declare your intended landing site.",
+      },
+      {
+        id: "final-emergency",
+        role: "pilot",
+        prompt: "Call final for emergency landing.",
+        expectedTokens: ["final", "emergency"],
+        atcReply: "Cessna 123AB, emergency equipment is standing by. Cleared to land runway 36.",
+        tips: "Short and clear. Runway + final + emergency equipment acknowledged.",
+      },
+    ],
+    examples: [
+      {
+        pilot: "Mayday, Mayday, Mayday. Denver Approach, Cessna 123AB, engine failure, 8,500 feet, 15 miles east, request immediate assistance.",
+        atc: "Cessna 123AB, roger Mayday. Say souls on board and fuel remaining.",
+      },
+      {
+        pilot: "Two souls on board, fuel two hours remaining, squawking 7700, requesting vectors to nearest airport.",
+        atc: "Cessna 123AB, squawk 7700 confirmed. Turn left heading 270, runway 36 in 8 miles.",
+      },
+    ],
+  },
 ];
 
 function normalize(text: string) {
@@ -184,7 +289,8 @@ function normalize(text: string) {
 
 export default function RadioCommsTrainer() {
   const { user, isAuthenticated } = useAuth();
-  const entitlements = (user as any)?.entitlements;
+  const entitlements = (user as { entitlements?: { canUseScenarioScoring?: boolean } } | undefined)
+    ?.entitlements;
   const isPro = entitlements?.canUseScenarioScoring ?? (user?.logbookProStatus === "active");
   const isGuest = !isAuthenticated;
   const isFree = isAuthenticated && !isPro;
@@ -193,7 +299,7 @@ export default function RadioCommsTrainer() {
   const [stepIndex, setStepIndex] = useState(0);
   const [input, setInput] = useState("");
   const [score, setScore] = useState({ correct: 0, total: 0 });
-  const [showFeedback, setShowFeedback] = useState<string | null>(null);
+  const [showFeedback, setShowFeedback] = useState<FeedbackState>(null);
   const [gateMessage, setGateMessage] = useState<string | null>(null);
   const [enableAudio, setEnableAudio] = useState(true);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -205,6 +311,8 @@ export default function RadioCommsTrainer() {
   const [freeUsageCount, setFreeUsageCount] = useState(0);
   const [freeUsageDate, setFreeUsageDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [guestUsed, setGuestUsed] = useState(false);
+  const [conversationLog, setConversationLog] = useState<Array<{ role: "atc" | "pilot"; text: string; hit?: boolean }>>([]);
+  const [showAnswerVisible, setShowAnswerVisible] = useState(false);
   const todayKey = new Date().toISOString().slice(0, 10);
   const freeUsageKey = "rsf-radio-free-usage";
   const guestUsageKey = "rsf-radio-guest-usage";
@@ -215,7 +323,13 @@ export default function RadioCommsTrainer() {
   });
 
   const saveSessionMutation = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: {
+      scenarioId: string;
+      scoreCorrect: number;
+      scoreTotal: number;
+      durationSec: number | null;
+      attempts: ScenarioAttempt[];
+    }) => {
       const res = await apiRequest("POST", "/api/radio-comms/sessions", payload);
       return res.json();
     },
@@ -332,7 +446,17 @@ export default function RadioCommsTrainer() {
     setGateMessage(null);
     setAttempts([]);
     setSessionSaved(false);
+    setConversationLog([]);
+    setShowAnswerVisible(false);
     sessionStartRef.current = Date.now();
+  };
+
+  const getExampleForStep = (stepId: string | undefined): string => {
+    if (!stepId) return "";
+    const step = scenario.steps.find((item) => item.id === stepId);
+    const token = step?.expectedTokens[0]?.toLowerCase() ?? "";
+    const example = scenario.examples.find((ex) => ex.pilot.toLowerCase().includes(token));
+    return example?.pilot ?? "See scenario examples below for reference.";
   };
 
   const resolveVoice = (availableVoices: SpeechSynthesisVoice[]) => {
@@ -375,13 +499,20 @@ export default function RadioCommsTrainer() {
     if (!currentStep) return;
     const tokens = currentStep.expectedTokens.map((t) => normalize(t));
     const normalizedInput = normalize(input);
-    const hit = tokens.every((token) => normalizedInput.includes(token));
+    const tokenResults = tokens.map((token) => ({
+      token,
+      hit: normalizedInput.includes(token),
+    }));
+    const hit = tokenResults.every((result) => result.hit);
     const nextScore = {
       correct: score.correct + (hit ? 1 : 0),
       total: score.total + 1,
     };
     setScore(nextScore);
-    setShowFeedback(hit ? "Correct" : "Needs work");
+    setShowFeedback({
+      type: hit ? "correct" : "needs_work",
+      tokenResults,
+    });
     setAttempts((prev) => [
       ...prev,
       {
@@ -390,6 +521,19 @@ export default function RadioCommsTrainer() {
         expectedTokens: currentStep.expectedTokens,
         hit,
         atcReply: currentStep.atcReply,
+        tokenResults,
+      },
+    ]);
+    setConversationLog((prev) => [
+      ...prev,
+      {
+        role: "pilot",
+        text: input,
+        hit,
+      },
+      {
+        role: "atc",
+        text: currentStep.atcReply,
       },
     ]);
     trackEvent("radio_comms_attempt", { scenario: scenario.id, hit });
@@ -405,9 +549,10 @@ export default function RadioCommsTrainer() {
       setStepIndex(stepIndex + 1);
       setInput("");
       setShowFeedback(null);
+      setShowAnswerVisible(false);
       return;
     }
-    setShowFeedback("Scenario complete");
+    setShowFeedback({ type: "complete" });
     if (!isPro) {
       recordScenarioUsage();
       setGateMessage(gateText);
@@ -502,8 +647,6 @@ export default function RadioCommsTrainer() {
         <CardHeader>
           <CardTitle>{scenario.title}</CardTitle>
           <CardDescription>{scenario.summary}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-xs text-muted-foreground">Voice</div>
             <label htmlFor="voice-select" className="sr-only">
@@ -533,19 +676,72 @@ export default function RadioCommsTrainer() {
               </span>
             )}
           </div>
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
-              Step {stepIndex + 1} of {scenario.steps.length}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Step {stepIndex + 1} of {scenario.steps.length}</span>
+              <span>Score {score.correct}/{score.total}</span>
             </div>
-            <div className="text-sm text-muted-foreground">
-              Score: {score.correct}/{score.total}
+            <div className="flex gap-1">
+              {scenario.steps.map((step, idx) => {
+                const attempt = attempts.find((a) => a.stepId === step.id);
+                return (
+                  <div
+                    key={step.id}
+                    className={cn(
+                      "h-2 flex-1 rounded-full transition-colors",
+                      idx < stepIndex && attempt?.hit
+                        ? "bg-green-400"
+                        : idx < stepIndex && !attempt?.hit
+                          ? "bg-red-400"
+                          : idx === stepIndex
+                            ? "bg-sky-400"
+                            : "bg-muted"
+                    )}
+                  />
+                );
+              })}
             </div>
           </div>
 
-          <div className="rounded-lg border p-4 space-y-2">
-            <div className="text-sm text-muted-foreground">Prompt</div>
-            <div className="font-semibold">{currentStep?.prompt}</div>
-            <div className="text-xs text-muted-foreground">{currentStep?.tips}</div>
+          {conversationLog.length > 0 && (
+            <div className="space-y-2 rounded-lg border bg-muted/20 p-3 max-h-64 overflow-y-auto">
+              {conversationLog.map((entry, idx) => (
+                <div
+                  key={`${entry.role}-${idx}`}
+                  className={cn(
+                    "flex flex-col max-w-[85%] rounded-lg px-3 py-2 text-sm",
+                    entry.role === "pilot"
+                      ? "ml-auto bg-sky-100 text-sky-900 items-end"
+                      : "mr-auto bg-slate-100 text-slate-800 items-start"
+                  )}
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">
+                    {entry.role === "pilot" ? "You (Pilot)" : "ATC"}
+                  </div>
+                  <div
+                    className={cn(
+                      entry.role === "pilot" && entry.hit === false
+                        ? "text-red-700"
+                        : entry.role === "pilot" && entry.hit === true
+                          ? "text-green-700"
+                          : ""
+                    )}
+                  >
+                    {entry.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="rounded-lg border-l-4 border-sky-400 bg-sky-50 px-4 py-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-sky-600 mb-1">
+              Your turn
+            </div>
+            <div className="font-semibold text-sm">{currentStep?.prompt}</div>
+            <div className="text-xs text-muted-foreground mt-1">{currentStep?.tips}</div>
           </div>
 
           <div className="space-y-2">
@@ -554,6 +750,16 @@ export default function RadioCommsTrainer() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type your radio call..."
               disabled={limitReached}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (showFeedback) {
+                    nextStep();
+                  } else if (input) {
+                    evaluate();
+                  }
+                }
+              }}
             />
             <div className="flex flex-wrap gap-2">
               <Button onClick={evaluate} disabled={!input || limitReached}>
@@ -572,24 +778,74 @@ export default function RadioCommsTrainer() {
                 {enableAudio ? "Audio on" : "Audio off"}
               </Button>
             </div>
+            {!limitReached && (
+              <div className="text-xs text-muted-foreground">
+                Press Enter to check · Enter again to advance
+              </div>
+            )}
           </div>
 
-          {showFeedback && (
-            <div className="rounded-md border p-3 text-sm">
-              {showFeedback === "Correct" && (
-                <span className="text-green-600">Correct. ATC response: {currentStep.atcReply}</span>
+          {showFeedback?.type === "correct" && (
+            <div className="rounded-lg border border-green-200 bg-green-50 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-semibold text-green-700">
+                <span>✓ Correct</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {showFeedback.tokenResults?.map(({ token, hit }) => (
+                  <span
+                    key={token}
+                    className={cn(
+                      "rounded px-2 py-0.5 text-xs font-medium border",
+                      hit
+                        ? "bg-green-100 text-green-800 border-green-300"
+                        : "bg-red-100 text-red-800 border-red-300"
+                    )}
+                  >
+                    {token}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {showFeedback?.type === "needs_work" && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-2">
+              <div className="text-sm font-semibold text-red-700">Needs work</div>
+              <div className="flex flex-wrap gap-1">
+                {showFeedback.tokenResults?.map(({ token, hit }) => (
+                  <span
+                    key={token}
+                    className={cn(
+                      "rounded px-2 py-0.5 text-xs font-medium border",
+                      hit
+                        ? "bg-green-100 text-green-800 border-green-300"
+                        : "bg-red-100 text-red-800 border-red-300"
+                    )}
+                  >
+                    {hit ? `✓ ${token}` : `✗ ${token}`}
+                  </span>
+                ))}
+              </div>
+              {showAnswerVisible && (
+                <div className="rounded border bg-white px-3 py-2 text-xs text-slate-700">
+                  <div className="font-semibold mb-1">Example correct call:</div>
+                  <div className="italic">{getExampleForStep(currentStep?.id)}</div>
+                </div>
               )}
-              {showFeedback === "Needs work" && (
-                <span className="text-red-600">
-                  Needs work. Expected to include: {currentStep.expectedTokens.join(", ")}. ATC response: {currentStep.atcReply}
-                </span>
-              )}
-              {showFeedback === "Scenario complete" && (
-                <span className="text-primary">
-                  Scenario complete. Great work!
-                  {saveSessionMutation.isPending && isPro ? " Saving session..." : ""}
-                </span>
-              )}
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline"
+                onClick={() => setShowAnswerVisible(true)}
+              >
+                Show example answer
+              </button>
+            </div>
+          )}
+
+          {showFeedback?.type === "complete" && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm font-semibold text-primary">
+              Scenario complete — {score.correct}/{score.total} calls correct.
+              {saveSessionMutation.isPending && isPro ? " Saving..." : ""}
             </div>
           )}
         </CardContent>
@@ -611,13 +867,13 @@ export default function RadioCommsTrainer() {
                 const scenarioTitle = SCENARIOS.find((s) => s.id === session.scenarioId)?.title || session.scenarioId;
                 const scoreLine = session.scoreTotal
                   ? `${session.scoreCorrect ?? 0}/${session.scoreTotal}`
-                  : session.scoreCorrect ?? "â€”";
+                  : session.scoreCorrect?.toString() ?? "—";
                 return (
                   <div key={session.id} className="rounded-lg border p-3 text-sm space-y-1">
                     <div className="font-semibold">{scenarioTitle}</div>
                     <div className="text-xs text-muted-foreground">
-                      {session.createdAt ? new Date(session.createdAt).toLocaleDateString() : "â€”"} â€¢ Score {scoreLine}
-                      {session.durationSec ? ` â€¢ ${Math.round(session.durationSec / 60)}m` : ""}
+                      {session.createdAt ? new Date(session.createdAt).toLocaleDateString() : "—"} · Score {scoreLine}
+                      {session.durationSec ? ` · ${Math.round(session.durationSec / 60)}m` : ""}
                     </div>
                   </div>
                 );
@@ -666,19 +922,6 @@ export default function RadioCommsTrainer() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Want more practice?</CardTitle>
-          <CardDescription>
-            RSF Pro unlocks all scenarios, advanced scoring, saved practice history, and full access to pilot tools.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }

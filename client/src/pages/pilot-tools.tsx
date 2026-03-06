@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
+import { SponsoredRightRail } from "@/components/banners/SponsoredRightRail";
 import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, CloudSun, Plane, Wind, Gauge, Scale } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -451,8 +451,9 @@ export default function PilotTools() {
   }, []);
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-5xl">
-      <div className="space-y-6">
+    <div className="container mx-auto max-w-7xl px-4 py-8">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold flex items-center justify-center gap-2">
@@ -463,11 +464,6 @@ export default function PilotTools() {
             Aviation weather, NOTAMs, and airport information
           </p>
         </div>
-
-        <BannerAdRotation
-          placement="pilot-tools"
-          className="mt-2"
-        />
 
         <Card className="border-slate-200 bg-slate-50">
           <CardHeader>
@@ -1343,6 +1339,12 @@ export default function PilotTools() {
             </Card>
           </>
         )}
+        </div>
+        <SponsoredRightRail
+          placement="pilot-tools"
+          infoTestId="button-banner-ad-info-pilot-tools"
+          className="xl:sticky xl:top-24 xl:self-start"
+        />
       </div>
     </div>
   );

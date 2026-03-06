@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
+import { SponsoredRightRail } from "@/components/banners/SponsoredRightRail";
 import { PageShell } from "@/components/layout/PageShell";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
@@ -213,129 +213,134 @@ export default function CfiDirectory() {
         </div>
       </section>
 
-      <BannerAdRotation placement="cfi-directory" className="mt-2" />
-
-      <section className="rounded-[1.45rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.85),rgba(255,255,255,0.62))] p-5 shadow-sm sm:p-6">
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <span className="rsf-kicker">Available instructors</span>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">Browse instructors by training fit, location, and availability.</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {profiles.length} instructor{profiles.length === 1 ? "" : "s"} match the current search.
-            </p>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="rounded-[1.45rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.85),rgba(255,255,255,0.62))] p-5 shadow-sm sm:p-6">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <span className="rsf-kicker">Available instructors</span>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">Browse instructors by training fit, location, and availability.</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {profiles.length} instructor{profiles.length === 1 ? "" : "s"} match the current search.
+              </p>
+            </div>
+            <Badge variant="outline">{hasFilters ? "Filtered search" : "All instructors"}</Badge>
           </div>
-          <Badge variant="outline">{hasFilters ? "Filtered search" : "All instructors"}</Badge>
-        </div>
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {isLoading ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Loading profiles...</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">Fetching instructor profiles.</p>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {!isLoading && profiles.length === 0 ? (
-            <Card className="md:col-span-2 lg:col-span-3">
-              <CardHeader>
-                <CardTitle>No instructors found</CardTitle>
-                <CardDescription>
-                  Try a different airport, state, or search term. If you are a CFI, you can also publish the first profile for this area.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-3">
-                <Button asChild>
-                  <Link href="/dashboard/cfi">Create your CFI profile</Link>
-                </Button>
-                {hasFilters ? (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setSearch("");
-                      setState("");
-                      setAirport("");
-                      trackEvent("cfi_directory_filter_reset");
-                    }}
-                  >
-                    Clear search
-                  </Button>
-                ) : null}
-              </CardContent>
-            </Card>
-          ) : null}
-
-          {profiles.map((profile) => {
-            const ratings = normalizeList(profile.ratingsHeld);
-            const aircraft = normalizeList(profile.aircraftTypes);
-            const languages = normalizeList(profile.languages);
-            return (
-              <Card key={profile.id} className="hover-elevate">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {isLoading ? (
+              <Card>
                 <CardHeader>
-                  <div className="flex items-center gap-3">
-                    {profile.headshotUrl ? (
-                      <div className="h-12 w-12 rounded-full overflow-hidden border">
-                        <img
-                          src={resolveHeadshotUrl(profile.headshotUrl)}
-                          alt={`${profile.displayName} headshot`}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-xs text-muted-foreground">
-                        CFI
-                      </div>
-                    )}
-                    <div>
-                      <CardTitle>{profile.displayName}</CardTitle>
-                      <CardDescription>{profile.headline || "CFI on Ready Set Fly"}</CardDescription>
-                    </div>
-                  </div>
+                  <CardTitle>Loading profiles...</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    {(profile.locationCity || profile.locationState) && (
-                      <span>
-                        {profile.locationCity || ""}{profile.locationCity && profile.locationState ? ", " : ""}
-                        {profile.locationState || ""}
-                      </span>
-                    )}
-                    {profile.airportHome && <span>Home: {profile.airportHome}</span>}
-                  </div>
-                  <div className="text-sm font-semibold">{formatRate(profile.hourlyRateCents)}</div>
-                  {ratings.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {ratings.slice(0, 4).map((rating) => (
-                        <Badge key={rating} variant="secondary">
-                          {rating}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {aircraft.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Aircraft: {aircraft.slice(0, 3).join(", ")}
-                      {aircraft.length > 3 ? "..." : ""}
-                    </p>
-                  )}
-                  {languages.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      Languages: {languages.slice(0, 3).join(", ")}
-                      {languages.length > 3 ? "..." : ""}
-                    </p>
-                  )}
-                  <Button asChild className="w-full">
-                    <Link href={`/cfi/${profile.slug}`}>Review instructor</Link>
-                  </Button>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">Fetching instructor profiles.</p>
                 </CardContent>
               </Card>
-            );
-          })}
-        </div>
-      </section>
+            ) : null}
+
+            {!isLoading && profiles.length === 0 ? (
+              <Card className="md:col-span-2 lg:col-span-3">
+                <CardHeader>
+                  <CardTitle>No instructors found</CardTitle>
+                  <CardDescription>
+                    Try a different airport, state, or search term. If you are a CFI, you can also publish the first profile for this area.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-3">
+                  <Button asChild>
+                    <Link href="/dashboard/cfi">Create your CFI profile</Link>
+                  </Button>
+                  {hasFilters ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSearch("");
+                        setState("");
+                        setAirport("");
+                        trackEvent("cfi_directory_filter_reset");
+                      }}
+                    >
+                      Clear search
+                    </Button>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {profiles.map((profile) => {
+              const ratings = normalizeList(profile.ratingsHeld);
+              const aircraft = normalizeList(profile.aircraftTypes);
+              const languages = normalizeList(profile.languages);
+              return (
+                <Card key={profile.id} className="hover-elevate">
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      {profile.headshotUrl ? (
+                        <div className="h-12 w-12 rounded-full overflow-hidden border">
+                          <img
+                            src={resolveHeadshotUrl(profile.headshotUrl)}
+                            alt={`${profile.displayName} headshot`}
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                          CFI
+                        </div>
+                      )}
+                      <div>
+                        <CardTitle>{profile.displayName}</CardTitle>
+                        <CardDescription>{profile.headline || "CFI on Ready Set Fly"}</CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      {(profile.locationCity || profile.locationState) && (
+                        <span>
+                          {profile.locationCity || ""}{profile.locationCity && profile.locationState ? ", " : ""}
+                          {profile.locationState || ""}
+                        </span>
+                      )}
+                      {profile.airportHome && <span>Home: {profile.airportHome}</span>}
+                    </div>
+                    <div className="text-sm font-semibold">{formatRate(profile.hourlyRateCents)}</div>
+                    {ratings.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {ratings.slice(0, 4).map((rating) => (
+                          <Badge key={rating} variant="secondary">
+                            {rating}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {aircraft.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Aircraft: {aircraft.slice(0, 3).join(", ")}
+                        {aircraft.length > 3 ? "..." : ""}
+                      </p>
+                    )}
+                    {languages.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Languages: {languages.slice(0, 3).join(", ")}
+                        {languages.length > 3 ? "..." : ""}
+                      </p>
+                    )}
+                    <Button asChild className="w-full">
+                      <Link href={`/cfi/${profile.slug}`}>Review instructor</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+        <SponsoredRightRail
+          placement="cfi-directory"
+          infoTestId="button-banner-ad-info-cfi"
+          className="xl:sticky xl:top-24 xl:self-start"
+        />
+      </div>
     </PageShell>
   );
 }

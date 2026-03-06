@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { MarketplaceListing, PromoAlert } from "@shared/schema";
 import { MarketplaceCard } from "@/components/marketplace-card";
 import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
-import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
+import { SponsoredRightRail } from "@/components/banners/SponsoredRightRail";
 import { Search, SlidersHorizontal, Gift, X } from "lucide-react";
 import { formatPrice } from "@/lib/formatters";
 import { apiUrl } from "@/lib/api";
@@ -303,56 +303,58 @@ export default function Marketplace() {
           </Alert>
         ))}
 
-        <BannerAdRotation 
-          placement="marketplace" 
-          category={selectedCategory}
-          className="mb-8"
-        />
+        <div className="mb-8 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="rounded-[1.2rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] p-5 shadow-[var(--shadow-rsf-panel)]">
+              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary/80">Browse category</div>
+              <h2 className="font-display text-2xl font-bold">{currentCategoryDetail.title}</h2>
+              <p className="mt-2 text-sm text-muted-foreground sm:text-base">{currentCategoryDetail.summary}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowFilters((current) => !current)}
+                  data-testid="button-toggle-filters-summary"
+                >
+                  <SlidersHorizontal className="mr-2 h-4 w-4" />
+                  {showFilters ? "Hide filters" : "Refine results"}
+                </Button>
+                <Badge variant="outline">{categoryListings.length} active listings</Badge>
+                {hasActiveFilters ? <Badge variant="secondary">Filters applied</Badge> : null}
+              </div>
+            </div>
 
-        <div className="mb-8 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="rounded-[1.2rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] p-5 shadow-[var(--shadow-rsf-panel)]">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-primary/80">Browse category</div>
-            <h2 className="font-display text-2xl font-bold">{currentCategoryDetail.title}</h2>
-            <p className="mt-2 text-sm text-muted-foreground sm:text-base">{currentCategoryDetail.summary}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setShowFilters((current) => !current)}
-                data-testid="button-toggle-filters-summary"
-              >
-                <SlidersHorizontal className="mr-2 h-4 w-4" />
-                {showFilters ? "Hide filters" : "Refine results"}
-              </Button>
-              <Badge variant="outline">{categoryListings.length} active listings</Badge>
-              {hasActiveFilters ? <Badge variant="secondary">Filters applied</Badge> : null}
+            <div className="rounded-[1.2rem] border border-white/10 bg-white/75 p-5 shadow-[var(--shadow-rsf-soft)]">
+              <div className="text-sm font-semibold">How to use this page</div>
+              <p className="mt-2 text-sm text-muted-foreground">{currentCategoryDetail.helper}</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    trackEvent("marketplace_create_listing_click", { category: selectedCategory });
+                    navigate("/create-marketplace-listing");
+                  }}
+                  data-testid="button-create-listing-summary"
+                >
+                  Create Listing
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    trackEvent("cta_click", { label: "marketplace_to_rentals", target: "/rentals" });
+                    navigate("/rentals");
+                  }}
+                >
+                  Browse Rentals
+                </Button>
+              </div>
             </div>
           </div>
-
-          <div className="rounded-[1.2rem] border border-white/10 bg-white/75 p-5 shadow-[var(--shadow-rsf-soft)]">
-            <div className="text-sm font-semibold">How to use this page</div>
-            <p className="mt-2 text-sm text-muted-foreground">{currentCategoryDetail.helper}</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              <Button
-                variant="default"
-                onClick={() => {
-                  trackEvent("marketplace_create_listing_click", { category: selectedCategory });
-                  navigate("/create-marketplace-listing");
-                }}
-                data-testid="button-create-listing-summary"
-              >
-                Create Listing
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  trackEvent("cta_click", { label: "marketplace_to_rentals", target: "/rentals" });
-                  navigate("/rentals");
-                }}
-              >
-                Browse Rentals
-              </Button>
-            </div>
-          </div>
+          <SponsoredRightRail
+            placement="marketplace"
+            category={selectedCategory}
+            infoTestId="button-banner-ad-info-marketplace"
+            className="xl:sticky xl:top-24 xl:self-start"
+          />
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">

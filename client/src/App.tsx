@@ -175,6 +175,7 @@ function Router() {
       <Route path="/terms-of-service" component={TermsOfService} />
       <Route path="/banner-ad-payment" component={BannerAdPaymentRedirect} />
       <Route path="/banner-advertise" component={BannerAdvertise} />
+      <Route path="/tools" component={() => <RedirectTo to="/tool-hub" />} />
       <Route path="/tool-hub" component={ToolHub} />
       <Route path="/cfi" component={CfiDirectory} />
       <Route path="/cfi/terms" component={CfiTerms} />

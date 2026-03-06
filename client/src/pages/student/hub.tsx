@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { trackEvent } from "@/lib/analytics";
 import { NextStepCTA } from "@/components/student/NextStepCTA";
-import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
+import { SponsoredRightRail } from "@/components/banners/SponsoredRightRail";
 import { useAuth } from "@/hooks/useAuth";
 import { PageShell } from "@/components/layout/PageShell";
 import { BookOpenCheck, ClipboardList, GraduationCap, Plane, Radar, Route } from "lucide-react";
@@ -89,10 +89,8 @@ export default function StudentHub() {
       }
       contentClassName="space-y-8"
     >
-      <BannerAdRotation placement="student-hub" className="px-0 py-0" />
-
       <section>
-        <div className="mb-6 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="mb-6 grid gap-4 xl:grid-cols-[1.1fr_0.9fr_340px]">
           <div className="rounded-[1.15rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] p-5 shadow-[var(--shadow-rsf-panel)]">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-primary">
               <GraduationCap className="h-4 w-4" />
@@ -130,6 +128,11 @@ export default function StudentHub() {
               </div>
             ))}
           </div>
+          <SponsoredRightRail
+            placement="student-hub"
+            infoTestId="button-banner-ad-info-student-hub"
+            className="xl:sticky xl:top-24 xl:self-start"
+          />
         </div>
 
         {!isAuthenticated ? (

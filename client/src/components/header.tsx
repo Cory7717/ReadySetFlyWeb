@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
 import { trackEvent } from "@/lib/analytics";
+import { RSF_TOOLS } from "@/lib/tool-registry";
 
 type ToolSearchItem = {
   label: string;
@@ -25,187 +26,41 @@ type ToolSearchItem = {
   keywords: string[];
 };
 
-const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
-  {
-    label: "Logbook",
-    path: "/logbook",
-    keywords: ["pilot logbook", "logbook pro", "logbook entries", "flight log"],
-  },
-  {
-    label: "Pilot Tools",
-    path: "/pilot-tools",
-    keywords: ["pilot tools", "aviation tools", "toolbox", "pilot utilities"],
-  },
-  {
-    label: "Tool Hub",
-    path: "/tool-hub",
-    keywords: ["tool hub", "tools hub", "pilot tools hub", "all tools"],
-  },
-  {
-    label: "NOTAMs",
-    path: "/pilot-tools",
-    keywords: ["notams", "notam", "runway advisory", "airport briefing"],
-  },
-  {
-    label: "Airport Briefing",
-    path: "/pilot-tools",
-    keywords: ["runway briefing", "airport briefing", "runways", "notams"],
-  },
-  {
-    label: "TFR Map",
-    path: "/tfr-map",
-    keywords: ["tfr", "temporary flight restriction", "tfrs", "map"],
-  },
-  {
-    label: "IFR Tools",
-    path: "/ifr-tools",
-    keywords: ["ifr", "instrument", "procedures", "ifr tools"],
-  },
-  {
-    label: "Approach Plates",
-    path: "/approach-plates",
-    keywords: ["ifr charts", "plates", "approach", "charts"],
-  },
-  {
-    label: "GPS Sims (Coming Soon)",
-    path: "/tool-hub",
-    keywords: ["gps simulator", "g1000", "gtn", "gtx", "ifr gps"],
-  },
-  {
-    label: "e6b calculator",
-    path: "/tools/e6b",
-    keywords: ["e6b", "e6-b", "flight computer", "wind triangle"],
-  },
-  {
-    label: "Weight & Balance",
-    path: "/weight-balance",
-    keywords: ["weight balance", "weight and balance", "cg", "center of gravity"],
-  },
-  {
-    label: "Ownership Cost Calculator",
-    path: "/ownership-cost-calculator",
-    keywords: ["ownership cost", "operating cost", "aircraft cost"],
-  },
-  {
-    label: "Crosswind Calculator",
-    path: "/pilot-tools",
-    keywords: ["crosswind", "headwind", "wind component", "runway wind"],
-  },
-  {
-    label: "Calculators",
-    path: "/pilot-tools#calculators",
-    keywords: ["calculators", "pilot calculators", "crosswind", "density altitude", "e6b", "weight balance"],
-  },
-  {
-    label: "Density Altitude Calculator",
-    path: "/pilot-tools",
-    keywords: ["density altitude", "pressure altitude", "performance", "hot and high"],
-  },
-  {
-    label: "Radio Comms Trainer",
-    path: "/radio-comms-trainer",
-    keywords: ["radio", "comms", "atc", "phraseology"],
-  },
-  {
-    label: "ADS-B Receiver Help",
-    path: "/adsb-receiver-help",
-    keywords: ["adsb receiver", "stratux", "sentry", "traffic receiver"],
-  },
-  {
-    label: "Live Traffic (Coming Soon)",
-    path: "/tool-hub",
-    keywords: ["live traffic", "adsb", "traffic map", "aircraft tracking"],
-  },
-  {
-    label: "Synthetic Vision (Coming Soon)",
-    path: "/tool-hub",
-    keywords: ["synthetic vision", "svt", "terrain view", "in-flight display", "pfd"],
-  },
-  {
-    label: "VOR Trainer",
-    path: "/student/vor-trainer",
-    keywords: ["vor", "navigation", "training", "student"],
-  },
-  {
-    label: "Six-Pack Trainer",
-    path: "/student/six-pack-trainer",
-    keywords: ["six pack", "flight instruments", "attitude", "instrument scan"],
-  },
-  {
-    label: "Student Hub",
-    path: "/student",
-    keywords: ["student", "training", "learn to fly", "student hub"],
-  },
-  {
-    label: "Student Roadmap",
-    path: "/student/roadmap",
-    keywords: ["roadmap", "training plan", "milestones"],
-  },
-  {
-    label: "Student Progress",
-    path: "/student/progress",
-    keywords: ["progress", "tracking", "stage checks"],
-  },
-  {
-    label: "Student Cost",
-    path: "/student/cost",
-    keywords: ["training cost", "cost to learn", "student cost"],
-  },
-  {
-    label: "Student Written",
-    path: "/student/written",
-    keywords: ["written test", "ground school", "knowledge test"],
-  },
-  {
-    label: "Student Syllabi",
-    path: "/student/syllabi",
-    keywords: ["syllabi", "lesson plan", "training syllabus"],
-  },
-  {
-    label: "Student Checklists",
-    path: "/student/checklists",
-    keywords: ["checklists", "preflight", "flows"],
-  },
-  {
-    label: "Student Weather",
-    path: "/student/weather",
-    keywords: ["weather basics", "student weather", "metar lesson"],
-  },
-  {
-    label: "Aviation Abbreviations",
-    path: "/student/abbreviations",
-    keywords: ["abbreviations", "acronyms", "aviation terms", "student study"],
-  },
-  {
-    label: "Flight Planner",
-    path: "/flight-planner",
-    keywords: ["flight plan", "plan flight", "route"],
-  },
+const CORE_SEARCH_ITEMS: ToolSearchItem[] = [
   {
     label: "Marketplace",
     path: "/marketplace",
-    keywords: ["buy", "sell", "listings", "marketplace"],
+    keywords: ["marketplace", "listings", "aviation services", "flight schools"],
   },
   {
     label: "Rentals",
     path: "/rentals",
-    keywords: ["rent", "aircraft rental", "rentals"],
+    keywords: ["rentals", "aircraft rental", "rent airplane"],
   },
   {
-    label: "Aviation Weather",
-    path: "/aviation-weather",
-    keywords: ["weather", "metar", "taf", "briefing"],
+    label: "FAQ",
+    path: "/faq",
+    keywords: ["faq", "help", "questions"],
   },
   {
     label: "CFI Directory",
     path: "/cfi",
-    keywords: ["cfi", "instructor", "flight instructor", "flight training"],
+    keywords: ["cfi", "instructor", "flight instructor"],
   },
   {
-    label: "Start Flying",
-    path: "/start-flying",
-    keywords: ["start flying", "getting started", "learn to fly"],
+    label: "Tool Hub",
+    path: "/tool-hub",
+    keywords: ["tool hub", "all tools", "pilot tools"],
   },
+];
+
+const TOOL_SEARCH_ITEMS: ToolSearchItem[] = [
+  ...CORE_SEARCH_ITEMS,
+  ...RSF_TOOLS.map((tool) => ({
+    label: tool.status === "coming_soon" ? `${tool.title} (Coming Soon)` : tool.title,
+    path: tool.path,
+    keywords: tool.keywords,
+  })),
 ];
 
 export function Header() {
@@ -524,10 +379,7 @@ export function Header() {
                       <Link href="/my-aircraft" data-testid="link-my-aircraft">My Aircraft</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href="/pilot-tools" data-testid="link-pilot-tools">Pilot Tools</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/ownership-cost-calculator" data-testid="link-ownership-cost">Ownership Cost Calculator</Link>
+                      <Link href="/tool-hub" data-testid="link-pilot-tools">Tool Hub</Link>
                     </DropdownMenuItem>
                     {user?.isAdmin && (
                       <>

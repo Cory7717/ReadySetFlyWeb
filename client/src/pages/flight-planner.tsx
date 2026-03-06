@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
@@ -226,7 +227,9 @@ type FilingPreviewResponse = {
 };
 
 const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
-const FILING_LIVE_ENABLED = false;
+const FLIGHT_PLANNER_ACTIVE_TAB_KEY = "rsf_planner_active_tab";
+const FLIGHT_PLANNER_TABS = ["route", "weather", "navlog", "analysis", "file"] as const;
+type FlightPlannerTab = typeof FLIGHT_PLANNER_TABS[number];
 
 const MAP_STYLE_OPTIONS: Array<{
   value: "standard" | "sectional" | "radar" | "winds" | "clouds" | "globe";
@@ -474,7 +477,20 @@ const checklistDefaults = {
   fuel: false,
   currency: false,
   notams: false,
+  tfr: false,
+  fuelSufficient: false,
 };
+
+function flightCategoryClassName(cat: string): string {
+  switch (cat) {
+    case "VFR": return "bg-green-100 text-green-800 border-green-300";
+    case "MVFR": return "bg-blue-100 text-blue-800 border-blue-300";
+    case "IFR": return "bg-red-100 text-red-800 border-red-300";
+    case "LIFR": return "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300";
+    default: return "bg-slate-100 text-slate-600 border-slate-300";
+  }
+}
+
 export default function FlightPlanner() {
   const { user, isAuthenticated } = useAuth();
   const { profile: studentProfile } = useStudentProfile();
@@ -493,6 +509,7 @@ export default function FlightPlanner() {
     studentProfile?.wizardJson || studentProfile?.roadmapJson || studentProfile?.progressJson
   );
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [activeTab, setActiveTab] = useState<FlightPlannerTab>("route");
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
 
@@ -508,6 +525,22 @@ export default function FlightPlanner() {
     sessionStorage.setItem(key, "1");
     setShowUpgradePrompt(true);
   }, [isPro]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(FLIGHT_PLANNER_ACTIVE_TAB_KEY);
+    if (stored && (FLIGHT_PLANNER_TABS as readonly string[]).includes(stored)) {
+      setActiveTab(stored as FlightPlannerTab);
+    } else {
+      setActiveTab("route");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!(FLIGHT_PLANNER_TABS as readonly string[]).includes(activeTab)) return;
+    window.localStorage.setItem(FLIGHT_PLANNER_ACTIVE_TAB_KEY, activeTab);
+  }, [activeTab]);
 
   const [editingPlan, setEditingPlan] = useState<FlightPlan | null>(null);
   const [form, setForm] = useState({
@@ -539,7 +572,7 @@ export default function FlightPlanner() {
   const [activeWeatherDetail, setActiveWeatherDetail] = useState<
     "metar" | "notams" | "pireps" | "hazards" | "winds" | "icing" | "turbulence" | null
   >(null);
-  const [wakeLockError, setWakeLockError] = useState<string | null>(null);
+  const [, setWakeLockError] = useState<string | null>(null);
   const [customProfile, setCustomProfile] = useState({
     name: "",
     cruiseKtasOverride: "",
@@ -1236,17 +1269,26 @@ export default function FlightPlanner() {
     if (Number.isFinite(onboard) && onboard > 0) return onboard;
     return planningFuel;
   }, [form.fuelOnBoard, planningFuel]);
+  const fuelSurplus = fuelAvailableGallons - totalFuel;
+  const surplusMinutes = planningBurn > 0
+    ? (fuelSurplus / planningBurn) * 60
+    : 0;
   const enduranceMinutes = useMemo(() => {
     if (!planningBurn || planningBurn <= 0) return 0;
     return (fuelAvailableGallons / planningBurn) * 60;
   }, [fuelAvailableGallons, planningBurn]);
   const legNavRows = useMemo(() => {
     let cumulativeNm = 0;
+    let cumulativeMinutes = 0;
     return legs.map((leg) => {
       cumulativeNm += leg.distanceNm;
       const course = Math.round(bearingDeg(leg.from, leg.to));
       const legMinutes = groundspeed > 0 ? (leg.distanceNm / groundspeed) * 60 : 0;
       const legFuel = planningBurn > 0 ? (leg.distanceNm / groundspeed) * planningBurn : 0;
+      cumulativeMinutes += legMinutes;
+      const legEtaUtc = plannedDepartureUtc
+        ? new Date(plannedDepartureUtc.getTime() + cumulativeMinutes * 60000)
+        : null;
       return {
         key: `${leg.from.icao}-${leg.to.icao}`,
         from: leg.from.icao,
@@ -1254,11 +1296,12 @@ export default function FlightPlanner() {
         course,
         distanceNm: leg.distanceNm,
         legMinutes,
+        legEtaUtc,
         legFuel,
         cumulativeNm,
       };
     });
-  }, [legs, groundspeed, planningBurn]);
+  }, [legs, groundspeed, planningBurn, plannedDepartureUtc]);
   const filingPacket = useMemo(() => ({
     filingLive: false,
     provider: "pending-flight-service-handoff",
@@ -1548,6 +1591,17 @@ export default function FlightPlanner() {
     [weatherFindings]
   );
 
+  const autoChecklist = useMemo(() => ({
+    weather: weatherData.length > 0 && !hasIfrWeather && !hasThunderRisk,
+    fuel: totalFuel > 0 && fuelAvailableGallons >= totalFuel,
+    notams: notamsSummaryQuery.isFetched && !notamsSummaryQuery.isError,
+    tfr: tfrRouteQuery.isFetched && tfrConflicts.length === 0,
+    fuelSufficient: totalFuel > 0 && fuelAvailableGallons >= totalFuel,
+    currency: false,
+  }), [weatherData, hasIfrWeather, hasThunderRisk, totalFuel,
+    fuelAvailableGallons, notamsSummaryQuery.isFetched,
+    notamsSummaryQuery.isError, tfrRouteQuery.isFetched, tfrConflicts]);
+
   const isIfrFlight = hasIfrWeather || plannedAltitudeFt >= 18000;
   const isVfrFlight = !isIfrFlight;
 
@@ -1815,12 +1869,13 @@ export default function FlightPlanner() {
 
   const exportNavLogCsv = () => {
     if (!legNavRows.length) return;
-    const header = ["Leg", "CourseDeg", "DistanceNm", "LegMinutes", "LegFuelGal", "CumulativeNm"];
+    const header = ["Leg", "CourseDeg", "DistanceNm", "LegMinutes", "ETA (Z)", "LegFuelGal", "CumulativeNm"];
     const rows = legNavRows.map((leg) => [
       `${leg.from} to ${leg.to}`,
       String(leg.course),
       leg.distanceNm.toFixed(1),
       Math.round(leg.legMinutes).toString(),
+      leg.legEtaUtc ? `${leg.legEtaUtc.toISOString().slice(11, 16)}Z` : "",
       leg.legFuel.toFixed(1),
       leg.cumulativeNm.toFixed(1),
     ]);
@@ -2171,6 +2226,15 @@ export default function FlightPlanner() {
           "Upgrade for unlimited saved plans, alerts, and advanced analytics.",
         ]}
       />
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="space-y-4">
+        <TabsList className="flex w-full flex-wrap gap-2">
+          <TabsTrigger value="route">Route</TabsTrigger>
+          <TabsTrigger value="weather">Weather</TabsTrigger>
+          <TabsTrigger value="navlog">Nav Log</TabsTrigger>
+          <TabsTrigger value="analysis">Analysis</TabsTrigger>
+          <TabsTrigger value="file">File &amp; Save</TabsTrigger>
+        </TabsList>
+        <TabsContent value="route" className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Quick Planning References</CardTitle>
@@ -2542,6 +2606,18 @@ export default function FlightPlanner() {
               <div className="text-lg font-semibold">{totalFuel ? totalFuel.toFixed(1) : "-"} gal</div>
             </div>
           </div>
+          {totalFuel > 0 && (
+            <div className={cn(
+              "rounded-lg border px-4 py-2 text-sm font-medium",
+              fuelSurplus >= 0
+                ? "border-green-300 bg-green-50 text-green-800"
+                : "border-red-300 bg-red-50 text-red-800"
+            )}>
+              {fuelSurplus >= 0
+                ? `Fuel surplus: +${fuelSurplus.toFixed(1)} gal (${formatMinutesLabel(surplusMinutes)} extra endurance)`
+                : `⚠ Fuel deficit: ${fuelSurplus.toFixed(1)} gal — add fuel or reduce route`}
+            </div>
+          )}
           <div className="text-xs text-muted-foreground">
             Usable fuel: {planningFuel ? `${planningFuel} gal` : "-"} | Max gross weight: {planningMaxWeight ? `${planningMaxWeight} lb` : "-"}
           </div>
@@ -2619,6 +2695,9 @@ export default function FlightPlanner() {
           ) : null}
         </CardContent>
       </Card>
+      </TabsContent>
+
+      <TabsContent value="navlog" className="space-y-6">
 
       <Card id="planner-nav-log">
         <CardHeader>
@@ -2652,6 +2731,7 @@ export default function FlightPlanner() {
                     <th className="py-2 pr-3">Course</th>
                     <th className="py-2 pr-3">Dist</th>
                     <th className="py-2 pr-3">ETE</th>
+                    <th className="py-2 pr-3">ETA (Z)</th>
                     <th className="py-2 pr-3">Fuel</th>
                     <th className="py-2">Cum</th>
                   </tr>
@@ -2663,6 +2743,11 @@ export default function FlightPlanner() {
                       <td className="py-2 pr-3">{String(leg.course).padStart(3, "0")}°</td>
                       <td className="py-2 pr-3">{leg.distanceNm.toFixed(1)} NM</td>
                       <td className="py-2 pr-3">{formatMinutesLabel(leg.legMinutes)}</td>
+                      <td className="py-2 pr-3 text-xs text-muted-foreground">
+                        {leg.legEtaUtc
+                          ? leg.legEtaUtc.toISOString().slice(11, 16) + "Z"
+                          : "-"}
+                      </td>
                       <td className="py-2 pr-3">{leg.legFuel.toFixed(1)} gal</td>
                       <td className="py-2">{leg.cumulativeNm.toFixed(1)} NM</td>
                     </tr>
@@ -2680,11 +2765,6 @@ export default function FlightPlanner() {
           <CardDescription>Route draws once valid airport coordinates are found.</CardDescription>
         </CardHeader>
         <CardContent>
-          {wakeLockError && (
-            <div className="mb-3 text-xs text-muted-foreground">
-              {wakeLockError}
-            </div>
-          )}
           <div className="mb-3 flex flex-wrap gap-3 text-sm">
             <a
               href="/adsb-receiver-help"
@@ -2813,6 +2893,9 @@ export default function FlightPlanner() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
+
+      <TabsContent value="weather" className="space-y-6">
 
       <Card id="route-weather-summary">
         <CardHeader>
@@ -2882,284 +2965,9 @@ export default function FlightPlanner() {
         overlayEnabled={tfmsOverlayEnabled}
         onToggleOverlay={setTfmsOverlayEnabled}
       />
+      </TabsContent>
 
-      <Dialog open={Boolean(activeWeatherDetail)} onOpenChange={(open) => !open && setActiveWeatherDetail(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
-          {activeWeatherDetail === "metar" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>METAR & TAF</DialogTitle>
-                <DialogDescription>Latest conditions along your route.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3 text-sm">
-                {weatherData.length === 0 && <div className="text-muted-foreground">No METAR/TAF data yet.</div>}
-                {weatherData.map(({ icao, data }) => (
-                  <div key={icao} className="rounded-lg border p-3">
-                    <div className="font-semibold">{icao}</div>
-                    <div className="text-xs text-muted-foreground mt-2">{data?.metar?.rawOb || "No METAR"}</div>
-                    <div className="text-xs text-muted-foreground mt-2">{data?.taf?.rawTAF || "No TAF"}</div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-          {activeWeatherDetail === "winds" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Winds Aloft</DialogTitle>
-                <DialogDescription>NOAA AWC winds/temps near your route.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2 text-sm">
-                {windsCount === 0 && <div className="text-muted-foreground">No winds aloft data in view.</div>}
-                {windsSummaryQuery.data?.stations?.slice(0, 12).map((station: any) => (
-                  <div key={`${station.stationId}-${station.lat}`} className="flex items-center justify-between rounded-lg border p-2">
-                    <div className="font-semibold">{station.icao || station.stationId}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {station.windDir ?? "-"} deg / {station.windSpeed ?? "-"} kt
-                      {station.tempC !== null ? `, ${station.tempC}C` : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-          {activeWeatherDetail === "notams" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>NOTAMs</DialogTitle>
-                <DialogDescription>Latest NOTAMs for {primaryIcao || "your route"}.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2 text-sm">
-                {notamsSummaryQuery.isError && (
-                  <div className="text-muted-foreground">NOTAM feed unavailable.</div>
-                )}
-                {!notamsSummaryQuery.isError && notamsCount === 0 && (
-                  <div className="text-muted-foreground">No active NOTAMs.</div>
-                )}
-                {notamsSummaryQuery.data?.notams?.map((notam: any) => (
-                  <div key={notam.id} className="rounded-lg border p-2">
-                    <div className="font-semibold">{notam.id}</div>
-                    <div className="text-xs text-muted-foreground mt-1">{notam.text}</div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-          {activeWeatherDetail === "pireps" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>PIREPs</DialogTitle>
-                <DialogDescription>Recent pilot reports near {primaryIcao || "your route"}.</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2 text-sm">
-                {pirepsCount === 0 && <div className="text-muted-foreground">No recent PIREPs in range.</div>}
-                {pirepsQuery.data?.reports?.slice(0, 12).map((report: any, index: number) => (
-                  <div key={`${report.rawOb || report.id || index}`} className="rounded-lg border p-2">
-                    <div className="font-semibold">{report.rawOb || "PIREP"}</div>
-                    {report.obsTime && <div className="text-xs text-muted-foreground mt-1">{report.obsTime}</div>}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-          {activeWeatherDetail === "hazards" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Convective Hazards</DialogTitle>
-                <DialogDescription>Domestic SIGMETs, G-AIRMETs, and TCF.</DialogDescription>
-              </DialogHeader>
-              {convectiveSummary.warnings.length > 0 && (
-                <Alert>
-                  <AlertDescription>{convectiveSummary.warnings.join(" ")}</AlertDescription>
-                </Alert>
-              )}
-              <div className="text-sm text-muted-foreground">
-                {convectiveCount > 0 ? `${convectiveCount} hazard items available.` : "No convective hazards returned."}
-                {convectiveSummary.tcfCount > 0 && ` TCF features: ${convectiveSummary.tcfCount}.`}
-              </div>
-              <div className="mt-3 space-y-2 text-sm">
-                {convectiveSummary.items.length === 0 && convectiveSummary.tcfCount === 0 ? (
-                  <div className="text-muted-foreground">No convective hazards returned.</div>
-                ) : (
-                  convectiveSummary.items.slice(0, 12).map((item, index) => (
-                    <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-2">
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold">{item.hazard}</div>
-                        <Badge variant="outline">{item.source.toUpperCase()}</Badge>
-                      </div>
-                      {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
-                      {(item.validFrom || item.validTo) && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Valid {item.validFrom || "-"} to {item.validTo || "-"}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-          {activeWeatherDetail === "icing" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Icing Guidance</DialogTitle>
-                <DialogDescription>AWC icing signals (stub if not available).</DialogDescription>
-              </DialogHeader>
-              {icingSummary.warnings.length > 0 && (
-                <Alert>
-                  <AlertDescription>{icingSummary.warnings.join(" ")}</AlertDescription>
-                </Alert>
-              )}
-              <div className="mt-3 space-y-2 text-sm">
-                {icingSummary.items.length === 0 ? (
-                  <div className="text-muted-foreground">No icing guidance returned yet.</div>
-                ) : (
-                  icingSummary.items.slice(0, 12).map((item, index) => (
-                    <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-2">
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold">{item.hazard}</div>
-                        <Badge variant="outline">{item.source.toUpperCase()}</Badge>
-                      </div>
-                      {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
-                      {(item.validFrom || item.validTo) && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Valid {item.validFrom || "-"} to {item.validTo || "-"}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-          {activeWeatherDetail === "turbulence" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Turbulence Guidance</DialogTitle>
-                <DialogDescription>AWC turbulence signals (stub if not available).</DialogDescription>
-              </DialogHeader>
-              {turbulenceSummary.warnings.length > 0 && (
-                <Alert>
-                  <AlertDescription>{turbulenceSummary.warnings.join(" ")}</AlertDescription>
-                </Alert>
-              )}
-              <div className="mt-3 space-y-2 text-sm">
-                {turbulenceSummary.items.length === 0 ? (
-                  <div className="text-muted-foreground">No turbulence guidance returned yet.</div>
-                ) : (
-                  turbulenceSummary.items.slice(0, 12).map((item, index) => (
-                    <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-2">
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold">{item.hazard}</div>
-                        <Badge variant="outline">{item.source.toUpperCase()}</Badge>
-                      </div>
-                      {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
-                      {(item.validFrom || item.validTo) && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Valid {item.validFrom || "-"} to {item.validTo || "-"}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={showFilingPayload}
-        onOpenChange={(open) => {
-          setShowFilingPayload(open);
-          if (!open) setFilingPreview(null);
-        }}
-      >
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Auto-file Handoff Preview</DialogTitle>
-            <DialogDescription>
-              RSF validates and stages the filing packet, but official filing still completes through Flight Service until live handoff is enabled.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 text-sm">
-            {filingPreview ? (
-              <>
-                <div className="grid gap-3 md:grid-cols-4">
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Provider</div>
-                    <div className="font-semibold">{filingPreview.provider}</div>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Route type</div>
-                    <div className="font-semibold">{filingPreview.routeType}</div>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Readiness</div>
-                    <div className="font-semibold">
-                      {filingPreview.readyToFile ? "Validated for handoff" : "Needs review"}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <div className="text-xs text-muted-foreground">Live filing</div>
-                    <div className="font-semibold">Disabled</div>
-                  </div>
-                </div>
-                {filingPreview.errors.length > 0 && (
-                  <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-red-900">
-                    <div className="font-semibold">Required fixes before filing</div>
-                    <ul className="mt-2 list-disc space-y-1 pl-5">
-                      {filingPreview.errors.map((error) => (
-                        <li key={error}>{error}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {filingPreview.warnings.length > 0 && (
-                  <Alert>
-                    <AlertDescription>
-                      <div className="font-semibold">Items to review before filing</div>
-                      <ul className="mt-2 list-disc pl-5 space-y-1">
-                        {filingPreview.warnings.map((warning) => (
-                          <li key={warning}>{warning}</li>
-                        ))}
-                      </ul>
-                    </AlertDescription>
-                  </Alert>
-                )}
-                <div className="rounded-lg border p-3">
-                  <div className="font-semibold">Next steps</div>
-                  <ol className="mt-2 list-decimal pl-5 space-y-1 text-muted-foreground">
-                    {filingPreview.nextSteps.map((step) => (
-                      <li key={step}>{step}</li>
-                    ))}
-                  </ol>
-                </div>
-                <div className="rounded-lg border bg-muted/40 p-3">
-                  <div className="mb-2 font-semibold">Staged filing payload</div>
-                  <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words text-xs">
-                    {JSON.stringify(filingPreview.packet, null, 2)}
-                  </pre>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <Button type="button" variant="outline" onClick={copyFilingPacket}>
-                    Copy filing packet
-                  </Button>
-                  <Button type="button" disabled>
-                    Send to Flight Service (Not live yet)
-                  </Button>
-                  <Button type="button" variant="ghost" asChild>
-                    <a href={filingPreview.providerUrl} target="_blank" rel="noopener noreferrer">
-                      Continue with Flight Service
-                    </a>
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <div className="text-muted-foreground">Building filing preview...</div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <TabsContent value="analysis" className="space-y-6">
       <Card id="route-analysis" className="relative">
         <CardHeader>
           <CardTitle>Route Analysis</CardTitle>
@@ -3235,7 +3043,7 @@ export default function FlightPlanner() {
                     <div key={icao} className="rounded-lg border p-3">
                       <div className="flex items-center justify-between">
                         <div className="font-semibold">{icao}</div>
-                        <Badge variant="outline">{category}</Badge>
+                        <Badge className={flightCategoryClassName(category)}>{category}</Badge>
                       </div>
                       <div className="text-xs text-muted-foreground mt-2 line-clamp-3">
                         {data?.metar?.rawOb || "No METAR data"}
@@ -3327,20 +3135,37 @@ export default function FlightPlanner() {
           <CardDescription>Quick preflight checklist (stored locally).</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm">
-          {Object.entries(checklist).map(([key, value]) => (
-            <label key={key} className="flex items-center gap-2">
-              <Checkbox
-                checked={value}
-                onCheckedChange={(checked) => setChecklist({ ...checklist, [key]: Boolean(checked) })}
-              />
-              {key === "weather" && "Weather reviewed"}
-              {key === "fuel" && "Fuel planned"}
-              {key === "currency" && "Currency checked"}
-              {key === "notams" && "NOTAMs acknowledged"}
-            </label>
-          ))}
+          {(() => {
+            const checklistLabels: Record<string, string> = {
+              weather: "Weather reviewed — no IFR/TS risk detected",
+              fuel: "Fuel sufficient for trip + reserve",
+              currency: "Pilot currency verified",
+              notams: "NOTAMs acknowledged",
+              tfr: "No TFR conflicts on route",
+              fuelSufficient: "Fuel on board ≥ fuel required",
+            };
+            return (Object.keys(checklistDefaults) as Array<keyof typeof checklistDefaults>).map((key) => {
+              const isAutoSatisfied = autoChecklist[key as keyof typeof autoChecklist];
+              const isChecked = checklist[key as keyof typeof checklist] || isAutoSatisfied;
+              return (
+                <label key={key} className="flex items-center gap-2">
+                  <Checkbox
+                    checked={isChecked}
+                    onCheckedChange={(checked) => setChecklist({ ...checklist, [key]: Boolean(checked) })}
+                  />
+                  <span>{checklistLabels[key] || key}</span>
+                  {isAutoSatisfied && !checklist[key as keyof typeof checklist] && (
+                    <span className="text-xs text-green-700/80">(auto-checked — click to override)</span>
+                  )}
+                </label>
+              );
+            });
+          })()}
         </CardContent>
       </Card>
+      </TabsContent>
+
+      <TabsContent value="file" className="space-y-6">
 
       <Card>
         <CardHeader>
@@ -3760,6 +3585,298 @@ export default function FlightPlanner() {
           )}
         </CardContent>
       </Card>
+      </TabsContent>
+      </Tabs>
+
+      <Dialog open={Boolean(activeWeatherDetail)} onOpenChange={(open) => !open && setActiveWeatherDetail(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          {activeWeatherDetail === "metar" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>METAR & TAF</DialogTitle>
+                <DialogDescription>Latest conditions along your route.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                {weatherData.length === 0 && <div className="text-muted-foreground">No METAR/TAF data yet.</div>}
+                {weatherData.map(({ icao, data }) => {
+                  const category = parseFlightCategory(data?.metar);
+                  const wind = parseMetarWind(data?.metar);
+                  const tempC = parseMetarTempC(data?.metar);
+                  return (
+                    <div key={icao} className="rounded-lg border p-3">
+                      <div className="font-semibold">{icao}</div>
+                      <div className="flex flex-wrap gap-3 text-xs font-medium mt-1 mb-1">
+                        <span className={cn("px-1.5 py-0.5 rounded border", flightCategoryClassName(category))}>
+                          {category}
+                        </span>
+                        {wind && <span>{wind.direction}° @ {wind.speed}kt</span>}
+                        {tempC !== null && <span>Temp {tempC}°C</span>}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-2">{data?.metar?.rawOb || "No METAR"}</div>
+                      <div className="text-xs text-muted-foreground mt-2">{data?.taf?.rawTAF || "No TAF"}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {activeWeatherDetail === "winds" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Winds Aloft</DialogTitle>
+                <DialogDescription>NOAA AWC winds/temps near your route.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 text-sm">
+                {windsCount === 0 && <div className="text-muted-foreground">No winds aloft data in view.</div>}
+                {windsSummaryQuery.data?.stations?.slice(0, 12).map((station: any) => (
+                  <div key={`${station.stationId}-${station.lat}`} className="flex items-center justify-between rounded-lg border p-2">
+                    <div className="font-semibold">{station.icao || station.stationId}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {station.windDir ?? "-"} deg / {station.windSpeed ?? "-"} kt
+                      {station.tempC !== null ? `, ${station.tempC}C` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {activeWeatherDetail === "notams" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>NOTAMs</DialogTitle>
+                <DialogDescription>Latest NOTAMs for {primaryIcao || "your route"}.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 text-sm">
+                {notamsSummaryQuery.isError && (
+                  <div className="text-muted-foreground">NOTAM feed unavailable.</div>
+                )}
+                {!notamsSummaryQuery.isError && notamsCount === 0 && (
+                  <div className="text-muted-foreground">No active NOTAMs.</div>
+                )}
+                {notamsSummaryQuery.data?.notams?.map((notam: any) => (
+                  <div key={notam.id} className="rounded-lg border p-2">
+                    <div className="font-semibold">{notam.id}</div>
+                    <div className="text-xs text-muted-foreground mt-1">{notam.text}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {activeWeatherDetail === "pireps" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>PIREPs</DialogTitle>
+                <DialogDescription>Recent pilot reports near {primaryIcao || "your route"}.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 text-sm">
+                {pirepsCount === 0 && <div className="text-muted-foreground">No recent PIREPs in range.</div>}
+                {pirepsQuery.data?.reports?.slice(0, 12).map((report: any, index: number) => (
+                  <div key={`${report.rawOb || report.id || index}`} className="rounded-lg border p-2">
+                    <div className="font-semibold">{report.rawOb || "PIREP"}</div>
+                    {report.obsTime && <div className="text-xs text-muted-foreground mt-1">{report.obsTime}</div>}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {activeWeatherDetail === "hazards" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Convective Hazards</DialogTitle>
+                <DialogDescription>Domestic SIGMETs, G-AIRMETs, and TCF.</DialogDescription>
+              </DialogHeader>
+              {convectiveSummary.warnings.length > 0 && (
+                <Alert>
+                  <AlertDescription>{convectiveSummary.warnings.join(" ")}</AlertDescription>
+                </Alert>
+              )}
+              <div className="text-sm text-muted-foreground">
+                {convectiveCount > 0 ? `${convectiveCount} hazard items available.` : "No convective hazards returned."}
+                {convectiveSummary.tcfCount > 0 && ` TCF features: ${convectiveSummary.tcfCount}.`}
+              </div>
+              <div className="mt-3 space-y-2 text-sm">
+                {convectiveSummary.items.length === 0 && convectiveSummary.tcfCount === 0 ? (
+                  <div className="text-muted-foreground">No convective hazards returned.</div>
+                ) : (
+                  convectiveSummary.items.slice(0, 12).map((item, index) => (
+                    <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-2">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold">{item.hazard}</div>
+                        <Badge variant="outline">{item.source.toUpperCase()}</Badge>
+                      </div>
+                      {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
+                      {(item.validFrom || item.validTo) && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Valid {item.validFrom || "-"} to {item.validTo || "-"}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+          {activeWeatherDetail === "icing" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Icing Guidance</DialogTitle>
+                <DialogDescription>AWC icing signals (stub if not available).</DialogDescription>
+              </DialogHeader>
+              {icingSummary.warnings.length > 0 && (
+                <Alert>
+                  <AlertDescription>{icingSummary.warnings.join(" ")}</AlertDescription>
+                </Alert>
+              )}
+              <div className="mt-3 space-y-2 text-sm">
+                {icingSummary.items.length === 0 ? (
+                  <div className="text-muted-foreground">No icing guidance returned yet.</div>
+                ) : (
+                  icingSummary.items.slice(0, 12).map((item, index) => (
+                    <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-2">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold">{item.hazard}</div>
+                        <Badge variant="outline">{item.source.toUpperCase()}</Badge>
+                      </div>
+                      {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
+                      {(item.validFrom || item.validTo) && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Valid {item.validFrom || "-"} to {item.validTo || "-"}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+          {activeWeatherDetail === "turbulence" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Turbulence Guidance</DialogTitle>
+                <DialogDescription>AWC turbulence signals (stub if not available).</DialogDescription>
+              </DialogHeader>
+              {turbulenceSummary.warnings.length > 0 && (
+                <Alert>
+                  <AlertDescription>{turbulenceSummary.warnings.join(" ")}</AlertDescription>
+                </Alert>
+              )}
+              <div className="mt-3 space-y-2 text-sm">
+                {turbulenceSummary.items.length === 0 ? (
+                  <div className="text-muted-foreground">No turbulence guidance returned yet.</div>
+                ) : (
+                  turbulenceSummary.items.slice(0, 12).map((item, index) => (
+                    <div key={`${item.source}-${item.hazard}-${index}`} className="rounded-lg border p-2">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold">{item.hazard}</div>
+                        <Badge variant="outline">{item.source.toUpperCase()}</Badge>
+                      </div>
+                      {item.dueTo && <div className="text-xs text-muted-foreground mt-1">Due to {item.dueTo}</div>}
+                      {(item.validFrom || item.validTo) && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Valid {item.validFrom || "-"} to {item.validTo || "-"}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={showFilingPayload}
+        onOpenChange={(open) => {
+          setShowFilingPayload(open);
+          if (!open) setFilingPreview(null);
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Auto-file Handoff Preview</DialogTitle>
+            <DialogDescription>
+              RSF validates and stages the filing packet, but official filing still completes through Flight Service until live handoff is enabled.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            {filingPreview ? (
+              <>
+                <div className="grid gap-3 md:grid-cols-4">
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Provider</div>
+                    <div className="font-semibold">{filingPreview.provider}</div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Route type</div>
+                    <div className="font-semibold">{filingPreview.routeType}</div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Readiness</div>
+                    <div className="font-semibold">
+                      {filingPreview.readyToFile ? "Validated for handoff" : "Needs review"}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Live filing</div>
+                    <div className="font-semibold">Disabled</div>
+                  </div>
+                </div>
+                {filingPreview.errors.length > 0 && (
+                  <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-red-900">
+                    <div className="font-semibold">Required fixes before filing</div>
+                    <ul className="mt-2 list-disc space-y-1 pl-5">
+                      {filingPreview.errors.map((error) => (
+                        <li key={error}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {filingPreview.warnings.length > 0 && (
+                  <Alert>
+                    <AlertDescription>
+                      <div className="font-semibold">Items to review before filing</div>
+                      <ul className="mt-2 list-disc pl-5 space-y-1">
+                        {filingPreview.warnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                <div className="rounded-lg border p-3">
+                  <div className="font-semibold">Next steps</div>
+                  <ol className="mt-2 list-decimal pl-5 space-y-1 text-muted-foreground">
+                    {filingPreview.nextSteps.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+                <div className="rounded-lg border bg-muted/40 p-3">
+                  <div className="mb-2 font-semibold">Staged filing payload</div>
+                  <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words text-xs">
+                    {JSON.stringify(filingPreview.packet, null, 2)}
+                  </pre>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button type="button" variant="outline" onClick={copyFilingPacket}>
+                    Copy filing packet
+                  </Button>
+                  <Button type="button" disabled>
+                    Send to Flight Service (Not live yet)
+                  </Button>
+                  <Button type="button" variant="ghost" asChild>
+                    <a href={filingPreview.providerUrl} target="_blank" rel="noopener noreferrer">
+                      Continue with Flight Service
+                    </a>
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="text-muted-foreground">Building filing preview...</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </PageShell>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import { apiUrl } from "@/lib/api";
 import { clearTfmsOverlay, setTfmsOverlay } from "@/map/layers/tfmsOverlayLayer";
@@ -395,14 +395,12 @@ export default function CesiumGlobe({
     viewer.zoomTo(viewer.entities, new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-30), 0));
   }, [points]);
 
-  const tokenHint = useMemo(() => tokenWarning, [tokenWarning]);
-
   return (
     <div className={heightClassName}>
       <div className="relative h-full w-full rounded-xl overflow-hidden">
-        {tokenHint && (
+        {tokenWarning && (
           <div className="absolute left-3 top-3 z-[1100] rounded-md border bg-white/90 px-3 py-2 text-xs text-slate-700 shadow">
-            {tokenHint}
+            {tokenWarning}
           </div>
         )}
         <div className="absolute right-3 top-3 z-[1100] space-y-2 rounded-md border bg-white/90 px-3 py-2 text-xs text-slate-700 shadow">

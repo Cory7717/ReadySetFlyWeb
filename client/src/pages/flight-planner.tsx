@@ -1590,6 +1590,30 @@ export default function FlightPlanner() {
     () => weatherFindings.some((item) => item.thunder),
     [weatherFindings]
   );
+  const weatherStatusText = weatherData.length === 0
+    ? "No METARs loaded"
+    : hasThunderRisk
+      ? "Thunder risk"
+      : hasIfrWeather
+        ? "IFR/LIFR risk"
+        : "VFR/MVFR";
+  const weatherStatusTone = weatherData.length === 0
+    ? "text-slate-300"
+    : hasThunderRisk
+      ? "text-amber-300"
+      : hasIfrWeather
+        ? "text-red-300"
+        : "text-emerald-300";
+  const tfrStatusText = !tfrRouteQuery.isFetched
+    ? "Not checked"
+    : tfrConflicts.length > 0
+      ? `${tfrConflicts.length} conflict${tfrConflicts.length === 1 ? "" : "s"}`
+      : "No conflicts";
+  const tfrStatusTone = !tfrRouteQuery.isFetched
+    ? "text-slate-300"
+    : tfrConflicts.length > 0
+      ? "text-amber-300"
+      : "text-emerald-300";
 
   const autoChecklist = useMemo(() => ({
     weather: weatherData.length > 0 && !hasIfrWeather && !hasThunderRisk,
@@ -2065,6 +2089,8 @@ export default function FlightPlanner() {
       });
     },
   });
+  const filingStateText = filingPreviewMutation.isPending ? "Preview building" : "Packet ready";
+  const filingStateTone = filingPreviewMutation.isPending ? "text-amber-300" : "text-emerald-300";
 
   const filingActionMutation = useMutation({
     mutationFn: async ({ planId, action }: { planId: string; action: "file" | "amend" | "activate" | "cancel" | "close" }) => {
@@ -2227,13 +2253,13 @@ export default function FlightPlanner() {
         ]}
       />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_460px]">
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="space-y-4">
-        <TabsList className="flex w-full flex-wrap gap-2">
-          <TabsTrigger value="route">Route</TabsTrigger>
-          <TabsTrigger value="weather">Weather</TabsTrigger>
-          <TabsTrigger value="navlog">Nav Log</TabsTrigger>
-          <TabsTrigger value="analysis">Analysis</TabsTrigger>
-          <TabsTrigger value="file">File &amp; Save</TabsTrigger>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
+        <TabsList className="flex w-full flex-wrap gap-1 rounded-xl border border-slate-700 bg-slate-950 p-1">
+          <TabsTrigger value="route" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Route</TabsTrigger>
+          <TabsTrigger value="weather" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Weather</TabsTrigger>
+          <TabsTrigger value="navlog" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Nav Log</TabsTrigger>
+          <TabsTrigger value="analysis" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Analysis</TabsTrigger>
+          <TabsTrigger value="file" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">File &amp; Save</TabsTrigger>
         </TabsList>
         <TabsContent value="route" className="space-y-6">
       <Card>
@@ -3457,6 +3483,33 @@ export default function FlightPlanner() {
         <Card className="border-slate-700 bg-slate-950 text-slate-100">
           <CardContent className="pt-4">
             <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Briefing Status
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Weather</div>
+                <div className={cn("font-semibold", weatherStatusTone)}>{weatherStatusText}</div>
+              </div>
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">NOTAMs</div>
+                <div className={cn("font-semibold", notamsSummaryQuery.isError ? "text-amber-300" : "text-slate-100")}>
+                  {notamsSummaryQuery.isError ? "Unavailable" : `${notamsCount} active`}
+                </div>
+              </div>
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">TFR Route</div>
+                <div className={cn("font-semibold", tfrStatusTone)}>{tfrStatusText}</div>
+              </div>
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Filing Packet</div>
+                <div className={cn("font-semibold", filingStateTone)}>{filingStateText}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-700 bg-slate-950 text-slate-100">
+          <CardContent className="pt-4">
+            <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               Flight Snapshot
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -3487,7 +3540,7 @@ export default function FlightPlanner() {
             </div>
           </CardContent>
         </Card>
-        <Card id="planner-route-map">
+        <Card id="planner-route-map" className="border-slate-700 bg-slate-950 text-slate-100">
           <CardHeader>
             <CardTitle>Route Map</CardTitle>
             <CardDescription>Live route view while you build, brief, and file.</CardDescription>
@@ -3496,12 +3549,12 @@ export default function FlightPlanner() {
             <div className="mb-3 flex flex-wrap gap-3 text-sm">
               <a
                 href="/adsb-receiver-help"
-                className="text-primary hover:underline"
+                className="text-blue-300 hover:underline"
                 onClick={() => trackEvent("adsb_help_click", { target: "/adsb-receiver-help" })}
               >
                 How to connect your ADS-B receiver
               </a>
-              <span className="text-muted-foreground">
+              <span className="text-slate-300">
                 RSF Synthetic Vision Lab <span className="font-medium">(coming soon)</span>
               </span>
             </div>
@@ -3545,7 +3598,7 @@ export default function FlightPlanner() {
             )}
             <div className="mt-4 space-y-2">
               <div className="text-xs text-muted-foreground">Map style</div>
-              <div className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-slate-200 bg-white/70 p-1">
+              <div className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-slate-700 bg-slate-900/70 p-1">
                 {MAP_STYLE_OPTIONS.map((option) => (
                   <button
                     key={option.value}
@@ -3554,8 +3607,8 @@ export default function FlightPlanner() {
                     className={cn(
                       "h-8 rounded-lg px-3 text-xs font-medium transition-colors",
                       mapStyle === option.value
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-slate-600 hover:bg-slate-100"
+                        ? "bg-blue-600 text-white shadow-sm"
+                        : "text-slate-300 hover:bg-slate-800"
                     )}
                   >
                     {option.label}

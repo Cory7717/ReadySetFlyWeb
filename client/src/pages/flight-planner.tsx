@@ -627,6 +627,15 @@ export default function FlightPlanner() {
     }
   }, [tfmsTier, tfmsOverlayEnabled]);
 
+  useEffect(() => {
+    const dep = departureResolved.trim().toUpperCase();
+    const dest = destinationResolved.trim().toUpperCase();
+    const hasCoreRoute = ICAO_REGEX.test(dep) && ICAO_REGEX.test(dest);
+    if (hasCoreRoute && mapStyle === "standard") {
+      setMapStyle("sectional");
+    }
+  }, [departureResolved, destinationResolved, mapStyle]);
+
   const openWeatherDetail = (
     id: "metar" | "notams" | "pireps" | "hazards" | "winds" | "icing" | "turbulence"
   ) => {
@@ -2381,6 +2390,7 @@ export default function FlightPlanner() {
           </Button>
         </>
       }
+      canopyClassName="hidden"
       contentClassName="max-w-[1400px] space-y-6"
     >
       <UpgradePromptDialog
@@ -3944,7 +3954,7 @@ export default function FlightPlanner() {
             </div>
             {mapStyle === "sectional" && (
               <div className="text-xs text-muted-foreground mt-2">
-                Sectional tiles appear at zoom 6+; zoom in for FAA chart detail.
+                Sectional tiles appear from zoom 4+; zoom in for FAA chart detail.
               </div>
             )}
             {(mapStyle === "radar" || mapStyle === "winds" || mapStyle === "clouds") && (

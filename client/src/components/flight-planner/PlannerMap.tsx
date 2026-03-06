@@ -58,7 +58,7 @@ function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "st
         if (mapStyle === "sectional") {
           const zoom = map.getZoom();
           if (zoom > 12) map.setZoom(12);
-          if (zoom < 6) map.setZoom(6);
+          if (zoom < 4) map.setZoom(4);
         }
       } catch {
         // Map may be unmounted during transitions; ignore.
@@ -78,10 +78,10 @@ function MapStyleController({ mapStyle }: { mapStyle: "standard" | "sectional" |
     const raf = requestAnimationFrame(() => {
       try {
         if (mapStyle === "sectional") {
-          map.setMinZoom(6);
+          map.setMinZoom(4);
           map.setMaxZoom(12);
-          if (map.getZoom() < 6) {
-            map.setZoom(6);
+          if (map.getZoom() < 4) {
+            map.setZoom(4);
           }
           return;
         }
@@ -295,7 +295,7 @@ export default function PlannerMap({
   const showRadar = mapStyle === "radar";
   const showWinds = mapStyle === "winds";
   const showClouds = mapStyle === "clouds";
-  const initialZoom = mapStyle === "sectional" ? 6 : (points.length ? 6 : 4);
+  const initialZoom = mapStyle === "sectional" ? 4 : (points.length ? 6 : 4);
   const [mapZoom, setMapZoom] = useState(initialZoom);
   const [mapCenter, setMapCenter] = useState<L.LatLng | null>(null);
   const showCloudsConus = showClouds;
@@ -484,7 +484,7 @@ export default function PlannerMap({
           <TileLayer
             attribution='Federal Aviation Administration, Aeronautical Information Services'
             url="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
-            minZoom={6}
+            minZoom={4}
             maxZoom={12}
             maxNativeZoom={12}
             opacity={0.85}

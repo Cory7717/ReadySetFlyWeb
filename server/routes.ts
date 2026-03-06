@@ -44,6 +44,7 @@ import { computeTfmsRisk } from "./services/tfms/risk";
 import { partners } from "./config/partners";
 import { registerAdminFinanceRoutes } from "./routes/adminFinance";
 import { flightPlanFilingProvider, validateFlightPlanForAction } from "./services/flight-plan-filing/provider";
+import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import {
   fetchMetar,
   fetchTaf,
@@ -8334,6 +8335,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/admin/users/:userId/cfi-profile", isAuthenticated, requireUsersAdmin, async (req: any, res) => {
+    try {
+      const profile = await storage.getCfiProfileByUser(req.params.userId);
+      if (!profile) {
+        return res.json({
+          profile: null,
+          credentials: [],
+          credentialReadiness: getCfiVerificationReadiness([]),
+        });
+      }
+
+      const credentials = await storage.getCfiCredentials(profile.id);
+      res.json({
+        profile,
+        credentials,
+        credentialReadiness: getCfiVerificationReadiness(credentials),
+      });
+    } catch (error) {
+      console.error("Failed to fetch admin CFI profile data:", error);
+      res.status(500).json({ error: "Failed to load CFI profile" });
+    }
+  });
+
+  app.patch("/api/admin/cfi-profiles/:profileId/verification", isAuthenticated, requireUsersAdmin, async (req: any, res) => {
+    try {
+      const adminId = req.user?.claims?.sub || req.session?.userId;
+      if (!adminId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const payload = z
+        .object({ action: z.enum(["verify", "unverify"]) })
+        .safeParse(req.body);
+      if (!payload.success) {
+        return res.status(400).json({ error: payload.error.format() });
+      }
+
+      const profile = await storage.getCfiProfileById(req.params.profileId);
+      if (!profile) {
+        return res.status(404).json({ error: "CFI profile not found" });
+      }
+
+      if (payload.data.action === "verify") {
+        const credentials = await storage.getCfiCredentials(profile.id);
+        const readiness = getCfiVerificationReadiness(credentials);
+        if (!readiness.isReady) {
+          return res.status(400).json({
+            error: "Required credentials are missing",
+            missing: readiness.checks.filter((check) => !check.met).map((check) => check.label),
+          });
+        }
+      }
+
+      const updates =
+        payload.data.action === "verify"
+          ? {
+              isVerified: true,
+              verifiedAt: new Date(),
+              verifiedByUserId: String(adminId),
+            }
+          : {
+              isVerified: false,
+              verifiedAt: null,
+              verifiedByUserId: null,
+            };
+
+      const updated = await storage.updateCfiProfile(profile.id, profile.userId, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update CFI verification status:", error);
+      res.status(500).json({ error: "Failed to update CFI verification status" });
+    }
+  });
+
   const adminInviteSchema = z.object({
     email: z.string().email(),
     role: z.enum(["operations", "finance", "sales", "support", "content", "housekeeping"]),
@@ -13592,7 +13667,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         storage.getCfiAvailabilityRules(profile.id),
         storage.getCfiLatestLegalAcceptance(userId, "cfi_terms"),
       ]);
-      res.json({ profile, credentials, availability, legal: { cfi_terms: !!cfiTerms } });
+      const credentialReadiness = getCfiVerificationReadiness(credentials);
+      res.json({
+        profile,
+        credentials,
+        availability,
+        legal: { cfi_terms: !!cfiTerms },
+        credentialReadiness,
+      });
     } catch (error) {
       console.error("Failed to load CFI dashboard:", error);
       res.status(500).json({ error: "Failed to load CFI dashboard" });
@@ -13676,6 +13758,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const accepted = await storage.getCfiLatestLegalAcceptance(userId, "cfi_terms");
       if (!accepted) {
         return res.status(403).json({ error: "CFI terms acceptance required" });
+      }
+      const credentials = await storage.getCfiCredentials(existing.id);
+      const readiness = getCfiVerificationReadiness(credentials);
+      if (!readiness.isReady) {
+        return res.status(403).json({
+          error: "Required CFI credentials are missing",
+          missing: readiness.checks.filter((check) => !check.met).map((check) => check.label),
+        });
       }
       const updated = await storage.updateCfiProfile(existing.id, userId, { isPublished: true });
       res.json(updated);

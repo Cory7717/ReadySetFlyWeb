@@ -171,7 +171,7 @@ export function Header() {
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 w-full order-3 sm:order-2 sm:flex-1">
             {/* Main Navigation Tabs - Compact on mobile */}
-            <nav className="flex w-full sm:flex-1 items-center justify-between gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 min-w-0 overflow-x-auto sm:overflow-visible whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="navigation" aria-label="Main navigation">
+            <nav className="flex w-full sm:flex-1 items-center justify-start gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 min-w-0 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="navigation" aria-label="Main navigation">
               <Link href="/marketplace" data-testid="link-marketplace">
                 <Button
                   variant="ghost"

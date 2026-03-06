@@ -49,6 +49,7 @@ export default function CfiDirectory() {
   const canUseCfi = !!entitlements?.canUseCfi;
   const [search, setSearch] = useState("");
   const [state, setState] = useState("");
+  const [city, setCity] = useState("");
   const [airport, setAirport] = useState("");
 
   useEffect(() => {
@@ -72,7 +73,15 @@ export default function CfiDirectory() {
     },
   });
 
-  const hasFilters = search.trim() || state.trim() || airport.trim();
+  const filteredProfiles = useMemo(() => {
+    const cityFilter = city.trim().toLowerCase();
+    if (!cityFilter) return profiles;
+    return profiles.filter((profile) =>
+      String(profile.locationCity || "").toLowerCase().includes(cityFilter)
+    );
+  }, [profiles, city]);
+
+  const hasFilters = search.trim() || state.trim() || city.trim() || airport.trim();
 
   return (
     <PageShell
@@ -122,7 +131,7 @@ export default function CfiDirectory() {
                   Filter by name, home airport, or state, then narrow to the instructor profile that fits your next step.
                 </p>
               </div>
-              <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <div className="mt-5 grid gap-4 md:grid-cols-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Search</label>
                   <Input
@@ -140,6 +149,14 @@ export default function CfiDirectory() {
                   />
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-medium">City</label>
+                  <Input
+                    value={city}
+                    onChange={(event) => setCity(event.target.value)}
+                    placeholder="e.g. Dallas"
+                  />
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-medium">Home airport</label>
                   <Input
                     value={airport}
@@ -150,7 +167,7 @@ export default function CfiDirectory() {
               </div>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline">{profiles.length} instructors</Badge>
+                  <Badge variant="outline">{filteredProfiles.length} instructors</Badge>
                   <Badge variant="outline">Direct profile view</Badge>
                   <Badge variant="outline">Student-friendly search</Badge>
                 </div>
@@ -160,6 +177,7 @@ export default function CfiDirectory() {
                     onClick={() => {
                       setSearch("");
                       setState("");
+                      setCity("");
                       setAirport("");
                       trackEvent("cfi_directory_filter_reset");
                     }}
@@ -220,7 +238,7 @@ export default function CfiDirectory() {
               <span className="rsf-kicker">Available instructors</span>
               <h2 className="mt-2 text-2xl font-semibold text-slate-900">Browse instructors by training fit, location, and availability.</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                {profiles.length} instructor{profiles.length === 1 ? "" : "s"} match the current search.
+                {filteredProfiles.length} instructor{filteredProfiles.length === 1 ? "" : "s"} match the current search.
               </p>
             </div>
             <Badge variant="outline">{hasFilters ? "Filtered search" : "All instructors"}</Badge>
@@ -238,7 +256,7 @@ export default function CfiDirectory() {
               </Card>
             ) : null}
 
-            {!isLoading && profiles.length === 0 ? (
+            {!isLoading && filteredProfiles.length === 0 ? (
               <Card className="md:col-span-2 lg:col-span-3">
                 <CardHeader>
                   <CardTitle>No instructors found</CardTitle>
@@ -256,6 +274,7 @@ export default function CfiDirectory() {
                       onClick={() => {
                         setSearch("");
                         setState("");
+                        setCity("");
                         setAirport("");
                         trackEvent("cfi_directory_filter_reset");
                       }}
@@ -267,7 +286,7 @@ export default function CfiDirectory() {
               </Card>
             ) : null}
 
-            {profiles.map((profile) => {
+            {filteredProfiles.map((profile) => {
               const ratings = normalizeList(profile.ratingsHeld);
               const aircraft = normalizeList(profile.aircraftTypes);
               const languages = normalizeList(profile.languages);
@@ -289,8 +308,15 @@ export default function CfiDirectory() {
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold truncate">
-                          {profile.displayName}
+                        <div className="flex items-center gap-2">
+                          <div className="font-semibold truncate">
+                            {profile.displayName}
+                          </div>
+                          {profile.isVerified ? (
+                            <Badge variant="default" className="text-[10px] h-5 shrink-0">
+                              Verified CFI
+                            </Badge>
+                          ) : null}
                         </div>
                         <div className="text-xs text-muted-foreground truncate">
                           {profile.headline || "Certified Flight Instructor"}

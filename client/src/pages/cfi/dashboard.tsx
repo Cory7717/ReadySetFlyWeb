@@ -17,6 +17,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import type { UploadResult } from "@uppy/core";
+import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 
 const LEGAL_VERSION = "2025-01";
 
@@ -68,7 +69,18 @@ type DashboardResponse = {
   credentials: CfiCredential[];
   availability: CfiAvailabilityRule[];
   legal: { cfi_terms: boolean };
+  credentialReadiness?: ReturnType<typeof getCfiVerificationReadiness>;
 } | null;
+
+const cfiCredentialTypeOptions = [
+  "CFI Certificate",
+  "Pilot Certificate",
+  "Medical Certificate",
+  "Driver License",
+  "Passport",
+  "Insurance",
+  "Other",
+];
 
 export default function CfiDashboard() {
   const { user } = useAuth();
@@ -140,6 +152,13 @@ export default function CfiDashboard() {
     const filled = fields.filter(Boolean).length;
     return Math.round((filled / fields.length) * 100);
   }, [formState, profile]);
+  const credentialReadiness = useMemo(() => {
+    if (dashboardData?.credentialReadiness) return dashboardData.credentialReadiness;
+    return getCfiVerificationReadiness(dashboardData?.credentials ?? []);
+  }, [dashboardData]);
+  const missingCredentialLabels = credentialReadiness.checks
+    .filter((check) => !check.met)
+    .map((check) => check.label);
 
   const startTrialMutation = useMutation({
     mutationFn: async () => {
@@ -318,6 +337,58 @@ export default function CfiDashboard() {
     }
   };
 
+  const handleCredentialGetUploadParameters = async () => {
+    const response = await fetch(apiUrl("/api/objects/upload"), {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error("Failed to get upload URL");
+    }
+    const data = await response.json();
+    return { method: "PUT" as const, url: data.uploadURL };
+  };
+
+  const extractUploaderFileUrl = (file: Record<string, unknown>) => {
+    const directUrl = typeof file.uploadURL === "string" ? file.uploadURL : "";
+    if (directUrl) return directUrl.split("?")[0];
+    const response = file.response as Record<string, unknown> | undefined;
+    if (!response) return "";
+    const responseUrl = typeof response.uploadURL === "string" ? response.uploadURL : "";
+    if (responseUrl) return responseUrl.split("?")[0];
+    const body = response.body as Record<string, unknown> | undefined;
+    if (body && typeof body.uploadURL === "string") {
+      return body.uploadURL.split("?")[0];
+    }
+    return "";
+  };
+
+  const handleCredentialUploadComplete = (
+    result: UploadResult<Record<string, unknown>, Record<string, unknown>>
+  ) => {
+    const firstFile = result.successful?.[0] as Record<string, unknown> | undefined;
+    if (!firstFile) return;
+    const fileUrl = extractUploaderFileUrl(firstFile);
+    const fileName = typeof firstFile.name === "string" ? firstFile.name : "";
+    if (!fileUrl) {
+      toast({
+        title: "Upload failed",
+        description: "Unable to capture uploaded file URL.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCredentialForm((prev) => ({
+      ...prev,
+      fileUrl,
+      fileName: prev.fileName || fileName,
+    }));
+    toast({
+      title: "Credential file uploaded",
+      description: "Review the type and expiration date, then click Add credential.",
+    });
+  };
+
   const saveAvailabilityMutation = useMutation({
     mutationFn: async () => {
       const payload = availabilityRules.map((rule) => ({
@@ -480,18 +551,18 @@ export default function CfiDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Publish & compliance</CardTitle>
-            <CardDescription>Accept the CFI terms before going live.</CardDescription>
+            <CardDescription>Accept terms and upload required CFI documents before going live.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 bg-muted/30">
               <div className="flex-1 space-y-0.5">
                 <div className="text-sm font-semibold">
-                  {profile?.isPublished ? "✓ Your profile is live" : "Your profile is not yet published"}
+                  {profile?.isPublished ? "Profile live" : "Your profile is not yet published"}
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {profile?.isPublished
                     ? "Students can find and contact you from the CFI directory."
-                    : "Accept CFI terms and publish to appear in the directory."}
+                    : "Accept terms and upload required credentials to publish in the directory."}
                 </div>
               </div>
               {profile?.slug && profile.isPublished && (
@@ -505,6 +576,12 @@ export default function CfiDashboard() {
               <Badge variant={dashboardData?.legal?.cfi_terms ? "default" : "outline"}>
                 {dashboardData?.legal?.cfi_terms ? "CFI terms accepted" : "CFI terms required"}
               </Badge>
+              <Badge variant={credentialReadiness.isReady ? "default" : "outline"}>
+                {credentialReadiness.isReady ? "Required credentials uploaded" : "Required credentials missing"}
+              </Badge>
+              <Badge variant={profile?.isVerified ? "default" : "outline"}>
+                {profile?.isVerified ? "Instructor verified by RSF" : "Awaiting admin verification"}
+              </Badge>
               {!dashboardData?.legal?.cfi_terms && (
                 <Button
                   variant="outline"
@@ -516,7 +593,12 @@ export default function CfiDashboard() {
               )}
               <Button
                 onClick={() => publishMutation.mutate()}
-                disabled={publishMutation.isPending || !dashboardData?.legal?.cfi_terms}
+                disabled={
+                  publishMutation.isPending ||
+                  !profile ||
+                  !dashboardData?.legal?.cfi_terms ||
+                  !credentialReadiness.isReady
+                }
               >
                 {profile?.isPublished ? "Re-publish profile" : "Publish profile"}
               </Button>
@@ -524,6 +606,11 @@ export default function CfiDashboard() {
                 <Link href="/cfi/terms">Review CFI terms</Link>
               </Button>
             </div>
+            {!credentialReadiness.isReady && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Missing: {missingCredentialLabels.join(", ")}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -833,9 +920,19 @@ export default function CfiDashboard() {
         <Card>
           <CardHeader>
             <CardTitle>Credentials</CardTitle>
-            <CardDescription>Upload certificates or documents to build trust.</CardDescription>
+            <CardDescription>Upload CFI, pilot, and medical documents for publish and verification.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="rounded-lg border bg-muted/30 p-3">
+              <div className="text-sm font-semibold mb-2">Required before publish</div>
+              <div className="flex flex-wrap gap-2">
+                {credentialReadiness.checks.map((check) => (
+                  <Badge key={check.key} variant={check.met ? "default" : "outline"}>
+                    {check.met ? "OK" : "Required"} {check.label}
+                  </Badge>
+                ))}
+              </div>
+            </div>
             {dashboardData?.credentials?.length ? (
               <div className="space-y-3">
                 {dashboardData.credentials.map((credential) => (
@@ -865,26 +962,63 @@ export default function CfiDashboard() {
             ) : (
               <p className="text-sm text-muted-foreground">No credentials uploaded yet.</p>
             )}
+
             <div className="grid gap-3 md:grid-cols-2">
-              <Input
+              <Select
                 value={credentialForm.type}
-                onChange={(event) => setCredentialForm({ ...credentialForm, type: event.target.value })}
-                placeholder="Credential type"
-              />
+                onValueChange={(value) => setCredentialForm({ ...credentialForm, type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Credential type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cfiCredentialTypeOptions.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Input
                 value={credentialForm.fileName}
                 onChange={(event) => setCredentialForm({ ...credentialForm, fileName: event.target.value })}
                 placeholder="File name"
               />
               <Input
-                value={credentialForm.fileUrl}
-                onChange={(event) => setCredentialForm({ ...credentialForm, fileUrl: event.target.value })}
-                placeholder="File URL"
-              />
-              <Input
                 type="date"
                 value={credentialForm.expiresOn}
                 onChange={(event) => setCredentialForm({ ...credentialForm, expiresOn: event.target.value })}
+              />
+              <div className="flex items-center gap-2">
+                <ObjectUploader
+                  maxNumberOfFiles={1}
+                  maxFileSize={20 * 1024 * 1024}
+                  allowedFileTypes={["image/*", ".pdf"]}
+                  enableImageEditor={false}
+                  onGetUploadParameters={handleCredentialGetUploadParameters}
+                  onComplete={handleCredentialUploadComplete}
+                  onError={(message) => {
+                    toast({
+                      title: "Upload failed",
+                      description: message,
+                      variant: "destructive",
+                    });
+                  }}
+                  buttonVariant="outline"
+                >
+                  Upload document
+                </ObjectUploader>
+                {credentialForm.fileName ? (
+                  <span className="text-xs text-muted-foreground truncate">{credentialForm.fileName}</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">PDF or image</span>
+                )}
+              </div>
+              <Input
+                value={credentialForm.fileUrl}
+                onChange={(event) => setCredentialForm({ ...credentialForm, fileUrl: event.target.value })}
+                placeholder="File URL"
+                className="md:col-span-2"
               />
             </div>
             <Textarea
@@ -893,7 +1027,15 @@ export default function CfiDashboard() {
               placeholder="Notes"
               rows={2}
             />
-            <Button onClick={() => createCredentialMutation.mutate()} disabled={createCredentialMutation.isPending}>
+            <Button
+              onClick={() => createCredentialMutation.mutate()}
+              disabled={
+                createCredentialMutation.isPending ||
+                !credentialForm.type.trim() ||
+                !credentialForm.fileName.trim() ||
+                !credentialForm.fileUrl.trim()
+              }
+            >
               {createCredentialMutation.isPending ? "Adding..." : "Add credential"}
             </Button>
           </CardContent>

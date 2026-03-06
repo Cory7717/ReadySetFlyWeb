@@ -1529,6 +1529,9 @@ export const cfiProfiles = pgTable("cfi_profiles", {
   contactNote: text("contact_note"),
   preferredPayments: text("preferred_payments"),
   isPublished: boolean("is_published").default(false),
+  isVerified: boolean("is_verified").default(false),
+  verifiedAt: timestamp("verified_at"),
+  verifiedByUserId: varchar("verified_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -1536,6 +1539,7 @@ export const cfiProfiles = pgTable("cfi_profiles", {
   uniqueIndex("uniq_cfi_profiles_slug").on(table.slug),
   index("idx_cfi_profiles_slug").on(table.slug),
   index("idx_cfi_profiles_school").on(table.schoolId),
+  index("idx_cfi_profiles_verified_by").on(table.verifiedByUserId),
 ]);
 
 export const cfiCredentials = pgTable("cfi_credentials", {
@@ -1967,6 +1971,9 @@ export const insertNotificationPreferencesSchema = createInsertSchema(notificati
 export const insertCfiProfileSchema = createInsertSchema(cfiProfiles).omit({
   id: true,
   userId: true,
+  isVerified: true,
+  verifiedAt: true,
+  verifiedByUserId: true,
   createdAt: true,
   updatedAt: true,
 });

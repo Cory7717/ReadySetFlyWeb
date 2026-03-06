@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { User, AircraftListing, MarketplaceListing, VerificationSubmission } from "@shared/schema";
+import type { User, AircraftListing, MarketplaceListing, VerificationSubmission, CfiProfile, CfiCredential } from "@shared/schema";
 import { formatPhoneNumber } from "@/lib/formatters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
 import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
@@ -24,6 +24,15 @@ interface AdminUserModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
+type AdminCfiProfileResponse = {
+  profile: CfiProfile | null;
+  credentials: CfiCredential[];
+  credentialReadiness: {
+    isReady: boolean;
+    checks: Array<{ key: string; label: string; met: boolean; reason?: string }>;
+  };
+};
 
 export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalProps) {
   const [activeTab, setActiveTab] = useState("profile");
@@ -56,6 +65,11 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
   // Fetch user's verification submissions
   const { data: verifications = [], isLoading: verificationsLoading } = useQuery<VerificationSubmission[]>({
     queryKey: ["/api/admin/users", userId, "verifications"],
+    enabled: open && !!userId,
+  });
+
+  const { data: cfiProfileData, isLoading: cfiProfileLoading } = useQuery<AdminCfiProfileResponse>({
+    queryKey: ["/api/admin/users", userId, "cfi-profile"],
     enabled: open && !!userId,
   });
 
@@ -155,6 +169,27 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
     },
   });
 
+  const cfiVerificationMutation = useMutation({
+    mutationFn: async ({ profileId, action }: { profileId: string; action: "verify" | "unverify" }) => {
+      return await apiRequest("PATCH", `/api/admin/cfi-profiles/${profileId}/verification`, { action });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", userId, "cfi-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cfi/profiles"] });
+      toast({
+        title: "CFI verification updated",
+        description: "Instructor verification status has been updated.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update CFI verification.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!user && !userLoading) return null;
 
   const certs = (user?.certifications || []).map((cert) => String(cert).toLowerCase());
@@ -168,6 +203,11 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
     .filter((value): value is Date => !!value)
     .sort((a, b) => b.getTime() - a.getTime())[0];
   const cfiAccessActive = cfiAccessEndsAt ? cfiAccessEndsAt > now : false;
+  const cfiProfile = cfiProfileData?.profile || null;
+  const cfiCredentialReadiness = cfiProfileData?.credentialReadiness;
+  const missingCfiCredentials = cfiCredentialReadiness?.checks
+    ?.filter((check) => !check.met)
+    ?.map((check) => check.label) || [];
 
   const handleResetPassword = () => {
     if (!userId || !confirm("Are you sure you want to send a password reset email to this user?")) return;
@@ -861,6 +901,66 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                             Revoke Access
                           </Button>
                         </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {adminUser?.isSuperAdmin && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">CFI Profile Verification</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {cfiProfileLoading ? (
+                          <p className="text-sm text-muted-foreground">Loading CFI profile...</p>
+                        ) : !cfiProfile ? (
+                          <p className="text-sm text-muted-foreground">No CFI profile found for this user.</p>
+                        ) : (
+                          <>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex items-center justify-between">
+                                <span>Publish status</span>
+                                <Badge variant={cfiProfile.isPublished ? "default" : "outline"}>
+                                  {cfiProfile.isPublished ? "Published" : "Not published"}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>Verification status</span>
+                                <Badge variant={cfiProfile.isVerified ? "default" : "outline"}>
+                                  {cfiProfile.isVerified ? "Verified" : "Not verified"}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>Credential readiness</span>
+                                <Badge variant={cfiCredentialReadiness?.isReady ? "default" : "outline"}>
+                                  {cfiCredentialReadiness?.isReady ? "Ready" : "Missing docs"}
+                                </Badge>
+                              </div>
+                            </div>
+                            {missingCfiCredentials.length > 0 && (
+                              <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                                Missing: {missingCfiCredentials.join(", ")}
+                              </div>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                onClick={() => cfiVerificationMutation.mutate({ profileId: cfiProfile.id, action: "verify" })}
+                                disabled={cfiVerificationMutation.isPending || !cfiCredentialReadiness?.isReady}
+                                data-testid="button-verify-cfi-profile"
+                              >
+                                Mark verified
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => cfiVerificationMutation.mutate({ profileId: cfiProfile.id, action: "unverify" })}
+                                disabled={cfiVerificationMutation.isPending}
+                                data-testid="button-unverify-cfi-profile"
+                              >
+                                Remove verification
+                              </Button>
+                            </div>
+                          </>
+                        )}
                       </CardContent>
                     </Card>
                   )}

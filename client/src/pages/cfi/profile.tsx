@@ -111,7 +111,10 @@ export default function CfiProfilePage() {
                 </div>
               )}
               <div className="space-y-1.5">
-                <Badge variant="outline">CFI Profile</Badge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">CFI Profile</Badge>
+                  {profile.isVerified ? <Badge variant="default">Verified CFI</Badge> : null}
+                </div>
                 <h1 className="text-2xl font-bold">
                   {profile.displayName}
                 </h1>

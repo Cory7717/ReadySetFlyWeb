@@ -93,114 +93,171 @@ export default function CfiProfilePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-10 space-y-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-            {profile.headshotUrl && (
-              <div className="h-20 w-20 rounded-full overflow-hidden border">
-                <img
-                  src={resolveHeadshotUrl(profile.headshotUrl)}
-                  alt={`${profile.displayName} headshot`}
-                  className="h-full w-full object-cover"
-                />
-              </div>
-            )}
-            <div className="space-y-2">
-              <Badge variant="outline">CFI Profile</Badge>
-              <h1 className="text-3xl font-bold">{profile.displayName}</h1>
-              <p className="text-muted-foreground max-w-2xl">{profile.headline || "Certified Flight Instructor"}</p>
-              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                {(profile.locationCity || profile.locationState) && (
-                  <span>
-                    {profile.locationCity || ""}{profile.locationCity && profile.locationState ? ", " : ""}
-                    {profile.locationState || ""}
-                  </span>
-                )}
-                {profile.airportHome && <span>Home airport: {profile.airportHome}</span>}
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="text-lg font-semibold text-right">{formatRate(profile.hourlyRateCents)}</div>
-            <Button asChild>
-              <Link href={`/cfi/${profile.slug}/request`}>
-                {isAuthenticated ? "Request a session" : "Sign in to request"}
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle>About</CardTitle>
-              <CardDescription>Background and training specialties.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground whitespace-pre-line">{profile.bio || "No bio provided yet."}</p>
-              {profile.contactNote && (
-                <div className="text-sm">
-                  <div className="font-semibold">Contact notes</div>
-                  <p className="text-muted-foreground whitespace-pre-line">{profile.contactNote}</p>
+      <div className="border-b bg-muted/30">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+            <div className="flex items-start gap-5">
+              {profile.headshotUrl ? (
+                <div className="h-24 w-24 rounded-full overflow-hidden border-4 border-background shadow-md shrink-0">
+                  <img
+                    src={resolveHeadshotUrl(profile.headshotUrl)}
+                    alt={`${profile.displayName} headshot`}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="h-24 w-24 rounded-full bg-muted border-4 border-background shadow-md flex items-center justify-center text-sm font-semibold text-muted-foreground shrink-0">
+                  CFI
                 </div>
               )}
-            </CardContent>
-          </Card>
+              <div className="space-y-1.5">
+                <Badge variant="outline">CFI Profile</Badge>
+                <h1 className="text-2xl font-bold">
+                  {profile.displayName}
+                </h1>
+                <p className="text-muted-foreground">
+                  {profile.headline || "Certified Flight Instructor"}
+                </p>
+                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                  {profile.airportHome && (
+                    <span className="font-semibold text-foreground">
+                      ✈ {profile.airportHome}
+                    </span>
+                  )}
+                  {(profile.locationCity || profile.locationState) && (
+                    <span>
+                      📍 {[profile.locationCity, profile.locationState].filter(Boolean).join(", ")}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col items-start md:items-end gap-3">
+              <div className="text-2xl font-bold">
+                {formatRate(profile.hourlyRateCents)}
+              </div>
+              <Button asChild size="lg">
+                <Link href={`/cfi/${profile.slug}/request`}>
+                  {isAuthenticated ? "Request a session" : "Sign in to request"}
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/cfi">← Back to directory</Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Training focus</CardTitle>
-              <CardDescription>Ratings, aircraft, and languages.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {ratings.length > 0 && (
-                <div>
-                  <div className="text-xs uppercase text-muted-foreground">Ratings held</div>
-                  <div className="flex flex-wrap gap-2 mt-2">
+      <div className="container mx-auto px-4 py-8 space-y-6">
+        <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>About</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground whitespace-pre-line leading-relaxed">
+                  {profile.bio || "No bio provided yet."}
+                </p>
+                {profile.contactNote && (
+                  <div className="mt-4 rounded-lg border bg-muted/30 p-3 text-sm">
+                    <div className="font-semibold mb-1">
+                      Contact preference
+                    </div>
+                    <p className="text-muted-foreground whitespace-pre-line">
+                      {profile.contactNote}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Ready to train?</CardTitle>
+                <CardDescription>
+                  Send a booking request and the CFI will follow up to confirm details.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-3">
+                <Button asChild>
+                  <Link href={`/cfi/${profile.slug}/request`}>
+                    Request a session
+                  </Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/cfi/student-terms">Student terms</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-4">
+            {ratings.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">
+                    Ratings held
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
                     {ratings.map((rating) => (
                       <Badge key={rating} variant="secondary">
                         {rating}
                       </Badge>
                     ))}
                   </div>
-                </div>
-              )}
-              {aircraft.length > 0 && (
-                <div>
-                  <div className="text-xs uppercase text-muted-foreground">Aircraft types</div>
-                  <p className="text-sm text-muted-foreground mt-2">{aircraft.join(", ")}</p>
-                </div>
-              )}
-              {languages.length > 0 && (
-                <div>
-                  <div className="text-xs uppercase text-muted-foreground">Languages</div>
-                  <p className="text-sm text-muted-foreground mt-2">{languages.join(", ")}</p>
-                </div>
-              )}
-              {!ratings.length && !aircraft.length && !languages.length && (
-                <p className="text-sm text-muted-foreground">No additional details shared yet.</p>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )}
+            {aircraft.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">
+                    Aircraft types
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {aircraft.map((item) => (
+                      <Badge key={item} variant="outline">
+                        {item}
+                      </Badge>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            {languages.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Languages</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    {languages.join(", ")}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+            {profile.preferredPayments && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">
+                    Preferred payment
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    {profile.preferredPayments}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Next steps</CardTitle>
-            <CardDescription>Request a session or review student terms.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            <Button asChild>
-              <Link href={`/cfi/${profile.slug}/request`}>Request a session</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/cfi/student-terms">Student terms</Link>
-            </Button>
-            <Button asChild variant="ghost">
-              <Link href="/cfi">Back to directory</Link>
-            </Button>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

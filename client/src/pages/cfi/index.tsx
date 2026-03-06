@@ -272,11 +272,11 @@ export default function CfiDirectory() {
               const aircraft = normalizeList(profile.aircraftTypes);
               const languages = normalizeList(profile.languages);
               return (
-                <Card key={profile.id} className="hover-elevate">
-                  <CardHeader>
-                    <div className="flex items-center gap-3">
+                <Card key={profile.id} className="hover-elevate flex flex-col">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start gap-3">
                       {profile.headshotUrl ? (
-                        <div className="h-12 w-12 rounded-full overflow-hidden border">
+                        <div className="h-14 w-14 rounded-full overflow-hidden border-2 border-muted shrink-0">
                           <img
                             src={resolveHeadshotUrl(profile.headshotUrl)}
                             alt={`${profile.displayName} headshot`}
@@ -284,50 +284,65 @@ export default function CfiDirectory() {
                           />
                         </div>
                       ) : (
-                        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                        <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center text-xs text-muted-foreground border-2 border-muted shrink-0 font-semibold">
                           CFI
                         </div>
                       )}
-                      <div>
-                        <CardTitle>{profile.displayName}</CardTitle>
-                        <CardDescription>{profile.headline || "CFI on Ready Set Fly"}</CardDescription>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold truncate">
+                          {profile.displayName}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {profile.headline || "Certified Flight Instructor"}
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          {profile.airportHome && (
+                            <span className="font-medium text-foreground">
+                              {profile.airportHome}
+                            </span>
+                          )}
+                          {(profile.locationCity || profile.locationState) && (
+                            <span>
+                              {[profile.locationCity, profile.locationState].filter(Boolean).join(", ")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-sm font-bold text-right shrink-0">
+                        {formatRate(profile.hourlyRateCents)}
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      {(profile.locationCity || profile.locationState) && (
-                        <span>
-                          {profile.locationCity || ""}{profile.locationCity && profile.locationState ? ", " : ""}
-                          {profile.locationState || ""}
-                        </span>
-                      )}
-                      {profile.airportHome && <span>Home: {profile.airportHome}</span>}
-                    </div>
-                    <div className="text-sm font-semibold">{formatRate(profile.hourlyRateCents)}</div>
+                  <CardContent className="flex-1 space-y-3 pt-0">
                     {ratings.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {ratings.slice(0, 4).map((rating) => (
-                          <Badge key={rating} variant="secondary">
+                      <div className="flex flex-wrap gap-1.5">
+                        {ratings.slice(0, 5).map((rating) => (
+                          <Badge key={rating} variant="secondary" className="text-xs">
                             {rating}
                           </Badge>
                         ))}
+                        {ratings.length > 5 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{ratings.length - 5}
+                          </Badge>
+                        )}
                       </div>
                     )}
                     {aircraft.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Aircraft: {aircraft.slice(0, 3).join(", ")}
-                        {aircraft.length > 3 ? "..." : ""}
-                      </p>
+                      <div className="text-xs text-muted-foreground">
+                        ✈ {aircraft.slice(0, 3).join(" · ")}
+                        {aircraft.length > 3 ? ` +${aircraft.length - 3}` : ""}
+                      </div>
                     )}
-                    {languages.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Languages: {languages.slice(0, 3).join(", ")}
-                        {languages.length > 3 ? "..." : ""}
-                      </p>
+                    {languages.length > 1 && (
+                      <div className="text-xs text-muted-foreground">
+                        🌐 {languages.join(", ")}
+                      </div>
                     )}
-                    <Button asChild className="w-full">
-                      <Link href={`/cfi/${profile.slug}`}>Review instructor</Link>
+                    <Button asChild className="w-full mt-auto">
+                      <Link href={`/cfi/${profile.slug}`}>
+                        View instructor →
+                      </Link>
                     </Button>
                   </CardContent>
                 </Card>

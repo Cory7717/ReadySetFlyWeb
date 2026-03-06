@@ -76,6 +76,7 @@ export function Header() {
   const isTraining = location.startsWith("/student") || location.startsWith("/start-flying");
   const isTools = location.startsWith("/tool-hub") || location.startsWith("/pilot-tools") || location.startsWith("/ifr-tools");
   const isFaq = location === "/faq";
+  const isCfi = location.startsWith("/cfi") || location.startsWith("/dashboard/cfi");
   const isMarketplace = location.startsWith("/marketplace");
   const isRentals = location.startsWith("/rentals");
 
@@ -198,6 +199,16 @@ export function Header() {
                   className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isFaq ? "bg-background shadow-sm" : ""}`}
                 >
                   FAQ
+                </Button>
+              </Link>
+              <Link href="/cfi" data-testid="link-cfi">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isCfi ? "bg-background shadow-sm" : ""}`}
+                  onClick={() => trackEvent("nav_click", { label: "cfi", target: "/cfi" })}
+                >
+                  CFI
                 </Button>
               </Link>
               <Link href="/flight-planner" data-testid="link-plan-flight">

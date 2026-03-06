@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trackEvent } from "@/lib/analytics";
@@ -599,69 +600,112 @@ export default function CfiTrainingCenter() {
           </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Student roster</CardTitle>
-            <CardDescription>Add students who already have RSF accounts.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-3">
-              <Input
-                placeholder="student@email.com"
-                value={studentForm.email}
-                onChange={(event) => setStudentForm({ ...studentForm, email: event.target.value })}
-              />
-              <Input
-                type="date"
-                value={studentForm.startDate}
-                onChange={(event) => setStudentForm({ ...studentForm, startDate: event.target.value })}
-              />
-              <Input
-                placeholder="Notes (optional)"
-                value={studentForm.notes}
-                onChange={(event) => setStudentForm({ ...studentForm, notes: event.target.value })}
-              />
-            </div>
-            <Button
-              onClick={() => addStudentMutation.mutate()}
-              disabled={addStudentMutation.isPending || !studentForm.email.trim()}
-            >
-              {addStudentMutation.isPending ? "Adding..." : "Add student"}
-            </Button>
-
-            {studentsLoading ? (
-              <div className="text-sm text-muted-foreground">Loading students...</div>
-            ) : students.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No students yet.</div>
-            ) : (
-              <div className="grid gap-2">
-                {students.map((student) => (
-                  <div
-                    key={student.id}
-                    className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3 ${
-                      student.id === selectedStudentId ? "border-primary/60 bg-primary/5" : ""
-                    }`}
-                  >
-                    <div>
-                      <div className="text-sm font-semibold">{formatStudentName(student)}</div>
-                      <div className="text-xs text-muted-foreground">{student.user?.email}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">{student.status || "active"}</Badge>
-                      <Button
-                        variant={student.id === selectedStudentId ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setSelectedStudentId(student.id)}
-                      >
-                        {student.id === selectedStudentId ? "Selected" : "View"}
-                      </Button>
-                    </div>
+        <div className="grid gap-6 lg:grid-cols-[280px_1fr] lg:items-start">
+          <div className="lg:sticky lg:top-6 space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Your students</CardTitle>
+                <CardDescription>
+                  {students.length} student{students.length !== 1 ? "s" : ""}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2 p-3 pt-0">
+                {studentsLoading ? (
+                  <div className="text-xs text-muted-foreground px-1">
+                    Loading...
                   </div>
-                ))}
+                ) : students.length === 0 ? (
+                  <div className="text-xs text-muted-foreground px-1">
+                    No students yet.
+                  </div>
+                ) : (
+                  students.map((student) => (
+                    <button
+                      key={student.id}
+                      type="button"
+                      onClick={() => setSelectedStudentId(student.id)}
+                      className={[
+                        "w-full rounded-lg border px-3 py-2.5",
+                        "text-left text-sm transition-colors",
+                        student.id === selectedStudentId
+                          ? "border-primary/60 bg-primary/5 font-medium"
+                          : "hover:bg-muted/40",
+                      ].join(" ")}
+                    >
+                      <div className="font-medium truncate">
+                        {formatStudentName(student)}
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {student.user?.email}
+                      </div>
+                      <div className="mt-1">
+                        <Badge variant="outline" className="text-[10px] h-4">
+                          {student.status || "active"}
+                        </Badge>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Add student</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 p-3 pt-0">
+                <Input
+                  placeholder="student@email.com"
+                  value={studentForm.email}
+                  onChange={(event) => setStudentForm({ ...studentForm, email: event.target.value })}
+                />
+                <Input
+                  type="date"
+                  value={studentForm.startDate}
+                  onChange={(event) => setStudentForm({ ...studentForm, startDate: event.target.value })}
+                />
+                <Button
+                  className="w-full"
+                  onClick={() => addStudentMutation.mutate()}
+                  disabled={addStudentMutation.isPending || !studentForm.email.trim()}
+                >
+                  {addStudentMutation.isPending ? "Adding..." : "Add student"}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-6 min-w-0">
+            {selectedStudent && (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="text-xs text-muted-foreground">Lessons</div>
+                  <div className="text-2xl font-bold">{lessons.length}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="text-xs text-muted-foreground">
+                    Milestones
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {completedMilestones}/{milestones.length}
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="text-xs text-muted-foreground">
+                    Endorsements
+                  </div>
+                  <div className="text-2xl font-bold">{endorsements.length}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3">
+                  <div className="text-xs text-muted-foreground">
+                    Synth sessions
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {syntheticVisionSessions.length}
+                  </div>
+                </div>
               </div>
             )}
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader>
@@ -927,12 +971,7 @@ export default function CfiTrainingCenter() {
                     Progress: {completedMilestones}/{milestones.length} complete ({milestoneProgress}%)
                   </div>
                 </div>
-                <div className="h-2 w-full rounded-full bg-muted/60">
-                  <div
-                    className="h-2 rounded-full bg-primary transition-all"
-                    style={{ width: `${milestoneProgress}%` }}
-                  />
-                </div>
+                <Progress value={milestoneProgress} className="h-2" />
 
                 {milestones.length === 0 ? (
                   <div className="text-sm text-muted-foreground">No milestones yet.</div>
@@ -1338,6 +1377,8 @@ export default function CfiTrainingCenter() {
             ))}
           </CardContent>
         </Card>
+          </div>
+        </div>
 
         <SignatureDialog
           open={!!signatureTarget}

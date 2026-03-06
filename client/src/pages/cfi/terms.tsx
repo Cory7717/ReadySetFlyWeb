@@ -48,14 +48,19 @@ export default function CfiTermsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-10">
-        <Card>
-          <CardHeader>
+      <div className="container mx-auto px-4 py-10 max-w-2xl">
+        <div className="space-y-6">
+          <div className="space-y-2">
             <Badge variant="outline">CFI Terms</Badge>
-            <CardTitle>Ready Set Fly CFI Marketplace Terms</CardTitle>
-            <CardDescription>Version {LEGAL_VERSION}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            <h1 className="text-3xl font-bold">
+              Ready Set Fly CFI Marketplace Terms
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Version {LEGAL_VERSION} · Last updated January 2025
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-card p-6 sm:p-8 space-y-5 text-sm text-muted-foreground leading-relaxed">
             <p>
               By publishing a CFI profile on Ready Set Fly, you agree to maintain accurate certifications, respond to
               students promptly, and uphold professional safety standards.
@@ -71,8 +76,13 @@ export default function CfiTermsPage() {
             <p>
               For questions, contact support@readysetfly.us.
             </p>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-3 pt-2">
+          <div className="rounded-lg border bg-muted/30 p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="text-sm">
+              {acceptance ? "✓ You have accepted these terms." : "Please review and accept before continuing."}
+            </div>
+            <div className="flex flex-wrap gap-3">
               {isAuthenticated ? (
                 <Button onClick={() => acceptMutation.mutate()} disabled={acceptMutation.isPending || !!acceptance}>
                   {acceptance ? "Already accepted" : acceptMutation.isPending ? "Accepting..." : "Accept CFI terms"}
@@ -86,8 +96,8 @@ export default function CfiTermsPage() {
                 <Link href="/dashboard/cfi">Back to CFI dashboard</Link>
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

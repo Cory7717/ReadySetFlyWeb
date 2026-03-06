@@ -199,29 +199,29 @@ export default function CfiSchoolDashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="rounded-lg border p-3">
+                <div className="rounded-lg border p-4 space-y-1 border-sky-100 bg-sky-50/40">
                   <div className="text-xs text-muted-foreground">Instructors</div>
-                  <div className="text-2xl font-semibold">{metrics?.instructors ?? members.length}</div>
+                  <div className="text-3xl font-bold text-sky-700">{metrics?.instructors ?? members.length}</div>
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rounded-lg border p-4 space-y-1 border-emerald-100 bg-emerald-50/40">
                   <div className="text-xs text-muted-foreground">Active students</div>
-                  <div className="text-2xl font-semibold">{metrics?.students ?? 0}</div>
+                  <div className="text-3xl font-bold text-emerald-700">{metrics?.students ?? 0}</div>
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rounded-lg border p-4 space-y-1 border-violet-100 bg-violet-50/40">
                   <div className="text-xs text-muted-foreground">Total lessons</div>
-                  <div className="text-2xl font-semibold">{metrics?.lessons ?? 0}</div>
+                  <div className="text-3xl font-bold text-violet-700">{metrics?.lessons ?? 0}</div>
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rounded-lg border p-4 space-y-1 border-amber-100 bg-amber-50/40">
                   <div className="text-xs text-muted-foreground">Upcoming lessons</div>
-                  <div className="text-2xl font-semibold">{metrics?.upcomingLessons ?? 0}</div>
+                  <div className="text-3xl font-bold text-amber-700">{metrics?.upcomingLessons ?? 0}</div>
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rounded-lg border p-4 space-y-1 border-emerald-100 bg-emerald-50/40">
                   <div className="text-xs text-muted-foreground">Completed lessons</div>
-                  <div className="text-2xl font-semibold">{metrics?.completedLessons ?? 0}</div>
+                  <div className="text-3xl font-bold text-emerald-700">{metrics?.completedLessons ?? 0}</div>
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className="rounded-lg border p-4 space-y-1 border-sky-100 bg-sky-50/40">
                   <div className="text-xs text-muted-foreground">Milestones completed</div>
-                  <div className="text-2xl font-semibold">{metrics?.milestonesCompleted ?? 0}</div>
+                  <div className="text-3xl font-bold text-sky-700">{metrics?.milestonesCompleted ?? 0}</div>
                 </div>
               </div>
             </CardContent>

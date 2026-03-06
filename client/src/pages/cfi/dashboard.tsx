@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -123,6 +124,22 @@ export default function CfiDashboard() {
     expiresOn: "",
     notes: "",
   });
+  const profileCompleteness = useMemo(() => {
+    if (!profile) return 0;
+    const fields = [
+      formState.displayName,
+      formState.headline,
+      formState.bio,
+      formState.headshotUrl,
+      formState.locationCity,
+      formState.airportHome,
+      formState.hourlyRate,
+      formState.ratingsHeld,
+      formState.aircraftTypes,
+    ];
+    const filled = fields.filter(Boolean).length;
+    return Math.round((filled / fields.length) * 100);
+  }, [formState, profile]);
 
   const startTrialMutation = useMutation({
     mutationFn: async () => {
@@ -415,6 +432,8 @@ export default function CfiDashboard() {
     );
   }
 
+  const pendingBookingCount = bookingRequests.filter((request) => request.status === "PENDING").length;
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-10 space-y-8">
@@ -439,6 +458,74 @@ export default function CfiDashboard() {
             </AlertDescription>
           </Alert>
         )}
+        {profile && profileCompleteness < 100 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-center justify-between gap-4">
+            <div className="space-y-1 flex-1">
+              <div className="text-sm font-semibold text-amber-800">
+                Profile {profileCompleteness}% complete
+              </div>
+              <Progress value={profileCompleteness} className="h-2 bg-amber-100 [&>div]:bg-amber-500" />
+              <div className="text-xs text-amber-700">
+                Students are more likely to reach out to instructors with complete profiles.
+              </div>
+            </div>
+            {profile.slug && (
+              <Button asChild size="sm" variant="outline" className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100">
+                <Link href={`/cfi/${profile.slug}`}>Preview</Link>
+              </Button>
+            )}
+          </div>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Publish & compliance</CardTitle>
+            <CardDescription>Accept the CFI terms before going live.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 bg-muted/30">
+              <div className="flex-1 space-y-0.5">
+                <div className="text-sm font-semibold">
+                  {profile?.isPublished ? "✓ Your profile is live" : "Your profile is not yet published"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {profile?.isPublished
+                    ? "Students can find and contact you from the CFI directory."
+                    : "Accept CFI terms and publish to appear in the directory."}
+                </div>
+              </div>
+              {profile?.slug && profile.isPublished && (
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/cfi/${profile.slug}`}>View live profile</Link>
+                </Button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Badge variant={dashboardData?.legal?.cfi_terms ? "default" : "outline"}>
+                {dashboardData?.legal?.cfi_terms ? "CFI terms accepted" : "CFI terms required"}
+              </Badge>
+              {!dashboardData?.legal?.cfi_terms && (
+                <Button
+                  variant="outline"
+                  onClick={() => acceptTermsMutation.mutate()}
+                  disabled={acceptTermsMutation.isPending}
+                >
+                  Accept CFI terms
+                </Button>
+              )}
+              <Button
+                onClick={() => publishMutation.mutate()}
+                disabled={publishMutation.isPending || !dashboardData?.legal?.cfi_terms}
+              >
+                {profile?.isPublished ? "Re-publish profile" : "Publish profile"}
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/cfi/terms">Review CFI terms</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -642,7 +729,7 @@ export default function CfiDashboard() {
             )}
             <div className="space-y-3">
               {availabilityRules.map((rule, index) => (
-                <div key={rule.id || index} className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto] items-center">
+                <div key={rule.id || index} className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto] items-center">
                   <Select
                     value={String(rule.weekday)}
                     onValueChange={(value) => {
@@ -662,15 +749,22 @@ export default function CfiDashboard() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <Input
-                    value={rule.timezone}
-                    onChange={(event) => {
-                      const next = [...availabilityRules];
-                      next[index] = { ...rule, timezone: event.target.value };
-                      setAvailabilityRules(next);
-                    }}
-                    placeholder="Timezone"
-                  />
+                  <div className="space-y-1">
+                    <Input
+                      value={rule.timezone}
+                      onChange={(event) => {
+                        const next = [...availabilityRules];
+                        next[index] = { ...rule, timezone: event.target.value };
+                        setAvailabilityRules(next);
+                      }}
+                      placeholder="Timezone"
+                    />
+                    {rule.timezone && (
+                      <div className="text-[10px] text-muted-foreground px-1">
+                        {rule.timezone}
+                      </div>
+                    )}
+                  </div>
                   <Input
                     type="time"
                     value={normalizeTimeValue(rule.startTime as any)}
@@ -694,6 +788,17 @@ export default function CfiDashboard() {
                     onClick={() => setAvailabilityRules(availabilityRules.filter((_, i) => i !== index))}
                   >
                     Remove
+                  </Button>
+                  <Button
+                    variant={rule.isActive ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      const next = [...availabilityRules];
+                      next[index] = { ...rule, isActive: !rule.isActive };
+                      setAvailabilityRules(next);
+                    }}
+                  >
+                    {rule.isActive ? "Active" : "Inactive"}
                   </Button>
                 </div>
               ))}
@@ -796,15 +901,37 @@ export default function CfiDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Booking requests</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Booking requests
+              {pendingBookingCount > 0 && (
+                <Badge variant="destructive" className="text-xs">
+                  {pendingBookingCount} pending
+                </Badge>
+              )}
+            </CardTitle>
             <CardDescription>Respond to incoming training requests.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {bookingRequests.length === 0 && (
               <p className="text-sm text-muted-foreground">No booking requests yet.</p>
             )}
-            {bookingRequests.map((request) => (
-              <div key={request.id} className="border rounded-lg p-3 space-y-2">
+            {[...bookingRequests]
+              .sort((a, b) => {
+                if (a.status === "PENDING" && b.status !== "PENDING") return -1;
+                if (a.status !== "PENDING" && b.status === "PENDING") return 1;
+                return 0;
+              })
+              .map((request) => (
+              <div
+                key={request.id}
+                className={`border rounded-lg p-3 space-y-2 ${
+                  request.status === "PENDING"
+                    ? "border-amber-200 bg-amber-50/40"
+                    : request.status === "CONFIRMED"
+                      ? "border-emerald-200 bg-emerald-50/40"
+                      : "border-muted"
+                }`}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-semibold">{request.sessionType}</div>
                   <Badge variant="outline">{request.status}</Badge>
@@ -833,37 +960,6 @@ export default function CfiDashboard() {
                 </div>
               </div>
             ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Publish & compliance</CardTitle>
-            <CardDescription>Accept the CFI terms before going live.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <Badge variant={dashboardData?.legal?.cfi_terms ? "default" : "outline"}>
-                {dashboardData?.legal?.cfi_terms ? "CFI terms accepted" : "CFI terms required"}
-              </Badge>
-              <Button
-                variant="outline"
-                onClick={() => acceptTermsMutation.mutate()}
-                disabled={acceptTermsMutation.isPending}
-              >
-                Accept CFI terms
-              </Button>
-              <Button
-                onClick={() => publishMutation.mutate()}
-                disabled={publishMutation.isPending || !dashboardData?.legal?.cfi_terms}
-              >
-                Publish profile
-              </Button>
-            </div>
-            {profile?.isPublished && <p className="text-sm text-muted-foreground">Your profile is live.</p>}
-            <Button asChild variant="ghost">
-              <Link href="/cfi/terms">Review CFI terms</Link>
-            </Button>
           </CardContent>
         </Card>
       </div>

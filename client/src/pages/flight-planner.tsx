@@ -292,6 +292,18 @@ type ContextualTool = {
   href: string;
 };
 
+type LegRiskLevel = "normal" | "caution" | "alert";
+
+type LegRiskSummary = {
+  level: LegRiskLevel;
+  hasTfrConflict: boolean;
+  hasIfrRisk: boolean;
+  hasThunderRisk: boolean;
+  hasFuelReserveRisk: boolean;
+  hasFuelDeficit: boolean;
+  remainingFuelGallons: number;
+};
+
 type HazardSummaryItem = {
   source: "airsigmet" | "gairmet" | "airmet";
   hazard: string;
@@ -1394,7 +1406,6 @@ export default function FlightPlanner() {
       .filter(Boolean)
       .map((value: string) => String(value));
   }, [tfrConflicts]);
-
   const tfrConflictRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1602,6 +1613,67 @@ export default function FlightPlanner() {
     () => weatherFindings.some((item) => item.thunder),
     [weatherFindings]
   );
+  const weatherByIcao = useMemo(() => {
+    const lookup = new Map<string, { category: string; thunder: boolean }>();
+    weatherFindings.forEach((item) => {
+      lookup.set(item.icao, { category: item.category, thunder: item.thunder });
+    });
+    return lookup;
+  }, [weatherFindings]);
+  const legRiskByKey = useMemo(() => {
+    const features = Array.isArray(tfrRouteQuery.data?.features) ? tfrRouteQuery.data.features : [];
+    const riskMap = new Map<string, LegRiskSummary>();
+    let cumulativeFuelUsed = 0;
+
+    legs.forEach((leg, index) => {
+      const navRow = legNavRows[index];
+      if (!navRow) return;
+      const fromWeather = weatherByIcao.get(navRow.from);
+      const toWeather = weatherByIcao.get(navRow.to);
+      const hasIfrRisk =
+        fromWeather?.category === "IFR" ||
+        fromWeather?.category === "LIFR" ||
+        toWeather?.category === "IFR" ||
+        toWeather?.category === "LIFR";
+      const hasThunderRiskForLeg = Boolean(fromWeather?.thunder || toWeather?.thunder);
+
+      const legBbox = {
+        west: Math.min(leg.from.lon, leg.to.lon),
+        east: Math.max(leg.from.lon, leg.to.lon),
+        south: Math.min(leg.from.lat, leg.to.lat),
+        north: Math.max(leg.from.lat, leg.to.lat),
+      };
+      const hasTfrConflict = features.some((feature: any) => {
+        const rings = extractPolygonRings(feature?.geometry);
+        if (!rings.length) return false;
+        return rings.some((ring) => routeIntersectsRing([leg.from, leg.to], ring, legBbox));
+      });
+
+      cumulativeFuelUsed += navRow.legFuel;
+      const remainingFuelGallons = fuelAvailableGallons - cumulativeFuelUsed;
+      const hasFuelDeficit = remainingFuelGallons < 0;
+      const hasFuelReserveRisk = remainingFuelGallons >= 0 && remainingFuelGallons < reserveFuel;
+
+      const level: LegRiskLevel =
+        hasTfrConflict || hasThunderRiskForLeg || hasFuelDeficit
+          ? "alert"
+          : hasIfrRisk || hasFuelReserveRisk
+            ? "caution"
+            : "normal";
+
+      riskMap.set(navRow.key, {
+        level,
+        hasTfrConflict,
+        hasIfrRisk,
+        hasThunderRisk: hasThunderRiskForLeg,
+        hasFuelReserveRisk,
+        hasFuelDeficit,
+        remainingFuelGallons,
+      });
+    });
+
+    return riskMap;
+  }, [tfrRouteQuery.data?.features, legs, legNavRows, weatherByIcao, fuelAvailableGallons, reserveFuel]);
   const weatherStatusText = weatherData.length === 0
     ? "No METARs loaded"
     : hasThunderRisk
@@ -3780,20 +3852,64 @@ export default function FlightPlanner() {
                     {legNavRows.length === 0 ? (
                       <div className="text-xs text-slate-300">No route legs yet.</div>
                     ) : (
-                      legNavRows.map((leg) => (
-                        <div
-                          key={`strip-${leg.key}`}
-                          className="min-w-[180px] rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100"
-                        >
-                          <div className="font-semibold">{leg.from} to {leg.to}</div>
-                          <div className="text-slate-300">
-                            {String(leg.course).padStart(3, "0")} deg · {leg.distanceNm.toFixed(1)} NM
+                      legNavRows.map((leg) => {
+                        const risk = legRiskByKey.get(leg.key);
+                        const riskContainerClass =
+                          risk?.level === "alert"
+                            ? "border-red-500/80 bg-red-950/30"
+                            : risk?.level === "caution"
+                              ? "border-amber-500/80 bg-amber-950/20"
+                              : "border-emerald-500/60 bg-emerald-950/20";
+                        return (
+                          <div
+                            key={`strip-${leg.key}`}
+                            className={cn("min-w-[208px] rounded-md border px-2 py-1.5 text-xs text-slate-100", riskContainerClass)}
+                          >
+                            <div className="font-semibold">{leg.from} to {leg.to}</div>
+                            <div className="text-slate-300">
+                              {String(leg.course).padStart(3, "0")} deg · {leg.distanceNm.toFixed(1)} NM
+                            </div>
+                            <div className="text-slate-400">
+                              ETA {leg.legEtaUtc ? `${leg.legEtaUtc.toISOString().slice(11, 16)}Z` : "--"}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {risk?.hasTfrConflict && (
+                                <span className="rounded-full border border-red-400/70 bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-200">
+                                  TFR
+                                </span>
+                              )}
+                              {risk?.hasThunderRisk && (
+                                <span className="rounded-full border border-red-400/70 bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-200">
+                                  TS
+                                </span>
+                              )}
+                              {risk?.hasIfrRisk && (
+                                <span className="rounded-full border border-amber-400/70 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+                                  IFR
+                                </span>
+                              )}
+                              {risk?.hasFuelDeficit && (
+                                <span className="rounded-full border border-red-400/70 bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-200">
+                                  Fuel Deficit
+                                </span>
+                              )}
+                              {!risk?.hasFuelDeficit && risk?.hasFuelReserveRisk && (
+                                <span className="rounded-full border border-amber-400/70 bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+                                  Low Reserve
+                                </span>
+                              )}
+                              {!risk?.hasTfrConflict && !risk?.hasThunderRisk && !risk?.hasIfrRisk && !risk?.hasFuelDeficit && !risk?.hasFuelReserveRisk && (
+                                <span className="rounded-full border border-emerald-400/70 bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
+                                  Normal
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-1 text-[10px] text-slate-300">
+                              Rem fuel {risk ? `${risk.remainingFuelGallons.toFixed(1)} gal` : "--"}
+                            </div>
                           </div>
-                          <div className="text-slate-400">
-                            ETA {leg.legEtaUtc ? `${leg.legEtaUtc.toISOString().slice(11, 16)}Z` : "--"}
-                          </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 ) : (

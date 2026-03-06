@@ -34,6 +34,15 @@ export default function ApproachPlates() {
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const seededIcao = (params.get("icao") || "").trim().toUpperCase();
+    if (!ICAO_REGEX.test(seededIcao)) return;
+    setQuery(seededIcao);
+    setSearchTerm(seededIcao);
+  }, []);
+
   const { data, isLoading } = useQuery<{ plates: PlateRecord[]; icao?: string }>(
     {
       queryKey: ["/api/plates", searchTerm],

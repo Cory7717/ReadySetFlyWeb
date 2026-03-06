@@ -568,6 +568,9 @@ export default function FlightPlanner() {
   const [arrivalAuto, setArrivalAuto] = useState(true);
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
   const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds" | "clouds" | "globe">("standard");
+  const [mapRenderVersion, setMapRenderVersion] = useState(0);
+  const [showAtcStrip, setShowAtcStrip] = useState(true);
+  const [showApproachOffer, setShowApproachOffer] = useState(false);
   const [windsAltitudeChoice, setWindsAltitudeChoice] = useState("planned");
   const [tfmsOverlayEnabled, setTfmsOverlayEnabled] = useState(false);
   const [activeWeatherDetail, setActiveWeatherDetail] = useState<
@@ -599,6 +602,7 @@ export default function FlightPlanner() {
   const destinationLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
   const departureSelectedRef = useRef<string | null>(null);
   const destinationSelectedRef = useRef<string | null>(null);
+  const lastApproachOfferKeyRef = useRef<string | null>(null);
   const plannedAltitudeFt = Number(plannedAltitude);
   const plannedAltitudeValue = Number.isFinite(plannedAltitudeFt) ? plannedAltitudeFt : undefined;
   const windsAltitudeFt = windsAltitudeChoice === "planned"
@@ -625,6 +629,13 @@ export default function FlightPlanner() {
       turbulence: "view_turb",
     };
     trackEvent(eventMap[id] || "view_weather_detail", { source: "flight_planner" });
+  };
+  const openApproachPlatesForIcao = (icao: string) => {
+    if (typeof window === "undefined") return;
+    const normalized = icao.trim().toUpperCase();
+    if (!ICAO_REGEX.test(normalized)) return;
+    window.open(`/approach-plates?icao=${encodeURIComponent(normalized)}`, "_blank", "noopener,noreferrer");
+    trackEvent("planner_open_approach_plate", { icao: normalized });
   };
 
   useEffect(() => {
@@ -1615,6 +1626,40 @@ export default function FlightPlanner() {
     : tfrConflicts.length > 0
       ? "text-amber-300"
       : "text-emerald-300";
+  const weatherDataUpdatedAtMs = useMemo(
+    () =>
+      weatherQueries.reduce((maxValue, query) => {
+        const value = typeof query.dataUpdatedAt === "number" ? query.dataUpdatedAt : 0;
+        return Math.max(maxValue, value);
+      }, 0),
+    [weatherQueries]
+  );
+  const latestBriefingUpdatedAtMs = useMemo(
+    () =>
+      Math.max(
+        weatherDataUpdatedAtMs,
+        windsSummaryQuery.dataUpdatedAt || 0,
+        pirepsQuery.dataUpdatedAt || 0,
+        notamsSummaryQuery.dataUpdatedAt || 0,
+        tfrRouteQuery.dataUpdatedAt || 0
+      ),
+    [
+      weatherDataUpdatedAtMs,
+      windsSummaryQuery.dataUpdatedAt,
+      pirepsQuery.dataUpdatedAt,
+      notamsSummaryQuery.dataUpdatedAt,
+      tfrRouteQuery.dataUpdatedAt,
+    ]
+  );
+  const isBriefingStale = latestBriefingUpdatedAtMs > 0 && Date.now() - latestBriefingUpdatedAtMs > 20 * 60 * 1000;
+  const briefingUpdatedLabel = latestBriefingUpdatedAtMs
+    ? new Date(latestBriefingUpdatedAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : "--";
+  const briefingUpdatedTone = latestBriefingUpdatedAtMs === 0
+    ? "text-slate-300"
+    : isBriefingStale
+      ? "text-amber-300"
+      : "text-emerald-300";
 
   const autoChecklist = useMemo(() => ({
     weather: weatherData.length > 0 && !hasIfrWeather && !hasThunderRisk,
@@ -1668,6 +1713,12 @@ export default function FlightPlanner() {
       ...waypoints,
     ].filter(Boolean);
   }, [departureResolved, destinationResolved, plannedStops, waypoints]);
+  const approachOfferAirports = useMemo(() => {
+    return Array.from(new Set(routeAirports))
+      .filter((icao) => ICAO_REGEX.test(icao))
+      .slice(0, 8);
+  }, [routeAirports]);
+  const approachOfferKey = useMemo(() => approachOfferAirports.join("|"), [approachOfferAirports]);
 
   const hasControlledAirport = useMemo(
     () => routeAirports.some((icao) => CONTROLLED_AIRPORTS.has(icao)),
@@ -1764,6 +1815,20 @@ export default function FlightPlanner() {
   }, [departureResolved, destinationResolved, waypointsInput, plannedStopsInput, plannedAltitude]);
 
   const briefingReady = Boolean(departureResolved && destinationResolved);
+
+  useEffect(() => {
+    if (!briefingReady || approachOfferAirports.length < 2 || !approachOfferKey) return;
+    if (typeof window === "undefined") return;
+    if (lastApproachOfferKeyRef.current === approachOfferKey) return;
+    const storageKey = `rsf.approachOfferSeen.${approachOfferKey}`;
+    if (window.localStorage.getItem(storageKey) === "1") {
+      lastApproachOfferKeyRef.current = approachOfferKey;
+      return;
+    }
+    window.localStorage.setItem(storageKey, "1");
+    lastApproachOfferKeyRef.current = approachOfferKey;
+    setShowApproachOffer(true);
+  }, [briefingReady, approachOfferAirports.length, approachOfferKey]);
 
   useEffect(() => {
     if (!isGuest || !briefingReady) {
@@ -2297,7 +2362,7 @@ export default function FlightPlanner() {
         <div className="min-w-0 space-y-3">
       <Card className="border-slate-700 bg-slate-950 text-slate-100">
         <CardContent className="pt-4">
-          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
             <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Route</div>
               <div className="text-xs font-semibold text-slate-100">{form.departure || "---"} to {form.destination || "---"}</div>
@@ -2321,6 +2386,13 @@ export default function FlightPlanner() {
             <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Checklist</div>
               <div className="text-xs font-semibold text-slate-100">{checklistCompletionCount}/6 complete</div>
+            </div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Briefing Sync</div>
+              <div className={cn("text-xs font-semibold", briefingUpdatedTone)}>
+                {briefingUpdatedLabel}
+                {isBriefingStale ? " (stale)" : latestBriefingUpdatedAtMs > 0 ? " (fresh)" : ""}
+              </div>
             </div>
           </div>
         </CardContent>
@@ -2591,6 +2663,42 @@ export default function FlightPlanner() {
                 onChange={(e) => setForm({ ...form, tailNumber: e.target.value })}
                 placeholder="N12345"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Planned Departure</Label>
+              <Input
+                type="datetime-local"
+                value={form.plannedDepartureAt}
+                onChange={(e) => setForm({ ...form, plannedDepartureAt: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Local time at departure ({departureTimeZone}).
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Planned Arrival</Label>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={!canAutoArrival}
+                  onClick={() => setArrivalAuto(true)}
+                >
+                  Auto-calc
+                </Button>
+              </div>
+              <Input
+                type="datetime-local"
+                value={form.plannedArrivalAt}
+                onChange={(e) => {
+                  setForm({ ...form, plannedArrivalAt: e.target.value });
+                  setArrivalAuto(false);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                Local time at destination ({destinationTimeZone}).
+              </p>
             </div>
             <div className="md:col-span-2 rounded-lg border p-4 space-y-2">
               <div className="font-semibold">Suggested routes</div>
@@ -3304,48 +3412,12 @@ export default function FlightPlanner() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Planned Departure</Label>
-              <Input
-                type="datetime-local"
-                value={form.plannedDepartureAt}
-                onChange={(e) => setForm({ ...form, plannedDepartureAt: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                Local time at departure ({departureTimeZone}).
-              </p>
-            </div>
-            <div className="space-y-2">
               <Label>Aircraft Type (optional)</Label>
               <Input
                 value={form.aircraftType}
                 onChange={(e) => setForm({ ...form, aircraftType: e.target.value })}
                 placeholder={selectedProfile?.name || ""}
               />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Planned Arrival</Label>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={!canAutoArrival}
-                  onClick={() => setArrivalAuto(true)}
-                >
-                  Auto-calc
-                </Button>
-              </div>
-              <Input
-                type="datetime-local"
-                value={form.plannedArrivalAt}
-                onChange={(e) => {
-                  setForm({ ...form, plannedArrivalAt: e.target.value });
-                  setArrivalAuto(false);
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                Local time at destination ({destinationTimeZone}).
-              </p>
             </div>
             <div className="space-y-2">
               <Label>Fuel On Board (gal)</Label>
@@ -3631,6 +3703,104 @@ export default function FlightPlanner() {
                 RSF Synthetic Vision Lab <span className="font-medium">(coming soon)</span>
               </span>
             </div>
+            <div className="sticky top-0 z-20 mb-3 rounded-lg border border-slate-700 bg-slate-900/90 p-2 backdrop-blur">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800"
+                  onClick={() => setMapRenderVersion((value) => value + 1)}
+                >
+                  Fit route
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800"
+                  onClick={() => {
+                    setActiveTab("weather");
+                    openWeatherDetail("metar");
+                  }}
+                >
+                  METAR/TAF
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800"
+                  onClick={() => {
+                    setActiveTab("weather");
+                    openWeatherDetail("notams");
+                  }}
+                >
+                  NOTAMs
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800"
+                  onClick={() => setShowApproachOffer(true)}
+                >
+                  Plates
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800"
+                  onClick={() => setShowAtcStrip((value) => !value)}
+                >
+                  {showAtcStrip ? "Hide" : "Show"} nav strip
+                </Button>
+                <Button type="button" size="sm" variant="outline" className="h-8 border-slate-600 text-slate-100 hover:bg-slate-800" asChild>
+                  <a href="/tfr-map" target="_blank" rel="noopener noreferrer">Full TFR map</a>
+                </Button>
+              </div>
+            </div>
+            {routePoints.length > 1 && (
+              <div className="mb-3 rounded-lg border border-slate-700 bg-slate-900/80 p-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300">
+                    ATC Leg Strip
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs text-blue-300 hover:underline"
+                    onClick={() => setShowAtcStrip((value) => !value)}
+                  >
+                    {showAtcStrip ? "Collapse" : "Expand"}
+                  </button>
+                </div>
+                {showAtcStrip ? (
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {legNavRows.length === 0 ? (
+                      <div className="text-xs text-slate-300">No route legs yet.</div>
+                    ) : (
+                      legNavRows.map((leg) => (
+                        <div
+                          key={`strip-${leg.key}`}
+                          className="min-w-[180px] rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100"
+                        >
+                          <div className="font-semibold">{leg.from} to {leg.to}</div>
+                          <div className="text-slate-300">
+                            {String(leg.course).padStart(3, "0")} deg · {leg.distanceNm.toFixed(1)} NM
+                          </div>
+                          <div className="text-slate-400">
+                            ETA {leg.legEtaUtc ? `${leg.legEtaUtc.toISOString().slice(11, 16)}Z` : "--"}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-300">Collapsed. Expand to see per-leg track, distance, and ETA.</div>
+                )}
+              </div>
+            )}
             {routeIcaos.length === 0 ? (
               <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
             ) : routePoints.length === 0 ? (
@@ -3641,11 +3811,13 @@ export default function FlightPlanner() {
               <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
                 {mapStyle === "globe" ? (
                   <CesiumGlobe
+                    key={`globe-${mapRenderVersion}`}
                     points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
                     tfmsOverlayEnabled={tfmsTier === "pro_plus" && tfmsOverlayEnabled}
                   />
                 ) : (
                   <PlannerMap
+                    key={`map-${mapStyle}-${mapRenderVersion}`}
                     points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
                     mapStyle={mapStyle}
                     plannedAltitudeFt={plannedAltitudeValue}
@@ -3750,6 +3922,49 @@ export default function FlightPlanner() {
       </div>
       </div>
       </div>
+
+      <Dialog open={showApproachOffer} onOpenChange={setShowApproachOffer}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approach Plates for This Route</DialogTitle>
+            <DialogDescription>
+              Your selected route airports are ready. Open plates for each stop before you file.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              {approachOfferAirports.map((icao) => (
+                <Button
+                  key={`plate-offer-${icao}`}
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openApproachPlatesForIcao(icao)}
+                >
+                  {icao}
+                </Button>
+              ))}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setShowApproachOffer(false)}>
+                Not now
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  const firstIcao = approachOfferAirports[0];
+                  if (firstIcao) {
+                    openApproachPlatesForIcao(firstIcao);
+                  }
+                  setShowApproachOffer(false);
+                }}
+              >
+                Open first airport
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Sheet open={Boolean(activeWeatherDetail)} onOpenChange={(open) => !open && setActiveWeatherDetail(null)}>
         <SheetContent side="right" className="max-h-[85vh] overflow-y-auto sm:max-w-xl">

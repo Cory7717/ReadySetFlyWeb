@@ -116,15 +116,15 @@ export default function ToolHub() {
     <div className="min-h-screen">
       <section className="border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_66%_19%),hsl(221_74%_34%))] py-10 text-slate-100 shadow-[inset_0_-1px_0_rgba(255,255,255,0.06)]">
         <div className="container mx-auto px-4 space-y-4">
-          <span className="rsf-kicker border-white/10 bg-white/10 text-slate-100">Tool Center</span>
-          <h1 className="font-display text-3xl sm:text-4xl font-bold">One place for every RSF tool.</h1>
+          <span className="rsf-kicker border-white/10 bg-white/10 text-slate-100">PILOT TOOL HUB</span>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold">Aviation tools for every phase of flight.</h1>
           <p className="max-w-3xl text-slate-300">
-            Marketplace remains the front door. When you need tools, open this page and pick from Plan, Calculate, Train, Track, and Advanced.
+            Plan routes, check weather, run calculations, and train — all without leaving RSF.
           </p>
           <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/90">
-            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">Marketplace first</span>
-            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">Tools centralized</span>
-            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">Faster discovery</span>
+            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">FLIGHT PLANNING</span>
+            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">WEATHER & WEATHER TOOLS</span>
+            <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">TRAINING & CALCULATORS</span>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild onClick={() => trackEvent("tool_hub_click", { target: "/marketplace" })}>

@@ -2226,6 +2226,7 @@ export default function FlightPlanner() {
           "Upgrade for unlimited saved plans, alerts, and advanced analytics.",
         ]}
       />
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_460px]">
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="space-y-4">
         <TabsList className="flex w-full flex-wrap gap-2">
           <TabsTrigger value="route">Route</TabsTrigger>
@@ -2755,141 +2756,6 @@ export default function FlightPlanner() {
                 </tbody>
               </table>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Route Map</CardTitle>
-          <CardDescription>Route draws once valid airport coordinates are found.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-3 flex flex-wrap gap-3 text-sm">
-            <a
-              href="/adsb-receiver-help"
-              className="text-primary hover:underline"
-              onClick={() => trackEvent("adsb_help_click", { target: "/adsb-receiver-help" })}
-            >
-              How to connect your ADS-B receiver
-            </a>
-            <span className="text-muted-foreground">
-              RSF Synthetic Vision Lab <span className="font-medium">(coming soon)</span>
-            </span>
-          </div>
-          {routeIcaos.length === 0 ? (
-            <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
-          ) : routePoints.length === 0 ? (
-            <div className="text-sm text-muted-foreground">
-              Waiting for airport coordinates... Waypoints are optional. Check ICAO codes if this takes more than a few seconds.
-            </div>
-          ) : (
-            <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
-              {mapStyle === "globe" ? (
-                <CesiumGlobe
-                  points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
-                  tfmsOverlayEnabled={tfmsTier === "pro_plus" && tfmsOverlayEnabled}
-                />
-              ) : (
-                <PlannerMap
-                  points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
-                  mapStyle={mapStyle}
-                  plannedAltitudeFt={plannedAltitudeValue}
-                  windsAltitudeFt={windsAltitudeFt}
-                />
-              )}
-            </Suspense>
-          )}
-          {airportErrors.length > 0 && (
-            <div className="mt-3 text-xs text-destructive">
-              Airport lookup failed for: {airportErrors.map((item) => item.icao).join(", ")}. Check ICAO codes.
-            </div>
-          )}
-          {routeIcaos.length > 0 && routePoints.length === 1 && (
-            <div className="mt-3 text-xs text-muted-foreground">
-              Route map updates as additional points resolve. Waypoints and planned stops are optional.
-            </div>
-          )}
-          {airportErrors.length === 0 && missingIcaos.length > 0 && (
-            <div className="mt-3 text-xs text-muted-foreground">
-              Waiting on coordinates for: {missingIcaos.join(", ")}.
-            </div>
-          )}
-          <div className="mt-4 space-y-2">
-            <div className="text-xs text-muted-foreground">Map style</div>
-            <div className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-slate-200 bg-white/70 p-1">
-              {MAP_STYLE_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setMapStyle(option.value)}
-                  className={cn(
-                    "h-8 rounded-lg px-3 text-xs font-medium transition-colors",
-                    mapStyle === option.value
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100"
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            {mapStyle === "winds" && (
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-muted-foreground">Winds altitude</span>
-                <Select value={windsAltitudeChoice} onValueChange={setWindsAltitudeChoice}>
-                  <SelectTrigger className="h-8 w-[170px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="z-[1001]">
-                    <SelectItem value="planned">Use planned altitude</SelectItem>
-                    <SelectItem value="3000">3,000 ft</SelectItem>
-                    <SelectItem value="6000">6,000 ft</SelectItem>
-                    <SelectItem value="9000">9,000 ft</SelectItem>
-                    <SelectItem value="12000">12,000 ft</SelectItem>
-                    <SelectItem value="18000">18,000 ft</SelectItem>
-                    <SelectItem value="24000">24,000 ft</SelectItem>
-                    <SelectItem value="30000">30,000 ft</SelectItem>
-                    <SelectItem value="34000">34,000 ft</SelectItem>
-                    <SelectItem value="39000">39,000 ft</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          {mapStyle === "sectional" && (
-            <div className="text-xs text-muted-foreground mt-2">
-              Sectional tiles appear at zoom 6+; zoom in for FAA chart detail.
-            </div>
-          )}
-          {(mapStyle === "radar" || mapStyle === "winds" || mapStyle === "clouds") && (
-            <div className="text-xs text-muted-foreground mt-2">
-              Weather layers are for situational awareness only. Radar shows precip; clouds are satellite IR.
-              Winds aloft uses NOAA AWC data near your planned altitude. Verify with official sources.
-            </div>
-          )}
-          {mapStyle === "globe" && (
-            <div className="text-xs text-muted-foreground mt-2">
-              3D globe view uses CesiumJS. Weather overlays are available in 2D for now.
-            </div>
-          )}
-          {mapStyle === "winds" && (
-            <div className="text-xs text-muted-foreground mt-1">
-              Wind arrows point in the direction the wind is blowing from; size scales with speed.
-            </div>
-          )}
-          {!isAuthenticated && routePoints.length > 0 && (
-            <Alert className="mt-3">
-              <AlertDescription className="flex flex-wrap items-center gap-3">
-                <span>Save this route and get planning reminders with a free account.</span>
-                <Button asChild size="sm">
-                  <Link href="/register">Create free account</Link>
-                </Button>
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/login">Sign in</Link>
-                </Button>
-              </AlertDescription>
-            </Alert>
           )}
         </CardContent>
       </Card>
@@ -3587,6 +3453,176 @@ export default function FlightPlanner() {
       </Card>
       </TabsContent>
       </Tabs>
+      <div className="space-y-4 xl:sticky xl:top-4">
+        <Card className="border-slate-700 bg-slate-950 text-slate-100">
+          <CardContent className="pt-4">
+            <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Flight Snapshot
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Distance</div>
+                <div className="font-semibold text-slate-100">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
+              </div>
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Trip Fuel</div>
+                <div className="font-semibold text-slate-100">{tripFuel ? `${tripFuel.toFixed(1)} gal` : "--"}</div>
+              </div>
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">ETE</div>
+                <div className="font-semibold text-slate-100">{eteHours ? formatMinutesLabel(Math.round(eteHours * 60)) : "--"}</div>
+              </div>
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Planned Alt</div>
+                <div className="font-semibold text-slate-100">{plannedAltitudeFt > 0 ? `${plannedAltitudeFt} ft` : "--"}</div>
+              </div>
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Avg Wind</div>
+                <div className="font-semibold text-slate-100">{windValue > 0 ? `${windValue} kt` : "0 kt"}</div>
+              </div>
+              <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">ETD (Z)</div>
+                <div className="font-semibold text-slate-100">{plannedDepartureUtc ? `${plannedDepartureUtc.toISOString().slice(11, 16)}Z` : "--"}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card id="planner-route-map">
+          <CardHeader>
+            <CardTitle>Route Map</CardTitle>
+            <CardDescription>Live route view while you build, brief, and file.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-3 flex flex-wrap gap-3 text-sm">
+              <a
+                href="/adsb-receiver-help"
+                className="text-primary hover:underline"
+                onClick={() => trackEvent("adsb_help_click", { target: "/adsb-receiver-help" })}
+              >
+                How to connect your ADS-B receiver
+              </a>
+              <span className="text-muted-foreground">
+                RSF Synthetic Vision Lab <span className="font-medium">(coming soon)</span>
+              </span>
+            </div>
+            {routeIcaos.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Enter a departure and destination to preview the route.</div>
+            ) : routePoints.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                Waiting for airport coordinates... Waypoints are optional. Check ICAO codes if this takes more than a few seconds.
+              </div>
+            ) : (
+              <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
+                {mapStyle === "globe" ? (
+                  <CesiumGlobe
+                    points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                    tfmsOverlayEnabled={tfmsTier === "pro_plus" && tfmsOverlayEnabled}
+                  />
+                ) : (
+                  <PlannerMap
+                    points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                    mapStyle={mapStyle}
+                    plannedAltitudeFt={plannedAltitudeValue}
+                    windsAltitudeFt={windsAltitudeFt}
+                  />
+                )}
+              </Suspense>
+            )}
+            {airportErrors.length > 0 && (
+              <div className="mt-3 text-xs text-destructive">
+                Airport lookup failed for: {airportErrors.map((item) => item.icao).join(", ")}. Check ICAO codes.
+              </div>
+            )}
+            {routeIcaos.length > 0 && routePoints.length === 1 && (
+              <div className="mt-3 text-xs text-muted-foreground">
+                Route map updates as additional points resolve. Waypoints and planned stops are optional.
+              </div>
+            )}
+            {airportErrors.length === 0 && missingIcaos.length > 0 && (
+              <div className="mt-3 text-xs text-muted-foreground">
+                Waiting on coordinates for: {missingIcaos.join(", ")}.
+              </div>
+            )}
+            <div className="mt-4 space-y-2">
+              <div className="text-xs text-muted-foreground">Map style</div>
+              <div className="inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-slate-200 bg-white/70 p-1">
+                {MAP_STYLE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setMapStyle(option.value)}
+                    className={cn(
+                      "h-8 rounded-lg px-3 text-xs font-medium transition-colors",
+                      mapStyle === option.value
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-slate-600 hover:bg-slate-100"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {mapStyle === "winds" && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Winds altitude</span>
+                  <Select value={windsAltitudeChoice} onValueChange={setWindsAltitudeChoice}>
+                    <SelectTrigger className="h-8 w-[170px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="z-[1001]">
+                      <SelectItem value="planned">Use planned altitude</SelectItem>
+                      <SelectItem value="3000">3,000 ft</SelectItem>
+                      <SelectItem value="6000">6,000 ft</SelectItem>
+                      <SelectItem value="9000">9,000 ft</SelectItem>
+                      <SelectItem value="12000">12,000 ft</SelectItem>
+                      <SelectItem value="18000">18,000 ft</SelectItem>
+                      <SelectItem value="24000">24,000 ft</SelectItem>
+                      <SelectItem value="30000">30,000 ft</SelectItem>
+                      <SelectItem value="34000">34,000 ft</SelectItem>
+                      <SelectItem value="39000">39,000 ft</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            {mapStyle === "sectional" && (
+              <div className="text-xs text-muted-foreground mt-2">
+                Sectional tiles appear at zoom 6+; zoom in for FAA chart detail.
+              </div>
+            )}
+            {(mapStyle === "radar" || mapStyle === "winds" || mapStyle === "clouds") && (
+              <div className="text-xs text-muted-foreground mt-2">
+                Weather layers are for situational awareness only. Radar shows precip; clouds are satellite IR.
+                Winds aloft uses NOAA AWC data near your planned altitude. Verify with official sources.
+              </div>
+            )}
+            {mapStyle === "globe" && (
+              <div className="text-xs text-muted-foreground mt-2">
+                3D globe view uses CesiumJS. Weather overlays are available in 2D for now.
+              </div>
+            )}
+            {mapStyle === "winds" && (
+              <div className="text-xs text-muted-foreground mt-1">
+                Wind arrows point in the direction the wind is blowing from; size scales with speed.
+              </div>
+            )}
+            {!isAuthenticated && routePoints.length > 0 && (
+              <Alert className="mt-3">
+                <AlertDescription className="flex flex-wrap items-center gap-3">
+                  <span>Save this route and get planning reminders with a free account.</span>
+                  <Button asChild size="sm">
+                    <Link href="/register">Create free account</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/login">Sign in</Link>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+      </div>
 
       <Dialog open={Boolean(activeWeatherDetail)} onOpenChange={(open) => !open && setActiveWeatherDetail(null)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">

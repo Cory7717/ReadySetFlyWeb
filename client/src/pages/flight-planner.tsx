@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -1625,6 +1626,11 @@ export default function FlightPlanner() {
   }), [weatherData, hasIfrWeather, hasThunderRisk, totalFuel,
     fuelAvailableGallons, notamsSummaryQuery.isFetched,
     notamsSummaryQuery.isError, tfrRouteQuery.isFetched, tfrConflicts]);
+  const checklistCompletionCount = useMemo(() => {
+    const keys: (keyof typeof autoChecklist)[] = ["weather", "fuel", "currency", "notams", "tfr", "fuelSufficient"];
+    return keys.filter((key) => checklist[key] || autoChecklist[key]).length;
+  }, [autoChecklist, checklist]);
+  const recentPlans = useMemo(() => savedPlans.slice(0, 8), [savedPlans]);
 
   const isIfrFlight = hasIfrWeather || plannedAltitudeFt >= 18000;
   const isVfrFlight = !isIfrFlight;
@@ -2253,6 +2259,72 @@ export default function FlightPlanner() {
         ]}
       />
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_460px]">
+      <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)]">
+        <Card className="border-slate-700 bg-slate-950 text-slate-100 xl:sticky xl:top-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Recent Flights</CardTitle>
+            <CardDescription className="text-slate-300">Load or edit an existing flight plan.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {plansLoading ? (
+              <div className="text-xs text-slate-300">Loading plans...</div>
+            ) : recentPlans.length === 0 ? (
+              <div className="text-xs text-slate-300">No saved plans yet.</div>
+            ) : (
+              recentPlans.map((plan) => (
+                <button
+                  key={`recent-${plan.id}`}
+                  type="button"
+                  onClick={() => setEditingPlan(plan)}
+                  className="w-full rounded-md border border-slate-700 bg-slate-900/70 px-2 py-2 text-left transition-colors hover:bg-slate-800"
+                >
+                  <div className="text-xs font-semibold text-slate-100">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
+                  <div className="text-[11px] text-slate-300">{plan.departure} to {plan.destination}</div>
+                </button>
+              ))
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2 w-full border-slate-600 text-slate-100 hover:bg-slate-800"
+              onClick={() => setActiveTab("file")}
+            >
+              Open saved plans
+            </Button>
+          </CardContent>
+        </Card>
+        <div className="min-w-0 space-y-3">
+      <Card className="border-slate-700 bg-slate-950 text-slate-100">
+        <CardContent className="pt-4">
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Route</div>
+              <div className="text-xs font-semibold text-slate-100">{form.departure || "---"} to {form.destination || "---"}</div>
+            </div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Legs</div>
+              <div className="text-xs font-semibold text-slate-100">{legNavRows.length || 0}</div>
+            </div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Distance</div>
+              <div className="text-xs font-semibold text-slate-100">{totalDistance ? `${totalDistance.toFixed(1)} NM` : "--"}</div>
+            </div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Fuel</div>
+              <div className="text-xs font-semibold text-slate-100">{totalFuel ? `${totalFuel.toFixed(1)} gal` : "--"}</div>
+            </div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Weather</div>
+              <div className={cn("text-xs font-semibold", weatherStatusTone)}>{weatherStatusText}</div>
+            </div>
+            <div className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1.5">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Checklist</div>
+              <div className="text-xs font-semibold text-slate-100">{checklistCompletionCount}/6 complete</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
         <TabsList className="flex w-full flex-wrap gap-1 rounded-xl border border-slate-700 bg-slate-950 p-1">
           <TabsTrigger value="route" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-300">Route</TabsTrigger>
@@ -3479,6 +3551,7 @@ export default function FlightPlanner() {
       </Card>
       </TabsContent>
       </Tabs>
+        </div>
       <div className="space-y-4 xl:sticky xl:top-4">
         <Card className="border-slate-700 bg-slate-950 text-slate-100">
           <CardContent className="pt-4">
@@ -3676,15 +3749,16 @@ export default function FlightPlanner() {
         </Card>
       </div>
       </div>
+      </div>
 
-      <Dialog open={Boolean(activeWeatherDetail)} onOpenChange={(open) => !open && setActiveWeatherDetail(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
+      <Sheet open={Boolean(activeWeatherDetail)} onOpenChange={(open) => !open && setActiveWeatherDetail(null)}>
+        <SheetContent side="right" className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
           {activeWeatherDetail === "metar" && (
             <>
-              <DialogHeader>
-                <DialogTitle>METAR & TAF</DialogTitle>
-                <DialogDescription>Latest conditions along your route.</DialogDescription>
-              </DialogHeader>
+              <SheetHeader>
+                <SheetTitle>METAR & TAF</SheetTitle>
+                <SheetDescription>Latest conditions along your route.</SheetDescription>
+              </SheetHeader>
               <div className="space-y-3 text-sm">
                 {weatherData.length === 0 && <div className="text-muted-foreground">No METAR/TAF data yet.</div>}
                 {weatherData.map(({ icao, data }) => {
@@ -3711,10 +3785,10 @@ export default function FlightPlanner() {
           )}
           {activeWeatherDetail === "winds" && (
             <>
-              <DialogHeader>
-                <DialogTitle>Winds Aloft</DialogTitle>
-                <DialogDescription>NOAA AWC winds/temps near your route.</DialogDescription>
-              </DialogHeader>
+              <SheetHeader>
+                <SheetTitle>Winds Aloft</SheetTitle>
+                <SheetDescription>NOAA AWC winds/temps near your route.</SheetDescription>
+              </SheetHeader>
               <div className="space-y-2 text-sm">
                 {windsCount === 0 && <div className="text-muted-foreground">No winds aloft data in view.</div>}
                 {windsSummaryQuery.data?.stations?.slice(0, 12).map((station: any) => (
@@ -3731,10 +3805,10 @@ export default function FlightPlanner() {
           )}
           {activeWeatherDetail === "notams" && (
             <>
-              <DialogHeader>
-                <DialogTitle>NOTAMs</DialogTitle>
-                <DialogDescription>Latest NOTAMs for {primaryIcao || "your route"}.</DialogDescription>
-              </DialogHeader>
+              <SheetHeader>
+                <SheetTitle>NOTAMs</SheetTitle>
+                <SheetDescription>Latest NOTAMs for {primaryIcao || "your route"}.</SheetDescription>
+              </SheetHeader>
               <div className="space-y-2 text-sm">
                 {notamsSummaryQuery.isError && (
                   <div className="text-muted-foreground">NOTAM feed unavailable.</div>
@@ -3753,10 +3827,10 @@ export default function FlightPlanner() {
           )}
           {activeWeatherDetail === "pireps" && (
             <>
-              <DialogHeader>
-                <DialogTitle>PIREPs</DialogTitle>
-                <DialogDescription>Recent pilot reports near {primaryIcao || "your route"}.</DialogDescription>
-              </DialogHeader>
+              <SheetHeader>
+                <SheetTitle>PIREPs</SheetTitle>
+                <SheetDescription>Recent pilot reports near {primaryIcao || "your route"}.</SheetDescription>
+              </SheetHeader>
               <div className="space-y-2 text-sm">
                 {pirepsCount === 0 && <div className="text-muted-foreground">No recent PIREPs in range.</div>}
                 {pirepsQuery.data?.reports?.slice(0, 12).map((report: any, index: number) => (
@@ -3770,10 +3844,10 @@ export default function FlightPlanner() {
           )}
           {activeWeatherDetail === "hazards" && (
             <>
-              <DialogHeader>
-                <DialogTitle>Convective Hazards</DialogTitle>
-                <DialogDescription>Domestic SIGMETs, G-AIRMETs, and TCF.</DialogDescription>
-              </DialogHeader>
+              <SheetHeader>
+                <SheetTitle>Convective Hazards</SheetTitle>
+                <SheetDescription>Domestic SIGMETs, G-AIRMETs, and TCF.</SheetDescription>
+              </SheetHeader>
               {convectiveSummary.warnings.length > 0 && (
                 <Alert>
                   <AlertDescription>{convectiveSummary.warnings.join(" ")}</AlertDescription>
@@ -3807,10 +3881,10 @@ export default function FlightPlanner() {
           )}
           {activeWeatherDetail === "icing" && (
             <>
-              <DialogHeader>
-                <DialogTitle>Icing Guidance</DialogTitle>
-                <DialogDescription>AWC icing signals (stub if not available).</DialogDescription>
-              </DialogHeader>
+              <SheetHeader>
+                <SheetTitle>Icing Guidance</SheetTitle>
+                <SheetDescription>AWC icing signals (stub if not available).</SheetDescription>
+              </SheetHeader>
               {icingSummary.warnings.length > 0 && (
                 <Alert>
                   <AlertDescription>{icingSummary.warnings.join(" ")}</AlertDescription>
@@ -3840,10 +3914,10 @@ export default function FlightPlanner() {
           )}
           {activeWeatherDetail === "turbulence" && (
             <>
-              <DialogHeader>
-                <DialogTitle>Turbulence Guidance</DialogTitle>
-                <DialogDescription>AWC turbulence signals (stub if not available).</DialogDescription>
-              </DialogHeader>
+              <SheetHeader>
+                <SheetTitle>Turbulence Guidance</SheetTitle>
+                <SheetDescription>AWC turbulence signals (stub if not available).</SheetDescription>
+              </SheetHeader>
               {turbulenceSummary.warnings.length > 0 && (
                 <Alert>
                   <AlertDescription>{turbulenceSummary.warnings.join(" ")}</AlertDescription>
@@ -3871,8 +3945,8 @@ export default function FlightPlanner() {
               </div>
             </>
           )}
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
       <Dialog
         open={showFilingPayload}
         onOpenChange={(open) => {

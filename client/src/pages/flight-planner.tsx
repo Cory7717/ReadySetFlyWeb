@@ -227,8 +227,31 @@ type FilingPreviewResponse = {
   packet: Record<string, unknown>;
 };
 
+type ScratchPadFields = {
+  clearanceLimit: string;
+  departure: string;
+  route: string;
+  altitude: string;
+  frequency: string;
+  squawk: string;
+  void: string;
+  notes: string;
+};
+
+const SCRATCH_PAD_DEFAULT: ScratchPadFields = {
+  clearanceLimit: "",
+  departure: "",
+  route: "",
+  altitude: "",
+  frequency: "",
+  squawk: "",
+  void: "",
+  notes: "",
+};
+
 const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
 const FLIGHT_PLANNER_ACTIVE_TAB_KEY = "rsf_planner_active_tab";
+const SCRATCH_PAD_KEY = "rsf.scratchPad";
 const FLIGHT_PLANNER_TABS = ["route", "weather", "navlog", "analysis", "file"] as const;
 type FlightPlannerTab = typeof FLIGHT_PLANNER_TABS[number];
 
@@ -504,6 +527,54 @@ function flightCategoryClassName(cat: string): string {
   }
 }
 
+type ScratchFieldProps = {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  multiline?: boolean;
+  tall?: boolean;
+};
+
+function ScratchField({
+  label,
+  hint,
+  value,
+  onChange,
+  multiline = false,
+  tall = false,
+}: ScratchFieldProps) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-baseline gap-2">
+        <label className="text-sm font-semibold text-white">
+          {label}
+        </label>
+        {hint && (
+          <span className="text-xs text-zinc-500">{hint}</span>
+        )}
+      </div>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={tall ? 4 : 2}
+          className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm font-mono text-white placeholder:text-zinc-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 resize-none"
+          spellCheck={false}
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-md border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm font-mono text-white placeholder:text-zinc-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+          spellCheck={false}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function FlightPlanner() {
   const { user, isAuthenticated } = useAuth();
   const { profile: studentProfile } = useStudentProfile();
@@ -525,6 +596,15 @@ export default function FlightPlanner() {
   const [activeTab, setActiveTab] = useState<FlightPlannerTab>("route");
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
+  const [scratchPadOpen, setScratchPadOpen] = useState(false);
+  const [scratchPad, setScratchPad] = useState<ScratchPadFields>(() => {
+    if (typeof window === "undefined") return SCRATCH_PAD_DEFAULT;
+    try {
+      const raw = localStorage.getItem(SCRATCH_PAD_KEY);
+      if (raw) return { ...SCRATCH_PAD_DEFAULT, ...JSON.parse(raw) };
+    } catch {}
+    return SCRATCH_PAD_DEFAULT;
+  });
 
   useEffect(() => {
     trackEvent("planner_page_view", { page: "flight-planner" });
@@ -554,6 +634,22 @@ export default function FlightPlanner() {
     if (!(FLIGHT_PLANNER_TABS as readonly string[]).includes(activeTab)) return;
     window.localStorage.setItem(FLIGHT_PLANNER_ACTIVE_TAB_KEY, activeTab);
   }, [activeTab]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(SCRATCH_PAD_KEY, JSON.stringify(scratchPad));
+    } catch {}
+  }, [scratchPad]);
+
+  useEffect(() => {
+    if (!scratchPadOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setScratchPadOpen(false);
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [scratchPadOpen]);
 
   const [editingPlan, setEditingPlan] = useState<FlightPlan | null>(null);
   const [form, setForm] = useState({
@@ -588,6 +684,10 @@ export default function FlightPlanner() {
   const [activeWeatherDetail, setActiveWeatherDetail] = useState<
     "metar" | "notams" | "pireps" | "hazards" | "winds" | "icing" | "turbulence" | null
   >(null);
+  const setScratchField = (
+    field: keyof ScratchPadFields,
+    value: string
+  ) => setScratchPad((prev) => ({ ...prev, [field]: value }));
   const [, setWakeLockError] = useState<string | null>(null);
   const [customProfile, setCustomProfile] = useState({
     name: "",
@@ -2380,6 +2480,25 @@ export default function FlightPlanner() {
       actions={
         <>
           {!isPro && <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Preview mode</Badge>}
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10"
+            onClick={() => {
+              setScratchPad((prev) => ({
+                ...prev,
+                clearanceLimit: prev.clearanceLimit || form.destination || "",
+                departure: prev.departure || form.departure || "",
+                route: prev.route || routeStringFull || "",
+                altitude: prev.altitude ||
+                  (plannedAltitudeFt ? String(plannedAltitudeFt) : ""),
+              }));
+              setScratchPadOpen(true);
+              trackEvent("scratch_pad_opened");
+            }}
+          >
+            ✏ Scratch Pad
+          </Button>
           <Button
             asChild
             variant="outline"
@@ -4323,6 +4442,123 @@ export default function FlightPlanner() {
           </div>
         </DialogContent>
       </Dialog>
+      {scratchPadOpen && (
+        <div
+          className="fixed inset-0 z-[2000] flex flex-col bg-zinc-950 text-white"
+          role="dialog"
+          aria-modal="true"
+          aria-label="IFR Clearance Scratch Pad"
+        >
+          <div className="flex items-center justify-between border-b border-zinc-700 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-bold tracking-tight">
+                ✏ IFR Clearance Scratch Pad
+              </span>
+              <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs font-mono text-zinc-400 tracking-widest">
+                CRAFT
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm("Clear all scratch pad fields?")) {
+                    setScratchPad(SCRATCH_PAD_DEFAULT);
+                  }
+                }}
+                className="rounded border border-zinc-600 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-400 hover:text-white transition-colors"
+              >
+                Clear all
+              </button>
+              <button
+                type="button"
+                onClick={() => setScratchPadOpen(false)}
+                className="rounded border border-zinc-600 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-400 hover:text-white transition-colors"
+              >
+                Close  <span className="ml-1 opacity-50">Esc</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            <div className="mx-auto max-w-3xl space-y-3">
+              <ScratchField
+                label="C — Clearance Limit"
+                hint="Usually destination airport or fix"
+                value={scratchPad.clearanceLimit}
+                onChange={(v) => setScratchField("clearanceLimit", v)}
+              />
+
+              <ScratchField
+                label="R — Route"
+                hint="Departure procedure, airways, fixes"
+                value={scratchPad.route}
+                onChange={(v) => setScratchField("route", v)}
+                multiline
+              />
+
+              <ScratchField
+                label="A — Altitude"
+                hint="Initial altitude / expect altitude / time"
+                value={scratchPad.altitude}
+                onChange={(v) => setScratchField("altitude", v)}
+              />
+
+              <ScratchField
+                label="F — Frequency"
+                hint="Departure control frequency"
+                value={scratchPad.frequency}
+                onChange={(v) => setScratchField("frequency", v)}
+              />
+
+              <ScratchField
+                label="T — Transponder / Squawk"
+                hint="4-digit squawk code"
+                value={scratchPad.squawk}
+                onChange={(v) => setScratchField("squawk", v)}
+              />
+
+              <div className="border-t border-zinc-700 pt-3">
+                <div className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-3">
+                  Additional
+                </div>
+              </div>
+
+              <ScratchField
+                label="Departure Airport"
+                hint="ICAO identifier"
+                value={scratchPad.departure}
+                onChange={(v) => setScratchField("departure", v)}
+              />
+
+              <ScratchField
+                label="Void / Release Time"
+                hint="IFR void time if clearance on ground"
+                value={scratchPad.void}
+                onChange={(v) => setScratchField("void", v)}
+              />
+
+              <ScratchField
+                label="Notes"
+                hint="Anything else — hold instructions, restrictions, remarks"
+                value={scratchPad.notes}
+                onChange={(v) => setScratchField("notes", v)}
+                multiline
+                tall
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-zinc-700 px-4 py-2 text-xs text-zinc-500 flex items-center justify-between">
+            <span>Content auto-saved · Escape to close</span>
+            <span className="font-mono">
+              {Object.values(scratchPad).some((v) => v.trim())
+                ? "● Unsaved notes present"
+                : "○ Empty"}
+            </span>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }

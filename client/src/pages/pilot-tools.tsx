@@ -13,6 +13,7 @@ import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, C
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent } from "@/lib/analytics";
+import { cn } from "@/lib/utils";
 
 interface WeatherData {
   icao: string;
@@ -128,6 +129,138 @@ function extractRunwayInUse(metar: any): string | null {
   return null;
 }
 
+function RunwayDiagram({
+  runwayHeadingDeg,
+  windDirDeg,
+  windSpeedKt,
+  crosswindKt,
+  headwindKt,
+}: {
+  runwayHeadingDeg: number;
+  windDirDeg: number;
+  windSpeedKt: number;
+  crosswindKt: number;
+  headwindKt: number;
+}) {
+  const size = 200;
+  const cx = size / 2;
+  const cy = size / 2;
+  const runwayLen = 70;
+  const runwayWidth = 14;
+  const arrowLen = Math.min(65, Math.max(20, windSpeedKt * 2.2));
+
+  const windRad = ((windDirDeg + 180) * Math.PI) / 180;
+
+  const windTipX = cx + Math.sin(windRad) * arrowLen;
+  const windTipY = cy - Math.cos(windRad) * arrowLen;
+  const windTailX = cx - Math.sin(windRad) * (arrowLen * 0.35);
+  const windTailY = cy + Math.cos(windRad) * (arrowLen * 0.35);
+
+  const isHeadwind = headwindKt >= 0;
+  const crossDir = crosswindKt > 0 ? "R" : crosswindKt < 0 ? "L" : "";
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <svg
+        viewBox={`0 0 ${size} ${size}`}
+        className="w-[200px] h-[200px]"
+        role="img"
+        aria-label="Runway wind diagram"
+      >
+        <defs>
+          <marker
+            id="wind-arrow"
+            viewBox="0 0 10 10"
+            refX="9" refY="5"
+            markerWidth="5" markerHeight="5"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z"
+                  fill="#0ea5e9" />
+          </marker>
+        </defs>
+
+        <circle cx={cx} cy={cy} r={90}
+                className="fill-slate-50 stroke-slate-200"
+                strokeWidth="1" />
+
+        {[0, 90, 180, 270].map((deg) => {
+          const r = (deg * Math.PI) / 180;
+          return (
+            <line
+              key={deg}
+              x1={cx + Math.sin(r) * 84}
+              y1={cy - Math.cos(r) * 84}
+              x2={cx + Math.sin(r) * 90}
+              y2={cy - Math.cos(r) * 90}
+              className="stroke-slate-300"
+              strokeWidth="1.5"
+            />
+          );
+        })}
+
+        <g transform={`rotate(${runwayHeadingDeg}, ${cx}, ${cy})`}>
+          <rect
+            x={cx - runwayWidth / 2}
+            y={cy - runwayLen}
+            width={runwayWidth}
+            height={runwayLen * 2}
+            rx="2"
+            className="fill-slate-700"
+          />
+          {[-30, -10, 10, 30].map((offset) => (
+            <rect
+              key={offset}
+              x={cx - 0.75}
+              y={cy + offset - 8}
+              width={1.5}
+              height={10}
+              className="fill-white/60"
+            />
+          ))}
+          <rect x={cx - runwayWidth / 2} y={cy - runwayLen}
+                width={runwayWidth} height={3}
+                className="fill-white/80" />
+          <rect x={cx - runwayWidth / 2} y={cy + runwayLen - 3}
+                width={runwayWidth} height={3}
+                className="fill-white/80" />
+        </g>
+
+        {windSpeedKt > 0 && (
+          <line
+            x1={windTailX}
+            y1={windTailY}
+            x2={windTipX}
+            y2={windTipY}
+            stroke="#0ea5e9"
+            strokeWidth="2.5"
+            markerEnd="url(#wind-arrow)"
+          />
+        )}
+
+        <circle cx={cx} cy={cy} r="3"
+                className="fill-slate-400" />
+      </svg>
+
+      <div className="flex gap-4 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-0.5 bg-sky-500 rounded" />
+          Wind
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-2 bg-slate-700 rounded-sm" />
+          Runway
+        </span>
+      </div>
+
+      <div className="text-xs text-center text-muted-foreground">
+        {isHeadwind ? "Headwind" : "Tailwind"} from {windDirDeg}°
+        {crossDir ? ` · crosswind from ${crossDir === "R" ? "right" : "left"}` : ""}
+      </div>
+    </div>
+  );
+}
+
 export default function PilotTools() {
   const { user } = useAuth();
   const entitlements = (user as any)?.entitlements;
@@ -144,6 +277,7 @@ export default function PilotTools() {
   const [altimeterSetting, setAltimeterSetting] = useState("29.92");
   const [oatValue, setOatValue] = useState("20");
   const [tempUnit, setTempUnit] = useState<"C" | "F">("C");
+  const [humidity, setHumidity] = useState("50");
 
   const heading = Number(runwayHeading) || 0;
   const windDir = Number(windDirection) || 0;
@@ -163,7 +297,18 @@ export default function PilotTools() {
   const oat = tempUnit === "F" ? (oatInput - 32) * (5 / 9) : oatInput;
   const pressureAltitude = Math.round(elevation + (29.92 - altimeter) * 1000);
   const isaTemp = 15 - 2 * (pressureAltitude / 1000);
-  const densityAltitude = Math.round(pressureAltitude + 120 * (oat - isaTemp));
+  const rhValue = Math.min(100, Math.max(0, Number(humidity) || 0));
+  const es = 6.1078 * Math.pow(10, (7.5 * oat) / (237.3 + oat));
+  const e = (rhValue / 100) * es;
+  const stationPressureHpa = 1013.25 * Math.pow(altimeter / 29.92126, 5.2561);
+  const tvCorrection = e > 0 ? (0.379 * e) / stationPressureHpa : 0;
+  const virtualTempK = (oat + 273.15) / (1 - tvCorrection);
+  const virtualTempC = virtualTempK - 273.15;
+  const densityAltitudeHumid = Math.round(
+    pressureAltitude + 120 * (virtualTempC - isaTemp)
+  );
+  const densityAltitude = densityAltitudeHumid;
+  const isaDeviation = Math.round(oat - isaTemp);
 
   const { data: weather, isLoading, error, refetch } = useQuery<WeatherData>({
     queryKey: [`/api/aviation-weather/${searchIcao}`],
@@ -496,6 +641,30 @@ export default function PilotTools() {
             <CardDescription>Quickly estimate crosswind and headwind components.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {weather?.metar?.rawOb && (() => {
+              const raw = weather.metar.rawOb as string;
+              const windMatch = raw.match(/\b(\d{3})(\d{2})(?:G(\d{2}))?KT\b/);
+              if (!windMatch) return null;
+              return (
+                <div className="flex items-center gap-2 rounded-lg border bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                  <span>
+                    METAR wind: {windMatch[1]}° at {windMatch[2]}kt
+                    {windMatch[3] ? ` gusting ${windMatch[3]}kt` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    className="ml-auto rounded border border-sky-300 px-2 py-0.5 text-xs font-semibold hover:bg-sky-100 transition-colors"
+                    onClick={() => {
+                      setWindDirection(windMatch[1]);
+                      setWindSpeed(windMatch[2]);
+                      setWindGust(windMatch[3] ?? "");
+                    }}
+                  >
+                    Fill from METAR
+                  </button>
+                </div>
+              );
+            })()}
             <div className="grid gap-3 md:grid-cols-4">
               <div className="space-y-2">
                 <Label>Runway heading</Label>
@@ -514,28 +683,99 @@ export default function PilotTools() {
                 <Input value={windGust} onChange={(e) => setWindGust(e.target.value)} placeholder="20" />
               </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border p-3">
-                <div className="text-xs text-muted-foreground">Crosswind</div>
-                <div className="text-lg font-semibold">
-                  {Math.abs(crosswind).toFixed(1)} kt {crosswindDir}
+
+            <div className="grid gap-6 md:grid-cols-[1fr_auto]">
+              <div className="space-y-3">
+                <div className="grid gap-3 grid-cols-2">
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">Crosswind (steady)</div>
+                    <div className="text-xl font-bold">
+                      {Math.abs(crosswind).toFixed(1)} kt
+                    </div>
+                    <div className="text-xs text-muted-foreground">{crosswindDir}</div>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <div className="text-xs text-muted-foreground">
+                      {headwind >= 0 ? "Headwind" : "Tailwind"} (steady)
+                    </div>
+                    <div className="text-xl font-bold">
+                      {Math.abs(headwind).toFixed(1)} kt
+                    </div>
+                  </div>
+                  {gustKt > 0 && (
+                    <>
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <div className="text-xs text-muted-foreground">
+                          Crosswind (gust)
+                        </div>
+                        <div className="text-xl font-bold text-amber-800">
+                          {maxCrosswind.toFixed(1)} kt
+                        </div>
+                      </div>
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <div className="text-xs text-muted-foreground">
+                          {maxHeadwind >= 0 ? "Headwind" : "Tailwind"} (gust)
+                        </div>
+                        <div className="text-xl font-bold text-amber-800">
+                          {Math.abs(maxHeadwind).toFixed(1)} kt
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
+
+                <div className="rounded-lg border bg-muted/30 px-4 py-3 text-xs text-muted-foreground space-y-1">
+                  <div className="font-semibold text-foreground text-sm mb-1">
+                    Component breakdown
+                  </div>
+                  <div>
+                    Wind angle to runway:{" "}
+                    <span className="font-mono font-semibold text-foreground">
+                      {Math.abs(angle).toFixed(0)}°{" "}
+                      {crosswindDir !== "calm" ? `(${crosswindDir})` : "(calm)"}
+                    </span>
+                  </div>
+                  <div>
+                    Crosswind = {windKt} × sin({Math.abs(angle).toFixed(0)}°) ={" "}
+                    <span className="font-semibold text-foreground">
+                      {Math.abs(crosswind).toFixed(1)} kt
+                    </span>
+                  </div>
+                  <div>
+                    Headwind = {windKt} × cos({Math.abs(angle).toFixed(0)}°) ={" "}
+                    <span className="font-semibold text-foreground">
+                      {Math.abs(headwind).toFixed(1)} kt
+                    </span>
+                  </div>
+                </div>
+
+                {(() => {
+                  const maxXwind = gustKt ? maxCrosswind : Math.abs(crosswind);
+                  const warnThreshold = 15;
+                  const dangerThreshold = 20;
+                  if (maxXwind < warnThreshold) return null;
+                  return (
+                    <div className={cn(
+                      "rounded-lg border px-4 py-2 text-sm font-medium",
+                      maxXwind >= dangerThreshold
+                        ? "border-red-300 bg-red-50 text-red-800"
+                        : "border-amber-300 bg-amber-50 text-amber-800"
+                    )}>
+                      {maxXwind >= dangerThreshold
+                        ? `⚠ ${maxXwind.toFixed(1)} kt crosswind exceeds typical light aircraft limits`
+                        : `⚡ ${maxXwind.toFixed(1)} kt crosswind — verify aircraft max demonstrated crosswind`}
+                    </div>
+                  );
+                })()}
               </div>
-              <div className="rounded-lg border p-3">
-                <div className="text-xs text-muted-foreground">Head/Tailwind</div>
-                <div className="text-lg font-semibold">
-                  {Math.abs(headwind).toFixed(1)} kt {headwind >= 0 ? "headwind" : "tailwind"}
-                </div>
-              </div>
-              <div className="rounded-lg border p-3">
-                <div className="text-xs text-muted-foreground">Max crosswind (gust)</div>
-                <div className="text-lg font-semibold">
-                  {maxCrosswind.toFixed(1)} kt
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Max headwind: {Math.abs(maxHeadwind).toFixed(1)} kt
-                </div>
-              </div>
+
+              <RunwayDiagram
+                runwayHeadingDeg={heading}
+                windDirDeg={windDir}
+                windSpeedKt={windKt}
+                crosswindKt={crosswind}
+                headwindKt={headwind}
+              />
             </div>
             <Alert>
               <AlertDescription className="text-xs">
@@ -554,7 +794,7 @@ export default function PilotTools() {
             <CardDescription>Estimate pressure altitude and density altitude.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-4">
               <div className="space-y-2">
                 <Label>Field elevation (ft)</Label>
                 <Input value={fieldElevation} onChange={(e) => setFieldElevation(e.target.value)} placeholder="500" />
@@ -571,36 +811,123 @@ export default function PilotTools() {
                     onChange={(e) => setOatValue(e.target.value)}
                     placeholder={tempUnit === "F" ? "68" : "20"}
                   />
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant={tempUnit === "C" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setTempUnit("C")}
-                    >
-                      C
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={tempUnit === "F" ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setTempUnit("F")}
-                    >
-                      F
-                    </Button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (tempUnit === "C") {
+                        const c = parseFloat(oatValue);
+                        if (Number.isFinite(c)) setOatValue(((c * 9 / 5) + 32).toFixed(1));
+                        setTempUnit("F");
+                      } else {
+                        const f = parseFloat(oatValue);
+                        if (Number.isFinite(f)) setOatValue((((f - 32) * 5) / 9).toFixed(1));
+                        setTempUnit("C");
+                      }
+                    }}
+                    className="rounded border border-input bg-background px-2 py-1 text-xs font-semibold hover:bg-muted transition-colors whitespace-nowrap"
+                  >
+                    °{tempUnit === "C" ? "C → F" : "F → C"}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Rel. humidity (%)</Label>
+                <Input
+                  value={humidity}
+                  onChange={(e) => setHumidity(e.target.value)}
+                  placeholder="50"
+                />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Pressure Altitude</div>
+                  <div className="text-xl font-bold">
+                    {pressureAltitude.toLocaleString()} ft
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Field elev {elevation.toLocaleString()} ft
+                    {pressureAltitude > elevation
+                      ? ` · +${(pressureAltitude - elevation).toLocaleString()} ft (low pressure)`
+                      : pressureAltitude < elevation
+                        ? ` · ${(pressureAltitude - elevation).toLocaleString()} ft (high pressure)`
+                        : " · standard pressure"}
+                  </div>
+                </div>
+
+                <div className={cn(
+                  "rounded-lg border p-3",
+                  densityAltitude > elevation + 2000
+                    ? "border-red-200 bg-red-50"
+                    : densityAltitude > elevation + 1000
+                      ? "border-amber-200 bg-amber-50"
+                      : ""
+                )}>
+                  <div className="text-xs text-muted-foreground">Density Altitude</div>
+                  <div className={cn(
+                    "text-xl font-bold",
+                    densityAltitude > elevation + 2000
+                      ? "text-red-700"
+                      : densityAltitude > elevation + 1000
+                        ? "text-amber-700"
+                        : ""
+                  )}>
+                    {densityAltitude.toLocaleString()} ft
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {densityAltitude > elevation
+                      ? `+${(densityAltitude - elevation).toLocaleString()} ft above field`
+                      : `${(densityAltitude - elevation).toLocaleString()} ft below field`}
+                  </div>
+                </div>
+
+                <div className={cn(
+                  "rounded-lg border p-3",
+                  isaDeviation > 15
+                    ? "border-red-200 bg-red-50"
+                    : isaDeviation > 8
+                      ? "border-amber-200 bg-amber-50"
+                      : ""
+                )}>
+                  <div className="text-xs text-muted-foreground">ISA Deviation</div>
+                  <div className={cn(
+                    "text-xl font-bold",
+                    isaDeviation > 15 ? "text-red-700" : isaDeviation > 8 ? "text-amber-700" : ""
+                  )}>
+                    {isaDeviation > 0 ? "+" : ""}{isaDeviation}°C
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    ISA at this PA = {Math.round(isaTemp)}°C
                   </div>
                 </div>
               </div>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-lg border p-3">
-                <div className="text-xs text-muted-foreground">Pressure altitude</div>
-                <div className="text-lg font-semibold">{pressureAltitude.toLocaleString()} ft</div>
-              </div>
-              <div className="rounded-lg border p-3">
-                <div className="text-xs text-muted-foreground">Density altitude</div>
-                <div className="text-lg font-semibold">{densityAltitude.toLocaleString()} ft</div>
-              </div>
+
+              {(() => {
+                const daDiff = densityAltitude - elevation;
+                if (daDiff > 3000) {
+                  return (
+                    <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-800">
+                      ⚠ DA {densityAltitude.toLocaleString()} ft — significantly degraded performance. Verify takeoff/climb data carefully.
+                    </div>
+                  );
+                }
+                if (daDiff > 1500) {
+                  return (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800">
+                      ⚡ DA {densityAltitude.toLocaleString()} ft — expect noticeably reduced climb rate. Review POH performance charts.
+                    </div>
+                  );
+                }
+                if (daDiff < -500) {
+                  return (
+                    <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-800">
+                      ✓ DA below field elevation — favorable performance conditions.
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
             <Alert>
               <AlertDescription className="text-xs">

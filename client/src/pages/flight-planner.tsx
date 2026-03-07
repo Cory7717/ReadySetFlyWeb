@@ -31,6 +31,7 @@ import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 import { PageShell } from "@/components/layout/PageShell";
 import PlannerMap from "@/components/flight-planner/PlannerMap";
+import NotamTranslator from "@/components/ai/NotamTranslator";
 
 const CesiumGlobe = lazy(() => import("@/components/flight-planner/CesiumGlobe"));
 
@@ -4285,6 +4286,11 @@ export default function FlightPlanner() {
                     <div className="text-xs text-muted-foreground mt-1">{notam.text}</div>
                   </div>
                 ))}
+                <NotamTranslator
+                  notams={notamsSummaryQuery.data?.notams?.map((notam: any) => notam.text ?? notam.notamTxt ?? notam.raw ?? "").filter(Boolean).join("\n\n") ?? ""}
+                  airport={primaryIcao}
+                  route={routeStringFull}
+                />
               </div>
             </>
           )}

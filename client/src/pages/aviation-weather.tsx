@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import WeatherBriefingSummarizer from "@/components/ai/WeatherBriefingSummarizer";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -429,6 +430,15 @@ export default function AviationWeatherHub() {
                 <Badge variant="secondary">Winds {windsCount}</Badge>
               </CardContent>
             </Card>
+          </div>
+          <div className="mt-4">
+            <WeatherBriefingSummarizer
+              metar={metarRaw}
+              taf={tafRaw}
+              pireps={pirepsQuery.data?.reports?.map((report: any) => report.rawOb ?? "").filter(Boolean).join("\n") ?? ""}
+              sigmet={hazardsSummary.items.map((item) => item.hazard).filter(Boolean).join("\n")}
+              origin={searchIcao}
+            />
           </div>
         </TabsContent>
 

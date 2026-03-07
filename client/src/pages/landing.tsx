@@ -478,10 +478,10 @@ export default function Landing() {
                   </div>
                   <div>
                     <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-                      Find the cheapest fuel before you launch
+                      As of March 7th, this is a new feature for RSF
                     </h1>
                     <p className="mt-1 max-w-2xl text-sm text-slate-200 sm:text-base">
-                      Search an airport, compare nearby FBO fuel pricing, and keep route planning and marketplace tools within reach.
+                      Give us a week and we will be live with the lowest fuel costs near you, along with a sectional-style map to visualize the best options around your airport. We are starting with 100LL and Jet-A fuel types, and will be adding more fuel types and features based on your feedback.
                     </p>
                   </div>
                 </div>
@@ -552,6 +552,8 @@ export default function Landing() {
                       </Label>
                       <select
                         id="fuel-radius"
+                        aria-label="Fuel search radius"
+                        title="Fuel search radius"
                         value={fuelRadiusMiles}
                         onChange={(event) => setFuelRadiusMiles(event.target.value)}
                         className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
@@ -621,7 +623,7 @@ export default function Landing() {
                         <div className="relative grid aspect-[16/9] min-h-[280px] grid-cols-12 grid-rows-6 overflow-hidden rounded-[0.8rem] border border-sky-400/10 bg-[radial-gradient(circle_at_20%_18%,hsl(47_48%_52%/0.18),transparent_22%),radial-gradient(circle_at_78%_74%,hsl(120_45%_42%/0.16),transparent_26%),linear-gradient(135deg,hsl(105_22%_27%/0.88),hsl(145_24%_23%/0.82)_38%,hsl(191_38%_20%/0.88)_72%,hsl(215_34%_13%/0.96))] p-4 sm:min-h-[340px]">
                           {fuelPrices?.source === "mock" ? (
                             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden">
-                              <div className="rotate-[-22deg] border border-white/10 bg-slate-950/15 px-5 py-2 text-center text-3xl font-black uppercase tracking-[0.34em] text-slate-100/12 sm:text-5xl">
+                              <div className="w-[72%] max-w-[260px] rotate-[-22deg] overflow-hidden rounded-lg border border-white/10 bg-slate-950/20 px-4 py-2 text-center text-2xl font-black uppercase tracking-[0.28em] text-slate-100/15 sm:text-4xl">
                                 Sample Pricing
                               </div>
                             </div>

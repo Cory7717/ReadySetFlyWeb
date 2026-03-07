@@ -44,6 +44,7 @@ import { computeTfmsRisk } from "./services/tfms/risk";
 import { partners } from "./config/partners";
 import { registerAdminFinanceRoutes } from "./routes/adminFinance";
 import { fuelPricesRouter } from "./routes/fuelPrices";
+import { aiToolsRouter } from "./routes/aiTools";
 import { flightPlanFilingProvider, validateFlightPlanForAction } from "./services/flight-plan-filing/provider";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import {
@@ -3190,6 +3191,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   registerAdminFinanceRoutes(app);
   app.use("/api/fuel-prices", fuelPricesRouter);
+  app.use("/api/ai-tools", aiToolsRouter);
 
   // Serve uploaded files
   app.use('/uploads', express.static('uploads'));

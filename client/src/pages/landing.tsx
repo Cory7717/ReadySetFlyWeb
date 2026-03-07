@@ -1268,7 +1268,7 @@ export default function Landing() {
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
-                          submitIcao();
+                          refreshAirportConditions();
                         }
                       }}
                       placeholder="KAUS or Austin, TX"
@@ -1310,10 +1310,10 @@ export default function Landing() {
                 </div>
                 <Button
                   variant="outline"
-                  onClick={submitIcao}
+                  onClick={refreshAirportConditions}
                   disabled={!ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
                 >
-                  Update conditions
+                  {weatherFetching || runwayFetching || notamsFetching ? "Refreshing..." : "Update conditions"}
                 </Button>
               </div>
             </CardContent>
@@ -1324,9 +1324,9 @@ export default function Landing() {
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <CardTitle>{conditionsTitle}</CardTitle>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge
-                      variant="secondary"
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge
+                        variant="secondary"
                       className={`text-white ${
                         flightCategory.color === "green"
                           ? "bg-green-600"
@@ -1344,12 +1344,27 @@ export default function Landing() {
                         Active RWY: {runwayInUseDisplay}
                       </Badge>
                     )}
-                    {atisInfo && (
-                      <Badge variant="outline" className="bg-sky-100 text-sky-800">
-                        ATIS: {atisInfo}
-                      </Badge>
-                    )}
-                  </div>
+                      {atisInfo && (
+                        <Badge variant="outline" className="bg-sky-100 text-sky-800">
+                          ATIS: {atisInfo}
+                        </Badge>
+                      )}
+                      {weatherHazards.map((hazard) => (
+                        <Badge
+                          key={hazard.id}
+                          variant="outline"
+                          className={
+                            hazard.tone === "red"
+                              ? "border-red-300 bg-red-50 text-red-800"
+                              : hazard.tone === "amber"
+                                ? "border-amber-300 bg-amber-50 text-amber-800"
+                                : "border-sky-300 bg-sky-50 text-sky-800"
+                          }
+                        >
+                          {hazard.label}
+                        </Badge>
+                      ))}
+                    </div>
                 </div>
                 <CardDescription className="flex items-center gap-2 flex-wrap">
                   {weather?.metar && (
@@ -1358,10 +1373,19 @@ export default function Landing() {
                     </span>
                   )}
                   {weather?.cached && <Badge variant="secondary" className="text-xs">Cached</Badge>}
-                  {weatherLoading && <Badge variant="secondary">Loading</Badge>}
+                  {(weatherLoading || weatherFetching) && <Badge variant="secondary">Loading</Badge>}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <Alert className={weatherHazards.length > 0 ? "border-amber-300 bg-amber-50" : "border-sky-200 bg-sky-50"}>
+                  <AlertTriangle className={`h-4 w-4 ${weatherHazards.some((hazard) => hazard.tone === "red") ? "text-red-700" : weatherHazards.length > 0 ? "text-amber-700" : "text-sky-700"}`} />
+                  <AlertDescription className="text-xs sm:text-sm">
+                    <strong>{flightCategory.category} is ceiling/visibility only.</strong>{" "}
+                    {weatherHazards.length > 0
+                      ? weatherHazards.map((hazard) => hazard.detail).join(" ")
+                      : "No additional precipitation, convective, or runway-surface hazards are currently flagged from the METAR/TAF/NOTAM summary."}
+                  </AlertDescription>
+                </Alert>
                 {weather?.metar ? (
                   <div>
                     <Label className="text-sm font-semibold">METAR</Label>

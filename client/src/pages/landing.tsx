@@ -504,44 +504,6 @@ export default function Landing() {
       {/* Hero Section */}
       <div className="relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
-          {!isAuthenticated && (
-            <div className="mb-6 rounded-xl border border-primary/20 bg-[linear-gradient(135deg,hsl(var(--primary)/0.06),hsl(var(--accent)/0.04))] px-5 py-4">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
-                    THE aviation marketplace with the planning tools built in.
-                  </h1>
-                  <p className="text-sm text-muted-foreground">
-                    Rentals, CFIs, and aviation services up front. Flight planning, weather, and logbook alongside them. Free to join — no card needed.
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  <Button asChild>
-                    <Link
-                      href="/register"
-                      onClick={() => trackEvent("cta_click", {
-                        label: "conversion_strip_register",
-                        target: "/register",
-                      })}
-                    >
-                      Create free account
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline">
-                    <Link
-                      href="/marketplace"
-                      onClick={() => trackEvent("cta_click", {
-                        label: "conversion_strip_marketplace",
-                        target: "/marketplace",
-                      })}
-                    >
-                      Browse listings
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
           <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_390px] xl:items-start">
             <div className="rsf-card-shell overflow-hidden">
               <div className="flex flex-col gap-4 border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-5 py-4 text-slate-100 sm:flex-row sm:items-end sm:justify-between">
@@ -573,7 +535,7 @@ export default function Landing() {
                       })}`}
                 </div>
               </div>
-              <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1.15fr)_320px]">
+              <div className="space-y-5 p-5">
                 <div className="space-y-4">
                   <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_120px_auto]">
                     <div className="space-y-2">
@@ -677,7 +639,7 @@ export default function Landing() {
                     ))}
                   </div>
 
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px] xl:items-start">
+                  <div className="space-y-4">
                     <div className="rounded-[1.15rem] border border-white/10 bg-[linear-gradient(180deg,hsl(208_34%_16%),hsl(220_32%_12%))] p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
@@ -700,10 +662,10 @@ export default function Landing() {
                           <span>Sectional-style regional view</span>
                           <span>Advisory only</span>
                         </div>
-                        <div className="relative grid aspect-[16/9] min-h-[280px] grid-cols-12 grid-rows-6 overflow-hidden rounded-[0.8rem] border border-sky-400/10 bg-[radial-gradient(circle_at_20%_18%,hsl(47_48%_52%/0.18),transparent_22%),radial-gradient(circle_at_78%_74%,hsl(120_45%_42%/0.16),transparent_26%),linear-gradient(135deg,hsl(105_22%_27%/0.88),hsl(145_24%_23%/0.82)_38%,hsl(191_38%_20%/0.88)_72%,hsl(215_34%_13%/0.96))] p-4 sm:min-h-[340px]">
+                        <div className="relative isolate grid aspect-[16/9] min-h-[280px] grid-cols-12 grid-rows-6 overflow-hidden rounded-[0.8rem] border border-sky-400/10 bg-[radial-gradient(circle_at_20%_18%,hsl(47_48%_52%/0.18),transparent_22%),radial-gradient(circle_at_78%_74%,hsl(120_45%_42%/0.16),transparent_26%),linear-gradient(135deg,hsl(105_22%_27%/0.88),hsl(145_24%_23%/0.82)_38%,hsl(191_38%_20%/0.88)_72%,hsl(215_34%_13%/0.96))] p-4 sm:min-h-[340px]">
                           {fuelPrices?.source === "mock" ? (
                             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden">
-                              <div className="w-[72%] max-w-[260px] rotate-[-22deg] overflow-hidden rounded-lg border border-white/10 bg-slate-950/20 px-4 py-2 text-center text-2xl font-black uppercase tracking-[0.28em] text-slate-100/15 sm:text-4xl">
+                              <div className="max-w-[220px] rotate-[-24deg] text-center text-3xl font-black uppercase tracking-[0.22em] text-slate-100/18 sm:text-4xl">
                                 Sample Pricing
                               </div>
                             </div>
@@ -773,7 +735,7 @@ export default function Landing() {
                       ) : null}
                     </div>
 
-                    <div className="space-y-3">
+                    <div className="grid gap-3 lg:grid-cols-[240px_minmax(0,1fr)]">
                       <div className="rounded-[1rem] border border-emerald-200 bg-emerald-50 p-4">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-700">Cheapest nearby</div>
                         {cheapestFuelAirport ? (
@@ -1811,3 +1773,4 @@ export default function Landing() {
     </div>
   );
 }
+

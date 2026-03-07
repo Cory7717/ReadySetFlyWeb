@@ -3629,10 +3629,20 @@ export default function FlightPlanner() {
           {isGuest && (
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button asChild variant="outline">
-                <Link href="/register">Create Free Account</Link>
+                <Link
+                  href="/register"
+                  onClick={() => trackEvent("cta_click", { label: "planner_save_register", target: "/register" })}
+                >
+                  Create Free Account
+                </Link>
               </Button>
               <Button asChild variant="ghost">
-                <Link href="/login">Sign In</Link>
+                <Link
+                  href="/login"
+                  onClick={() => trackEvent("cta_click", { label: "planner_save_sign_in", target: "/login" })}
+                >
+                  Sign In
+                </Link>
               </Button>
             </div>
           )}
@@ -3642,6 +3652,26 @@ export default function FlightPlanner() {
                 Free accounts can save one active plan. Upgrade to RSF Pro for unlimited saved plans, aircraft profiles, and planning history.
               </AlertDescription>
             </Alert>
+          )}
+          {isFree && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <div className="text-sm font-semibold text-emerald-900">
+                Want unlimited saved plans and a full planning workflow?
+              </div>
+              <div className="mt-1 text-xs text-emerald-800">
+                Start a 14-day Pro trial for unlimited saved plans, aircraft profiles, and linked logbook workflow.
+              </div>
+              <div className="mt-3">
+                <Button asChild size="sm" variant="outline" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100">
+                  <Link
+                    href="/logbook/pro"
+                    onClick={() => trackEvent("cta_click", { label: "planner_save_start_trial", target: "/logbook/pro" })}
+                  >
+                    Start 14-day Pro trial
+                  </Link>
+                </Button>
+              </div>
+            </div>
           )}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
@@ -3680,6 +3710,9 @@ export default function FlightPlanner() {
           <div className="flex flex-wrap gap-3">
             <Button
               onClick={() => {
+                if (isGuest) {
+                  trackEvent("cta_click", { label: "planner_save_requires_auth", target: "/register" });
+                }
                 runWithAuth("save_flight_plan", async () => {
                   await savePlanActionRef.current();
                 });
@@ -3691,6 +3724,11 @@ export default function FlightPlanner() {
             <Button
               variant="outline"
               onClick={() => {
+                if (isGuest) {
+                  trackEvent("cta_click", { label: "planner_logbook_requires_auth", target: "/register" });
+                } else if (isFree) {
+                  trackEvent("cta_click", { label: "planner_logbook_upgrade_interest", target: "/logbook/pro" });
+                }
                 runWithAuth("sync_logbook_entry", async () => {
                   await sendToLogbookActionRef.current();
                 });
@@ -3713,7 +3751,19 @@ export default function FlightPlanner() {
         <CardContent className="space-y-4">
           {!isPro && (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              Free accounts keep one active plan. RSF Pro unlocks unlimited storage and per-leg breakdowns.
+              <div>Free accounts keep one active plan. RSF Pro unlocks unlimited storage and per-leg breakdowns.</div>
+              {isFree && (
+                <div className="mt-3">
+                  <Button asChild size="sm" variant="outline">
+                    <Link
+                      href="/logbook/pro"
+                      onClick={() => trackEvent("cta_click", { label: "planner_saved_plans_start_trial", target: "/logbook/pro" })}
+                    >
+                      Start 14-day Pro trial
+                    </Link>
+                  </Button>
+                </div>
+              )}
             </div>
           )}
           {plansLoading ? (

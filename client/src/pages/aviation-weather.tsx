@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -109,6 +110,9 @@ export default function AviationWeatherHub() {
   };
 
   const handleToggleFavorite = () => {
+    if (!isAuthenticated) {
+      trackEvent("cta_click", { label: "weather_favorite_requires_auth", target: "/register" });
+    }
     runWithAuth("save_airport_favorite", async () => {
       try {
         if (currentFavorite) {
@@ -335,8 +339,28 @@ export default function AviationWeatherHub() {
             </div>
 
             {!isAuthenticated && (
-              <div className="text-xs text-muted-foreground">
-                Sign in to save airports and receive IFR/MVFR alerts.
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <div className="text-xs text-muted-foreground">
+                  Save favorite airports and IFR/MVFR alerts with a free RSF account.
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button asChild size="sm">
+                    <Link
+                      href="/register"
+                      onClick={() => trackEvent("cta_click", { label: "weather_favorite_register", target: "/register" })}
+                    >
+                      Create free account
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link
+                      href="/login"
+                      onClick={() => trackEvent("cta_click", { label: "weather_favorite_sign_in", target: "/login" })}
+                    >
+                      Sign in
+                    </Link>
+                  </Button>
+                </div>
               </div>
             )}
 

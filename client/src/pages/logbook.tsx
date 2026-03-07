@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import type { LogbookEntry, InsertLogbookEntry, Endorsement, LogbookArchive } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
 import { Switch } from "@/components/ui/switch";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
@@ -317,6 +318,7 @@ export default function Logbook() {
   const [signRole, setSignRole] = useState<"pilot" | "cfi">("pilot");
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canUseLogbook ?? (user?.logbookProStatus === "active");
+  const isGuest = !user;
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [proForm, setProForm] = useState({
     medicalClass: "",
@@ -702,6 +704,50 @@ export default function Logbook() {
             {entries.some((e) => !e.isLocked) && (
               <div className="rounded-[1rem] border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900">
                 Unsigned entries are still drafts. Use <span className="font-semibold">Sign</span> when an entry is final.
+              </div>
+            )}
+            {isGuest && (
+              <div className="rounded-[1rem] border border-primary/20 bg-primary/5 px-4 py-3">
+                <div className="text-sm font-semibold text-slate-900">Create a free account to keep your logbook tied to RSF.</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Save entries, export anytime, and grow into Pro only when you want alerts and advanced workflow.
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button asChild size="sm">
+                    <Link
+                      href="/register"
+                      onClick={() => trackEvent("cta_click", { label: "logbook_guest_register", target: "/register" })}
+                    >
+                      Create free account
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link
+                      href="/login"
+                      onClick={() => trackEvent("cta_click", { label: "logbook_guest_sign_in", target: "/login" })}
+                    >
+                      Sign in
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            )}
+            {!isGuest && !isPro && (
+              <div className="rounded-[1rem] border border-emerald-200 bg-emerald-50/90 px-4 py-3">
+                <div className="text-sm font-semibold text-emerald-900">Ready for alerts, endorsements, and deeper currency tracking?</div>
+                <div className="mt-1 text-xs text-emerald-800">
+                  Start a 14-day Pro trial once the free logbook workflow is working for you.
+                </div>
+                <div className="mt-3">
+                  <Button asChild size="sm" variant="outline" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100">
+                    <Link
+                      href="/logbook/pro"
+                      onClick={() => trackEvent("cta_click", { label: "logbook_start_trial_banner", target: "/logbook/pro" })}
+                    >
+                      Start 14-day Pro trial
+                    </Link>
+                  </Button>
+                </div>
               </div>
             )}
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">

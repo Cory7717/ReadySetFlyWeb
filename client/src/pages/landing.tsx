@@ -7,6 +7,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
+import WeatherBriefingSummarizer from "@/components/ai/WeatherBriefingSummarizer";
+import NotamTranslator from "@/components/ai/NotamTranslator";
 import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -124,6 +126,8 @@ export default function Landing() {
   const [fuelRadiusMiles, setFuelRadiusMiles] = useState("50");
   const [selectedFuelType, setSelectedFuelType] = useState<FuelType>("100LL");
   const [hasUsedTool, setHasUsedTool] = useState(false);
+  const [showAiWeatherSummary, setShowAiWeatherSummary] = useState(false);
+  const [showAiNotamTranslator, setShowAiNotamTranslator] = useState(false);
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const av8mapsTiles = useMemo(
@@ -1538,6 +1542,34 @@ export default function Landing() {
                   </div>
                 )}
 
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold">AI weather briefing</div>
+                      <div className="text-xs text-muted-foreground">
+                        Summarize METAR and TAF into a plain-English briefing for this airport.
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowAiWeatherSummary((current) => !current)}
+                    >
+                      {showAiWeatherSummary ? "Hide AI summary" : "Open AI summary"}
+                    </Button>
+                  </div>
+                  {showAiWeatherSummary && (
+                    <div className="mt-3">
+                      <WeatherBriefingSummarizer
+                        metar={weather?.metar?.rawOb ?? ""}
+                        taf={weather?.taf?.rawTAF ?? ""}
+                        origin={searchIcao}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription className="text-xs">
@@ -1635,6 +1667,33 @@ export default function Landing() {
                     <p className="text-sm text-muted-foreground">No active NOTAMs.</p>
                   )}
                   <p className="text-xs text-muted-foreground">NOTAMs powered by FAA SWIM.</p>
+                </div>
+
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold">AI NOTAM translator</div>
+                      <div className="text-xs text-muted-foreground">
+                        Translate raw NOTAMs into plain-English operational and legality impacts.
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowAiNotamTranslator((current) => !current)}
+                    >
+                      {showAiNotamTranslator ? "Hide AI translator" : "Open AI translator"}
+                    </Button>
+                  </div>
+                  {showAiNotamTranslator && (
+                    <div className="mt-3">
+                      <NotamTranslator
+                        notams={notams?.notams?.map((item) => item.text ?? "").filter(Boolean).join("\n\n") ?? ""}
+                        airport={searchIcao}
+                      />
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

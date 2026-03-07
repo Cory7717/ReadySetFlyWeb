@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { SponsoredRightRail } from "@/components/banners/SponsoredRightRail";
+import WeatherBriefingSummarizer from "@/components/ai/WeatherBriefingSummarizer";
+import NotamTranslator from "@/components/ai/NotamTranslator";
 import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, CloudSun, Plane, Wind, Gauge, Scale } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -194,6 +196,8 @@ export default function PilotTools() {
   const [oatValue, setOatValue] = useState("20");
   const [tempUnit, setTempUnit] = useState<"C" | "F">("C");
   const [humidity, setHumidity] = useState("50");
+  const [showAiWeatherSummary, setShowAiWeatherSummary] = useState(false);
+  const [showAiNotamTranslator, setShowAiNotamTranslator] = useState(false);
 
   const heading = Number(runwayHeading) || 0;
   const windDir = Number(windDirection) || 0;
@@ -1105,6 +1109,34 @@ export default function PilotTools() {
                   </div>
                 )}
 
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold">AI weather briefing</div>
+                      <div className="text-xs text-muted-foreground">
+                        Summarize METAR and TAF into a short pilot-ready briefing.
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowAiWeatherSummary((current) => !current)}
+                    >
+                      {showAiWeatherSummary ? "Hide AI summary" : "Open AI summary"}
+                    </Button>
+                  </div>
+                  {showAiWeatherSummary && (
+                    <div className="mt-3">
+                      <WeatherBriefingSummarizer
+                        metar={weather?.metar?.rawOb ?? ""}
+                        taf={weather?.taf?.rawTAF ?? ""}
+                        origin={searchIcao}
+                      />
+                    </div>
+                  )}
+                </div>
+
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription className="text-xs">
@@ -1205,6 +1237,33 @@ export default function PilotTools() {
                   <p className="text-xs text-muted-foreground">
                     NOTAMs powered by FAA SWIM.
                   </p>
+                </div>
+
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold">AI NOTAM translator</div>
+                      <div className="text-xs text-muted-foreground">
+                        Translate raw NOTAMs into plain-English operational and legality impacts.
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowAiNotamTranslator((current) => !current)}
+                    >
+                      {showAiNotamTranslator ? "Hide AI translator" : "Open AI translator"}
+                    </Button>
+                  </div>
+                  {showAiNotamTranslator && (
+                    <div className="mt-3">
+                      <NotamTranslator
+                        notams={notams?.notams?.map((item) => item.text ?? "").filter(Boolean).join("\n\n") ?? ""}
+                        airport={weather.icao}
+                      />
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

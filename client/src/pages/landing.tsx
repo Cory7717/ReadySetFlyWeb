@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
-import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -88,7 +88,7 @@ function formatTimeAgo(timestamp: number): string {
 
 
 export default function Landing() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { data: eventsData } = useQuery({
     queryKey: ["aviation-events", "feed"],
     queryFn: async () => {
@@ -123,6 +123,7 @@ export default function Landing() {
   const [searchIcao, setSearchIcao] = useState("KAUS");
   const [fuelRadiusMiles, setFuelRadiusMiles] = useState("50");
   const [selectedFuelType, setSelectedFuelType] = useState<FuelType>("100LL");
+  const [hasUsedTool, setHasUsedTool] = useState(false);
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const av8mapsTiles = useMemo(
@@ -291,6 +292,7 @@ export default function Landing() {
   );
   const proMonthly = membershipPlanOptions.pro.find((plan) => plan.interval === "monthly")?.price;
   const proPlusMonthly = membershipPlanOptions.pro_plus.find((plan) => plan.interval === "monthly")?.price;
+  const isPaidUser = !!(user as any)?.entitlements?.isPro || !!(user as any)?.entitlements?.isProPlus;
   const fuelAirports = useMemo(
     () =>
       (fuelPrices?.results ?? [])
@@ -336,6 +338,7 @@ export default function Landing() {
     if (!ICAO_REGEX.test(normalized)) return;
     if (normalized !== searchIcao) {
       setSearchIcao(normalized);
+      setHasUsedTool(true);
       return;
     }
     await Promise.all([
@@ -343,12 +346,14 @@ export default function Landing() {
       refetchRunwayBriefing(),
       refetchNotams(),
     ]);
+    setHasUsedTool(true);
   };
 
   const submitIcao = () => {
     const normalized = icaoInput.trim().toUpperCase();
     if (!ICAO_REGEX.test(normalized)) return;
     setSearchIcao(normalized);
+    setHasUsedTool(true);
   };
 
   const applySuggestion = (suggestion: AirportSearchResult) => {
@@ -460,9 +465,83 @@ export default function Landing() {
   
   return (
     <div className="min-h-screen">
+      {!isAuthenticated && (
+        <div className="sticky top-0 z-50 border-b border-primary/10 bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80">
+          <div className="container mx-auto flex items-center justify-between gap-4 px-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">
+                THE aviation marketplace with the planning tools built in.
+              </span>{" "}
+              Early access is free — no credit card required.
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
+                <Link
+                  href="/login"
+                  onClick={() => trackEvent("cta_click", {
+                    label: "sticky_bar_sign_in",
+                    target: "/login",
+                  })}
+                >
+                  Sign in
+                </Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link
+                  href="/register"
+                  onClick={() => trackEvent("cta_click", {
+                    label: "sticky_bar_register",
+                    target: "/register",
+                  })}
+                >
+                  Create free account
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Hero Section */}
       <div className="relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
+          {!isAuthenticated && (
+            <div className="mb-6 rounded-xl border border-primary/20 bg-[linear-gradient(135deg,hsl(var(--primary)/0.06),hsl(var(--accent)/0.04))] px-5 py-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+                    THE aviation marketplace with the planning tools built in.
+                  </h1>
+                  <p className="text-sm text-muted-foreground">
+                    Rentals, CFIs, and aviation services up front. Flight planning, weather, and logbook alongside them. Free to join — no card needed.
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Button asChild>
+                    <Link
+                      href="/register"
+                      onClick={() => trackEvent("cta_click", {
+                        label: "conversion_strip_register",
+                        target: "/register",
+                      })}
+                    >
+                      Create free account
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link
+                      href="/marketplace"
+                      onClick={() => trackEvent("cta_click", {
+                        label: "conversion_strip_marketplace",
+                        target: "/marketplace",
+                      })}
+                    >
+                      Browse listings
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_390px] xl:items-start">
             <div className="rsf-card-shell overflow-hidden">
               <div className="flex flex-col gap-4 border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-5 py-4 text-slate-100 sm:flex-row sm:items-end sm:justify-between">
@@ -573,6 +652,7 @@ export default function Landing() {
                             airport: icaoInput.trim().toUpperCase(),
                             radius: fuelRadiusMiles,
                           });
+                          setHasUsedTool(true);
                           submitIcao();
                         }}
                         data-testid="button-fuel-search"
@@ -812,6 +892,47 @@ export default function Landing() {
         </div>
       </div>
 
+      {!isAuthenticated && hasUsedTool && (
+        <div className="border-t border-primary/10 bg-primary/[0.03]">
+          <div className="container mx-auto px-4 py-5">
+            <div className="flex flex-col gap-4 rounded-xl border border-primary/20 bg-background/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-0.5">
+                <p className="text-sm font-semibold">
+                  Save searches, log flights, and unlock every RSF tool.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Free account — no credit card. Upgrade to Pro anytime with a 14-day trial.
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button asChild size="sm">
+                  <Link
+                    href="/register"
+                    onClick={() => trackEvent("cta_click", {
+                      label: "post_tool_nudge_register",
+                      target: "/register",
+                    })}
+                  >
+                    Create free account
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link
+                    href="/login"
+                    onClick={() => trackEvent("cta_click", {
+                      label: "post_tool_nudge_sign_in",
+                      target: "/login",
+                    })}
+                  >
+                    Sign in
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="rsf-section-band py-8 sm:py-10">
         <div className="container mx-auto px-4">
           <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
@@ -988,6 +1109,7 @@ export default function Landing() {
                 </div>
             </section>
 
+            {!isPaidUser && (
             <section className="rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6">
                 <div className="text-center space-y-3">
                   <span className="rsf-kicker mx-auto">RSF Memberships</span>
@@ -998,7 +1120,7 @@ export default function Landing() {
                 </div>
 
                 <div className="mt-6 grid gap-4">
-                  <Card className="border-white/16 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(255,255,255,0.62))]">
+                  <Card className="border-muted/60 bg-[linear-gradient(180deg,hsl(var(--muted)/0.4),hsl(var(--muted)/0.2))] opacity-90">
                     <CardHeader>
                       <CardTitle className="text-lg">RSF Free</CardTitle>
                       <CardDescription>Marketplace access and open tools, no credit card required.</CardDescription>
@@ -1024,7 +1146,12 @@ export default function Landing() {
 
                   <Card className="border-primary/40 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))]">
                     <CardHeader>
-                      <Badge className="w-fit">Most Popular</Badge>
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge className="w-fit">Most Popular</Badge>
+                        <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 text-xs">
+                          14-day free trial
+                        </Badge>
+                      </div>
                       <CardTitle className="text-lg">{membershipTierInfo.pro.title}</CardTitle>
                       <CardDescription>{membershipTierInfo.pro.subtitle}</CardDescription>
                     </CardHeader>
@@ -1033,7 +1160,6 @@ export default function Landing() {
                         ${proMonthly?.toFixed(2) ?? "5.99"}
                         <span className="text-sm text-muted-foreground">/mo</span>
                       </div>
-                      <p className="text-xs font-medium text-emerald-600">14-day free trial on monthly billing</p>
                       <ul className="space-y-2 text-sm text-muted-foreground">
                         {membershipTierInfo.pro.features.map((feature) => (
                           <li key={feature} className="flex items-start gap-2">
@@ -1050,7 +1176,12 @@ export default function Landing() {
 
                   <Card className="border-[hsl(var(--accent)/0.32)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.11))]">
                     <CardHeader>
-                      <Badge variant="secondary" className="w-fit">Power Pilot</Badge>
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge variant="secondary" className="w-fit">Power Pilot</Badge>
+                        <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 text-xs">
+                          14-day free trial
+                        </Badge>
+                      </div>
                       <CardTitle className="text-lg">{membershipTierInfo.pro_plus.title}</CardTitle>
                       <CardDescription>{membershipTierInfo.pro_plus.subtitle}</CardDescription>
                     </CardHeader>
@@ -1059,7 +1190,6 @@ export default function Landing() {
                         ${proPlusMonthly?.toFixed(2) ?? "11.99"}
                         <span className="text-sm text-muted-foreground">/mo</span>
                       </div>
-                      <p className="text-xs font-medium text-emerald-600">14-day free trial on monthly billing</p>
                       <ul className="space-y-2 text-sm text-muted-foreground">
                         {membershipTierInfo.pro_plus.features.map((feature) => (
                           <li key={feature} className="flex items-start gap-2">
@@ -1074,7 +1204,82 @@ export default function Landing() {
                     </CardContent>
                   </Card>
                 </div>
+                <div className="mt-6 overflow-hidden rounded-xl border">
+                  <div className="bg-muted/40 px-4 py-3">
+                    <h3 className="text-sm font-semibold">
+                      What's included — side by side
+                    </h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/20">
+                          <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                            Feature
+                          </th>
+                          <th className="px-4 py-3 text-center font-medium text-muted-foreground">
+                            Free
+                          </th>
+                          <th className="px-4 py-3 text-center font-medium text-primary">
+                            Pro
+                          </th>
+                          <th className="px-4 py-3 text-center font-medium text-muted-foreground">
+                            Pro+
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {[
+                          { feature: "Marketplace & rentals", free: true, pro: true, proPlus: true },
+                          { feature: "CFI directory", free: true, pro: true, proPlus: true },
+                          { feature: "Weather & TFR tools", free: true, pro: true, proPlus: true },
+                          { feature: "Flight planner", free: "Limited", pro: true, proPlus: true },
+                          { feature: "Digital logbook", free: false, pro: true, proPlus: true },
+                          { feature: "Saved flight plans", free: false, pro: true, proPlus: true },
+                          { feature: "AI weather summary", free: true, pro: true, proPlus: true },
+                          { feature: "GPS simulators", free: false, pro: false, proPlus: true },
+                          { feature: "CFI training center", free: false, pro: false, proPlus: true },
+                        ].map(({ feature, free, pro, proPlus }) => (
+                          <tr key={feature} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-4 py-3 font-medium">
+                              {feature}
+                            </td>
+                            {[free, pro, proPlus].map((value, idx) => (
+                              <td key={idx} className="px-4 py-3 text-center">
+                                {value === true ? (
+                                  <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-500" />
+                                ) : value === false ? (
+                                  <span className="text-muted-foreground/40">
+                                    —
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">
+                                    {value}
+                                  </span>
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="border-t bg-muted/20 px-4 py-3 text-center">
+                    <Button asChild size="sm">
+                      <Link
+                        href="/logbook/pro"
+                        onClick={() => trackEvent("cta_click", {
+                          label: "comparison_table_start_trial",
+                          target: "/logbook/pro",
+                        })}
+                      >
+                        Start your 14-day free trial
+                      </Link>
+                    </Button>
+                  </div>
+                </div>
             </section>
+            )}
           </div>
         </div>
       </div>
@@ -1603,99 +1808,6 @@ export default function Landing() {
       </div>
       )}
 
-      {/* Mobile App Section */}
-      <div className="py-12 sm:py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            <Card className="overflow-hidden">
-              <CardContent className="p-0">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
-                  {/* Content Side */}
-                  <div className="p-6 sm:p-8 lg:p-12 flex flex-col justify-center">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Smartphone className="h-6 w-6 text-primary" />
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        Coming Soon
-                      </Badge>
-                    </div>
-                    <h2 className="text-2xl sm:text-3xl font-bold mb-4">
-                      Take Ready Set Fly Anywhere
-                    </h2>
-                    <p className="text-muted-foreground mb-6">
-                      Our mobile app is coming soon to iOS and Android. Plan flights, review route analysis,
-                      and keep training tools handy on the go.
-                    </p>
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-                        <span className="text-sm">Build and review flight plans anywhere</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-                        <span className="text-sm">Review overviews and training tools on the go</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-                        <span className="text-sm">Log flights and track currency after landing</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* App Store Badges Side */}
-                  <div className="bg-muted/30 p-6 sm:p-8 lg:p-12 flex flex-col justify-center items-center gap-4">
-                    <p className="text-sm font-medium text-muted-foreground mb-2">
-                      Download on
-                    </p>
-                    
-                    {/* App Store Badge - Placeholder */}
-                    <div 
-                      className="w-full max-w-[200px] h-[60px] rounded-lg border-2 border-muted flex items-center justify-center bg-background/50 cursor-not-allowed opacity-60"
-                      data-testid="badge-app-store"
-                    >
-                      <div className="text-center">
-                        <div className="text-xs text-muted-foreground">Available Soon</div>
-                        <div className="font-semibold">App Store</div>
-                      </div>
-                    </div>
-
-                    {/* Play Store Badge - Placeholder */}
-                    <div 
-                      className="w-full max-w-[200px] h-[60px] rounded-lg border-2 border-muted flex items-center justify-center bg-background/50 cursor-not-allowed opacity-60"
-                      data-testid="badge-play-store"
-                    >
-                      <div className="text-center">
-                        <div className="text-xs text-muted-foreground">Available Soon</div>
-                        <div className="font-semibold">Google Play</div>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground text-center mt-4 max-w-[250px]">
-                      Sign up now to be notified when our mobile apps launch
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-
-      {/* Admin Login */}
-      <div className="py-8">
-        <div className="container mx-auto px-4 text-center">
-          <Button 
-            variant="ghost"
-            size="sm"
-            onClick={() => window.location.href = apiUrl('/api/auth/google')}
-            data-testid="button-admin-login"
-            className="text-muted-foreground hover:text-foreground"
-          >
-            Admin Login
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

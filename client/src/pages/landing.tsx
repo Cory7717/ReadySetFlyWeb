@@ -292,7 +292,11 @@ export default function Landing() {
   );
   const proMonthly = membershipPlanOptions.pro.find((plan) => plan.interval === "monthly")?.price;
   const proPlusMonthly = membershipPlanOptions.pro_plus.find((plan) => plan.interval === "monthly")?.price;
-  const isPaidUser = !!(user as any)?.entitlements?.isPro || !!(user as any)?.entitlements?.isProPlus;
+  const hasProCore = !!(user as any)?.entitlements?.isPro;
+  const hasProPlus = !!(user as any)?.entitlements?.isProPlus;
+  const isPaidUser = hasProCore || hasProPlus;
+  const showFullMembershipSection = !hasProCore && !hasProPlus;
+  const showProPlusUpgradeSection = hasProCore && !hasProPlus;
   const fuelAirports = useMemo(
     () =>
       (fuelPrices?.results ?? [])
@@ -897,7 +901,7 @@ export default function Landing() {
 
       <div className="rsf-section-band py-8 sm:py-10">
         <div className="container mx-auto px-4">
-          <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className={`grid gap-6 ${showFullMembershipSection ? "xl:grid-cols-[1.1fr_0.9fr]" : ""}`}>
             <section className="rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6">
                 <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
                     <div>
@@ -1071,7 +1075,7 @@ export default function Landing() {
                 </div>
             </section>
 
-            {!isPaidUser && (
+            {showFullMembershipSection && (
             <section className="rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6">
                 <div className="text-center space-y-3">
                   <span className="rsf-kicker mx-auto">RSF Memberships</span>
@@ -1243,6 +1247,94 @@ export default function Landing() {
             </section>
             )}
           </div>
+
+          {showProPlusUpgradeSection && (
+            <section className="mt-6 rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2">
+                  <span className="rsf-kicker">Pro+ Upgrade</span>
+                  <h2 className="text-2xl font-semibold">You already have Pro Core. Pro+ adds the training stack.</h2>
+                  <p className="text-sm text-muted-foreground max-w-3xl">
+                    Keep Quick Start front and center, and surface Pro+ only when it adds something real: GPS simulators, CFI training center access, and the higher-end pilot workflow tools.
+                  </p>
+                </div>
+                <Button asChild>
+                  <Link href="/logbook/pro">Upgrade to Pro+</Link>
+                </Button>
+              </div>
+
+              <div className="mt-6 grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+                <Card className="border-[hsl(var(--accent)/0.32)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.11))]">
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-2">
+                      <Badge variant="secondary" className="w-fit">Power Pilot</Badge>
+                      <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 text-xs">
+                        14-day free trial
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-lg">{membershipTierInfo.pro_plus.title}</CardTitle>
+                    <CardDescription>{membershipTierInfo.pro_plus.subtitle}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="text-3xl font-bold">
+                      ${proPlusMonthly?.toFixed(2) ?? "11.99"}
+                      <span className="text-sm text-muted-foreground">/mo</span>
+                    </div>
+                    <ul className="space-y-2 text-sm text-muted-foreground">
+                      {membershipTierInfo.pro_plus.features.slice(0, 5).map((feature) => (
+                        <li key={feature} className="flex items-start gap-2">
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                    <Button asChild className="w-full">
+                      <Link href="/logbook/pro">Start Pro+ trial</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <div className="overflow-hidden rounded-xl border">
+                  <div className="bg-muted/40 px-4 py-3">
+                    <h3 className="text-sm font-semibold">Pro Core vs Pro+</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/20">
+                          <th className="px-4 py-3 text-left font-medium text-muted-foreground">Feature</th>
+                          <th className="px-4 py-3 text-center font-medium text-muted-foreground">Pro Core</th>
+                          <th className="px-4 py-3 text-center font-medium text-primary">Pro+</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {[
+                          { feature: "Digital logbook", pro: true, proPlus: true },
+                          { feature: "Saved flight plans", pro: true, proPlus: true },
+                          { feature: "AI weather summary", pro: true, proPlus: true },
+                          { feature: "GPS simulators", pro: false, proPlus: true },
+                          { feature: "CFI training center", pro: false, proPlus: true },
+                        ].map(({ feature, pro, proPlus }) => (
+                          <tr key={feature} className="hover:bg-muted/20 transition-colors">
+                            <td className="px-4 py-3 font-medium">{feature}</td>
+                            {[pro, proPlus].map((value, idx) => (
+                              <td key={idx} className="px-4 py-3 text-center">
+                                {value ? (
+                                  <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-500" />
+                                ) : (
+                                  <span className="text-muted-foreground/40">-</span>
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
         </div>
       </div>
 

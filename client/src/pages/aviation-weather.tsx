@@ -75,6 +75,7 @@ export default function AviationWeatherHub() {
   const [icaoInput, setIcaoInput] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
   const [activeTab, setActiveTab] = useState("overview");
+  const [showAiWeatherSummary, setShowAiWeatherSummary] = useState(false);
   const [windsAltitude, setWindsAltitude] = useState("12000");
   const trackedTabs = useRef(new Set<string>());
   const { isAuthenticated } = useAuth();
@@ -455,14 +456,34 @@ export default function AviationWeatherHub() {
               </CardContent>
             </Card>
           </div>
-          <div className="mt-4">
-            <WeatherBriefingSummarizer
-              metar={metarRaw}
-              taf={tafRaw}
-              pireps={pirepsQuery.data?.reports?.map((report: any) => report.rawOb ?? "").filter(Boolean).join("\n") ?? ""}
-              sigmet={hazardsSummary.items.map((item) => item.hazard).filter(Boolean).join("\n")}
-              origin={searchIcao}
-            />
+          <div className="mt-4 rounded-lg border bg-muted/20 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="text-sm font-semibold">AI weather briefing</div>
+                <div className="text-xs text-muted-foreground">
+                  Translate METAR, TAF, PIREPs, and SIGMETs into a short pilot-ready summary.
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setShowAiWeatherSummary((current) => !current)}
+              >
+                {showAiWeatherSummary ? "Hide AI summary" : "Open AI summary"}
+              </Button>
+            </div>
+            {showAiWeatherSummary && (
+              <div className="mt-4">
+                <WeatherBriefingSummarizer
+                  metar={metarRaw}
+                  taf={tafRaw}
+                  pireps={pirepsQuery.data?.reports?.map((report: any) => report.rawOb ?? "").filter(Boolean).join("\n") ?? ""}
+                  sigmet={hazardsSummary.items.map((item) => item.hazard).filter(Boolean).join("\n")}
+                  origin={searchIcao}
+                />
+              </div>
+            )}
           </div>
         </TabsContent>
 

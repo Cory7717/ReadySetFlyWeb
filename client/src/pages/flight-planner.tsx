@@ -684,6 +684,7 @@ export default function FlightPlanner() {
   const [showApproachOffer, setShowApproachOffer] = useState(false);
   const [windsAltitudeChoice, setWindsAltitudeChoice] = useState("planned");
   const [tfmsOverlayEnabled, setTfmsOverlayEnabled] = useState(false);
+  const [showAiNotamTranslator, setShowAiNotamTranslator] = useState(false);
   const [activeWeatherDetail, setActiveWeatherDetail] = useState<
     "metar" | "notams" | "pireps" | "hazards" | "winds" | "icing" | "turbulence" | null
   >(null);
@@ -4336,11 +4337,33 @@ export default function FlightPlanner() {
                     <div className="text-xs text-muted-foreground mt-1">{notam.text}</div>
                   </div>
                 ))}
-                <NotamTranslator
-                  notams={notamsSummaryQuery.data?.notams?.map((notam: any) => notam.text ?? notam.notamTxt ?? notam.raw ?? "").filter(Boolean).join("\n\n") ?? ""}
-                  airport={primaryIcao}
-                  route={routeStringFull}
-                />
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold">AI NOTAM translator</div>
+                      <div className="text-xs text-muted-foreground">
+                        Translate raw NOTAM text into plain-English relevance and legality impacts.
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowAiNotamTranslator((current) => !current)}
+                    >
+                      {showAiNotamTranslator ? "Hide AI translator" : "Open AI translator"}
+                    </Button>
+                  </div>
+                  {showAiNotamTranslator && (
+                    <div className="mt-3">
+                      <NotamTranslator
+                        notams={notamsSummaryQuery.data?.notams?.map((notam: any) => notam.text ?? notam.notamTxt ?? notam.raw ?? "").filter(Boolean).join("\n\n") ?? ""}
+                        airport={primaryIcao}
+                        route={routeStringFull}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}

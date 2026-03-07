@@ -25,6 +25,7 @@ import { trackEvent } from "@/lib/analytics";
 import { runWithAuth } from "@/utils/authGate";
 import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/flightPlanner";
 import { cn } from "@/lib/utils";
+import { parseFlightCategory as getFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import type { FlightPlan } from "@shared/schema";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
@@ -368,21 +369,7 @@ const buildHazardSummary = (payload: any) => {
 };
 
 function parseFlightCategory(metar: any): "VFR" | "MVFR" | "IFR" | "LIFR" | "UNKNOWN" {
-  const declared = String(metar?.fltCat || metar?.flightCategory || "").toUpperCase();
-  if (declared === "VFR" || declared === "MVFR" || declared === "IFR" || declared === "LIFR") {
-    return declared;
-  }
-  if (!metar?.rawOb) return "UNKNOWN";
-  const raw = metar.rawOb || "";
-  const visMatch = raw.match(/\s(\d{1,2})SM/);
-  const visibility = visMatch ? parseInt(visMatch[1], 10) : 10;
-  const ceilingMatch = raw.match(/(BKN|OVC)(\d{3})/);
-  const ceiling = ceilingMatch ? parseInt(ceilingMatch[2], 10) * 100 : 10000;
-
-  if (ceiling >= 3000 && visibility > 5) return "VFR";
-  if (ceiling >= 1000 && visibility >= 3) return "MVFR";
-  if (ceiling >= 500 && visibility >= 1) return "IFR";
-  return "LIFR";
+  return getFlightCategory(metar).category;
 }
 
 function hasThunder(taf: any) {
@@ -3339,18 +3326,43 @@ export default function FlightPlanner() {
               <div className="grid gap-3 md:grid-cols-3">
                 {weatherData.map(({ icao, data }) => {
                   const category = parseFlightCategory(data?.metar);
+                  const hazards = parseWeatherHazards(data?.metar, data?.taf);
                   return (
                     <div key={icao} className="rounded-lg border p-3">
                       <div className="flex items-center justify-between">
                         <div className="font-semibold">{icao}</div>
                         <Badge className={flightCategoryClassName(category)}>{category}</Badge>
                       </div>
+                      {hazards.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {hazards.map((hazard) => (
+                            <Badge
+                              key={`${icao}-${hazard.id}`}
+                              variant="outline"
+                              className={
+                                hazard.tone === "red"
+                                  ? "border-red-300 bg-red-50 text-red-800"
+                                  : hazard.tone === "amber"
+                                    ? "border-amber-300 bg-amber-50 text-amber-800"
+                                    : "border-sky-300 bg-sky-50 text-sky-800"
+                              }
+                            >
+                              {hazard.label}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
                       <div className="text-xs text-muted-foreground mt-2 line-clamp-3">
                         {data?.metar?.rawOb || "No METAR data"}
                       </div>
                       <div className="text-xs text-muted-foreground mt-2 line-clamp-3">
                         {data?.taf?.rawTAF || "No TAF data"}
                       </div>
+                      {hazards.length > 0 && (
+                        <div className="text-[11px] text-amber-700 mt-2">
+                          {category} is category only; additional hazards are flagged above.
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -4191,6 +4203,7 @@ export default function FlightPlanner() {
                   const category = parseFlightCategory(data?.metar);
                   const wind = parseMetarWind(data?.metar);
                   const tempC = parseMetarTempC(data?.metar);
+                  const hazards = parseWeatherHazards(data?.metar, data?.taf);
                   return (
                     <div key={icao} className="rounded-lg border p-3">
                       <div className="font-semibold">{icao}</div>
@@ -4201,6 +4214,30 @@ export default function FlightPlanner() {
                         {wind && <span>{wind.direction}° @ {wind.speed}kt</span>}
                         {tempC !== null && <span>Temp {tempC}°C</span>}
                       </div>
+                      {hazards.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {hazards.map((hazard) => (
+                            <span
+                              key={`${icao}-${hazard.id}`}
+                              className={cn(
+                                "px-1.5 py-0.5 rounded border text-[11px] font-medium",
+                                hazard.tone === "red"
+                                  ? "border-red-300 bg-red-50 text-red-800"
+                                  : hazard.tone === "amber"
+                                    ? "border-amber-300 bg-amber-50 text-amber-800"
+                                    : "border-sky-300 bg-sky-50 text-sky-800"
+                              )}
+                            >
+                              {hazard.label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {hazards.length > 0 && (
+                        <div className="text-[11px] text-amber-700 mt-2">
+                          {category} reflects ceiling/visibility only; review hazards before launch.
+                        </div>
+                      )}
                       <div className="text-xs text-muted-foreground mt-2">{data?.metar?.rawOb || "No METAR"}</div>
                       <div className="text-xs text-muted-foreground mt-2">{data?.taf?.rawTAF || "No TAF"}</div>
                     </div>

@@ -13,6 +13,7 @@ import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
+import { extractAtisIdentifier, extractRunwayInUse, parseFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import av8mapsLogo from "@assets/Av8Maps.JPG";
 import rsfPromoVideo from "@assets/rsf-video-2026-02-28.mp4";
@@ -61,13 +62,6 @@ interface FuelPriceResponse {
   communityEnabled: boolean;
 }
 
-interface WeatherHazard {
-  id: string;
-  label: string;
-  detail: string;
-  tone: "amber" | "red" | "blue";
-}
-
 type LandingModuleId = "conditions" | "cfi" | "partner" | "events";
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
@@ -82,19 +76,6 @@ const AV8MAPS_EMBED_ENABLED =
   String(import.meta.env.VITE_AV8MAPS_EMBED_ENABLED ?? "false").toLowerCase() === "true";
 const AV8MAPS_EMBED_URL = (import.meta.env.VITE_AV8MAPS_EMBED_URL || "").trim();
 
-function parseFlightCategory(metar: any): { category: string; color: string } {
-  if (!metar) return { category: "UNKNOWN", color: "gray" };
-  const raw = metar.rawOb || "";
-  const visMatch = raw.match(/\s(\d{1,2})SM/);
-  const visibility = visMatch ? parseInt(visMatch[1]) : 10;
-  const ceilingMatch = raw.match(/(BKN|OVC)(\d{3})/);
-  const ceiling = ceilingMatch ? parseInt(ceilingMatch[2]) * 100 : 10000;
-  if (ceiling >= 3000 && visibility > 5) return { category: "VFR", color: "green" };
-  if (ceiling >= 1000 && visibility >= 3) return { category: "MVFR", color: "blue" };
-  if (ceiling >= 500 && visibility >= 1) return { category: "IFR", color: "red" };
-  return { category: "LIFR", color: "purple" };
-}
-
 function formatTimeAgo(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
@@ -105,89 +86,6 @@ function formatTimeAgo(timestamp: number): string {
   return `${hours}h ${minutes % 60}m ago`;
 }
 
-function extractAtisIdentifier(metar: any): string | null {
-  if (!metar?.rawOb) return null;
-  const raw = metar.rawOb;
-  const infoMatch = raw.match(/\bINFO\s+([A-Z])\b/i);
-  if (infoMatch) return `Information ${infoMatch[1].toUpperCase()}`;
-  const atisMatch = raw.match(/\bATIS\s+([A-Z])\b/i);
-  if (atisMatch) return `Information ${atisMatch[1].toUpperCase()}`;
-  const rmkIndex = raw.indexOf("RMK");
-  if (rmkIndex !== -1) {
-    const afterRmk = raw.substring(rmkIndex);
-    const endMatch = afterRmk.match(/\s([A-Z])\s*$/);
-    if (endMatch) return `Information ${endMatch[1]}`;
-  }
-  return null;
-}
-
-function extractRunwayInUse(metar: any): string | null {
-  if (!metar?.rawOb) return null;
-  const raw = metar.rawOb;
-  const rwyMatch = raw.match(/\b(?:RWY|RUNWAY)\s+(\d{2}[LCR]?(?:\s*(?:AND|\/|&)\s*\d{2}[LCR]?)*)/i);
-  if (rwyMatch) return rwyMatch[1].replace(/\s+/g, " ").trim();
-  const arrRwyMatch = raw.match(/\bARR\s+(?:RWY|RUNWAY)\s+(\d{2}[LCR]?)/i);
-  const depRwyMatch = raw.match(/\bDEP\s+(?:RWY|RUNWAY)\s+(\d{2}[LCR]?)/i);
-  if (arrRwyMatch || depRwyMatch) {
-    const runways = [];
-    if (arrRwyMatch) runways.push(`${arrRwyMatch[1]} (arr)`);
-    if (depRwyMatch) runways.push(`${depRwyMatch[1]} (dep)`);
-    return runways.join(", ");
-  }
-  return null;
-}
-
-function parseWeatherHazards(
-  metar: any,
-  taf: any,
-  notamItems: Array<{ text: string }> = []
-): WeatherHazard[] {
-  const metarRaw = String(metar?.rawOb || "").toUpperCase();
-  const tafRaw = String(taf?.rawTAF || "").toUpperCase();
-  const hazards: WeatherHazard[] = [];
-
-  if (/\b(\+|-)?(RA|DZ|SN|SG|PL|GR|GS|SHRA|SHSN)\b/.test(metarRaw)) {
-    hazards.push({
-      id: "precip",
-      label: "Precipitation",
-      detail: "Current METAR reports active precipitation at the airport.",
-      tone: "blue",
-    });
-  }
-
-  if (/\b(TS|TSRA|VCTS|LTG|CB)\b/.test(metarRaw) || /\b(TS|TSRA|VCTS|CB)\b/.test(tafRaw)) {
-    hazards.push({
-      id: "convective",
-      label: "Convective risk",
-      detail: "Thunderstorms, lightning, or cumulonimbus are present or forecast nearby.",
-      tone: "red",
-    });
-  }
-
-  if (/\bG\d{2,3}KT\b/.test(metarRaw) || /\bG\d{2,3}KT\b/.test(tafRaw)) {
-    hazards.push({
-      id: "gusts",
-      label: "Gusty winds",
-      detail: "Wind gusts are reported or forecast. Recheck crosswind and runway alignment.",
-      tone: "amber",
-    });
-  }
-
-  if (
-    notamItems.some((item) =>
-      /\b(WET|SLIPPERY|BRAKING|FICON|POOR|NIL)\b/i.test(item.text)
-    )
-  ) {
-    hazards.push({
-      id: "runway",
-      label: "Runway condition",
-      detail: "NOTAMs indicate runway surface or braking action concerns.",
-      tone: "amber",
-    });
-  }
-
-  return hazards;
-}
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();

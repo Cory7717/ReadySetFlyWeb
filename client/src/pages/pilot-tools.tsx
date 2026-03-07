@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
+import { extractAtisIdentifier, extractRunwayInUse, parseFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 
 interface WeatherData {
   icao: string;
@@ -34,35 +35,6 @@ interface AirportSearchResult {
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 
-function parseFlightCategory(metar: any): { category: string; color: string } {
-  if (!metar) return { category: "UNKNOWN", color: "gray" };
-
-  // Extract ceiling and visibility from rawOb
-  const raw = metar.rawOb || "";
-  
-  // Simple heuristic for flight category based on common METAR patterns
-  // VFR: ceiling > 3000 ft, vis > 5 mi
-  // MVFR: ceiling 1000-3000 ft or vis 3-5 mi
-  // IFR: ceiling 500-1000 ft or vis 1-3 mi
-  // LIFR: ceiling < 500 ft or vis < 1 mi
-
-  const visMatch = raw.match(/\s(\d{1,2})SM/);
-  const visibility = visMatch ? parseInt(visMatch[1]) : 10;
-
-  const ceilingMatch = raw.match(/(BKN|OVC)(\d{3})/);
-  const ceiling = ceilingMatch ? parseInt(ceilingMatch[2]) * 100 : 10000;
-
-  if (ceiling >= 3000 && visibility > 5) {
-    return { category: "VFR", color: "green" };
-  } else if (ceiling >= 1000 && visibility >= 3) {
-    return { category: "MVFR", color: "blue" };
-  } else if (ceiling >= 500 && visibility >= 1) {
-    return { category: "IFR", color: "red" };
-  } else {
-    return { category: "LIFR", color: "purple" };
-  }
-}
-
 function formatTimeAgo(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
@@ -71,62 +43,6 @@ function formatTimeAgo(timestamp: number): string {
   if (minutes < 60) return `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
   return `${hours}h ${minutes % 60}m ago`;
-}
-
-function extractAtisIdentifier(metar: any): string | null {
-  if (!metar?.rawOb) return null;
-  // ATIS identifier appears after RMK in format like "RMK AO2 SLP123 T01234567 INFO A"
-  // or just "ATIS ALPHA" or single letter at end
-  const raw = metar.rawOb;
-  
-  // Try to find INFO X pattern (most common)
-  const infoMatch = raw.match(/\bINFO\s+([A-Z])\b/i);
-  if (infoMatch) {
-    return `Information ${infoMatch[1].toUpperCase()}`;
-  }
-  
-  // Try to find ATIS X pattern
-  const atisMatch = raw.match(/\bATIS\s+([A-Z])\b/i);
-  if (atisMatch) {
-    return `Information ${atisMatch[1].toUpperCase()}`;
-  }
-  
-  // Try to find single letter at the very end after RMK
-  const rmkIndex = raw.indexOf('RMK');
-  if (rmkIndex !== -1) {
-    const afterRmk = raw.substring(rmkIndex);
-    // Look for pattern like ending with single letter
-    const endMatch = afterRmk.match(/\s([A-Z])\s*$/);
-    if (endMatch) {
-      return `Information ${endMatch[1]}`;
-    }
-  }
-  
-  return null;
-}
-
-function extractRunwayInUse(metar: any): string | null {
-  if (!metar?.rawOb) return null;
-  const raw = metar.rawOb;
-  
-  // Look for RWY XX or RUNWAY XX patterns in remarks
-  const rwyMatch = raw.match(/\b(?:RWY|RUNWAY)\s+(\d{2}[LCR]?(?:\s*(?:AND|\/|&)\s*\d{2}[LCR]?)*)/i);
-  if (rwyMatch) {
-    return rwyMatch[1].replace(/\s+/g, ' ').trim();
-  }
-  
-  // Also try to find arrival/departure runway info
-  const arrRwyMatch = raw.match(/\bARR\s+(?:RWY|RUNWAY)\s+(\d{2}[LCR]?)/i);
-  const depRwyMatch = raw.match(/\bDEP\s+(?:RWY|RUNWAY)\s+(\d{2}[LCR]?)/i);
-  
-  if (arrRwyMatch || depRwyMatch) {
-    const runways = [];
-    if (arrRwyMatch) runways.push(`${arrRwyMatch[1]} (arr)`);
-    if (depRwyMatch) runways.push(`${depRwyMatch[1]} (dep)`);
-    return runways.join(', ');
-  }
-  
-  return null;
 }
 
 function RunwayDiagram({
@@ -310,7 +226,13 @@ export default function PilotTools() {
   const densityAltitude = densityAltitudeHumid;
   const isaDeviation = Math.round(oat - isaTemp);
 
-  const { data: weather, isLoading, error, refetch } = useQuery<WeatherData>({
+  const {
+    data: weather,
+    isLoading,
+    isFetching: weatherFetching,
+    error,
+    refetch: refetchWeather,
+  } = useQuery<WeatherData>({
     queryKey: [`/api/aviation-weather/${searchIcao}`],
     queryFn: async () => {
       const res = await fetch(apiUrl(`/api/aviation-weather/${searchIcao}`), {
@@ -339,7 +261,12 @@ export default function PilotTools() {
     staleTime: 1000 * 60 * 30,
   });
 
-  const { data: runwayBriefing, isLoading: runwayLoading } = useQuery<{
+  const {
+    data: runwayBriefing,
+    isLoading: runwayLoading,
+    isFetching: runwayFetching,
+    refetch: refetchRunwayBriefing,
+  } = useQuery<{
     icao: string;
     runwayInUse: string | null;
     wind: { direction: number | null; speed: number | null; gust: number | null };
@@ -364,7 +291,13 @@ export default function PilotTools() {
     enabled: !!searchIcao,
   });
 
-  const { data: notams, isLoading: notamsLoading, isError: notamsError } = useQuery<{
+  const {
+    data: notams,
+    isLoading: notamsLoading,
+    isFetching: notamsFetching,
+    isError: notamsError,
+    refetch: refetchNotams,
+  } = useQuery<{
     icao: string;
     notams: Array<{ id: string; text: string; effective?: string; expires?: string }>;
     raw?: any;
@@ -418,7 +351,15 @@ export default function PilotTools() {
     if (!trimmed) return;
     const normalized = trimmed.toUpperCase();
     if (ICAO_REGEX.test(normalized)) {
-      setSearchIcao(normalized);
+      if (normalized === searchIcao) {
+        void Promise.all([
+          refetchWeather(),
+          refetchRunwayBriefing(),
+          refetchNotams(),
+        ]);
+      } else {
+        setSearchIcao(normalized);
+      }
       return;
     }
     if (airportSuggestions.length > 0) {
@@ -445,6 +386,10 @@ export default function PilotTools() {
   const conditionsTitle = `${airportTitleBase}${
     airportDescriptor ? ` - ${airportDescriptor}` : ""
   } - Current Conditions`;
+  const weatherHazards = useMemo(
+    () => parseWeatherHazards(weather?.metar, weather?.taf, notams?.notams ?? []),
+    [weather?.metar, weather?.taf, notams?.notams]
+  );
 
   useEffect(() => {
     trackEvent("pilot_tools_view", { page: "/pilot-tools" });
@@ -1078,6 +1023,21 @@ export default function PilotTools() {
                         ATIS: {atisInfo}
                       </Badge>
                     )}
+                    {weatherHazards.map((hazard) => (
+                      <Badge
+                        key={hazard.id}
+                        variant="outline"
+                        className={
+                          hazard.tone === "red"
+                            ? "border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200"
+                            : hazard.tone === "amber"
+                              ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+                              : "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-200"
+                        }
+                      >
+                        {hazard.label}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
                 <CardDescription className="flex items-center gap-2 flex-wrap">
@@ -1089,6 +1049,9 @@ export default function PilotTools() {
                   {weather.cached && (
                     <Badge variant="secondary" className="text-xs">Cached</Badge>
                   )}
+                  {(weatherFetching || runwayFetching || notamsFetching) && (
+                    <Badge variant="secondary" className="text-xs">Refreshing</Badge>
+                  )}
                   {runwayInUseDisplay && (
                     <Badge variant="outline" className="text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200">
                       Runway {runwayInUseDisplay} in use
@@ -1097,6 +1060,22 @@ export default function PilotTools() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <Alert className={weatherHazards.length > 0 ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20" : ""}>
+                  <AlertTriangle className={cn(
+                    "h-4 w-4",
+                    weatherHazards.some((hazard) => hazard.tone === "red")
+                      ? "text-red-700 dark:text-red-200"
+                      : weatherHazards.length > 0
+                        ? "text-amber-700 dark:text-amber-200"
+                        : ""
+                  )} />
+                  <AlertDescription className="text-xs">
+                    <strong>{flightCategory.category} is ceiling/visibility only.</strong>{" "}
+                    {weatherHazards.length > 0
+                      ? weatherHazards.map((hazard) => hazard.detail).join(" ")
+                      : "No additional precipitation, convective, gust, or runway-surface hazards are currently flagged from the METAR/TAF/NOTAM summary."}
+                  </AlertDescription>
+                </Alert>
                 {weather.metar ? (
                   <>
                     <div>

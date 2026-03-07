@@ -604,7 +604,7 @@ export default function Landing() {
                     ))}
                   </div>
 
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
                     <div className="rounded-[1.15rem] border border-white/10 bg-[linear-gradient(180deg,hsl(215_36%_17%),hsl(220_32%_12%))] p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
@@ -622,9 +622,9 @@ export default function Landing() {
                           {selectedFuelType} pins
                         </div>
                       </div>
-                      <div className="mt-4 grid aspect-[16/9] grid-cols-12 grid-rows-6 rounded-[1rem] border border-sky-400/10 bg-[radial-gradient(circle_at_top,hsl(193_90%_35%/0.22),transparent_34%),linear-gradient(180deg,hsl(205_48%_17%),hsl(217_40%_10%))] p-4">
+                      <div className="mt-4 grid aspect-[16/9] min-h-[280px] grid-cols-12 grid-rows-6 rounded-[1rem] border border-sky-400/10 bg-[radial-gradient(circle_at_top,hsl(193_90%_35%/0.22),transparent_34%),linear-gradient(180deg,hsl(205_48%_17%),hsl(217_40%_10%))] p-4 sm:min-h-[340px]">
                         <div className="col-span-full row-span-full rounded-[0.8rem] border border-dashed border-white/10 bg-[linear-gradient(135deg,hsl(140_38%_22%/0.42),hsl(193_45%_14%/0.24))]" />
-                        {fuelMapPins.map((airport) => (
+                        {fuelMapPins.map((airport, index) => (
                           <button
                             key={`${airport.icao}-${airport.matchingFuel.type}`}
                             type="button"
@@ -632,15 +632,10 @@ export default function Landing() {
                               setIcaoInput(airport.icao);
                               setSearchIcao(airport.icao);
                             }}
-                            className={`relative z-10 flex w-24 -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-sky-300/30 bg-slate-950/85 px-2 py-1 text-left shadow-lg transition hover:border-sky-300 hover:bg-slate-950 ${airport.colClass} ${airport.rowClass}`}
+                            title={`${airport.icao} - $${airport.matchingFuel.pricePPG?.toFixed(2)}`}
+                            className={`relative z-10 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-sky-300/60 bg-slate-950/90 text-xs font-semibold text-white shadow-lg transition hover:border-sky-300 hover:bg-slate-950 sm:h-9 sm:w-9 ${airport.colClass} ${airport.rowClass}`}
                           >
-                            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{airport.icao}</span>
-                            <span className="text-sm font-semibold text-white">
-                              ${airport.matchingFuel.pricePPG?.toFixed(2)}
-                            </span>
-                            <span className="text-[10px] text-slate-400">
-                              {airport.distanceMiles?.toFixed(1) ?? "0.0"} mi
-                            </span>
+                            {index + 1}
                           </button>
                         ))}
                         {!fuelPricesLoading && fuelMapPins.length === 0 ? (
@@ -649,6 +644,36 @@ export default function Landing() {
                           </div>
                         ) : null}
                       </div>
+                      {fuelMapPins.length > 0 ? (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                          {fuelMapPins.slice(0, 6).map((airport, index) => (
+                            <button
+                              key={`${airport.icao}-legend`}
+                              type="button"
+                              onClick={() => {
+                                setIcaoInput(airport.icao);
+                                setSearchIcao(airport.icao);
+                              }}
+                              className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/20 text-xs font-semibold text-sky-200">
+                                  {index + 1}
+                                </span>
+                                <div>
+                                  <div className="text-sm font-semibold text-white">{airport.icao}</div>
+                                  <div className="text-[11px] text-slate-400">
+                                    {airport.distanceMiles?.toFixed(1) ?? "0.0"} mi
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-sm font-semibold text-sky-200">
+                                ${airport.matchingFuel.pricePPG?.toFixed(2)}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="space-y-3">

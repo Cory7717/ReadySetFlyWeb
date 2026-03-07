@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index, uniqueIndex, foreignKey, date, time } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index, uniqueIndex, foreignKey, date, time, uuid, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1567,6 +1567,29 @@ export const cfiAvailabilityRules = pgTable("cfi_availability_rules", {
   index("idx_cfi_availability_profile").on(table.cfiProfileId),
 ]);
 
+export const fuelPriceReports = pgTable(
+  "fuel_price_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    icao: varchar("icao", { length: 5 }).notNull(),
+    fuelType: varchar("fuel_type", { length: 20 }).notNull(),
+    pricePPG: numeric("price_ppg", {
+      precision: 6, scale: 3
+    }).notNull(),
+    fboName: varchar("fbo_name", { length: 200 }),
+    notes: text("notes"),
+    reportedBy: varchar("reported_by", { length: 100 })
+      .notNull(),
+    reportedAt: timestamp("reported_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    verified: boolean("verified").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  }
+);
+
 export const cfiBookingRequests = pgTable("cfi_booking_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   cfiProfileId: varchar("cfi_profile_id").notNull().references(() => cfiProfiles.id, { onDelete: "cascade" }),
@@ -2703,6 +2726,10 @@ export type CfiMessage = typeof cfiMessages.$inferSelect;
 export type InsertCfiMessage = z.infer<typeof insertCfiMessageSchema>;
 export type CfiLegalAcceptance = typeof cfiLegalAcceptances.$inferSelect;
 export type InsertCfiLegalAcceptance = z.infer<typeof insertCfiLegalAcceptanceSchema>;
+export type FuelPriceReport =
+  typeof fuelPriceReports.$inferSelect;
+export type NewFuelPriceReport =
+  typeof fuelPriceReports.$inferInsert;
 export type UserSettings = typeof userSettings.$inferSelect;
 export type InsertUserSettings = z.infer<typeof insertUserSettingsSchema>;
 export type PushToken = typeof pushTokens.$inferSelect;

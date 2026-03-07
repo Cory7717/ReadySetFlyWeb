@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
-import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, Smartphone, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -33,9 +33,44 @@ interface AirportSearchResult {
   state?: string | null;
 }
 
+type FuelType = "100LL" | "Jet-A" | "Mogas" | "100LL UL";
+
+interface FuelPrice {
+  type: FuelType;
+  pricePPG: number | null;
+  updatedAt: string | null;
+  source: "airnav" | "community" | "mock";
+  reportedBy?: "airnav" | "pilot";
+}
+
+interface FuelPriceResult {
+  icao: string;
+  name: string;
+  city: string;
+  state: string;
+  lat: number;
+  lon: number;
+  fuels: FuelPrice[];
+  distanceMiles?: number;
+}
+
+interface FuelPriceResponse {
+  results: FuelPriceResult[];
+  queriedAt: string;
+  source: "airnav" | "community" | "mixed" | "mock";
+  communityEnabled: boolean;
+}
+
 type LandingModuleId = "conditions" | "cfi" | "partner" | "events";
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+const FUEL_MAP_COL_CLASSES = [
+  "col-start-1", "col-start-2", "col-start-3", "col-start-4", "col-start-5", "col-start-6",
+  "col-start-7", "col-start-8", "col-start-9", "col-start-10", "col-start-11", "col-start-12",
+];
+const FUEL_MAP_ROW_CLASSES = [
+  "row-start-1", "row-start-2", "row-start-3", "row-start-4", "row-start-5", "row-start-6",
+];
 const AV8MAPS_EMBED_ENABLED =
   String(import.meta.env.VITE_AV8MAPS_EMBED_ENABLED ?? "false").toLowerCase() === "true";
 const AV8MAPS_EMBED_URL = (import.meta.env.VITE_AV8MAPS_EMBED_URL || "").trim();
@@ -129,6 +164,8 @@ export default function Landing() {
   const [openLandingModules, setOpenLandingModules] = useState<LandingModuleId[]>(["conditions", "partner"]);
   const [icaoInput, setIcaoInput] = useState("KAUS");
   const [searchIcao, setSearchIcao] = useState("KAUS");
+  const [fuelRadiusMiles, setFuelRadiusMiles] = useState("50");
+  const [selectedFuelType, setSelectedFuelType] = useState<FuelType>("100LL");
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const av8mapsTiles = useMemo(
@@ -190,6 +227,20 @@ export default function Landing() {
     },
     enabled: Boolean(searchIcao),
     staleTime: 1000 * 60 * 10,
+  });
+
+  const { data: fuelPrices, isLoading: fuelPricesLoading, isError: fuelPricesError } = useQuery<FuelPriceResponse>({
+    queryKey: ["/api/fuel-prices", searchIcao, fuelRadiusMiles],
+    queryFn: async () => {
+      const res = await fetch(
+        apiUrl(`/api/fuel-prices?airport=${encodeURIComponent(searchIcao)}&radiusMiles=${encodeURIComponent(fuelRadiusMiles)}`),
+        { credentials: "include" }
+      );
+      if (!res.ok) throw new Error("Failed to fetch fuel prices");
+      return res.json();
+    },
+    enabled: Boolean(searchIcao),
+    staleTime: 1000 * 60 * 15,
   });
 
   const { data: airportMeta } = useQuery<AirportSearchResult | null>({
@@ -263,7 +314,45 @@ export default function Landing() {
   } - Current Conditions`;
   const proMonthly = membershipPlanOptions.pro.find((plan) => plan.interval === "monthly")?.price;
   const proPlusMonthly = membershipPlanOptions.pro_plus.find((plan) => plan.interval === "monthly")?.price;
-  const heroNotamCount = notams?.notams?.length ?? 0;
+  const fuelAirports = useMemo(
+    () =>
+      (fuelPrices?.results ?? [])
+        .map((airport) => {
+          const matchingFuel = airport.fuels.find(
+            (fuel) => fuel.type === selectedFuelType && fuel.pricePPG !== null
+          );
+          return matchingFuel ? { ...airport, matchingFuel } : null;
+        })
+        .filter(
+          (airport): airport is FuelPriceResult & { matchingFuel: FuelPrice } => !!airport
+        )
+        .sort((a, b) => (a.matchingFuel.pricePPG ?? Infinity) - (b.matchingFuel.pricePPG ?? Infinity)),
+    [fuelPrices, selectedFuelType]
+  );
+  const cheapestFuelAirport = fuelAirports[0] ?? null;
+  const fuelMapPins = useMemo(() => {
+    if (fuelAirports.length === 0) return [];
+    const lats = fuelAirports.map((airport) => airport.lat);
+    const lons = fuelAirports.map((airport) => airport.lon);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+    const latRange = Math.max(maxLat - minLat, 0.01);
+    const lonRange = Math.max(maxLon - minLon, 0.01);
+
+    return fuelAirports.slice(0, 8).map((airport) => {
+      const normalizedX = (airport.lon - minLon) / lonRange;
+      const normalizedY = (maxLat - airport.lat) / latRange;
+      const colIndex = Math.max(0, Math.min(11, Math.round(normalizedX * 11)));
+      const rowIndex = Math.max(0, Math.min(5, Math.round(normalizedY * 5)));
+      return {
+        ...airport,
+        colClass: FUEL_MAP_COL_CLASSES[colIndex],
+        rowClass: FUEL_MAP_ROW_CLASSES[rowIndex],
+      };
+    });
+  }, [fuelAirports]);
 
   const submitIcao = () => {
     const normalized = icaoInput.trim().toUpperCase();
@@ -384,113 +473,281 @@ export default function Landing() {
       <div className="relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
           <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_390px] xl:items-start">
-            <div className="max-w-4xl mx-auto xl:mx-0 xl:max-w-none text-center xl:text-left space-y-4 sm:space-y-6">
-            <h1 className="bg-[linear-gradient(180deg,#f8fbff_0%,#d5deea_24%,#94a5bc_58%,#556781_100%)] bg-clip-text text-4xl font-bold tracking-tight text-transparent drop-shadow-[0_2px_0_rgba(11,18,32,0.35)] sm:text-5xl md:text-6xl">
-              Ready Set Fly
-            </h1>
-            <p className="text-lg sm:text-xl md:text-2xl text-slate-50 px-4 xl:px-0 font-semibold">
-              Find aircraft, instructors, and tools that keep you flying.
-            </p>
-            <p className="text-base sm:text-lg text-slate-200/88 max-w-2xl mx-auto xl:mx-0 px-4 xl:px-0">
-              From aircraft rentals to instructors and local services, we are bringing everything in General Aviation into one place — so pilots spend less time searching and more time flying.
-            </p>
-            <p className="text-sm sm:text-base font-semibold text-primary">
-              Find first. Plan second. Fly with confidence.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center xl:justify-start pt-4">
-              <Button size="lg" asChild data-testid="button-marketplace">
-                <Link
-                  href="/marketplace"
-                  onClick={() => trackEvent("cta_click", { label: "landing_marketplace", target: "/marketplace" })}
-                >
-                  Browse listings
-                </Link>
-              </Button>
-              <Button size="lg" variant="outline" asChild data-testid="button-rentals">
-                <Link
-                  href="/rentals"
-                  onClick={() => trackEvent("cta_click", { label: "landing_rentals", target: "/rentals" })}
-                >
-                  Find rentals
-                </Link>
-              </Button>
-              <Button size="lg" variant="outline" asChild data-testid="button-plan-flight">
-                <Link
-                  href="/flight-planner"
-                  onClick={() => trackEvent("cta_click", { label: "landing_plan_flight", target: "/flight-planner" })}
-                >
-                  Build a route
-                </Link>
-              </Button>
-            </div>
-            <div className="rsf-card-shell max-w-4xl text-left">
-              <div className="flex items-center justify-between border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Current Conditions</div>
-                  <div className="text-sm text-slate-100">Live weather, runway details, and current NOTAMs</div>
-                </div>
-                <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">
-                  FAA live data
-                </Badge>
-              </div>
-              <div className="grid gap-4 p-4 md:grid-cols-[1.1fr_0.9fr]">
-                <div className="space-y-3">
+            <div className="rsf-card-shell overflow-hidden">
+              <div className="flex flex-col gap-4 border-b border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-5 py-4 text-slate-100 sm:flex-row sm:items-end sm:justify-between">
+                <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rsf-kicker">Current Conditions</span>
-                    <Badge
-                      variant="secondary"
-                      className={`text-white ${
-                        flightCategory.color === "green"
-                          ? "bg-green-600"
-                          : flightCategory.color === "blue"
-                            ? "bg-blue-600"
-                            : flightCategory.color === "red"
-                              ? "bg-red-600"
-                              : "bg-purple-600"
-                      }`}
-                    >
-                      {flightCategory.category}
+                    <span className="rsf-kicker border-white/20 bg-white/10 text-slate-100">Fuel Price Finder</span>
+                    <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">
+                      {fuelPrices?.source === "mock" ? "Sample data" : "Live feed"}
                     </Badge>
-                    {weather?.cached ? <Badge variant="outline">Cached</Badge> : null}
+                    <Badge variant="secondary" className="border-0 bg-white/10 text-slate-100 shadow-none">
+                      {selectedFuelType}
+                    </Badge>
                   </div>
                   <div>
-                    <div className="text-2xl font-semibold">{searchIcao}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {airportDescriptor || "Live airport briefing, runway details, and current NOTAMs"}
+                    <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                      Find the cheapest fuel before you launch
+                    </h1>
+                    <p className="mt-1 max-w-2xl text-sm text-slate-200 sm:text-base">
+                      Search an airport, compare nearby FBO fuel pricing, and keep route planning and marketplace tools within reach.
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-white/15 bg-black/10 px-3 py-2 text-xs text-slate-200">
+                  {fuelPrices?.source === "mock"
+                    ? "Sample fuel data until live provider is enabled."
+                    : `Updated ${new Date(fuelPrices?.queriedAt ?? Date.now()).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}`}
+                </div>
+              </div>
+              <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1.15fr)_320px]">
+                <div className="space-y-4">
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_120px_auto]">
+                    <div className="space-y-2">
+                      <Label htmlFor="fuel-airport-search" className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Airport
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="fuel-airport-search"
+                          value={icaoInput}
+                          onChange={(event) => setIcaoInput(event.target.value.toUpperCase())}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              trackEvent("fuel_price_search", {
+                                airport: icaoInput.trim().toUpperCase(),
+                                radius: fuelRadiusMiles,
+                              });
+                              submitIcao();
+                            }
+                          }}
+                          placeholder="ICAO or airport code"
+                          className="pr-10"
+                          data-testid="input-fuel-airport-search"
+                        />
+                        <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        {airportSuggestions.length > 0 ? (
+                          <div className="absolute left-0 right-0 top-[calc(100%+0.4rem)] z-20 rounded-xl border border-white/10 bg-background/95 p-1 shadow-lg backdrop-blur">
+                            {airportSuggestions.map((suggestion) => (
+                              <button
+                                key={suggestion.icao}
+                                type="button"
+                                className="flex w-full items-start justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+                                onClick={() => applySuggestion(suggestion)}
+                              >
+                                <span className="font-medium">{suggestion.icao}</span>
+                                <span className="ml-3 text-xs text-muted-foreground">
+                                  {[suggestion.name, suggestion.city, suggestion.state].filter(Boolean).join(" / ")}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                      {loadingSuggestions ? (
+                        <div className="text-xs text-muted-foreground">Searching airports...</div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">
+                          Search by ICAO. Fuel pricing returns nearby airports inside the selected radius.
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="fuel-radius" className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Radius
+                      </Label>
+                      <select
+                        id="fuel-radius"
+                        value={fuelRadiusMiles}
+                        onChange={(event) => setFuelRadiusMiles(event.target.value)}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        data-testid="select-fuel-radius"
+                      >
+                        <option value="25">25 mi</option>
+                        <option value="50">50 mi</option>
+                        <option value="75">75 mi</option>
+                        <option value="100">100 mi</option>
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        className="w-full"
+                        onClick={() => {
+                          trackEvent("fuel_price_search", {
+                            airport: icaoInput.trim().toUpperCase(),
+                            radius: fuelRadiusMiles,
+                          });
+                          submitIcao();
+                        }}
+                        data-testid="button-fuel-search"
+                      >
+                        Search prices
+                      </Button>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-primary/15 bg-primary/5 p-3 font-mono text-xs text-slate-700 dark:text-slate-200">
-                    {weather?.metar?.rawOb || "METAR preview unavailable. Select an airport below to load live conditions."}
-                  </div>
+
                   <div className="flex flex-wrap gap-2">
+                    {(["100LL", "Jet-A", "Mogas", "100LL UL"] as FuelType[]).map((fuelType) => (
+                      <Button
+                        key={fuelType}
+                        type="button"
+                        size="sm"
+                        variant={selectedFuelType === fuelType ? "default" : "outline"}
+                        onClick={() => setSelectedFuelType(fuelType)}
+                        data-testid={`button-fuel-type-${fuelType}`}
+                      >
+                        {fuelType}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+                    <div className="rounded-[1.15rem] border border-white/10 bg-[linear-gradient(180deg,hsl(215_36%_17%),hsl(220_32%_12%))] p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">Regional fuel map</div>
+                          <div className="text-sm text-slate-200">
+                            {fuelPricesLoading
+                              ? "Loading nearby fuel prices..."
+                              : fuelPricesError
+                                ? "Fuel service temporarily unavailable."
+                                : `Showing up to ${fuelMapPins.length} nearby airports around ${searchIcao}`}
+                          </div>
+                        </div>
+                        <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                          <MapPin className="mr-1 inline h-3.5 w-3.5" />
+                          {selectedFuelType} pins
+                        </div>
+                      </div>
+                      <div className="mt-4 grid aspect-[16/9] grid-cols-12 grid-rows-6 rounded-[1rem] border border-sky-400/10 bg-[radial-gradient(circle_at_top,hsl(193_90%_35%/0.22),transparent_34%),linear-gradient(180deg,hsl(205_48%_17%),hsl(217_40%_10%))] p-4">
+                        <div className="col-span-full row-span-full rounded-[0.8rem] border border-dashed border-white/10 bg-[linear-gradient(135deg,hsl(140_38%_22%/0.42),hsl(193_45%_14%/0.24))]" />
+                        {fuelMapPins.map((airport) => (
+                          <button
+                            key={`${airport.icao}-${airport.matchingFuel.type}`}
+                            type="button"
+                            onClick={() => {
+                              setIcaoInput(airport.icao);
+                              setSearchIcao(airport.icao);
+                            }}
+                            className={`relative z-10 flex w-24 -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-sky-300/30 bg-slate-950/85 px-2 py-1 text-left shadow-lg transition hover:border-sky-300 hover:bg-slate-950 ${airport.colClass} ${airport.rowClass}`}
+                          >
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">{airport.icao}</span>
+                            <span className="text-sm font-semibold text-white">
+                              ${airport.matchingFuel.pricePPG?.toFixed(2)}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {airport.distanceMiles?.toFixed(1) ?? "0.0"} mi
+                            </span>
+                          </button>
+                        ))}
+                        {!fuelPricesLoading && fuelMapPins.length === 0 ? (
+                          <div className="col-span-full row-span-full flex items-center justify-center text-sm text-slate-300">
+                            No nearby pricing available for {selectedFuelType}.
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="rounded-[1rem] border border-emerald-200 bg-emerald-50 p-4">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-700">Cheapest nearby</div>
+                        {cheapestFuelAirport ? (
+                          <div className="mt-2 space-y-1">
+                            <div className="text-xl font-semibold text-emerald-900">
+                              ${cheapestFuelAirport.matchingFuel.pricePPG?.toFixed(2)}
+                            </div>
+                            <div className="text-sm font-medium text-foreground">{cheapestFuelAirport.icao} - {cheapestFuelAirport.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {[cheapestFuelAirport.city, cheapestFuelAirport.state].filter(Boolean).join(", ")}
+                              {cheapestFuelAirport.distanceMiles !== undefined ? ` - ${cheapestFuelAirport.distanceMiles.toFixed(1)} mi` : ""}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-sm text-muted-foreground">
+                            No fuel result yet for this search.
+                          </div>
+                        )}
+                      </div>
+                      <div className="rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--muted)/0.86))] p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-semibold">Nearby price board</div>
+                          <div className="text-xs text-muted-foreground">{selectedFuelType}</div>
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {fuelPricesLoading ? (
+                            <div className="text-sm text-muted-foreground">Loading price board...</div>
+                          ) : fuelAirports.length > 0 ? (
+                            fuelAirports.slice(0, 5).map((airport) => (
+                              <button
+                                key={airport.icao}
+                                type="button"
+                                onClick={() => {
+                                  setIcaoInput(airport.icao);
+                                  setSearchIcao(airport.icao);
+                                }}
+                                className="flex w-full items-center justify-between rounded-lg border border-white/10 bg-white/50 px-3 py-2 text-left transition hover:bg-white"
+                              >
+                                <div>
+                                  <div className="text-sm font-semibold">{airport.icao}</div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {airport.distanceMiles?.toFixed(1) ?? "0.0"} mi - {airport.city}, {airport.state}
+                                  </div>
+                                </div>
+                                <div className="text-base font-semibold text-primary">
+                                  ${airport.matchingFuel.pricePPG?.toFixed(2)}
+                                </div>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="text-sm text-muted-foreground">No price board entries found.</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <Button size="lg" asChild data-testid="button-marketplace">
+                      <Link
+                        href="/marketplace"
+                        onClick={() => trackEvent("cta_click", { label: "landing_marketplace", target: "/marketplace" })}
+                      >
+                        Browse listings
+                      </Link>
+                    </Button>
+                    <Button size="lg" variant="outline" asChild data-testid="button-rentals">
+                      <Link
+                        href="/rentals"
+                        onClick={() => trackEvent("cta_click", { label: "landing_rentals", target: "/rentals" })}
+                      >
+                        Find rentals
+                      </Link>
+                    </Button>
+                    <Button size="lg" variant="outline" asChild data-testid="button-plan-flight">
+                      <Link
+                        href="/flight-planner"
+                        onClick={() => trackEvent("cta_click", { label: "landing_plan_flight", target: "/flight-planner" })}
+                      >
+                        Build a route
+                      </Link>
+                    </Button>
                     <Button
-                      size="sm"
+                      size="lg"
+                      variant="outline"
                       onClick={() => {
                         if (!openLandingModules.includes("conditions")) toggleLandingModule("conditions");
                         document.getElementById("airport-weather")?.scrollIntoView({ behavior: "smooth", block: "start" });
                       }}
+                      data-testid="button-fuel-open-weather"
                     >
-                      View conditions
+                      Open weather below
                     </Button>
-                    <Button asChild size="sm" variant="outline">
-                      <Link href="/tfr-map">Review airspace</Link>
-                    </Button>
-                  </div>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1">
-                  <div className="rounded-xl border border-white/10 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] p-4">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">Runway / ATIS</div>
-                    <div className="mt-2 text-lg font-semibold">{runwayInUseDisplay ? `RWY ${runwayInUseDisplay}` : "Runway pending"}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">{atisInfo || "ATIS not parsed from current report"}</div>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.08))] p-4">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/80">NOTAM / Brief</div>
-                    <div className="mt-2 text-lg font-semibold">{heroNotamCount} active NOTAM{heroNotamCount === 1 ? "" : "s"}</div>
-                    <div className="mt-1 text-sm text-muted-foreground">Powered by FAA SWIM for airport and route briefing.</div>
                   </div>
                 </div>
               </div>
-            </div>
             </div>
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 text-sm">

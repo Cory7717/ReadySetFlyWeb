@@ -43,6 +43,7 @@ import { createDbTfmsProvider } from "./services/tfms/providers/db";
 import { computeTfmsRisk } from "./services/tfms/risk";
 import { partners } from "./config/partners";
 import { registerAdminFinanceRoutes } from "./routes/adminFinance";
+import { fuelPricesRouter } from "./routes/fuelPrices";
 import { flightPlanFilingProvider, validateFlightPlanForAction } from "./services/flight-plan-filing/provider";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import {
@@ -3188,6 +3189,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/mobile/auth', registerMobileAuthRoutes(storage));
 
   registerAdminFinanceRoutes(app);
+  app.use("/api/fuel-prices", fuelPricesRouter);
 
   // Serve uploaded files
   app.use('/uploads', express.static('uploads'));

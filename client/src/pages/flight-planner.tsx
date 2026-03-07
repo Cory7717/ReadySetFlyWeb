@@ -29,8 +29,8 @@ import type { FlightPlan } from "@shared/schema";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 import { PageShell } from "@/components/layout/PageShell";
+import PlannerMap from "@/components/flight-planner/PlannerMap";
 
-const PlannerMap = lazy(() => import("@/components/flight-planner/PlannerMap"));
 const CesiumGlobe = lazy(() => import("@/components/flight-planner/CesiumGlobe"));
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
@@ -4020,23 +4020,23 @@ export default function FlightPlanner() {
                 Waiting for airport coordinates... Waypoints are optional. Check ICAO codes if this takes more than a few seconds.
               </div>
             ) : (
-              <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
-                {mapStyle === "globe" ? (
+              mapStyle === "globe" ? (
+                <Suspense fallback={<div className="h-[380px] rounded-xl border bg-muted animate-pulse" />}>
                   <CesiumGlobe
                     key={`globe-${mapRenderVersion}`}
                     points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
                     tfmsOverlayEnabled={tfmsTier === "pro_plus" && tfmsOverlayEnabled}
                   />
-                ) : (
-                  <PlannerMap
-                    key={`map-${mapStyle}-${mapRenderVersion}`}
-                    points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
-                    mapStyle={mapStyle}
-                    plannedAltitudeFt={plannedAltitudeValue}
-                    windsAltitudeFt={windsAltitudeFt}
-                  />
-                )}
-              </Suspense>
+                </Suspense>
+              ) : (
+                <PlannerMap
+                  key={`map-${mapStyle}-${mapRenderVersion}`}
+                  points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                  mapStyle={mapStyle}
+                  plannedAltitudeFt={plannedAltitudeValue}
+                  windsAltitudeFt={windsAltitudeFt}
+                />
+              )
             )}
             {airportErrors.length > 0 && (
               <div className="mt-3 text-xs text-destructive">

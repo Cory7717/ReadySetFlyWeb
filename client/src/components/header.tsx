@@ -171,12 +171,12 @@ export function Header() {
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0 w-full order-3 sm:order-2 sm:flex-1">
             {/* Main Navigation Tabs - Compact on mobile */}
-            <nav className="flex w-full sm:flex-1 items-center justify-start gap-0.5 sm:gap-1 rounded-full bg-muted p-0.5 sm:p-1 min-w-0 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="navigation" aria-label="Main navigation">
+            <nav className="flex w-full sm:flex-1 sm:min-w-0 max-w-full items-center justify-start gap-0 rounded-full bg-muted p-0.5 sm:p-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="navigation" aria-label="Main navigation">
               <Link href="/marketplace" data-testid="link-marketplace">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isMarketplace ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isMarketplace ? "bg-background shadow-sm" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "marketplace", target: "/marketplace" })}
                 >
                   Marketplace
@@ -186,7 +186,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isRentals ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isRentals ? "bg-background shadow-sm" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "rentals", target: "/rentals" })}
                 >
                   Rentals
@@ -196,7 +196,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isFaq ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isFaq ? "bg-background shadow-sm" : ""}`}
                 >
                   FAQ
                 </Button>
@@ -205,7 +205,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isCfi ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isCfi ? "bg-background shadow-sm" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "cfi", target: "/cfi" })}
                 >
                   CFI
@@ -215,7 +215,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isPlanner ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isPlanner ? "bg-background shadow-sm" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "plan_flight", target: "/flight-planner" })}
                 >
                   Plan Flight
@@ -225,7 +225,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isTraining ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isTraining ? "bg-background shadow-sm" : ""}`}
                 >
                   Training
                 </Button>
@@ -234,7 +234,7 @@ export function Header() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`rounded-full text-xs sm:text-sm px-2 sm:px-3 ${isTools ? "bg-background shadow-sm" : ""}`}
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isTools ? "bg-background shadow-sm" : ""}`}
                   onClick={() => trackEvent("nav_click", { label: "tools", target: "/tool-hub" })}
                 >
                   Tools
@@ -245,7 +245,7 @@ export function Header() {
             {/* Tool Search */}
             <form
               ref={searchRef}
-              className="relative w-full sm:w-[135px] md:w-[165px] lg:w-[195px] flex-shrink-0 overflow-visible z-[90] sm:order-none mt-1 sm:mt-0"
+              className="relative w-full sm:w-[118px] md:w-[145px] lg:w-[172px] xl:w-[186px] flex-shrink-0 overflow-visible z-[90] sm:order-none mt-1 sm:mt-0"
               onSubmit={(event) => {
                 event.preventDefault();
                 handleToolSubmit();

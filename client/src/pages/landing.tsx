@@ -469,42 +469,6 @@ export default function Landing() {
   
   return (
     <div className="min-h-screen">
-      {!isAuthenticated && (
-        <div className="sticky top-0 z-50 border-b border-primary/10 bg-background/95 backdrop-blur-sm supports-[backdrop-filter]:bg-background/80">
-          <div className="container mx-auto flex items-center justify-between gap-4 px-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">
-                THE aviation marketplace with the planning tools built in.
-              </span>{" "}
-              Early access is free — no credit card required.
-            </p>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
-                <Link
-                  href="/login"
-                  onClick={() => trackEvent("cta_click", {
-                    label: "sticky_bar_sign_in",
-                    target: "/login",
-                  })}
-                >
-                  Sign in
-                </Link>
-              </Button>
-              <Button asChild size="sm">
-                <Link
-                  href="/register"
-                  onClick={() => trackEvent("cta_click", {
-                    label: "sticky_bar_register",
-                    target: "/register",
-                  })}
-                >
-                  Create free account
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Hero Section */}
       <div className="relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">

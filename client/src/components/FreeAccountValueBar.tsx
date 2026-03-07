@@ -103,7 +103,7 @@ export function FreeAccountValueBar() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-700">Free Account Benefits</p>
             <p className="text-sm font-semibold text-slate-900">Create your free Ready Set Fly account</p>
             <p className="text-xs text-slate-700">
-              Save flight plans, log flights, track training progress, and manage instructor or marketplace messages from one dashboard.
+              Browse the rental and traditional marketplace, save flight plans, log flights, track training progress, and manage instructor or marketplace messages from one dashboard.
             </p>
           </div>
           <div className="flex items-center gap-2">

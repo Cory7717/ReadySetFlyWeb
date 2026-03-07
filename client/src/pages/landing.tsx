@@ -61,6 +61,13 @@ interface FuelPriceResponse {
   communityEnabled: boolean;
 }
 
+interface WeatherHazard {
+  id: string;
+  label: string;
+  detail: string;
+  tone: "amber" | "red" | "blue";
+}
+
 type LandingModuleId = "conditions" | "cfi" | "partner" | "events";
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
@@ -128,6 +135,58 @@ function extractRunwayInUse(metar: any): string | null {
     return runways.join(", ");
   }
   return null;
+}
+
+function parseWeatherHazards(
+  metar: any,
+  taf: any,
+  notamItems: Array<{ text: string }> = []
+): WeatherHazard[] {
+  const metarRaw = String(metar?.rawOb || "").toUpperCase();
+  const tafRaw = String(taf?.rawTAF || "").toUpperCase();
+  const hazards: WeatherHazard[] = [];
+
+  if (/\b(\+|-)?(RA|DZ|SN|SG|PL|GR|GS|SHRA|SHSN)\b/.test(metarRaw)) {
+    hazards.push({
+      id: "precip",
+      label: "Precipitation",
+      detail: "Current METAR reports active precipitation at the airport.",
+      tone: "blue",
+    });
+  }
+
+  if (/\b(TS|TSRA|VCTS|LTG|CB)\b/.test(metarRaw) || /\b(TS|TSRA|VCTS|CB)\b/.test(tafRaw)) {
+    hazards.push({
+      id: "convective",
+      label: "Convective risk",
+      detail: "Thunderstorms, lightning, or cumulonimbus are present or forecast nearby.",
+      tone: "red",
+    });
+  }
+
+  if (/\bG\d{2,3}KT\b/.test(metarRaw) || /\bG\d{2,3}KT\b/.test(tafRaw)) {
+    hazards.push({
+      id: "gusts",
+      label: "Gusty winds",
+      detail: "Wind gusts are reported or forecast. Recheck crosswind and runway alignment.",
+      tone: "amber",
+    });
+  }
+
+  if (
+    notamItems.some((item) =>
+      /\b(WET|SLIPPERY|BRAKING|FICON|POOR|NIL)\b/i.test(item.text)
+    )
+  ) {
+    hazards.push({
+      id: "runway",
+      label: "Runway condition",
+      detail: "NOTAMs indicate runway surface or braking action concerns.",
+      tone: "amber",
+    });
+  }
+
+  return hazards;
 }
 
 export default function Landing() {
@@ -216,7 +275,12 @@ export default function Landing() {
     []
   );
 
-  const { data: weather, isLoading: weatherLoading } = useQuery<WeatherData>({
+  const {
+    data: weather,
+    isLoading: weatherLoading,
+    isFetching: weatherFetching,
+    refetch: refetchWeather,
+  } = useQuery<WeatherData>({
     queryKey: [`/api/aviation-weather/${searchIcao}`],
     queryFn: async () => {
       const res = await fetch(apiUrl(`/api/aviation-weather/${searchIcao}`), {
@@ -258,7 +322,12 @@ export default function Landing() {
     staleTime: 1000 * 60 * 30,
   });
 
-  const { data: runwayBriefing, isLoading: runwayLoading } = useQuery<{
+  const {
+    data: runwayBriefing,
+    isLoading: runwayLoading,
+    isFetching: runwayFetching,
+    refetch: refetchRunwayBriefing,
+  } = useQuery<{
     icao: string;
     runwayInUse: string | null;
     advisory: { runway: string; heading: number; headwind: number; crosswind: number } | null;
@@ -281,7 +350,13 @@ export default function Landing() {
     staleTime: 1000 * 60 * 10,
   });
 
-  const { data: notams, isLoading: notamsLoading, isError: notamsError } = useQuery<{
+  const {
+    data: notams,
+    isLoading: notamsLoading,
+    isFetching: notamsFetching,
+    isError: notamsError,
+    refetch: refetchNotams,
+  } = useQuery<{
     icao: string;
     notams: Array<{ id: string; text: string; effective?: string; expires?: string }>;
   }>({
@@ -312,6 +387,10 @@ export default function Landing() {
   const conditionsTitle = `${airportTitleBase}${
     airportDescriptor ? ` - ${airportDescriptor}` : ""
   } - Current Conditions`;
+  const weatherHazards = useMemo(
+    () => parseWeatherHazards(weather?.metar, weather?.taf, notams?.notams ?? []),
+    [weather?.metar, weather?.taf, notams?.notams]
+  );
   const proMonthly = membershipPlanOptions.pro.find((plan) => plan.interval === "monthly")?.price;
   const proPlusMonthly = membershipPlanOptions.pro_plus.find((plan) => plan.interval === "monthly")?.price;
   const fuelAirports = useMemo(
@@ -353,6 +432,20 @@ export default function Landing() {
       };
     });
   }, [fuelAirports]);
+
+  const refreshAirportConditions = async () => {
+    const normalized = icaoInput.trim().toUpperCase();
+    if (!ICAO_REGEX.test(normalized)) return;
+    if (normalized !== searchIcao) {
+      setSearchIcao(normalized);
+      return;
+    }
+    await Promise.all([
+      refetchWeather(),
+      refetchRunwayBriefing(),
+      refetchNotams(),
+    ]);
+  };
 
   const submitIcao = () => {
     const normalized = icaoInput.trim().toUpperCase();
@@ -604,8 +697,15 @@ export default function Landing() {
                     ))}
                   </div>
 
-                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-                    <div className="rounded-[1.15rem] border border-white/10 bg-[linear-gradient(180deg,hsl(215_36%_17%),hsl(220_32%_12%))] p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+                  <div className="relative grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+                    {fuelPrices?.source === "mock" ? (
+                      <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden">
+                        <div className="rotate-[-18deg] rounded-2xl border border-white/10 bg-slate-950/10 px-6 py-2 text-center text-3xl font-black uppercase tracking-[0.4em] text-slate-500/20 sm:text-5xl xl:text-6xl">
+                          Sample Pricing
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="rounded-[1.15rem] border border-white/10 bg-[linear-gradient(180deg,hsl(208_34%_16%),hsl(220_32%_12%))] p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400">Regional fuel map</div>
@@ -622,8 +722,24 @@ export default function Landing() {
                           {selectedFuelType} pins
                         </div>
                       </div>
-                      <div className="mt-4 grid aspect-[16/9] min-h-[280px] grid-cols-12 grid-rows-6 rounded-[1rem] border border-sky-400/10 bg-[radial-gradient(circle_at_top,hsl(193_90%_35%/0.22),transparent_34%),linear-gradient(180deg,hsl(205_48%_17%),hsl(217_40%_10%))] p-4 sm:min-h-[340px]">
-                        <div className="col-span-full row-span-full rounded-[0.8rem] border border-dashed border-white/10 bg-[linear-gradient(135deg,hsl(140_38%_22%/0.42),hsl(193_45%_14%/0.24))]" />
+                      <div className="mt-4 rounded-[1rem] border border-sky-400/10 bg-[linear-gradient(180deg,hsl(201_44%_18%),hsl(215_36%_11%))] p-3">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-slate-300">
+                          <span>Sectional-style regional view</span>
+                          <span>Advisory only</span>
+                        </div>
+                        <div className="relative grid aspect-[16/9] min-h-[280px] grid-cols-12 grid-rows-6 overflow-hidden rounded-[0.8rem] border border-sky-400/10 bg-[radial-gradient(circle_at_20%_18%,hsl(47_48%_52%/0.18),transparent_22%),radial-gradient(circle_at_78%_74%,hsl(120_45%_42%/0.16),transparent_26%),linear-gradient(135deg,hsl(105_22%_27%/0.88),hsl(145_24%_23%/0.82)_38%,hsl(191_38%_20%/0.88)_72%,hsl(215_34%_13%/0.96))] p-4 sm:min-h-[340px]">
+                          <div className="col-span-full row-span-full rounded-[0.8rem] border border-dashed border-white/10" />
+                          <div className="pointer-events-none absolute inset-x-[10%] top-[26%] h-px rotate-[8deg] border-t border-dashed border-amber-200/30" />
+                          <div className="pointer-events-none absolute inset-x-[18%] top-[62%] h-px -rotate-[12deg] border-t border-dashed border-sky-200/25" />
+                          <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/10 bg-slate-950/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">
+                            N
+                          </div>
+                          <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border border-white/10 bg-slate-950/55 px-2 py-1 text-[10px] text-slate-300">
+                            Area: {searchIcao}
+                          </div>
+                          <div className="pointer-events-none absolute bottom-3 right-3 rounded-md border border-white/10 bg-slate-950/55 px-2 py-1 text-[10px] text-slate-300">
+                            Radius {fuelRadiusMiles} mi
+                          </div>
                         {fuelMapPins.map((airport, index) => (
                           <button
                             key={`${airport.icao}-${airport.matchingFuel.type}`}
@@ -643,6 +759,7 @@ export default function Landing() {
                             No nearby pricing available for {selectedFuelType}.
                           </div>
                         ) : null}
+                        </div>
                       </div>
                       {fuelMapPins.length > 0 ? (
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">

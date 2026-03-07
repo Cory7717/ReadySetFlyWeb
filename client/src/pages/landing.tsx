@@ -595,14 +595,7 @@ export default function Landing() {
                     ))}
                   </div>
 
-                  <div className="relative grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-                    {fuelPrices?.source === "mock" ? (
-                      <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden">
-                        <div className="rotate-[-18deg] rounded-2xl border border-white/10 bg-slate-950/10 px-6 py-2 text-center text-3xl font-black uppercase tracking-[0.4em] text-slate-500/20 sm:text-5xl xl:text-6xl">
-                          Sample Pricing
-                        </div>
-                      </div>
-                    ) : null}
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px] xl:items-start">
                     <div className="rounded-[1.15rem] border border-white/10 bg-[linear-gradient(180deg,hsl(208_34%_16%),hsl(220_32%_12%))] p-4 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
@@ -626,9 +619,16 @@ export default function Landing() {
                           <span>Advisory only</span>
                         </div>
                         <div className="relative grid aspect-[16/9] min-h-[280px] grid-cols-12 grid-rows-6 overflow-hidden rounded-[0.8rem] border border-sky-400/10 bg-[radial-gradient(circle_at_20%_18%,hsl(47_48%_52%/0.18),transparent_22%),radial-gradient(circle_at_78%_74%,hsl(120_45%_42%/0.16),transparent_26%),linear-gradient(135deg,hsl(105_22%_27%/0.88),hsl(145_24%_23%/0.82)_38%,hsl(191_38%_20%/0.88)_72%,hsl(215_34%_13%/0.96))] p-4 sm:min-h-[340px]">
+                          {fuelPrices?.source === "mock" ? (
+                            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden">
+                              <div className="rotate-[-22deg] border border-white/10 bg-slate-950/15 px-5 py-2 text-center text-3xl font-black uppercase tracking-[0.34em] text-slate-100/12 sm:text-5xl">
+                                Sample Pricing
+                              </div>
+                            </div>
+                          ) : null}
                           <div className="col-span-full row-span-full rounded-[0.8rem] border border-dashed border-white/10" />
-                          <div className="pointer-events-none absolute inset-x-[10%] top-[26%] h-px rotate-[8deg] border-t border-dashed border-amber-200/30" />
-                          <div className="pointer-events-none absolute inset-x-[18%] top-[62%] h-px -rotate-[12deg] border-t border-dashed border-sky-200/25" />
+                          <div className="pointer-events-none absolute inset-x-[12%] top-[30%] h-px rotate-[8deg] border-t border-dashed border-amber-100/20" />
+                          <div className="pointer-events-none absolute inset-x-[22%] top-[60%] h-px -rotate-[12deg] border-t border-dashed border-sky-100/15" />
                           <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-white/10 bg-slate-950/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">
                             N
                           </div>

@@ -1379,8 +1379,8 @@ export default function Landing() {
             </p>
           </div>
 
-          <Card className="border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.7))]">
-            <CardContent className="p-5">
+          <Card className="overflow-visible border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.7))]">
+            <CardContent className="relative z-30 p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div className="space-y-2">
                   <Label htmlFor="landing-icao" className="text-sm font-semibold">

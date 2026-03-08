@@ -931,12 +931,12 @@ export default function PilotTools() {
         </Card>
 
         {/* Search */}
-        <Card id="airport-weather">
+        <Card id="airport-weather" className="overflow-visible">
           <CardHeader>
             <CardTitle>Airport Weather</CardTitle>
             <CardDescription>Enter an ICAO code or city/state to find nearby airports.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="relative z-30 space-y-2">
             <div className="flex gap-2">
               <div className="flex-1 space-y-2">
                 <Label htmlFor="icao" className="sr-only">ICAO Code</Label>

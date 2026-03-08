@@ -861,6 +861,19 @@ export const promoCodeUsages = pgTable("promo_code_usages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const aiToolUsages = pgTable("ai_tool_usages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: varchar("user_id").references(() => users.id),
+  anonId: varchar("anon_id", { length: 64 }),
+  toolType: varchar("tool_type", { length: 50 }).notNull(),
+  ipHash: varchar("ip_hash", { length: 64 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ai_tool_usages_user_tool").on(table.userId, table.toolType),
+  index("idx_ai_tool_usages_anon_tool").on(table.anonId, table.toolType),
+  index("idx_ai_tool_usages_created_at").on(table.createdAt),
+]);
+
 // Expenses (for admin analytics tracking)
 export const expenses = pgTable("expenses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2654,6 +2667,8 @@ export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
 
 export type PromoCodeUsage = typeof promoCodeUsages.$inferSelect;
 export type InsertPromoCodeUsage = typeof promoCodeUsages.$inferInsert;
+export type AiToolUsage = typeof aiToolUsages.$inferSelect;
+export type InsertAiToolUsage = typeof aiToolUsages.$inferInsert;
 
 export type Expense = typeof expenses.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;

@@ -20,6 +20,10 @@ import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
 import { PageShell } from "@/components/layout/PageShell";
 
+const SOFT_LAUNCH_VISIT_KEY = "rsf.marketplace_soft_launch_visits_v1";
+const SOFT_LAUNCH_MAX_SHOWS = 5;
+const SOFT_LAUNCH_PROMO_CODE = "TAILWINDS";
+
 const categories = [
   { id: "aircraft-sale", label: "Aircraft For Sale", fee: "$25-100/mo" },
   { id: "job", label: "Aviation Jobs", fee: "$40/mo" },
@@ -69,6 +73,7 @@ export default function Marketplace() {
   const [showFilters, setShowFilters] = useState(false);
   const [dismissedBanners, setDismissedBanners] = useState<string[]>([]);
   const [showPromoModal, setShowPromoModal] = useState(false);
+  const [showSoftLaunchModal, setShowSoftLaunchModal] = useState(false);
   const [previousCategory, setPreviousCategory] = useState("aircraft-sale");
   const [showSchoolEmptyModal, setShowSchoolEmptyModal] = useState(false);
   const [hasShownSchoolEmptyModal, setHasShownSchoolEmptyModal] = useState(false);
@@ -89,6 +94,21 @@ export default function Marketplace() {
 
   useEffect(() => {
     trackEvent("marketplace_view", { page: "/marketplace" });
+  }, []);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(SOFT_LAUNCH_VISIT_KEY);
+      const visits = raw ? Number(raw) : 0;
+      const nextVisits = Number.isFinite(visits) ? visits + 1 : 1;
+      window.localStorage.setItem(SOFT_LAUNCH_VISIT_KEY, String(nextVisits));
+      if (nextVisits <= SOFT_LAUNCH_MAX_SHOWS) {
+        setShowSoftLaunchModal(true);
+        trackEvent("marketplace_soft_launch_modal_shown", { visitCount: nextVisits });
+      }
+    } catch {
+      setShowSoftLaunchModal(true);
+    }
   }, []);
 
   // Apply query params from Student Pilot CTAs
@@ -247,6 +267,21 @@ export default function Marketplace() {
           </Alert>
         </div>
       )}
+
+      <div className="container mx-auto px-4 pt-6">
+        <Alert className="border-sky-200 bg-sky-50">
+          <Gift className="h-4 w-4 text-sky-700" />
+          <AlertTitle>Soft launch listing offer</AlertTitle>
+          <AlertDescription className="space-y-2">
+            <div>
+              RSF is in soft launch and we are actively building the aviation community. The first 5 eligible users in each marketplace category can get their first listing free for 3 months with promo code <span className="font-mono font-semibold">{SOFT_LAUNCH_PROMO_CODE}</span>.
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Availability is limited by category and enforced during validation and checkout.
+            </div>
+          </AlertDescription>
+        </Alert>
+      </div>
 
       <section className="sticky top-16 z-40 border-b border-white/10 bg-[hsl(var(--card)/0.9)] backdrop-blur-md">
         <div className="container mx-auto px-4">
@@ -703,6 +738,61 @@ export default function Marketplace() {
           onOpenChange={(open) => !open && setSelectedListingId(null)}
         />
       )}
+
+      <Dialog
+        open={showSoftLaunchModal}
+        onOpenChange={(open) => {
+          setShowSoftLaunchModal(open);
+          if (!open) {
+            trackEvent("marketplace_soft_launch_modal_dismissed");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg" data-testid="dialog-marketplace-soft-launch">
+          <DialogHeader>
+            <div className="mb-2 flex items-center gap-3">
+              <div className="rounded-full bg-sky-100 p-3 dark:bg-sky-900/30">
+                <Gift className="h-6 w-6 text-sky-700 dark:text-sky-300" />
+              </div>
+              <div className="flex-1">
+                <DialogTitle className="text-xl">Marketplace soft launch offer</DialogTitle>
+              </div>
+            </div>
+            <DialogDescription className="text-base">
+              RSF is in soft launch and we are actively building the aviation community. To help seed high-quality listings, the first 5 eligible users in each marketplace category can receive their first listing free for 3 months with promo code {SOFT_LAUNCH_PROMO_CODE}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-lg border-2 border-dashed border-sky-300 bg-sky-50 p-4 text-center dark:border-sky-700 dark:bg-sky-950/30">
+            <div className="text-sm text-muted-foreground">Promo code</div>
+            <div className="font-mono text-2xl font-bold text-sky-700 dark:text-sky-300">{SOFT_LAUNCH_PROMO_CODE}</div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              Category-limited. Enforced at validation and checkout.
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowSoftLaunchModal(false);
+                trackEvent("marketplace_soft_launch_modal_later");
+              }}
+            >
+              Maybe later
+            </Button>
+            <Button
+              onClick={() => {
+                setShowSoftLaunchModal(false);
+                trackEvent("marketplace_soft_launch_modal_create_listing");
+                navigate("/create-marketplace-listing");
+              }}
+            >
+              Create a listing
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Category-Specific Promo Modal */}
       {categoryAlert && (

@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, type BannerAdOrder, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, type BannerAdOrder, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type PromoCode } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -108,6 +108,200 @@ const logDebug = (...args: unknown[]) => {
     console.log(...args);
   }
 };
+
+const TAILWINDS_PROMO_CODE = "TAILWINDS";
+const TAILWINDS_CATEGORY_LIMIT = 5;
+const TAILWINDS_DURATION_DAYS = 90;
+
+type MarketplacePromoResolution =
+  | {
+      valid: true;
+      code: string;
+      description: string;
+      discountType: string;
+      discountValue: number | null;
+      discountAmount: number;
+      promoCodeRecord: PromoCode | null;
+      durationDays: number;
+      completionToken: string | null;
+    }
+  | {
+      valid: false;
+      message: string;
+    };
+
+const generateMarketplaceFreeCompletionToken = ({
+  userId,
+  promoCode,
+  originalAmount,
+  discountAmount,
+  durationDays,
+}: {
+  userId: string;
+  promoCode: string;
+  originalAmount: number;
+  discountAmount: number;
+  durationDays: number;
+}) =>
+  jwt.sign(
+    {
+      type: "free-marketplace-listing",
+      userId,
+      promoCode,
+      originalAmount: originalAmount.toFixed(2),
+      discountAmount: discountAmount.toFixed(2),
+      durationDays,
+      timestamp: Date.now(),
+    },
+    process.env.SESSION_SECRET || "dev-secret",
+    { expiresIn: "30m" },
+  );
+
+async function getOrCreateTailwindsPromoCode(): Promise<PromoCode> {
+  const existing = await storage.getPromoCodeByCode(TAILWINDS_PROMO_CODE);
+  if (existing) {
+    return existing;
+  }
+
+  return storage.createPromoCode({
+    code: TAILWINDS_PROMO_CODE,
+    description: "Soft-launch offer: first eligible listing in category free for 3 months.",
+    discountType: "waive_creation_fee",
+    discountValue: undefined,
+    maxUses: undefined,
+    isActive: true,
+    validFrom: new Date(),
+    validUntil: undefined,
+    applicableToMarketplace: true,
+    applicableToBannerAds: false,
+  });
+}
+
+async function resolveMarketplacePromoCode(params: {
+  code: string;
+  userId?: string | null;
+  category?: string | null;
+  amount?: number | null;
+}): Promise<MarketplacePromoResolution> {
+  const normalizedCode = params.code.trim().toUpperCase();
+  const category = params.category?.trim() || null;
+  const amount = Number.isFinite(params.amount) ? Math.max(0, Number(params.amount)) : null;
+
+  if (normalizedCode === TAILWINDS_PROMO_CODE) {
+    const promoCodeRecord = await getOrCreateTailwindsPromoCode();
+
+    if (!params.userId) {
+      return {
+        valid: false,
+        message: "Sign in to use the TAILWINDS soft-launch offer.",
+      };
+    }
+
+    if (!category) {
+      return {
+        valid: false,
+        message: "Marketplace category is required for TAILWINDS.",
+      };
+    }
+
+    const existingListings = await storage.getMarketplaceListingsByUser(params.userId);
+    const hasExistingListing = existingListings.some((listing) => !listing.isExample);
+    if (hasExistingListing) {
+      return {
+        valid: false,
+        message: "TAILWINDS applies to your first marketplace listing only.",
+      };
+    }
+
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(promoCodeUsages)
+      .innerJoin(
+        marketplaceListings,
+        eq(promoCodeUsages.marketplaceListingId, marketplaceListings.id),
+      )
+      .where(
+        and(
+          eq(promoCodeUsages.promoCodeId, promoCodeRecord.id),
+          eq(marketplaceListings.category, category),
+          eq(marketplaceListings.isExample, false),
+        ),
+      );
+
+    const categoryClaimCount = Number(result?.count ?? 0);
+    if (categoryClaimCount >= TAILWINDS_CATEGORY_LIMIT) {
+      return {
+        valid: false,
+        message: `TAILWINDS has already been claimed ${TAILWINDS_CATEGORY_LIMIT} times in this category.`,
+      };
+    }
+
+    const discountAmount = amount ?? 0;
+    return {
+      valid: true,
+      code: TAILWINDS_PROMO_CODE,
+      description: "Soft-launch offer applied: your first listing in this category is free for 3 months.",
+      discountType: "fixed",
+      discountValue: amount ?? null,
+      discountAmount,
+      promoCodeRecord,
+      durationDays: TAILWINDS_DURATION_DAYS,
+      completionToken:
+        params.userId && amount && amount > 0
+          ? generateMarketplaceFreeCompletionToken({
+              userId: params.userId,
+              promoCode: TAILWINDS_PROMO_CODE,
+              originalAmount: amount,
+              discountAmount,
+              durationDays: TAILWINDS_DURATION_DAYS,
+            })
+          : null,
+    };
+  }
+
+  const promoCode = await storage.validatePromoCodeForContext(normalizedCode, "marketplace");
+  if (!promoCode) {
+    return {
+      valid: false,
+      message: "Invalid or expired promo code",
+    };
+  }
+
+  let discountAmount = 0;
+  if (amount !== null) {
+    if (promoCode.discountType === "percentage") {
+      discountAmount = (amount * parseFloat(promoCode.discountValue || "0")) / 100;
+    } else if (promoCode.discountType === "fixed" || promoCode.discountType === "fixed_amount") {
+      discountAmount = parseFloat(promoCode.discountValue || "0");
+    } else if (promoCode.discountType === "free_7_day" || promoCode.discountType === "waive_creation_fee") {
+      discountAmount = amount;
+    }
+    discountAmount = Math.min(discountAmount, amount);
+  }
+
+  const durationDays = promoCode.discountType === "free_7_day" ? 7 : 30;
+
+  return {
+    valid: true,
+    code: promoCode.code,
+    description: promoCode.description || "Promo code applied successfully!",
+    discountType: promoCode.discountType,
+    discountValue: promoCode.discountValue ? parseFloat(promoCode.discountValue) : null,
+    discountAmount,
+    promoCodeRecord: promoCode,
+    durationDays,
+    completionToken:
+      params.userId && amount !== null && Math.max(0, amount - discountAmount) <= 0
+        ? generateMarketplaceFreeCompletionToken({
+            userId: params.userId,
+            promoCode: promoCode.code,
+            originalAmount: amount,
+            discountAmount,
+            durationDays,
+          })
+        : null,
+  };
+}
 
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number) {
   const controller = new AbortController();
@@ -4142,27 +4336,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // If promo code applied, validate and use discounted amount
       let amount = fullAmount;
       if (promoCode) {
-        // Re-validate promo code server-side and get promo details
-        const validatedPromo = await storage.validatePromoCodeForContext(promoCode, 'marketplace');
-        
-        if (!validatedPromo) {
-          return res.status(400).json({ error: "Invalid or expired promo code" });
+        const resolvedPromo = await resolveMarketplacePromoCode({
+          code: promoCode,
+          userId,
+          category,
+          amount: fullAmount,
+        });
+
+        if (!resolvedPromo.valid) {
+          return res.status(400).json({ error: resolvedPromo.message });
         }
-        
-        // Calculate discount SERVER-SIDE from validated promo details
-        let serverCalculatedDiscount = 0;
-        if (validatedPromo.discountType === 'percentage') {
-          const discountPercent = parseFloat(validatedPromo.discountValue || "0");
-          serverCalculatedDiscount = (fullAmount * discountPercent) / 100;
-        } else if (validatedPromo.discountType === 'fixed' || validatedPromo.discountType === 'fixed_amount') {
-          serverCalculatedDiscount = parseFloat(validatedPromo.discountValue || "0");
-        } else if (validatedPromo.discountType === 'free_7_day' || validatedPromo.discountType === 'waive_creation_fee') {
-          serverCalculatedDiscount = fullAmount;
-        }
-        
-        // Clamp discount to not exceed full amount
-        serverCalculatedDiscount = Math.min(serverCalculatedDiscount, fullAmount);
-        
+
+        let serverCalculatedDiscount = Math.min(resolvedPromo.discountAmount, fullAmount);
         // Calculate expected final amount from SERVER-CALCULATED discount
         const expectedFinal = Math.max(0, fullAmount - serverCalculatedDiscount);
         if (finalAmount !== undefined) {
@@ -4715,27 +4900,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const fullAmount = feeBreakdown.totalDue;
       let expectedAmount = fullAmount;
-      let validatedPromo: any = null;
+      let resolvedPromo: Extract<Awaited<ReturnType<typeof resolveMarketplacePromoCode>>, { valid: true }> | null = null;
 
       const promoToApply = (promoCode || promoCodeUsed || "").toString().trim();
       if (promoToApply) {
-        validatedPromo = await storage.validatePromoCodeForContext(promoToApply, 'marketplace');
-        if (!validatedPromo) {
-          return res.status(400).json({ error: "Invalid or expired promo code" });
+        const promoResolution = await resolveMarketplacePromoCode({
+          code: promoToApply,
+          userId,
+          category,
+          amount: fullAmount,
+        });
+        if (!promoResolution.valid) {
+          return res.status(400).json({ error: promoResolution.message });
         }
-
-        let serverCalculatedDiscount = 0;
-        if (validatedPromo.discountType === 'percentage') {
-          const discountPercent = parseFloat(validatedPromo.discountValue || "0");
-          serverCalculatedDiscount = (fullAmount * discountPercent) / 100;
-        } else if (validatedPromo.discountType === 'fixed' || validatedPromo.discountType === 'fixed_amount') {
-          serverCalculatedDiscount = parseFloat(validatedPromo.discountValue || "0");
-        } else if (validatedPromo.discountType === 'free_7_day' || validatedPromo.discountType === 'waive_creation_fee') {
-          serverCalculatedDiscount = fullAmount;
-        }
-
-        serverCalculatedDiscount = Math.min(serverCalculatedDiscount, fullAmount);
-        expectedAmount = Math.max(0, fullAmount - serverCalculatedDiscount);
+        resolvedPromo = promoResolution;
+        expectedAmount = Math.max(0, fullAmount - Math.min(promoResolution.discountAmount, fullAmount));
       }
 
       if (expectedAmount <= 0) {
@@ -4792,7 +4971,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const listing = await storage.createMarketplaceListing({
         ...validatedData,
         isPaid: true,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + (resolvedPromo?.durationDays ?? 30) * 24 * 60 * 60 * 1000),
+        ...(resolvedPromo?.durationDays && resolvedPromo.durationDays > 30
+          ? { promoFreeUntil: new Date(Date.now() + resolvedPromo.durationDays * 24 * 60 * 60 * 1000) }
+          : {}),
       });
 
       const consumption = await storage.consumePayPalOrder({
@@ -4827,20 +5009,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         // Record promo code usage if applied
-        if (validatedPromo) {
-        try {
-          await storage.recordPromoCodeUsage({
-            promoCodeId: validatedPromo.id,
-            userId: userId,
-            marketplaceListingId: listing.id,
-          });
-          logDebug(`✅ Promo code ${validatedPromo.code} usage recorded for marketplace listing ${listing.id}`);
-        } catch (error) {
-          console.error(`⚠️ Failed to record promo code usage for ${validatedPromo.code}:`, error);
+        if (resolvedPromo?.promoCodeRecord) {
+          try {
+            await storage.recordPromoCodeUsage({
+              promoCodeId: resolvedPromo.promoCodeRecord.id,
+              userId,
+              marketplaceListingId: listing.id,
+            });
+            logDebug(`Promo code ${resolvedPromo.code} usage recorded for marketplace listing ${listing.id}`);
+          } catch (error) {
+            console.error(`Failed to record promo code usage for ${resolvedPromo.code}:`, error);
+          }
         }
-      }
-
-      // Check listing threshold and create notification if needed
+        // Check listing threshold and create notification if needed
       try {
         const categoryListings = await storage.getMarketplaceListingsByCategory(listing.category);
         const activeCount = categoryListings.filter((l: any) => l.isActive).length;
@@ -4924,49 +5105,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Branch by token type
       if (tokenData.type === 'free-marketplace-listing') {
-        // SECURITY: Re-validate promo code is still active and valid
         if (tokenData.promoCode) {
-          const validPromo = await storage.validatePromoCodeForContext(tokenData.promoCode, 'marketplace');
-          if (!validPromo) {
-            console.error(`❌ Promo code ${tokenData.promoCode} is no longer valid for marketplace listing`);
-            return res.status(400).json({ 
+          const promoResolution = await resolveMarketplacePromoCode({
+            code: tokenData.promoCode,
+            userId: requesterId,
+            category: listingData?.category,
+            amount: originalAmount,
+          });
+          if (!promoResolution.valid) {
+            console.error(`Promo code ${tokenData.promoCode} is no longer valid for marketplace listing`);
+            return res.status(400).json({
               error: "Promo code is no longer valid",
               details: "Please refresh the page and try again"
             });
           }
-          
-          // Validate the base listing data
-          const validatedData = insertMarketplaceListingSchema.parse({ 
-            ...listingData, 
+
+          const validatedData = insertMarketplaceListingSchema.parse({
+            ...listingData,
             userId: requesterId,
             monthlyFee: "0",
           });
-          
-          // Create listing with free promo benefits
+
           const listing = await storage.createMarketplaceListing({
             ...validatedData,
-            isPaid: true, // Mark as paid since it's free with promo
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+            isPaid: true,
+            expiresAt: new Date(Date.now() + promoResolution.durationDays * 24 * 60 * 60 * 1000),
+            ...(promoResolution.durationDays > 30
+              ? { promoFreeUntil: new Date(Date.now() + promoResolution.durationDays * 24 * 60 * 60 * 1000) }
+              : {}),
           });
-          
-          // Record promo code usage
+
           try {
-            await storage.recordPromoCodeUsage({
-              promoCodeId: tokenData.promoCode,
-              userId: requesterId,
-              marketplaceListingId: listing.id,
-            });
-            logDebug(`✅ Promo code ${tokenData.promoCode} usage recorded for FREE marketplace listing ${listing.id}`);
+            if (promoResolution.promoCodeRecord) {
+              await storage.recordPromoCodeUsage({
+                promoCodeId: promoResolution.promoCodeRecord.id,
+                userId: requesterId,
+                marketplaceListingId: listing.id,
+              });
+            }
+            logDebug(`Promo code ${tokenData.promoCode} usage recorded for FREE marketplace listing ${listing.id}`);
           } catch (error) {
-            console.error(`⚠️ Failed to record promo code usage for ${tokenData.promoCode}:`, error);
-            // Don't fail the listing creation - just log the error
+            console.error(`Failed to record promo code usage for ${tokenData.promoCode}:`, error);
           }
-          
-          // Create threshold notification if needed
+
           try {
             const categoryListings = await storage.getMarketplaceListingsByCategory(listing.category);
             const activeCount = categoryListings.filter((l: any) => l.isActive).length;
-            
+
             if (activeCount === 25 || activeCount === 30) {
               await storage.createAdminNotification({
                 type: "listing_threshold",
@@ -4982,24 +5167,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           } catch (notifError) {
             console.error("Failed to create threshold notification:", notifError);
           }
-          
-          logDebug(`✅ FREE marketplace listing ${listing.id} completed with promo code ${tokenData.promoCode} by user ${requesterId}`);
-          
+
+          logDebug(`FREE marketplace listing ${listing.id} completed with promo code ${tokenData.promoCode} by user ${requesterId}`);
+
           const feeBreakdown = buildMarketplaceListingFeeBreakdown({
             category: listing.category,
             tier: listing.tier || "basic",
             user: await storage.getUser(requesterId),
           });
 
-          return res.status(201).json({ 
+          return res.status(201).json({
             status: 'COMPLETED',
             message: 'Free listing created successfully',
             listing,
             feeBreakdown,
           });
-        } else {
-          return res.status(400).json({ error: "No promo code provided for free listing" });
         }
+        return res.status(400).json({ error: "No promo code provided for free listing" });
       }
 
       if (tokenData.type === 'admin-free-marketplace-listing') {
@@ -6954,24 +7138,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Promo code validation (public for banner ads, authenticated for marketplace)
   app.post("/api/promo-codes/validate", async (req: any, res) => {
     try {
-      const { code, context } = req.body;
+      const { code, context, category, amount } = req.body;
       
-      if (!code || !context) {
+      if (!code) {
+        return res.status(400).json({ valid: false, message: "Code is required" });
+      }
+
+      const resolvedContext = context || (category ? "marketplace" : null);
+      if (!resolvedContext) {
         return res.status(400).json({ valid: false, message: "Code and context are required" });
       }
 
-      if (context !== "banner-ad" && context !== "marketplace") {
+      if (resolvedContext !== "banner-ad" && resolvedContext !== "marketplace") {
         return res.status(400).json({ valid: false, message: "Invalid context" });
       }
 
-      // Validate using database
-      const promoCode = await storage.validatePromoCodeForContext(code, context);
-      
+      if (resolvedContext === "marketplace") {
+        if (!req.user?.claims?.sub) {
+          return res.status(401).json({ valid: false, message: "Sign in to validate marketplace promo codes" });
+        }
+
+        const amountNumber =
+          amount === undefined || amount === null || amount === ""
+            ? null
+            : Number(amount);
+        const resolvedPromo = await resolveMarketplacePromoCode({
+          code,
+          userId: req.user.claims.sub,
+          category,
+          amount: amountNumber,
+        });
+
+        if (!resolvedPromo.valid) {
+          return res.json({ valid: false, message: resolvedPromo.message });
+        }
+
+        return res.json({
+          valid: true,
+          code: resolvedPromo.code,
+          description: resolvedPromo.description,
+          discountType: resolvedPromo.discountType,
+          discountValue: resolvedPromo.discountValue,
+          durationDays: resolvedPromo.durationDays,
+          completionToken: resolvedPromo.completionToken,
+        });
+      }
+
+      const promoCode = await storage.validatePromoCodeForContext(code, "banner-ad");
       if (!promoCode) {
         return res.json({ valid: false, message: "Invalid or expired promo code" });
       }
 
-      // Return valid promo code details
       res.json({ 
         valid: true,
         code: promoCode.code,

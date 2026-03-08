@@ -408,7 +408,12 @@ export default function CreateMarketplaceListing() {
       const response = await fetch(apiUrl(`/api/promo-codes/validate`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: promoCode, category: selectedCategory }),
+        credentials: "include",
+        body: JSON.stringify({
+          code: promoCode,
+          context: "marketplace",
+          category: selectedCategory,
+        }),
       });
       
       const data = await response.json();
@@ -417,7 +422,7 @@ export default function CreateMarketplaceListing() {
       if (data.valid) {
         toast({
           title: "Promo Code Applied!",
-          description: data.description || "You've unlocked a free 7-day listing!",
+          description: data.description || "Marketplace promo applied successfully.",
         });
       } else {
         toast({
@@ -1010,10 +1015,15 @@ export default function CreateMarketplaceListing() {
             <CardHeader>
               <CardTitle>Promo Code (Optional)</CardTitle>
               <CardDescription>
-                Enter a promo code for a free 7-day listing or other discounts
+                Enter a promo code for marketplace discounts or soft-launch offers
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <Alert className="mb-4 border-sky-200 bg-sky-50">
+                <AlertDescription className="text-sm">
+                  Soft launch offer: the first 5 eligible users in each marketplace category can get their first listing free for 3 months with promo code <span className="font-mono font-semibold">TAILWINDS</span>.
+                </AlertDescription>
+              </Alert>
               <div className="flex gap-2">
                 <Input
                   placeholder="Enter promo code"
@@ -1036,12 +1046,12 @@ export default function CreateMarketplaceListing() {
               </div>
               {promoCodeValid === true && (
                 <div className="mt-2 text-sm text-chart-2 flex items-center gap-1">
-                  ✓ Promo code applied! Your listing is free for 7 days.
+                  Promo code applied.
                 </div>
               )}
               {promoCodeValid === false && (
                 <div className="mt-2 text-sm text-destructive flex items-center gap-1">
-                  ✗ Invalid promo code
+                  Invalid promo code
                 </div>
               )}
             </CardContent>

@@ -661,6 +661,7 @@ export default function MarketplaceListingCheckout() {
         body: JSON.stringify({
           code: normalizedCode,
           context: "marketplace",
+          category: isUpgradeMode ? undefined : listingData?.category,
           amount: totalAmount,
         }),
       });
@@ -672,6 +673,7 @@ export default function MarketplaceListingCheckout() {
       }
       
       setAppliedPromo(data);
+      setCompletionToken(data.completionToken ?? null);
       
       // Calculate discount based on type
       let discount = 0;
@@ -709,31 +711,6 @@ export default function MarketplaceListingCheckout() {
     }
   };
   
-  // Generate completion token when promo makes order free
-  useEffect(() => {
-    if (adminGrant) return;
-    if (appliedPromo && finalAmount === 0 && listingData && feeQuote) {
-      // Generate signed token for free order completion
-      const totalAmount = feeQuote.totalDue;
-      
-      // Note: In production, this token generation should happen on the backend
-      // For security, we're simulating the pattern here but the actual signing
-      // will be validated server-side
-      const tokenData = {
-        type: 'free-marketplace-listing',
-        userId: 'CURRENT_USER', // Will be replaced by server with actual user ID
-        promoCode: appliedPromo.code,
-        originalAmount: totalAmount.toString(),
-        discountAmount: discountAmount.toString(),
-        timestamp: Date.now(),
-      };
-      
-      // Create a simple token (server will validate properly)
-      const token = btoa(JSON.stringify(tokenData));
-      setCompletionToken(token);
-    }
-  }, [appliedPromo, finalAmount, discountAmount, listingData, feeQuote]);
-
   // Loading state
   if (!listingData && !upgradeContext) {
     return (
@@ -883,6 +860,9 @@ export default function MarketplaceListingCheckout() {
           {/* Promo Code Section */}
           <div className="bg-muted p-4 rounded-lg space-y-3">
             <h3 className="font-semibold">Promo Code</h3>
+            <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+              Soft launch offer: the first 5 eligible users in each marketplace category can get their first listing free for 3 months with promo code <span className="font-mono font-semibold">TAILWINDS</span>.
+            </div>
             <div className="flex gap-2">
               <Input
                 placeholder="Enter promo code"

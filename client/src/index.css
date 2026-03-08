@@ -417,6 +417,18 @@ img.uppy-Dashboard-Item-previewImg {
   }
 }
 
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 @keyframes marquee-scroll {
   0% {
     transform: translateX(0);

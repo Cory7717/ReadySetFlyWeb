@@ -9,7 +9,7 @@ import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
 import WeatherBriefingSummarizer from "@/components/ai/WeatherBriefingSummarizer";
 import NotamTranslator from "@/components/ai/NotamTranslator";
-import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiUrl } from "@/lib/api";
@@ -65,8 +65,10 @@ interface FuelPriceResponse {
 }
 
 type LandingModuleId = "conditions" | "cfi" | "partner" | "events";
+type MobileTab = "weather" | "find" | "plan" | "log";
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+const LANDING_WEATHER_BAR_DISMISS_KEY = "rsf.landing.weather_jump.dismissed";
 const FUEL_MAP_COL_CLASSES = [
   "col-start-1", "col-start-2", "col-start-3", "col-start-4", "col-start-5", "col-start-6",
   "col-start-7", "col-start-8", "col-start-9", "col-start-10", "col-start-11", "col-start-12",
@@ -125,7 +127,11 @@ export default function Landing() {
   const [searchIcao, setSearchIcao] = useState("KAUS");
   const [fuelRadiusMiles, setFuelRadiusMiles] = useState("50");
   const [selectedFuelType, setSelectedFuelType] = useState<FuelType>("100LL");
+  const [activeMobileTab, setActiveMobileTab] = useState<MobileTab>("weather");
+  const [mobileFuelExpanded, setMobileFuelExpanded] = useState(false);
   const [hasUsedTool, setHasUsedTool] = useState(false);
+  const [hasUsedWeatherTool, setHasUsedWeatherTool] = useState(false);
+  const [weatherJumpDismissed, setWeatherJumpDismissed] = useState(false);
   const [showAiWeatherSummary, setShowAiWeatherSummary] = useState(false);
   const [showAiNotamTranslator, setShowAiNotamTranslator] = useState(false);
   const [airportSuggestions, setAirportSuggestions] = useState<AirportSearchResult[]>([]);
@@ -347,6 +353,7 @@ export default function Landing() {
     if (normalized !== searchIcao) {
       setSearchIcao(normalized);
       setHasUsedTool(true);
+      setHasUsedWeatherTool(true);
       return;
     }
     await Promise.all([
@@ -355,6 +362,7 @@ export default function Landing() {
       refetchNotams(),
     ]);
     setHasUsedTool(true);
+    setHasUsedWeatherTool(true);
   };
 
   const submitIcao = () => {
@@ -362,6 +370,7 @@ export default function Landing() {
     if (!ICAO_REGEX.test(normalized)) return;
     setSearchIcao(normalized);
     setHasUsedTool(true);
+    setHasUsedWeatherTool(true);
   };
 
   const applySuggestion = (suggestion: AirportSearchResult) => {
@@ -369,6 +378,7 @@ export default function Landing() {
     setIcaoInput(normalized);
     setSearchIcao(normalized);
     setAirportSuggestions([]);
+    setHasUsedWeatherTool(true);
   };
 
   useEffect(() => {
@@ -396,6 +406,21 @@ export default function Landing() {
 
     return () => window.clearTimeout(handle);
   }, [icaoInput]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      setWeatherJumpDismissed(window.localStorage.getItem(LANDING_WEATHER_BAR_DISMISS_KEY) === "true");
+    } catch {
+      setWeatherJumpDismissed(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeMobileTab === "find") {
+      setMobileFuelExpanded(true);
+    }
+  }, [activeMobileTab]);
 
   const pauseAutoScroll = (ms = 8000) => {
     setAutoPauseUntil(Date.now() + ms);
@@ -454,6 +479,83 @@ export default function Landing() {
     };
   }, [feedEvents.length, eventsHovering, autoPauseUntil]);
 
+  const scrollToWeatherSection = () => {
+    if (!openLandingModules.includes("conditions")) {
+      setOpenLandingModules((current) => [...current, "conditions"]);
+    }
+    window.requestAnimationFrame(() => {
+      document.getElementById("airport-weather")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const dismissWeatherJumpBar = () => {
+    setWeatherJumpDismissed(true);
+    try {
+      window.localStorage.setItem(LANDING_WEATHER_BAR_DISMISS_KEY, "true");
+    } catch {}
+  };
+
+  const MobilePillNav = () => (
+    <div className="sticky top-0 z-40 border-b border-white/10 bg-background/95 px-3 py-2 backdrop-blur md:hidden">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+        {(
+          [
+            { id: "weather", label: "Weather" },
+            { id: "find", label: "Find" },
+            { id: "plan", label: "Plan" },
+            { id: "log", label: "Log" },
+          ] as { id: MobileTab; label: string }[]
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveMobileTab(tab.id)}
+            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeMobileTab === tab.id
+                ? "bg-primary text-white shadow-sm"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const MobileBottomNav = () => (
+    <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-background/97 pb-safe backdrop-blur-md md:hidden">
+      <div className="grid grid-cols-4">
+        {(
+          [
+            { id: "weather", label: "Weather", icon: "⛅" },
+            { id: "find", label: "Find", icon: "🗺" },
+            { id: "plan", label: "Plan", icon: "✈️" },
+            { id: "log", label: "Log", icon: "📓" },
+          ] as { id: MobileTab; label: string; icon: string }[]
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => {
+              setActiveMobileTab(tab.id);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className={`relative flex flex-col items-center gap-0.5 px-2 py-3 text-xs font-medium transition-colors ${
+              activeMobileTab === tab.id ? "text-primary" : "text-muted-foreground"
+            }`}
+          >
+            <span className="text-lg leading-none">{tab.icon}</span>
+            <span>{tab.label}</span>
+            {activeMobileTab === tab.id && (
+              <span className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-primary" />
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   const toggleLandingModule = (moduleId: LandingModuleId) => {
     setOpenLandingModules((current) => {
       const next = current.includes(moduleId)
@@ -472,7 +574,48 @@ export default function Landing() {
   }, []);
   
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-20 md:pb-0">
+      <MobilePillNav />
+      {!weatherJumpDismissed && !hasUsedWeatherTool && (
+        <div className="hidden border-b border-sky-200 bg-gradient-to-r from-sky-50 to-cyan-50 md:block">
+          <div className="container mx-auto px-4 py-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-sky-700">Weather &amp; NOTAM Briefing</p>
+                <p className="text-sm font-semibold text-slate-900">Get current airport weather and NOTAMs</p>
+                <p className="text-xs text-slate-700">
+                  Check live METARs, TAFs, runway conditions, and airport briefing details from the landing page.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    trackEvent("landing_weather_jump_bar_click", { target: "airport-weather" });
+                    setHasUsedWeatherTool(true);
+                    scrollToWeatherSection();
+                  }}
+                >
+                  Jump to weather
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8"
+                  aria-label="Dismiss weather briefing banner"
+                  onClick={() => {
+                    trackEvent("landing_weather_jump_bar_dismissed", { target: "airport-weather" });
+                    dismissWeatherJumpBar();
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className={activeMobileTab === "find" || activeMobileTab === "weather" ? "" : "hidden md:block"}>
       {/* Hero Section */}
       <div className="relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
@@ -507,6 +650,20 @@ export default function Landing() {
                       })}`}
                 </div>
               </div>
+              <div className="flex items-center justify-between border-t border-white/10 px-5 py-3 md:hidden">
+                <span className="text-sm text-slate-200">
+                  {mobileFuelExpanded ? "Showing fuel prices near " : "Tap to find fuel prices near "}
+                  <span className="font-semibold">{searchIcao}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMobileFuelExpanded((value) => !value)}
+                  className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs text-slate-100 hover:bg-white/20"
+                >
+                  {mobileFuelExpanded ? "Collapse" : "Show prices"}
+                </button>
+              </div>
+              <div className={`md:block ${mobileFuelExpanded ? "block" : "hidden"}`}>
               <div className="space-y-5 p-5">
                 <div className="space-y-4">
                   <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_120px_auto]">
@@ -794,6 +951,8 @@ export default function Landing() {
                       size="lg"
                       variant="outline"
                       onClick={() => {
+                        setActiveMobileTab("weather");
+                        setHasUsedWeatherTool(true);
                         if (!openLandingModules.includes("conditions")) toggleLandingModule("conditions");
                         document.getElementById("airport-weather")?.scrollIntoView({ behavior: "smooth", block: "start" });
                       }}
@@ -803,6 +962,7 @@ export default function Landing() {
                     </Button>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
             <div className="space-y-3">
@@ -867,10 +1027,10 @@ export default function Landing() {
         </div>
       )}
 
-      <div className="rsf-section-band py-8 sm:py-10">
+      <div className={`rsf-section-band py-8 sm:py-10 ${activeMobileTab === "weather" ? "hidden md:block" : ""}`}>
         <div className="container mx-auto px-4">
           <div className={`grid gap-6 ${showFullMembershipSection ? "xl:grid-cols-[1.1fr_0.9fr]" : ""}`}>
-            <section className="rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6">
+            <section className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "log" ? "hidden md:block" : ""}`}>
                 <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
                     <div>
                       <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Quick Start</div>
@@ -897,7 +1057,7 @@ export default function Landing() {
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <Card className="border-primary/30 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))]">
+                  <Card className={`border-primary/30 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))] ${activeMobileTab === "plan" ? "hidden md:block" : ""}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Find</div>
@@ -918,7 +1078,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-primary/28 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.1))]">
+                  <Card className={`border-primary/28 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.1))] ${activeMobileTab === "plan" ? "hidden md:block" : ""}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Find</div>
@@ -939,7 +1099,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-[hsl(var(--accent)/0.34)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.12))]">
+                  <Card className={`border-[hsl(var(--accent)/0.34)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.12))] ${activeMobileTab === "plan" ? "hidden md:block" : ""}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--accent))]">Connect</div>
@@ -960,7 +1120,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-slate-900/18 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(22,32,42,0.1))]">
+                  <Card className={`border-slate-900/18 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(22,32,42,0.1))] ${activeMobileTab === "find" ? "hidden md:block" : ""}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/90 dark:text-slate-300/80">Plan</div>
@@ -981,7 +1141,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-primary/22 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))]">
+                  <Card className={`border-primary/22 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] hidden md:block`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">Track</div>
@@ -1002,7 +1162,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-accent/34 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.14))]">
+                  <Card className={`border-accent/34 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.14))] ${activeMobileTab === "find" ? "hidden md:block" : ""}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/80 dark:text-slate-300/80">Brief</div>
@@ -1024,7 +1184,7 @@ export default function Landing() {
                   </Card>
                 </div>
 
-                <div className="mt-4 overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,hsl(221_52%_19%),hsl(221_34%_15%))] shadow-[var(--shadow-rsf-panel)]">
+                <div className="mt-4 hidden overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,hsl(221_52%_19%),hsl(221_34%_15%))] shadow-[var(--shadow-rsf-panel)] md:block">
                   <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
                     <span>RSF overview</span>
                     <span className="text-slate-400">Muted video</span>
@@ -1044,7 +1204,7 @@ export default function Landing() {
             </section>
 
             {showFullMembershipSection && (
-            <section className="rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6">
+            <section className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "log" ? "" : "hidden md:block"}`}>
                 <div className="text-center space-y-3">
                   <span className="rsf-kicker mx-auto">RSF Memberships</span>
                   <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
@@ -1217,7 +1377,7 @@ export default function Landing() {
           </div>
 
           {showProPlusUpgradeSection && (
-            <section className="mt-6 rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6">
+            <section className={`mt-6 rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "log" ? "" : "hidden md:block"}`}>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2">
                   <span className="rsf-kicker">Pro+ Upgrade</span>
@@ -1305,8 +1465,9 @@ export default function Landing() {
           )}
         </div>
       </div>
+      </div>
 
-      <div className="py-10 sm:py-12">
+      <div className="hidden py-10 sm:py-12 md:block">
         <div className="container mx-auto px-4">
           <Card className="overflow-hidden border-white/12 bg-[linear-gradient(180deg,hsl(221_54%_18%/0.82),hsl(221_42%_15%/0.88))] text-slate-100 shadow-[var(--shadow-rsf-panel)]">
             <CardContent className="p-5 sm:p-6">
@@ -1369,8 +1530,8 @@ export default function Landing() {
       </div>
 
       {/* Current Conditions */}
-      {openLandingModules.includes("conditions") && (
-      <div className="pb-10 sm:pb-12">
+      {(openLandingModules.includes("conditions") || activeMobileTab === "weather") && (
+      <div className={`pb-10 sm:pb-12 ${activeMobileTab !== "weather" ? "hidden md:block" : ""}`}>
         <div className="container mx-auto px-4 space-y-6">
           <div className="text-center space-y-2">
             <h2 className="text-2xl sm:text-3xl font-semibold">Current Conditions</h2>
@@ -1706,10 +1867,10 @@ export default function Landing() {
       )}
 
       {/* CFI marketplace and featured partner */}
-      {(openLandingModules.includes("cfi") || openLandingModules.includes("partner")) && (
-      <div className="py-10 sm:py-12">
+      {(openLandingModules.includes("cfi") || openLandingModules.includes("partner") || activeMobileTab === "find") && (
+      <div className={`py-10 sm:py-12 ${activeMobileTab !== "find" ? "hidden md:block" : ""}`}>
         <div className="container mx-auto px-4">
-          {openLandingModules.includes("cfi") ? (
+          {(openLandingModules.includes("cfi") || activeMobileTab === "find") ? (
           <Card className="mt-6 border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--primary)/0.11))]">
             <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-4 max-w-3xl">
@@ -1771,7 +1932,7 @@ export default function Landing() {
             </CardContent>
           </Card>
           ) : null}
-          {openLandingModules.includes("partner") ? (
+          {(openLandingModules.includes("partner") || activeMobileTab === "find") ? (
             <FeaturedPartnerToolCard
               className="mt-6 mx-auto w-full md:w-2/3"
               partnerKey="av8maps"
@@ -1793,8 +1954,8 @@ export default function Landing() {
       )}
 
       {/* Aviation Events Feed */}
-      {openLandingModules.includes("events") && (
-      <div className="py-10">
+      {(openLandingModules.includes("events") || activeMobileTab === "find") && (
+      <div className={`py-10 ${activeMobileTab !== "find" ? "hidden md:block" : ""}`}>
         <div className="container mx-auto px-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
@@ -1888,6 +2049,7 @@ export default function Landing() {
       </div>
       )}
 
+      <MobileBottomNav />
     </div>
   );
 }

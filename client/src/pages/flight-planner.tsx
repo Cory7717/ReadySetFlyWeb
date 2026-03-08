@@ -249,6 +249,8 @@ type ScratchInkStroke = {
   points: ScratchInkPoint[];
 };
 
+type ScratchPadInkLayout = "ruled" | "blank" | "craft";
+
 const SCRATCH_PAD_DEFAULT: ScratchPadFields = {
   clearanceLimit: "",
   departure: "",
@@ -264,6 +266,7 @@ const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
 const FLIGHT_PLANNER_ACTIVE_TAB_KEY = "rsf_planner_active_tab";
 const SCRATCH_PAD_KEY = "rsf.scratchPad";
 const SCRATCH_PAD_INK_KEY = "rsf.scratchPadInk";
+const SCRATCH_PAD_INK_LAYOUT_KEY = "rsf.scratchPadInkLayout";
 const FLIGHT_PLANNER_TABS = ["route", "weather", "navlog", "analysis", "file"] as const;
 type FlightPlannerTab = typeof FLIGHT_PLANNER_TABS[number];
 
@@ -575,10 +578,11 @@ function ScratchField({
 
 type ScratchPadInkBoardProps = {
   strokes: ScratchInkStroke[];
+  layout: ScratchPadInkLayout;
   onChange: (strokes: ScratchInkStroke[]) => void;
 };
 
-function ScratchPadInkBoard({ strokes, onChange }: ScratchPadInkBoardProps) {
+function ScratchPadInkBoard({ strokes, layout, onChange }: ScratchPadInkBoardProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [draftStroke, setDraftStroke] = useState<ScratchInkStroke | null>(null);
@@ -627,17 +631,55 @@ function ScratchPadInkBoard({ strokes, onChange }: ScratchPadInkBoardProps) {
     ctx.fillStyle = "#111827";
     ctx.fillRect(0, 0, boardSize.width, boardSize.height);
 
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
-    ctx.lineWidth = 1;
-    ctx.setLineDash([6, 8]);
-    for (let line = 1; line < 4; line += 1) {
-      const y = (boardSize.height / 4) * line;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(boardSize.width, y);
-      ctx.stroke();
+    if (layout === "ruled") {
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 8]);
+      for (let line = 1; line < 4; line += 1) {
+        const y = (boardSize.height / 4) * line;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(boardSize.width, y);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
     }
-    ctx.setLineDash([]);
+
+    if (layout === "craft") {
+      const sections = [
+        { key: "C", label: "CLEARANCE", width: 0.18 },
+        { key: "R", label: "ROUTE", width: 0.28 },
+        { key: "A", label: "ALTITUDE", width: 0.18 },
+        { key: "F", label: "FREQ", width: 0.18 },
+        { key: "T", label: "SQUAWK", width: 0.18 },
+      ];
+      let x = 0;
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.2)";
+      ctx.fillStyle = "rgba(30, 41, 59, 0.45)";
+      ctx.lineWidth = 1;
+      sections.forEach((section, index) => {
+        const width = index === sections.length - 1
+          ? boardSize.width - x
+          : Math.round(boardSize.width * section.width);
+        ctx.fillRect(x, 0, width, 32);
+        ctx.strokeRect(x, 0, width, boardSize.height);
+        ctx.fillStyle = "#cbd5e1";
+        ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, monospace";
+        ctx.fillText(`${section.key} ${section.label}`, x + 10, 20);
+        ctx.fillStyle = "rgba(30, 41, 59, 0.45)";
+        x += width;
+      });
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.12)";
+      ctx.setLineDash([4, 8]);
+      for (let line = 1; line < 6; line += 1) {
+        const y = 32 + ((boardSize.height - 32) / 6) * line;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(boardSize.width, y);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
 
     const drawStroke = (stroke: ScratchInkStroke) => {
       if (stroke.points.length === 0) return;
@@ -658,7 +700,7 @@ function ScratchPadInkBoard({ strokes, onChange }: ScratchPadInkBoardProps) {
 
     strokes.forEach(drawStroke);
     if (draftStroke) drawStroke(draftStroke);
-  }, [boardSize, draftStroke, strokes]);
+  }, [boardSize, draftStroke, layout, strokes]);
 
   const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -767,6 +809,15 @@ export default function FlightPlanner() {
       return [];
     }
   });
+  const [scratchInkLayout, setScratchInkLayout] = useState<ScratchPadInkLayout>(() => {
+    if (typeof window === "undefined") return "ruled";
+    try {
+      const raw = localStorage.getItem(SCRATCH_PAD_INK_LAYOUT_KEY);
+      return raw === "blank" || raw === "craft" || raw === "ruled" ? raw : "ruled";
+    } catch {
+      return "ruled";
+    }
+  });
 
   useEffect(() => {
     trackEvent("planner_page_view", { page: "flight-planner" });
@@ -824,6 +875,13 @@ export default function FlightPlanner() {
       localStorage.setItem(SCRATCH_PAD_INK_KEY, JSON.stringify(scratchInk));
     } catch {}
   }, [scratchInk]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(SCRATCH_PAD_INK_LAYOUT_KEY, scratchInkLayout);
+    } catch {}
+  }, [scratchInkLayout]);
 
   useEffect(() => {
     if (!scratchPadOpen) return;
@@ -4873,15 +4931,50 @@ export default function FlightPlanner() {
             <div className="flex-1 overflow-y-auto px-4 py-4">
               <TabsContent value="ink" className="mt-0 h-full focus-visible:outline-none">
                 <div className="mx-auto max-w-5xl space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3">
+                    <div>
+                      <div className="text-sm font-semibold text-white">Writing surface</div>
+                      <div className="text-xs text-zinc-400">
+                        Choose the pad that matches how you copy clearance notes.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: "ruled" as ScratchPadInkLayout, label: "Ruled" },
+                        { value: "blank" as ScratchPadInkLayout, label: "Blank" },
+                        { value: "craft" as ScratchPadInkLayout, label: "CRAFT grid" },
+                      ].map((option) => (
+                        <Button
+                          key={option.value}
+                          type="button"
+                          size="sm"
+                          variant={scratchInkLayout === option.value ? "default" : "outline"}
+                          className={
+                            scratchInkLayout === option.value
+                              ? ""
+                              : "border-zinc-600 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                          }
+                          onClick={() => setScratchInkLayout(option.value)}
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-                    <ScratchPadInkBoard strokes={scratchInk} onChange={setScratchInk} />
+                    <ScratchPadInkBoard
+                      strokes={scratchInk}
+                      layout={scratchInkLayout}
+                      onChange={setScratchInk}
+                    />
                     <div className="space-y-3">
                       <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-4">
                         <div className="text-sm font-semibold text-white">Fast IFR copy flow</div>
                         <div className="mt-2 space-y-2 text-xs text-zinc-400">
                           <div>1. Write the readback freehand while ATC is talking.</div>
                           <div>2. Use Undo if you miss a stroke.</div>
-                          <div>3. Switch to CRAFT fields if you want a cleaner final copy.</div>
+                          <div>3. Use Ruled, Blank, or CRAFT grid depending on the clearance.</div>
+                          <div>4. Switch to CRAFT fields if you want a cleaner final copy.</div>
                         </div>
                       </div>
                       <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-4">

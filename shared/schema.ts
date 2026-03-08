@@ -202,6 +202,11 @@ export const users = pgTable("users", {
   membershipInterval: text("membership_interval"), // monthly, biannual, annual
   membershipTrialEndsAt: timestamp("membership_trial_ends_at"),
   membershipNextBillingAt: timestamp("membership_next_billing_at"),
+  membershipGrantTier: text("membership_grant_tier"), // pro, pro_plus, or null
+  membershipGrantEndsAt: timestamp("membership_grant_ends_at"),
+  membershipGrantGrantedBy: varchar("membership_grant_granted_by"),
+  membershipGrantGrantedAt: timestamp("membership_grant_granted_at"),
+  membershipGrantReason: text("membership_grant_reason"),
   paypalSubscriptionId: text("paypal_subscription_id"),
   paypalPlanId: text("paypal_plan_id"),
 

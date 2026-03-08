@@ -12,6 +12,7 @@ import { trackEvent, trackSessionPing } from "@/lib/analytics";
 import { SignupNudgeBanner } from "@/components/SignupNudgeBanner";
 import { FreeAccountValueBar } from "@/components/FreeAccountValueBar";
 import { AiWeatherTranslatorAnnouncement } from "@/components/AiWeatherTranslatorAnnouncement";
+import { MembershipGrantAnnouncement } from "@/components/MembershipGrantAnnouncement";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { ScrollToTopButton } from "@/components/scroll-to-top-button";
 import { recordAnonSession, recordAnonToolInteraction, isSoftAuthEnabled } from "@/utils/anonUsage";
@@ -346,6 +347,7 @@ function AppShell() {
         </div>
         <AuthGateModal />
         <AiWeatherTranslatorAnnouncement />
+        <MembershipGrantAnnouncement />
         <SignupNudgeBanner />
         <ScrollToTopButton />
         <Toaster />

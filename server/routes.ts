@@ -8556,6 +8556,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/admin/users/:userId/membership-grant", isAuthenticated, requireUsersAdmin, async (req: any, res) => {
+    try {
+      const adminId = req.user?.claims?.sub || req.session?.userId;
+      if (!adminId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const admin = await storage.getUser(String(adminId));
+      if (!admin || !admin.isSuperAdmin) {
+        return res.status(403).json({ error: "Super Admin required" });
+      }
+
+      const targetUser = await storage.getUser(req.params.userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const action = String(req.body?.action || "grant").toLowerCase();
+      if (action === "revoke") {
+        const updated = await storage.updateUser(req.params.userId, {
+          membershipGrantTier: null,
+          membershipGrantEndsAt: null,
+          membershipGrantGrantedBy: String(adminId),
+          membershipGrantGrantedAt: new Date(),
+          membershipGrantReason: null,
+        });
+        return res.json({ membershipGrantEndsAt: null, user: updated });
+      }
+
+      const tier = req.body?.tier === "pro" ? "pro" : req.body?.tier === "pro_plus" ? "pro_plus" : null;
+      if (!tier) {
+        return res.status(400).json({ error: "Tier must be pro or pro_plus" });
+      }
+
+      const durationDays = Number(req.body?.durationDays || 14);
+      if (!Number.isFinite(durationDays) || durationDays < 1 || durationDays > 365) {
+        return res.status(400).json({ error: "durationDays must be between 1 and 365" });
+      }
+
+      const reason =
+        typeof req.body?.reason === "string" && req.body.reason.trim()
+          ? req.body.reason.trim().slice(0, 500)
+          : null;
+
+      const now = new Date();
+      const grantEndsAt = addDays(now, durationDays);
+      const updated = await storage.updateUser(req.params.userId, {
+        membershipGrantTier: tier,
+        membershipGrantEndsAt: grantEndsAt,
+        membershipGrantGrantedBy: String(adminId),
+        membershipGrantGrantedAt: now,
+        membershipGrantReason: reason,
+      });
+
+      res.json({
+        membershipGrantTier: tier,
+        membershipGrantEndsAt: grantEndsAt.toISOString(),
+        user: updated,
+      });
+    } catch (error) {
+      console.error("Error granting membership support access:", error);
+      res.status(500).json({ error: "Failed to update membership support access" });
+    }
+  });
+
   app.get("/api/admin/users/:userId/cfi-profile", isAuthenticated, requireUsersAdmin, async (req: any, res) => {
     try {
       const profile = await storage.getCfiProfileByUser(req.params.userId);

@@ -110,6 +110,7 @@ export function getEffectiveMembership(user?: User | null) {
   let provider = user.membershipProvider || null;
   let paypalSubscriptionId = user.paypalSubscriptionId || user.logbookProSubscriptionId || null;
   let paypalPlanId = user.paypalPlanId || null;
+  const now = new Date();
 
   const legacyStatus = mapLegacyStatus(user.logbookProStatus);
   const legacyEndsAt = user.logbookProEndsAt ? new Date(user.logbookProEndsAt) : null;
@@ -122,6 +123,39 @@ export function getEffectiveMembership(user?: User | null) {
       interval = interval || (user.logbookProPlan as BillingInterval | null);
       provider = provider || "paypal";
       paypalSubscriptionId = paypalSubscriptionId || user.logbookProSubscriptionId || null;
+    }
+  }
+
+  const grantTierRaw = user.membershipGrantTier;
+  const grantTier =
+    grantTierRaw === "pro" || grantTierRaw === "pro_plus"
+      ? grantTierRaw
+      : null;
+  const grantEndsAt = user.membershipGrantEndsAt
+    ? new Date(user.membershipGrantEndsAt)
+    : null;
+  const grantActive = !!grantTier && !!grantEndsAt && grantEndsAt > now;
+  const tierRank = (value: MembershipTier) =>
+    value === "pro_plus" ? 2 : value === "pro" ? 1 : 0;
+
+  if (grantActive) {
+    const currentRank = tierRank(tier);
+    const grantRank = tierRank(grantTier);
+    const shouldApplyGrant =
+      status === "inactive" ||
+      grantRank > currentRank ||
+      (grantRank === currentRank && (!endsAt || grantEndsAt > endsAt));
+
+    if (shouldApplyGrant) {
+      tier = grantTier;
+      status = "active";
+      endsAt = grantEndsAt;
+      trialEndsAt = null;
+      nextBillingAt = null;
+      interval = null;
+      provider = "admin_grant";
+      paypalSubscriptionId = null;
+      paypalPlanId = null;
     }
   }
 

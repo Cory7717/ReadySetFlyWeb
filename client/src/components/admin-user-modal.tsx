@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -41,6 +42,9 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [selectedPromoListingId, setSelectedPromoListingId] = useState<string | null>(null);
   const [promoDuration, setPromoDuration] = useState("7");
+  const [membershipGrantTier, setMembershipGrantTier] = useState<"pro" | "pro_plus">("pro_plus");
+  const [membershipGrantDuration, setMembershipGrantDuration] = useState("14");
+  const [membershipGrantReason, setMembershipGrantReason] = useState("");
   const { user: adminUser } = useAuth();
   const { toast } = useToast();
 
@@ -190,6 +194,42 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
     },
   });
 
+  const membershipGrantMutation = useMutation({
+    mutationFn: async ({
+      action,
+      tier,
+      durationDays,
+      reason,
+    }: {
+      action: "grant" | "revoke";
+      tier?: "pro" | "pro_plus";
+      durationDays?: number;
+      reason?: string;
+    }) => {
+      return await apiRequest("POST", `/api/admin/users/${userId}/membership-grant`, {
+        action,
+        tier,
+        durationDays,
+        reason,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", userId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Membership support access updated",
+        description: "Temporary RSF membership access has been updated for this user.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update membership support access.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!user && !userLoading) return null;
 
   const certs = (user?.certifications || []).map((cert) => String(cert).toLowerCase());
@@ -208,6 +248,8 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
   const missingCfiCredentials = cfiCredentialReadiness?.checks
     ?.filter((check) => !check.met)
     ?.map((check) => check.label) || [];
+  const membershipGrantEndsAt = user?.membershipGrantEndsAt ? new Date(user.membershipGrantEndsAt) : null;
+  const membershipGrantActive = membershipGrantEndsAt ? membershipGrantEndsAt > now : false;
 
   const handleResetPassword = () => {
     if (!userId || !confirm("Are you sure you want to send a password reset email to this user?")) return;
@@ -1028,9 +1070,110 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                       <CardTitle className="text-lg">Account Actions</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <p className="text-sm text-muted-foreground">
-                        Additional account management actions will be available here in future updates.
-                      </p>
+                      {adminUser?.isSuperAdmin ? (
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-sm font-medium">Temporary RSF membership access</span>
+                              <Badge variant={membershipGrantActive ? "default" : "outline"}>
+                                {membershipGrantActive ? "Active" : "Inactive"}
+                              </Badge>
+                            </div>
+                            <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+                              <div>
+                                Current membership:{" "}
+                                <span className="font-semibold text-foreground">
+                                  {(user.membershipTier || "free").toUpperCase()}
+                                </span>
+                                {" · "}
+                                {(user.membershipStatus || "inactive").replace(/_/g, " ")}
+                              </div>
+                              <div>
+                                Support grant:{" "}
+                                {membershipGrantActive && user.membershipGrantTier
+                                  ? `${String(user.membershipGrantTier).toUpperCase()} until ${membershipGrantEndsAt?.toLocaleString()}`
+                                  : "No active support grant"}
+                              </div>
+                              {user.membershipGrantReason && (
+                                <div>Reason: {user.membershipGrantReason}</div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label>Grant tier</Label>
+                              <Select
+                                value={membershipGrantTier}
+                                onValueChange={(value) => setMembershipGrantTier(value as "pro" | "pro_plus")}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="pro">RSF Pro Core</SelectItem>
+                                  <SelectItem value="pro_plus">RSF Pro+</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Duration</Label>
+                              <Select value={membershipGrantDuration} onValueChange={setMembershipGrantDuration}>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="3">3 days</SelectItem>
+                                  <SelectItem value="7">7 days</SelectItem>
+                                  <SelectItem value="14">14 days</SelectItem>
+                                  <SelectItem value="30">30 days</SelectItem>
+                                  <SelectItem value="90">90 days</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Reason</Label>
+                            <Input
+                              value={membershipGrantReason}
+                              onChange={(event) => setMembershipGrantReason(event.target.value)}
+                              placeholder="Tech support, issue reproduction, pilot onboarding..."
+                            />
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              onClick={() =>
+                                membershipGrantMutation.mutate({
+                                  action: "grant",
+                                  tier: membershipGrantTier,
+                                  durationDays: parseInt(membershipGrantDuration, 10),
+                                  reason: membershipGrantReason.trim() || undefined,
+                                })
+                              }
+                              disabled={membershipGrantMutation.isPending}
+                            >
+                              {membershipGrantMutation.isPending ? "Saving..." : "Grant support access"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() =>
+                                membershipGrantMutation.mutate({
+                                  action: "revoke",
+                                })
+                              }
+                              disabled={membershipGrantMutation.isPending || !membershipGrantActive}
+                            >
+                              Revoke access
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            This overlays RSF membership entitlements for support or issue resolution and does not modify the user&apos;s PayPal subscription.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Additional account management actions will be available here in future updates.
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 </div>

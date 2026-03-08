@@ -692,6 +692,22 @@ export default function FlightPlanner() {
     field: keyof ScratchPadFields,
     value: string
   ) => setScratchPad((prev) => ({ ...prev, [field]: value }));
+  const scratchPadHasContent = useMemo(
+    () => Object.values(scratchPad).some((value) => value.trim()),
+    [scratchPad]
+  );
+  const openScratchPad = () => {
+    setScratchPad((prev) => ({
+      ...prev,
+      clearanceLimit: prev.clearanceLimit || form.destination || "",
+      departure: prev.departure || form.departure || "",
+      route: prev.route || routeStringFull || "",
+      altitude: prev.altitude ||
+        (plannedAltitudeFt ? String(plannedAltitudeFt) : ""),
+    }));
+    setScratchPadOpen(true);
+    trackEvent("scratch_pad_opened");
+  };
   const [, setWakeLockError] = useState<string | null>(null);
   const [customProfile, setCustomProfile] = useState({
     name: "",
@@ -2497,18 +2513,7 @@ export default function FlightPlanner() {
             variant="outline"
             size="sm"
             className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10"
-            onClick={() => {
-              setScratchPad((prev) => ({
-                ...prev,
-                clearanceLimit: prev.clearanceLimit || form.destination || "",
-                departure: prev.departure || form.departure || "",
-                route: prev.route || routeStringFull || "",
-                altitude: prev.altitude ||
-                  (plannedAltitudeFt ? String(plannedAltitudeFt) : ""),
-              }));
-              setScratchPadOpen(true);
-              trackEvent("scratch_pad_opened");
-            }}
+            onClick={openScratchPad}
           >
             ✏ Scratch Pad
           </Button>
@@ -2537,6 +2542,33 @@ export default function FlightPlanner() {
           "Upgrade for unlimited saved plans, alerts, and advanced analytics.",
         ]}
       />
+      <Card className="border-sky-200 bg-[linear-gradient(180deg,hsl(204_100%_98%),hsl(210_40%_97%))] text-slate-900 shadow-sm">
+        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-sky-600 text-white hover:bg-sky-600">IFR Scratch Pad</Badge>
+              <Badge variant="outline">CRAFT</Badge>
+              {scratchPadHasContent && (
+                <Badge variant="secondary">Notes saved</Badge>
+              )}
+            </div>
+            <div>
+              <div className="text-sm font-semibold">Keep clearance readback notes in one full-screen pad.</div>
+              <div className="text-sm text-slate-600">
+                Clearance limit, route, altitude, frequency, squawk, void time, and notes stay auto-saved on this device.
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:min-w-[220px]">
+            <Button onClick={openScratchPad}>
+              {scratchPadHasContent ? "Open scratch pad" : "Start scratch pad"}
+            </Button>
+            <div className="text-xs text-slate-500">
+              Opens full-screen. Press <span className="font-mono">Esc</span> to close.
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_540px]">
       <div className="min-w-0 space-y-4">
       <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">

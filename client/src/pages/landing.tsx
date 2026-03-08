@@ -9,9 +9,9 @@ import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
 import WeatherBriefingSummarizer from "@/components/ai/WeatherBriefingSummarizer";
 import NotamTranslator from "@/components/ai/NotamTranslator";
-import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin, X } from "lucide-react";
+import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin, X, DollarSign, UserPlus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
@@ -65,7 +65,7 @@ interface FuelPriceResponse {
 }
 
 type LandingModuleId = "conditions" | "cfi" | "partner" | "events";
-type MobileTab = "weather" | "find" | "plan" | "log";
+type MobileTab = "weather" | "find" | "plan" | "log" | "pricing";
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 const LANDING_WEATHER_BAR_DISMISS_KEY = "rsf.landing.weather_jump.dismissed";
@@ -93,6 +93,7 @@ function formatTimeAgo(timestamp: number): string {
 
 export default function Landing() {
   const { isAuthenticated, user } = useAuth();
+  const [, navigate] = useLocation();
   const { data: eventsData } = useQuery({
     queryKey: ["aviation-events", "feed"],
     queryFn: async () => {
@@ -307,6 +308,8 @@ export default function Landing() {
   const isPaidUser = hasProCore || hasProPlus;
   const showFullMembershipSection = !hasProCore && !hasProPlus;
   const showProPlusUpgradeSection = hasProCore && !hasProPlus;
+  const showMembershipTabContent = showFullMembershipSection || showProPlusUpgradeSection;
+  const showQuickStartOnMobile = activeMobileTab === "find" || activeMobileTab === "plan" || (activeMobileTab === "log" && !showMembershipTabContent);
   const fuelAirports = useMemo(
     () =>
       (fuelPrices?.results ?? [])
@@ -422,6 +425,26 @@ export default function Landing() {
     }
   }, [activeMobileTab]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.innerWidth >= 768) return;
+    const targetId =
+      activeMobileTab === "weather"
+        ? "landing-weather-section"
+        : activeMobileTab === "find"
+          ? "landing-find-section"
+        : activeMobileTab === "plan"
+          ? "landing-quickstart-section"
+          : activeMobileTab === "pricing"
+            ? "landing-membership-section"
+            : showMembershipTabContent
+              ? "landing-membership-section"
+              : "landing-quickstart-section";
+    window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [activeMobileTab, showMembershipTabContent]);
+
   const pauseAutoScroll = (ms = 8000) => {
     setAutoPauseUntil(Date.now() + ms);
   };
@@ -495,59 +518,81 @@ export default function Landing() {
     } catch {}
   };
 
-  const MobilePillNav = () => (
-    <div className="sticky top-0 z-40 border-b border-white/10 bg-background/95 px-3 py-2 backdrop-blur md:hidden">
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-        {(
-          [
-            { id: "weather", label: "Weather" },
-            { id: "find", label: "Find" },
-            { id: "plan", label: "Plan" },
-            { id: "log", label: "Log" },
-          ] as { id: MobileTab; label: string }[]
-        ).map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveMobileTab(tab.id)}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-              activeMobileTab === tab.id
-                ? "bg-primary text-white shadow-sm"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
   const MobileBottomNav = () => (
     <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-background/97 pb-safe backdrop-blur-md md:hidden">
-      <div className="grid grid-cols-4">
-        {(
-          [
-            { id: "weather", label: "Weather", icon: "⛅" },
-            { id: "find", label: "Find", icon: "🗺" },
-            { id: "plan", label: "Plan", icon: "✈️" },
-            { id: "log", label: "Log", icon: "📓" },
-          ] as { id: MobileTab; label: string; icon: string }[]
-        ).map((tab) => (
+      <div className={`grid ${!isAuthenticated || !isPaidUser ? "grid-cols-5" : "grid-cols-4"}`}>
+        {[
+          {
+            key: "weather",
+            label: "Weather",
+            icon: Plane,
+            onClick: () => setActiveMobileTab("weather"),
+            active: activeMobileTab === "weather",
+          },
+          {
+            key: "find",
+            label: "Explore",
+            icon: MapPin,
+            onClick: () => setActiveMobileTab("find"),
+            active: activeMobileTab === "find",
+          },
+          {
+            key: "plan",
+            label: "Plan",
+            icon: Search,
+            onClick: () => setActiveMobileTab("plan"),
+            active: activeMobileTab === "plan",
+          },
+          ...(isAuthenticated
+            ? [
+                {
+                  key: "log",
+                  label: "Log",
+                  icon: FileText,
+                  onClick: () => setActiveMobileTab("log"),
+                  active: activeMobileTab === "log",
+                },
+              ]
+            : []),
+          ...(!isPaidUser
+            ? [
+                {
+                  key: "pricing",
+                  label: "Pricing",
+                  icon: DollarSign,
+                  onClick: () => setActiveMobileTab("pricing"),
+                  active: activeMobileTab === "pricing",
+                },
+              ]
+            : []),
+          ...(!isAuthenticated
+            ? [
+                {
+                  key: "join",
+                  label: "Join",
+                  icon: UserPlus,
+                  onClick: () => navigate("/register"),
+                  active: false,
+                },
+              ]
+            : []),
+        ].map((item) => (
           <button
-            key={tab.id}
+            key={item.key}
             type="button"
             onClick={() => {
-              setActiveMobileTab(tab.id);
-              window.scrollTo({ top: 0, behavior: "smooth" });
+              item.onClick();
+              if (item.key !== "join") {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }
             }}
             className={`relative flex flex-col items-center gap-0.5 px-2 py-3 text-xs font-medium transition-colors ${
-              activeMobileTab === tab.id ? "text-primary" : "text-muted-foreground"
+              item.active ? "text-primary" : "text-muted-foreground"
             }`}
           >
-            <span className="text-lg leading-none">{tab.icon}</span>
-            <span>{tab.label}</span>
-            {activeMobileTab === tab.id && (
+            <item.icon className="h-4 w-4" />
+            <span>{item.label}</span>
+            {item.active && (
               <span className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-primary" />
             )}
           </button>
@@ -575,7 +620,6 @@ export default function Landing() {
   
   return (
     <div className="min-h-screen pb-20 md:pb-0">
-      <MobilePillNav />
       {!weatherJumpDismissed && !hasUsedWeatherTool && (
         <div className="hidden border-b border-sky-200 bg-gradient-to-r from-sky-50 to-cyan-50 md:block">
           <div className="container mx-auto px-4 py-3">
@@ -615,7 +659,7 @@ export default function Landing() {
           </div>
         </div>
       )}
-      <div className={activeMobileTab === "find" || activeMobileTab === "weather" ? "" : "hidden md:block"}>
+      <div id="landing-find-section" className={activeMobileTab === "find" ? "" : "hidden md:block"}>
       {/* Hero Section */}
       <div className="relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
         <div className="container mx-auto px-4 py-12 sm:py-20">
@@ -1027,10 +1071,10 @@ export default function Landing() {
         </div>
       )}
 
-      <div className={`rsf-section-band py-8 sm:py-10 ${activeMobileTab === "weather" ? "hidden md:block" : ""}`}>
+      <div id="landing-quickstart-section" className={`rsf-section-band py-8 sm:py-10 ${activeMobileTab === "weather" ? "hidden md:block" : ""}`}>
         <div className="container mx-auto px-4">
           <div className={`grid gap-6 ${showFullMembershipSection ? "xl:grid-cols-[1.1fr_0.9fr]" : ""}`}>
-            <section className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "log" ? "hidden md:block" : ""}`}>
+            <section className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${showQuickStartOnMobile ? "" : "hidden md:block"}`}>
                 <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
                     <div>
                       <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Quick Start</div>
@@ -1057,7 +1101,7 @@ export default function Landing() {
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <Card className={`border-primary/30 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))] ${activeMobileTab === "plan" ? "hidden md:block" : ""}`}>
+                  <Card className={`border-primary/30 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))] ${activeMobileTab === "plan" || activeMobileTab === "log" ? "hidden md:block" : ""}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Find</div>
@@ -1078,7 +1122,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className={`border-primary/28 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.1))] ${activeMobileTab === "plan" ? "hidden md:block" : ""}`}>
+                  <Card className={`border-primary/28 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.1))] ${activeMobileTab === "plan" || activeMobileTab === "log" ? "hidden md:block" : ""}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Find</div>
@@ -1099,7 +1143,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className={`border-[hsl(var(--accent)/0.34)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.12))] ${activeMobileTab === "plan" ? "hidden md:block" : ""}`}>
+                  <Card className={`border-[hsl(var(--accent)/0.34)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.12))] ${activeMobileTab === "plan" || activeMobileTab === "log" ? "hidden md:block" : ""}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--accent))]">Connect</div>
@@ -1120,7 +1164,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className={`border-slate-900/18 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(22,32,42,0.1))] ${activeMobileTab === "find" ? "hidden md:block" : ""}`}>
+                  <Card className={`border-slate-900/18 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(22,32,42,0.1))] ${activeMobileTab === "find" || activeMobileTab === "log" ? "hidden md:block" : ""}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/90 dark:text-slate-300/80">Plan</div>
@@ -1141,7 +1185,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className={`border-primary/22 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] hidden md:block`}>
+                  <Card className={`border-primary/22 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] ${activeMobileTab === "log" ? "" : "hidden md:block"}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/70">Track</div>
@@ -1162,7 +1206,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className={`border-accent/34 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.14))] ${activeMobileTab === "find" ? "hidden md:block" : ""}`}>
+                  <Card className={`border-accent/34 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.14))] ${activeMobileTab === "find" || activeMobileTab === "log" ? "hidden md:block" : ""}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/80 dark:text-slate-300/80">Brief</div>
@@ -1204,7 +1248,7 @@ export default function Landing() {
             </section>
 
             {showFullMembershipSection && (
-            <section className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "log" ? "" : "hidden md:block"}`}>
+            <section id="landing-membership-section" className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "log" || activeMobileTab === "pricing" ? "" : "hidden md:block"}`}>
                 <div className="text-center space-y-3">
                   <span className="rsf-kicker mx-auto">RSF Memberships</span>
                   <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
@@ -1377,7 +1421,7 @@ export default function Landing() {
           </div>
 
           {showProPlusUpgradeSection && (
-            <section className={`mt-6 rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "log" ? "" : "hidden md:block"}`}>
+            <section id="landing-membership-section" className={`mt-6 rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "log" || activeMobileTab === "pricing" ? "" : "hidden md:block"}`}>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2">
                   <span className="rsf-kicker">Pro+ Upgrade</span>
@@ -1531,7 +1575,7 @@ export default function Landing() {
 
       {/* Current Conditions */}
       {(openLandingModules.includes("conditions") || activeMobileTab === "weather") && (
-      <div className={`pb-10 sm:pb-12 ${activeMobileTab !== "weather" ? "hidden md:block" : ""}`}>
+      <div id="landing-weather-section" className={`pb-10 sm:pb-12 ${activeMobileTab !== "weather" ? "hidden md:block" : ""}`}>
         <div className="container mx-auto px-4 space-y-6">
           <div className="text-center space-y-2">
             <h2 className="text-2xl sm:text-3xl font-semibold">Current Conditions</h2>
@@ -1870,6 +1914,23 @@ export default function Landing() {
       {(openLandingModules.includes("cfi") || openLandingModules.includes("partner") || activeMobileTab === "find") && (
       <div className={`py-10 sm:py-12 ${activeMobileTab !== "find" ? "hidden md:block" : ""}`}>
         <div className="container mx-auto px-4">
+          {(openLandingModules.includes("partner") || activeMobileTab === "find") ? (
+            <FeaturedPartnerToolCard
+              className="mt-6 mx-auto w-full md:w-2/3"
+              partnerKey="av8maps"
+              title="Av8Maps - Nationwide GA Destination Maps"
+              description="Choose your next flight destination with fly-in camping, restaurants, aviation-friendly stays, and more."
+              logoSrc={av8mapsLogo}
+              ctaLabel="Explore Av8Maps"
+              outboundPath="/out/av8maps"
+              placement="home_featured_partner_card"
+              source="home_featured_partner_card"
+              badgeLabel="Featured Partner Tool"
+              embedEnabled={AV8MAPS_EMBED_ENABLED}
+              embedUrl={AV8MAPS_EMBED_URL || undefined}
+              tiles={av8mapsTiles}
+            />
+          ) : null}
           {(openLandingModules.includes("cfi") || activeMobileTab === "find") ? (
           <Card className="mt-6 border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--primary)/0.11))]">
             <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
@@ -1931,23 +1992,6 @@ export default function Landing() {
               </div>
             </CardContent>
           </Card>
-          ) : null}
-          {(openLandingModules.includes("partner") || activeMobileTab === "find") ? (
-            <FeaturedPartnerToolCard
-              className="mt-6 mx-auto w-full md:w-2/3"
-              partnerKey="av8maps"
-              title="Av8Maps - Nationwide GA Destination Maps"
-              description="Choose your next flight destination with fly-in camping, restaurants, aviation-friendly stays, and more."
-              logoSrc={av8mapsLogo}
-              ctaLabel="Explore Av8Maps"
-              outboundPath="/out/av8maps"
-              placement="home_featured_partner_card"
-              source="home_featured_partner_card"
-              badgeLabel="Featured Partner Tool"
-              embedEnabled={AV8MAPS_EMBED_ENABLED}
-              embedUrl={AV8MAPS_EMBED_URL || undefined}
-              tiles={av8mapsTiles}
-            />
           ) : null}
         </div>
       </div>

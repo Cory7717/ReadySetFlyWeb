@@ -1122,6 +1122,7 @@ export default function PilotTools() {
                       size="sm"
                       variant="outline"
                       onClick={() => setShowAiWeatherSummary((current) => !current)}
+                      className="w-full sm:w-auto"
                     >
                       {showAiWeatherSummary ? "Hide AI summary" : "Open AI summary"}
                     </Button>
@@ -1252,6 +1253,7 @@ export default function PilotTools() {
                       size="sm"
                       variant="outline"
                       onClick={() => setShowAiNotamTranslator((current) => !current)}
+                      className="w-full sm:w-auto"
                     >
                       {showAiNotamTranslator ? "Hide AI translator" : "Open AI translator"}
                     </Button>

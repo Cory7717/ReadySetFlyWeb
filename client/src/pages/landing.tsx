@@ -1386,7 +1386,7 @@ export default function Landing() {
                   <Label htmlFor="landing-icao" className="text-sm font-semibold">
                     Airport ICAO
                   </Label>
-                  <div className="relative max-w-xs">
+                  <div className="relative w-full sm:max-w-xs">
                     <Input
                       id="landing-icao"
                       value={icaoInput}
@@ -1439,6 +1439,7 @@ export default function Landing() {
                   variant="outline"
                   onClick={refreshAirportConditions}
                   disabled={!ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
+                  className="w-full sm:w-auto"
                 >
                   {weatherFetching || runwayFetching || notamsFetching ? "Refreshing..." : "Update conditions"}
                 </Button>
@@ -1555,6 +1556,7 @@ export default function Landing() {
                       size="sm"
                       variant="outline"
                       onClick={() => setShowAiWeatherSummary((current) => !current)}
+                      className="w-full sm:w-auto"
                     >
                       {showAiWeatherSummary ? "Hide AI summary" : "Open AI summary"}
                     </Button>
@@ -1682,6 +1684,7 @@ export default function Landing() {
                       size="sm"
                       variant="outline"
                       onClick={() => setShowAiNotamTranslator((current) => !current)}
+                      className="w-full sm:w-auto"
                     >
                       {showAiNotamTranslator ? "Hide AI translator" : "Open AI translator"}
                     </Button>

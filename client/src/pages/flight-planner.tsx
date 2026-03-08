@@ -4350,6 +4350,7 @@ export default function FlightPlanner() {
                       size="sm"
                       variant="outline"
                       onClick={() => setShowAiNotamTranslator((current) => !current)}
+                      className="w-full sm:w-auto"
                     >
                       {showAiNotamTranslator ? "Hide AI translator" : "Open AI translator"}
                     </Button>

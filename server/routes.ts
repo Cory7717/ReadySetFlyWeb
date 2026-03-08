@@ -8513,6 +8513,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/admin/users/:userId", isAuthenticated, requireUsersAdmin, async (req: any, res) => {
+    try {
+      const requestingUserId = req.user?.claims?.sub || req.session?.userId;
+      const requestingUser = requestingUserId ? await storage.getUser(String(requestingUserId)) : null;
+      if (!requestingUser) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      if (!requestingUser.isSuperAdmin) {
+        return res.status(403).json({ error: "Super Admin required to delete user accounts" });
+      }
+      if (String(requestingUserId) === req.params.userId) {
+        return res.status(400).json({ error: "You cannot delete your own account from admin" });
+      }
+
+      const targetUser = await storage.getUser(req.params.userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      if (targetUser.isSuperAdmin) {
+        return res.status(403).json({ error: "Cannot delete another super admin account" });
+      }
+
+      const deleted = await storage.deleteUser(req.params.userId);
+      if (!deleted) {
+        return res.status(500).json({ error: "Failed to delete user account" });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin delete user error:", error);
+      res.status(500).json({ error: "Failed to delete user account" });
+    }
+  });
+
   // Grant or revoke CFI support access (Super Admin only)
   app.post("/api/admin/users/:userId/cfi-grant", isAuthenticated, requireUsersAdmin, async (req: any, res) => {
     try {

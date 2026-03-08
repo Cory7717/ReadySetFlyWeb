@@ -230,6 +230,27 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
     },
   });
 
+  const deleteUserMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", `/api/admin/users/${userId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "User deleted",
+        description: "The RSF account has been deleted.",
+      });
+      onOpenChange(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete user account.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!user && !userLoading) return null;
 
   const certs = (user?.certifications || []).map((cert) => String(cert).toLowerCase());
@@ -259,6 +280,15 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
   const handleToggleVerification = (field: string, currentValue: boolean) => {
     if (!userId) return;
     toggleVerificationMutation.mutate({ userId, field, value: !currentValue });
+  };
+
+  const handleDeleteUser = () => {
+    if (!userId || !user) return;
+    const confirmed = window.confirm(
+      `Delete the RSF account for ${user.email || user.id}? This removes the user and related data and cannot be undone.`
+    );
+    if (!confirmed) return;
+    deleteUserMutation.mutate();
   };
 
   const handleToggleAdmin = () => {
@@ -1168,6 +1198,35 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                           <p className="text-xs text-muted-foreground">
                             This overlays RSF membership entitlements for support or issue resolution and does not modify the user&apos;s PayPal subscription.
                           </p>
+                          <Separator />
+                          <div className="space-y-2">
+                            <div className="text-sm font-medium text-destructive">Delete RSF account</div>
+                            <p className="text-xs text-muted-foreground">
+                              Permanently delete this user account and its related RSF data. This action cannot be undone.
+                            </p>
+                            <Button
+                              variant="destructive"
+                              onClick={handleDeleteUser}
+                              disabled={
+                                deleteUserMutation.isPending ||
+                                Boolean(user?.isSuperAdmin) ||
+                                adminUser?.id === user?.id
+                              }
+                              data-testid="button-delete-user-account"
+                            >
+                              {deleteUserMutation.isPending ? "Deleting..." : "Delete user account"}
+                            </Button>
+                            {user?.isSuperAdmin && (
+                              <div className="text-xs text-muted-foreground">
+                                Super admin accounts cannot be deleted from this control.
+                              </div>
+                            )}
+                            {adminUser?.id === user?.id && (
+                              <div className="text-xs text-muted-foreground">
+                                You cannot delete your own account from the admin dashboard.
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <p className="text-sm text-muted-foreground">

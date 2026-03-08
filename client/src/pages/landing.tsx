@@ -308,8 +308,6 @@ export default function Landing() {
   const isPaidUser = hasProCore || hasProPlus;
   const showFullMembershipSection = !hasProCore && !hasProPlus;
   const showProPlusUpgradeSection = hasProCore && !hasProPlus;
-  const showMembershipTabContent = showFullMembershipSection || showProPlusUpgradeSection;
-  const showQuickStartOnMobile = activeMobileTab === "find" || activeMobileTab === "plan" || (activeMobileTab === "log" && !showMembershipTabContent);
   const fuelAirports = useMemo(
     () =>
       (fuelPrices?.results ?? [])
@@ -425,26 +423,6 @@ export default function Landing() {
     }
   }, [activeMobileTab]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.innerWidth >= 768) return;
-    const targetId =
-      activeMobileTab === "weather"
-        ? "landing-weather-section"
-        : activeMobileTab === "find"
-          ? "landing-find-section"
-        : activeMobileTab === "plan"
-          ? "landing-quickstart-section"
-          : activeMobileTab === "pricing"
-            ? "landing-membership-section"
-            : showMembershipTabContent
-              ? "landing-membership-section"
-              : "landing-quickstart-section";
-    window.requestAnimationFrame(() => {
-      document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }, [activeMobileTab, showMembershipTabContent]);
-
   const pauseAutoScroll = (ms = 8000) => {
     setAutoPauseUntil(Date.now() + ms);
   };
@@ -517,6 +495,40 @@ export default function Landing() {
       window.localStorage.setItem(LANDING_WEATHER_BAR_DISMISS_KEY, "true");
     } catch {}
   };
+
+  const MobilePillNav = () => (
+    <div className="sticky top-0 z-40 border-b border-white/10 bg-background/95 px-3 py-2 backdrop-blur md:hidden">
+      <div className="scrollbar-hide flex gap-2 overflow-x-auto">
+        {[
+          { id: "weather" as MobileTab, label: "⛅ Weather" },
+          { id: "find" as MobileTab, label: "🗺 Explore" },
+          { id: "plan" as MobileTab, label: "✈️ Plan" },
+          ...(isAuthenticated
+            ? [{ id: "log" as MobileTab, label: "📓 Log" }]
+            : []),
+          ...(!isPaidUser
+            ? [{ id: "pricing" as MobileTab, label: "💳 Pricing" }]
+            : []),
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => {
+              setActiveMobileTab(tab.id);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeMobileTab === tab.id
+                ? "bg-primary text-white shadow-sm"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   const MobileBottomNav = () => (
     <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-background/97 pb-safe backdrop-blur-md md:hidden">
@@ -620,6 +632,471 @@ export default function Landing() {
   
   return (
     <div className="min-h-screen pb-20 md:pb-0">
+      <MobilePillNav />
+      {activeMobileTab === "weather" && (
+        <div className="md:hidden">
+          <div className="container mx-auto space-y-4 px-4 pt-4">
+            <Card className="overflow-visible border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.7))]">
+              <CardContent className="relative z-30 p-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mobile-weather-icao" className="text-sm font-semibold">
+                    Airport ICAO
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="mobile-weather-icao"
+                      value={icaoInput}
+                      onChange={(event) => setIcaoInput(event.target.value)}
+                      onBlur={submitIcao}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          refreshAirportConditions();
+                        }
+                      }}
+                      placeholder="KAUS or Austin, TX"
+                      className="pr-10"
+                    />
+                    <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    {(loadingSuggestions || airportSuggestions.length > 0) && (
+                      <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-sm">
+                        {loadingSuggestions ? (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">Searching airports...</div>
+                        ) : (
+                          <ul className="max-h-56 overflow-auto">
+                            {airportSuggestions.map((suggestion) => (
+                              <li key={suggestion.icao}>
+                                <button
+                                  type="button"
+                                  onMouseDown={(event) => event.preventDefault()}
+                                  onClick={() => applySuggestion(suggestion)}
+                                  className="w-full px-3 py-2 text-left text-sm hover:bg-muted/60"
+                                >
+                                  <div className="font-semibold">{suggestion.icao}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {suggestion.name}
+                                    {suggestion.city ? ` - ${suggestion.city}` : ""}
+                                    {suggestion.state ? `, ${suggestion.state}` : ""}
+                                  </div>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                    {airportMeta && (
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {airportMeta.name ?? "Unknown airport"}
+                        {airportLocation ? ` (${airportLocation})` : ""}
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={refreshAirportConditions}
+                    disabled={!ICAO_REGEX.test(icaoInput.trim().toUpperCase())}
+                    className="w-full"
+                  >
+                    {weatherFetching || runwayFetching || notamsFetching ? "Refreshing..." : "Update conditions"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge
+                variant="secondary"
+                className={`text-white ${
+                  flightCategory.color === "green"
+                    ? "bg-green-600"
+                    : flightCategory.color === "blue"
+                      ? "bg-blue-600"
+                      : flightCategory.color === "red"
+                        ? "bg-red-600"
+                        : "bg-purple-600"
+                }`}
+              >
+                {flightCategory.category}
+              </Badge>
+              {runwayInUseDisplay && (
+                <Badge variant="outline" className="bg-primary/10 text-primary">
+                  Active RWY: {runwayInUseDisplay}
+                </Badge>
+              )}
+              {atisInfo && (
+                <Badge variant="outline" className="bg-sky-100 text-sky-800">
+                  ATIS: {atisInfo}
+                </Badge>
+              )}
+              {weatherHazards.map((hazard) => (
+                <Badge
+                  key={hazard.id}
+                  variant="outline"
+                  className={
+                    hazard.tone === "red"
+                      ? "border-red-300 bg-red-50 text-red-800"
+                      : hazard.tone === "amber"
+                        ? "border-amber-300 bg-amber-50 text-amber-800"
+                        : "border-sky-300 bg-sky-50 text-sky-800"
+                  }
+                >
+                  {hazard.label}
+                </Badge>
+              ))}
+            </div>
+
+            {weather?.metar ? (
+              <div>
+                <Label className="text-sm font-semibold">METAR</Label>
+                <p className="mt-1 rounded-md bg-muted p-3 font-mono text-sm break-all">
+                  {weather.metar.rawOb}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No METAR data available.</p>
+            )}
+
+            {weather?.taf && (
+              <div>
+                <Label className="text-sm font-semibold">TAF (Forecast)</Label>
+                <p className="mt-1 rounded-md bg-muted p-3 font-mono text-sm whitespace-pre-wrap break-all">
+                  {weather.taf.rawTAF}
+                </p>
+              </div>
+            )}
+
+            <div className="rounded-lg border bg-primary/5 p-4">
+              <div className="mb-3 space-y-1">
+                <div className="text-sm font-semibold">AI weather briefing</div>
+                <div className="text-xs text-muted-foreground">
+                  Plain-English summary of METAR and TAF for {searchIcao}.
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                className="w-full"
+                onClick={() => setShowAiWeatherSummary((current) => !current)}
+              >
+                {showAiWeatherSummary ? "Hide AI summary" : "Open AI summary"}
+              </Button>
+              {showAiWeatherSummary && (
+                <div className="mt-3">
+                  <WeatherBriefingSummarizer
+                    metar={weather?.metar?.rawOb ?? ""}
+                    taf={weather?.taf?.rawTAF ?? ""}
+                    origin={searchIcao}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <div className="mb-3 space-y-1">
+                <div className="text-sm font-semibold">AI NOTAM translator</div>
+                <div className="text-xs text-muted-foreground">
+                  Plain-English operational impacts for active NOTAMs at {searchIcao}.
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowAiNotamTranslator((current) => !current)}
+              >
+                {showAiNotamTranslator ? "Hide AI translator" : "Open AI translator"}
+              </Button>
+              {showAiNotamTranslator && (
+                <div className="mt-3">
+                  <NotamTranslator
+                    notams={notams?.notams?.map((item) => item.text ?? "").filter(Boolean).join("\n\n") ?? ""}
+                    airport={searchIcao}
+                  />
+                </div>
+              )}
+            </div>
+
+            {notams?.notams?.length ? (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Active NOTAMs</Label>
+                {notams.notams.slice(0, 4).map((item) => (
+                  <div key={item.id} className="space-y-1 rounded-lg border p-3 text-xs">
+                    <div className="font-semibold">{item.text}</div>
+                    {(item.effective || item.expires) && (
+                      <div className="text-muted-foreground">
+                        {item.effective ? `Effective ${item.effective}` : ""}
+                        {item.expires ? ` - Expires ${item.expires}` : ""}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {runwayBriefing?.advisory && (
+              <div className="rounded-lg border p-3 text-sm">
+                <Label className="mb-2 block text-sm font-semibold">Runway Advisory</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">Recommended: {runwayBriefing.advisory.runway}</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    Headwind {runwayBriefing.advisory.headwind} kt - Crosswind {runwayBriefing.advisory.crosswind} kt
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Advisory only. ATC assigns runways - verify with ATIS and tower.
+                </p>
+              </div>
+            )}
+
+            <div className="rounded-lg border border-white/10 bg-muted/20 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">Fuel prices near {searchIcao}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {cheapestFuelAirport
+                      ? `Cheapest ${selectedFuelType}: $${cheapestFuelAirport.matchingFuel.pricePPG?.toFixed(2)} at ${cheapestFuelAirport.icao}`
+                      : "Search fuel prices in the Explore tab"}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setActiveMobileTab("find");
+                    setMobileFuelExpanded(true);
+                  }}
+                >
+                  View prices
+                </Button>
+              </div>
+            </div>
+
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>Disclaimer:</strong> Planning use only. Always obtain an official weather briefing before flight.
+              </AlertDescription>
+            </Alert>
+          </div>
+        </div>
+      )}
+      {activeMobileTab === "plan" && (
+        <div className="container mx-auto space-y-4 px-4 pt-4 md:hidden">
+          <div className="space-y-1">
+            <h2 className="text-xl font-semibold">Plan your flight</h2>
+            <p className="text-sm text-muted-foreground">
+              Tools for route planning, performance, and airspace awareness.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: "Flight Planner", desc: "Route, fuel, timing, alternates.", href: "/flight-planner", icon: Plane },
+              { label: "TFR + NOTAM Map", desc: "Active restrictions and airspace.", href: "/tfr-map", icon: AlertTriangle },
+              { label: "E6B Calculator", desc: "Wind, fuel burn, time/speed/dist.", href: "/e6b", icon: Calculator },
+              { label: "Crosswind Calc", desc: "Headwind and crosswind components.", href: "/pilot-tools", icon: Plane },
+              { label: "Density Altitude", desc: "Performance altitude calculator.", href: "/pilot-tools", icon: Plane },
+              { label: "All Tools", desc: "Full tool hub.", href: "/tool-hub", icon: Search },
+            ].map((item) => (
+              <Link
+                key={item.label}
+                href={item.href}
+                onClick={() =>
+                  trackEvent("cta_click", {
+                    label: `mobile_plan_tab_${item.label.toLowerCase().replace(/\s/g, "_")}`,
+                    target: item.href,
+                  })
+                }
+              >
+                <div className="flex h-full flex-col gap-2 rounded-xl border border-white/10 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] p-4 transition hover:bg-muted/60">
+                  <item.icon className="h-4 w-4 text-primary" />
+                  <div className="text-sm font-semibold leading-tight">{item.label}</div>
+                  <div className="text-xs leading-snug text-muted-foreground">{item.desc}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+      {activeMobileTab === "log" && (
+        <div className="container mx-auto space-y-4 px-4 pt-4 md:hidden">
+          {isPaidUser ? (
+            <>
+              <div className="space-y-1">
+                <h2 className="text-xl font-semibold">Your logbook</h2>
+                <p className="text-sm text-muted-foreground">
+                  Track flights, endorsements, and currency.
+                </p>
+              </div>
+              <Button asChild className="w-full" size="lg">
+                <Link
+                  href="/logbook"
+                  onClick={() => trackEvent("cta_click", { label: "mobile_log_tab_open_logbook", target: "/logbook" })}
+                >
+                  Open digital logbook
+                </Link>
+              </Button>
+              {hasProPlus ? (
+                <Button asChild variant="outline" className="w-full">
+                  <Link href="/cfi/training-center">CFI Training Center</Link>
+                </Button>
+              ) : (
+                <div className="rounded-lg border border-accent/30 bg-accent/5 p-4 text-sm">
+                  <div className="mb-1 font-semibold">Upgrade to Pro+</div>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Unlock GPS simulators and the CFI training center.
+                  </p>
+                  <Button asChild size="sm" className="w-full">
+                    <Link href="/logbook/pro">Upgrade to Pro+</Link>
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <h2 className="text-xl font-semibold">Free digital logbook</h2>
+                <p className="text-sm text-muted-foreground">
+                  Log flights with the basic RSF logbook now. Upgrade for saved plans, enhanced tracking, and Pro features.
+                </p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                <div className="font-semibold">Included with a free account</div>
+                <ul className="mt-2 space-y-2 text-xs text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    Basic digital logbook access
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    Core flight entry and tracking
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    Upgrade when you need saved plans and enhanced tools
+                  </li>
+                </ul>
+              </div>
+              <Button asChild className="w-full" size="lg">
+                <Link
+                  href="/logbook"
+                  onClick={() => trackEvent("cta_click", { label: "mobile_log_tab_open_logbook", target: "/logbook" })}
+                >
+                  Open free logbook
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full">
+                <Link
+                  href="/logbook/pro"
+                  onClick={() => trackEvent("cta_click", { label: "mobile_log_tab_start_trial", target: "/logbook/pro" })}
+                >
+                  Start 14-day Pro trial
+                </Link>
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+      {activeMobileTab === "pricing" && (
+        <div className="container mx-auto space-y-4 px-4 pt-4 md:hidden">
+          <div className="space-y-2 text-center">
+            <span className="rsf-kicker mx-auto">RSF Memberships</span>
+            <h2 className="text-2xl font-semibold">Free vs Pro Core vs Pro+</h2>
+            <p className="text-sm text-muted-foreground">
+              Start free. Upgrade when you are ready - 14-day trial, no credit card required.
+            </p>
+          </div>
+
+          <Card className="border-muted/60 bg-[linear-gradient(180deg,hsl(var(--muted)/0.4),hsl(var(--muted)/0.2))] opacity-90">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">RSF Free</CardTitle>
+              <div className="text-2xl font-bold">
+                $0<span className="text-sm font-normal text-muted-foreground">/mo</span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                Marketplace, rentals, CFI directory
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                Weather, TFR, and NOTAM tools
+              </div>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                AI weather briefings (limited)
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/40 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))]">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2">
+                <Badge className="w-fit">Most Popular</Badge>
+                <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-xs text-emerald-700">
+                  14-day free trial
+                </Badge>
+              </div>
+              <CardTitle className="text-base">{membershipTierInfo.pro.title}</CardTitle>
+              <div className="text-2xl font-bold">
+                ${proMonthly?.toFixed(2) ?? "5.99"}
+                <span className="text-sm font-normal text-muted-foreground">/mo</span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              {membershipTierInfo.pro.features.map((feature) => (
+                <div key={feature} className="flex items-start gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  {feature}
+                </div>
+              ))}
+              <Button asChild className="mt-2 w-full">
+                <Link
+                  href="/logbook/pro"
+                  onClick={() => trackEvent("cta_click", { label: "mobile_pricing_tab_pro_trial", target: "/logbook/pro" })}
+                >
+                  Start Pro trial
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border-[hsl(var(--accent)/0.32)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.11))]">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2">
+                <Badge variant="secondary" className="w-fit">Power Pilot</Badge>
+                <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-xs text-emerald-700">
+                  14-day free trial
+                </Badge>
+              </div>
+              <CardTitle className="text-base">{membershipTierInfo.pro_plus.title}</CardTitle>
+              <div className="text-2xl font-bold">
+                ${proPlusMonthly?.toFixed(2) ?? "11.99"}
+                <span className="text-sm font-normal text-muted-foreground">/mo</span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              {membershipTierInfo.pro_plus.features.map((feature) => (
+                <div key={feature} className="flex items-start gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  {feature}
+                </div>
+              ))}
+              <Button asChild variant="outline" className="mt-2 w-full">
+                <Link
+                  href="/logbook/pro"
+                  onClick={() => trackEvent("cta_click", { label: "mobile_pricing_tab_proplus_trial", target: "/logbook/pro" })}
+                >
+                  Start Pro+ trial
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
       {!weatherJumpDismissed && !hasUsedWeatherTool && (
         <div className="hidden border-b border-sky-200 bg-gradient-to-r from-sky-50 to-cyan-50 md:block">
           <div className="container mx-auto px-4 py-3">
@@ -1071,10 +1548,10 @@ export default function Landing() {
         </div>
       )}
 
-      <div id="landing-quickstart-section" className={`rsf-section-band py-8 sm:py-10 ${activeMobileTab === "weather" ? "hidden md:block" : ""}`}>
+      <div id="landing-quickstart-section" className="hidden rsf-section-band py-8 sm:py-10 md:block">
         <div className="container mx-auto px-4">
           <div className={`grid gap-6 ${showFullMembershipSection ? "xl:grid-cols-[1.1fr_0.9fr]" : ""}`}>
-            <section className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${showQuickStartOnMobile ? "" : "hidden md:block"}`}>
+            <section className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "find" || activeMobileTab === "plan" || activeMobileTab === "log" ? "" : "hidden md:block"}`}>
                 <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
                     <div>
                       <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-200">Quick Start</div>
@@ -1101,7 +1578,7 @@ export default function Landing() {
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <Card className={`border-primary/30 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))] ${activeMobileTab === "plan" || activeMobileTab === "log" ? "hidden md:block" : ""}`}>
+                  <Card className={`border-primary/30 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))] ${activeMobileTab === "find" ? "" : "hidden md:block"}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Find</div>
@@ -1122,7 +1599,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className={`border-primary/28 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.1))] ${activeMobileTab === "plan" || activeMobileTab === "log" ? "hidden md:block" : ""}`}>
+                  <Card className={`border-primary/28 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.1))] ${activeMobileTab === "find" ? "" : "hidden md:block"}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Find</div>
@@ -1143,7 +1620,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className={`border-[hsl(var(--accent)/0.34)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.12))] ${activeMobileTab === "plan" || activeMobileTab === "log" ? "hidden md:block" : ""}`}>
+                  <Card className={`border-[hsl(var(--accent)/0.34)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.12))] ${activeMobileTab === "find" ? "" : "hidden md:block"}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[hsl(var(--accent))]">Connect</div>
@@ -1164,7 +1641,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className={`border-slate-900/18 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(22,32,42,0.1))] ${activeMobileTab === "find" || activeMobileTab === "log" ? "hidden md:block" : ""}`}>
+                  <Card className={`border-slate-900/18 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(22,32,42,0.1))] ${activeMobileTab === "plan" ? "" : "hidden md:block"}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/90 dark:text-slate-300/80">Plan</div>
@@ -1206,7 +1683,7 @@ export default function Landing() {
                     </CardContent>
                   </Card>
 
-                  <Card className={`border-accent/34 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.14))] ${activeMobileTab === "find" || activeMobileTab === "log" ? "hidden md:block" : ""}`}>
+                  <Card className={`border-accent/34 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.14))] ${activeMobileTab === "plan" ? "" : "hidden md:block"}`}>
                     <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
                       <div className="space-y-3">
                         <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-700/80 dark:text-slate-300/80">Brief</div>
@@ -1248,7 +1725,7 @@ export default function Landing() {
             </section>
 
             {showFullMembershipSection && (
-            <section id="landing-membership-section" className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "log" || activeMobileTab === "pricing" ? "" : "hidden md:block"}`}>
+            <section id="landing-membership-section" className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "pricing" ? "" : "hidden md:block"}`}>
                 <div className="text-center space-y-3">
                   <span className="rsf-kicker mx-auto">RSF Memberships</span>
                   <h2 className="text-2xl sm:text-3xl font-semibold">RSF Free vs Pro Core vs Pro+</h2>
@@ -1421,7 +1898,7 @@ export default function Landing() {
           </div>
 
           {showProPlusUpgradeSection && (
-            <section id="landing-membership-section" className={`mt-6 rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "log" || activeMobileTab === "pricing" ? "" : "hidden md:block"}`}>
+            <section id="landing-membership-section" className={`mt-6 rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "pricing" ? "" : "hidden md:block"}`}>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2">
                   <span className="rsf-kicker">Pro+ Upgrade</span>
@@ -1574,8 +2051,8 @@ export default function Landing() {
       </div>
 
       {/* Current Conditions */}
-      {(openLandingModules.includes("conditions") || activeMobileTab === "weather") && (
-      <div id="landing-weather-section" className={`pb-10 sm:pb-12 ${activeMobileTab !== "weather" ? "hidden md:block" : ""}`}>
+      {openLandingModules.includes("conditions") && (
+      <div id="landing-weather-section" className="hidden pb-10 sm:pb-12 md:block">
         <div className="container mx-auto px-4 space-y-6">
           <div className="text-center space-y-2">
             <h2 className="text-2xl sm:text-3xl font-semibold">Current Conditions</h2>

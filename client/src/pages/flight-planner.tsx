@@ -1,5 +1,5 @@
 ﻿
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -240,6 +240,15 @@ type ScratchPadFields = {
   notes: string;
 };
 
+type ScratchInkPoint = {
+  x: number;
+  y: number;
+};
+
+type ScratchInkStroke = {
+  points: ScratchInkPoint[];
+};
+
 const SCRATCH_PAD_DEFAULT: ScratchPadFields = {
   clearanceLimit: "",
   departure: "",
@@ -254,6 +263,7 @@ const SCRATCH_PAD_DEFAULT: ScratchPadFields = {
 const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
 const FLIGHT_PLANNER_ACTIVE_TAB_KEY = "rsf_planner_active_tab";
 const SCRATCH_PAD_KEY = "rsf.scratchPad";
+const SCRATCH_PAD_INK_KEY = "rsf.scratchPadInk";
 const FLIGHT_PLANNER_TABS = ["route", "weather", "navlog", "analysis", "file"] as const;
 type FlightPlannerTab = typeof FLIGHT_PLANNER_TABS[number];
 
@@ -563,6 +573,157 @@ function ScratchField({
   );
 }
 
+type ScratchPadInkBoardProps = {
+  strokes: ScratchInkStroke[];
+  onChange: (strokes: ScratchInkStroke[]) => void;
+};
+
+function ScratchPadInkBoard({ strokes, onChange }: ScratchPadInkBoardProps) {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [draftStroke, setDraftStroke] = useState<ScratchInkStroke | null>(null);
+  const [boardSize, setBoardSize] = useState({ width: 0, height: 0 });
+  const activePointerIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const updateSize = () => {
+      const nextWidth = wrapperRef.current?.clientWidth ?? 0;
+      const nextHeight = wrapperRef.current?.clientHeight ?? 0;
+      setBoardSize((current) =>
+        current.width === nextWidth && current.height === nextHeight
+          ? current
+          : { width: nextWidth, height: nextHeight }
+      );
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver !== "undefined" && wrapperRef.current) {
+      const observer = new ResizeObserver(() => updateSize());
+      observer.observe(wrapperRef.current);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || boardSize.width === 0 || boardSize.height === 0) return;
+
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = Math.round(boardSize.width * ratio);
+    canvas.height = Math.round(boardSize.height * ratio);
+    canvas.style.width = `${boardSize.width}px`;
+    canvas.style.height = `${boardSize.height}px`;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(ratio, ratio);
+    ctx.clearRect(0, 0, boardSize.width, boardSize.height);
+    ctx.fillStyle = "#111827";
+    ctx.fillRect(0, 0, boardSize.width, boardSize.height);
+
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 8]);
+    for (let line = 1; line < 4; line += 1) {
+      const y = (boardSize.height / 4) * line;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(boardSize.width, y);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    const drawStroke = (stroke: ScratchInkStroke) => {
+      if (stroke.points.length === 0) return;
+      ctx.strokeStyle = "#f8fafc";
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+      stroke.points.slice(1).forEach((point) => {
+        ctx.lineTo(point.x, point.y);
+      });
+      if (stroke.points.length === 1) {
+        ctx.lineTo(stroke.points[0].x + 0.01, stroke.points[0].y + 0.01);
+      }
+      ctx.stroke();
+    };
+
+    strokes.forEach(drawStroke);
+    if (draftStroke) drawStroke(draftStroke);
+  }, [boardSize, draftStroke, strokes]);
+
+  const pointFromEvent = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+  };
+
+  const finishStroke = () => {
+    if (!draftStroke || draftStroke.points.length === 0) {
+      setDraftStroke(null);
+      activePointerIdRef.current = null;
+      return;
+    }
+    onChange([...strokes, draftStroke]);
+    setDraftStroke(null);
+    activePointerIdRef.current = null;
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
+        <div>Finger, mouse, or stylus. Write the clearance first, organize later.</div>
+        <div className="font-mono">{strokes.length} stroke{strokes.length === 1 ? "" : "s"} saved</div>
+      </div>
+      <div
+        ref={wrapperRef}
+        className="relative h-[60vh] min-h-[360px] overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+      >
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between border-b border-zinc-800 px-3 py-2 text-[10px] uppercase tracking-[0.24em] text-zinc-500">
+          <span>Ink Pad</span>
+          <span>Auto-saved</span>
+        </div>
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 mt-8 h-[calc(100%-2rem)] w-full touch-none"
+          onPointerDown={(event) => {
+            const point = pointFromEvent(event);
+            activePointerIdRef.current = event.pointerId;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            setDraftStroke({ points: [point] });
+          }}
+          onPointerMove={(event) => {
+            if (activePointerIdRef.current !== event.pointerId) return;
+            const point = pointFromEvent(event);
+            setDraftStroke((current) => {
+              if (!current) return current;
+              return { points: [...current.points, point] };
+            });
+          }}
+          onPointerUp={(event) => {
+            if (activePointerIdRef.current !== event.pointerId) return;
+            finishStroke();
+          }}
+          onPointerCancel={(event) => {
+            if (activePointerIdRef.current !== event.pointerId) return;
+            finishStroke();
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function FlightPlanner() {
   const { user, isAuthenticated } = useAuth();
   const { profile: studentProfile } = useStudentProfile();
@@ -586,6 +747,7 @@ export default function FlightPlanner() {
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
   const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string } | null>(null);
   const [scratchPadOpen, setScratchPadOpen] = useState(false);
+  const [scratchPadMode, setScratchPadMode] = useState<"ink" | "craft">("ink");
   const [scratchPad, setScratchPad] = useState<ScratchPadFields>(() => {
     if (typeof window === "undefined") return SCRATCH_PAD_DEFAULT;
     try {
@@ -593,6 +755,17 @@ export default function FlightPlanner() {
       if (raw) return { ...SCRATCH_PAD_DEFAULT, ...JSON.parse(raw) };
     } catch {}
     return SCRATCH_PAD_DEFAULT;
+  });
+  const [scratchInk, setScratchInk] = useState<ScratchInkStroke[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(SCRATCH_PAD_INK_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   });
 
   useEffect(() => {
@@ -646,6 +819,13 @@ export default function FlightPlanner() {
   }, [scratchPad]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem(SCRATCH_PAD_INK_KEY, JSON.stringify(scratchInk));
+    } catch {}
+  }, [scratchInk]);
+
+  useEffect(() => {
     if (!scratchPadOpen) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setScratchPadOpen(false);
@@ -692,9 +872,14 @@ export default function FlightPlanner() {
     field: keyof ScratchPadFields,
     value: string
   ) => setScratchPad((prev) => ({ ...prev, [field]: value }));
-  const scratchPadHasContent = useMemo(
+  const scratchPadHasText = useMemo(
     () => Object.values(scratchPad).some((value) => value.trim()),
     [scratchPad]
+  );
+  const scratchPadHasInk = scratchInk.length > 0;
+  const scratchPadHasContent = useMemo(
+    () => scratchPadHasText || scratchPadHasInk,
+    [scratchPadHasInk, scratchPadHasText]
   );
   const openScratchPad = () => {
     setScratchPad((prev) => ({
@@ -705,6 +890,7 @@ export default function FlightPlanner() {
       altitude: prev.altitude ||
         (plannedAltitudeFt ? String(plannedAltitudeFt) : ""),
     }));
+    setScratchPadMode("ink");
     setScratchPadOpen(true);
     trackEvent("scratch_pad_opened");
   };
@@ -2553,9 +2739,9 @@ export default function FlightPlanner() {
               )}
             </div>
             <div>
-              <div className="text-sm font-semibold">Keep clearance readback notes in one full-screen pad.</div>
+              <div className="text-sm font-semibold">Write IFR clearance notes with your finger, stylus, or keyboard.</div>
               <div className="text-sm text-slate-600">
-                Clearance limit, route, altitude, frequency, squawk, void time, and notes stay auto-saved on this device.
+                Ink Pad is fastest for live readback. CRAFT fields stay available when you want the structured version, and both auto-save on this device.
               </div>
             </div>
           </div>
@@ -4622,114 +4808,174 @@ export default function FlightPlanner() {
           aria-modal="true"
           aria-label="IFR Clearance Scratch Pad"
         >
-          <div className="flex items-center justify-between border-b border-zinc-700 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <span className="text-lg font-bold tracking-tight">
-                ✏ IFR Clearance Scratch Pad
-              </span>
-              <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs font-mono text-zinc-400 tracking-widest">
-                CRAFT
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm("Clear all scratch pad fields?")) {
-                    setScratchPad(SCRATCH_PAD_DEFAULT);
-                  }
-                }}
-                className="rounded border border-zinc-600 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-400 hover:text-white transition-colors"
-              >
-                Clear all
-              </button>
-              <button
-                type="button"
-                onClick={() => setScratchPadOpen(false)}
-                className="rounded border border-zinc-600 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-400 hover:text-white transition-colors"
-              >
-                Close  <span className="ml-1 opacity-50">Esc</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-4 py-4">
-            <div className="mx-auto max-w-3xl space-y-3">
-              <ScratchField
-                label="C — Clearance Limit"
-                hint="Usually destination airport or fix"
-                value={scratchPad.clearanceLimit}
-                onChange={(v) => setScratchField("clearanceLimit", v)}
-              />
-
-              <ScratchField
-                label="R — Route"
-                hint="Departure procedure, airways, fixes"
-                value={scratchPad.route}
-                onChange={(v) => setScratchField("route", v)}
-                multiline
-              />
-
-              <ScratchField
-                label="A — Altitude"
-                hint="Initial altitude / expect altitude / time"
-                value={scratchPad.altitude}
-                onChange={(v) => setScratchField("altitude", v)}
-              />
-
-              <ScratchField
-                label="F — Frequency"
-                hint="Departure control frequency"
-                value={scratchPad.frequency}
-                onChange={(v) => setScratchField("frequency", v)}
-              />
-
-              <ScratchField
-                label="T — Transponder / Squawk"
-                hint="4-digit squawk code"
-                value={scratchPad.squawk}
-                onChange={(v) => setScratchField("squawk", v)}
-              />
-
-              <div className="border-t border-zinc-700 pt-3">
-                <div className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-3">
-                  Additional
+          <Tabs
+            value={scratchPadMode}
+            onValueChange={(value) => setScratchPadMode(value as "ink" | "craft")}
+            className="flex h-full flex-col"
+          >
+            <div className="border-b border-zinc-700 px-4 py-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-lg font-bold tracking-tight">
+                      ✏ IFR Clearance Scratch Pad
+                    </span>
+                    <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs font-mono tracking-widest text-zinc-400">
+                      INK + CRAFT
+                    </span>
+                  </div>
+                  <div className="text-sm text-zinc-400">
+                    Ink Pad is built for finger-speed readback. Switch to CRAFT fields when you need structured notes.
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-zinc-600 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                    onClick={() => setScratchInk((current) => current.slice(0, -1))}
+                    disabled={!scratchPadHasInk}
+                  >
+                    Undo ink
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-zinc-600 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                    onClick={() => {
+                      if (window.confirm("Clear all scratch pad notes and ink?")) {
+                        setScratchPad(SCRATCH_PAD_DEFAULT);
+                        setScratchInk([]);
+                      }
+                    }}
+                  >
+                    Clear all
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-zinc-600 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
+                    onClick={() => setScratchPadOpen(false)}
+                  >
+                    Close <span className="ml-1 opacity-50">Esc</span>
+                  </Button>
                 </div>
               </div>
-
-              <ScratchField
-                label="Departure Airport"
-                hint="ICAO identifier"
-                value={scratchPad.departure}
-                onChange={(v) => setScratchField("departure", v)}
-              />
-
-              <ScratchField
-                label="Void / Release Time"
-                hint="IFR void time if clearance on ground"
-                value={scratchPad.void}
-                onChange={(v) => setScratchField("void", v)}
-              />
-
-              <ScratchField
-                label="Notes"
-                hint="Anything else — hold instructions, restrictions, remarks"
-                value={scratchPad.notes}
-                onChange={(v) => setScratchField("notes", v)}
-                multiline
-                tall
-              />
+              <TabsList className="mt-3 grid w-full max-w-[320px] grid-cols-2 bg-zinc-900">
+                <TabsTrigger value="ink">Ink Pad</TabsTrigger>
+                <TabsTrigger value="craft">CRAFT Fields</TabsTrigger>
+              </TabsList>
             </div>
-          </div>
 
-          <div className="border-t border-zinc-700 px-4 py-2 text-xs text-zinc-500 flex items-center justify-between">
-            <span>Content auto-saved · Escape to close</span>
-            <span className="font-mono">
-              {Object.values(scratchPad).some((v) => v.trim())
-                ? "● Unsaved notes present"
-                : "○ Empty"}
-            </span>
-          </div>
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              <TabsContent value="ink" className="mt-0 h-full focus-visible:outline-none">
+                <div className="mx-auto max-w-5xl space-y-4">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+                    <ScratchPadInkBoard strokes={scratchInk} onChange={setScratchInk} />
+                    <div className="space-y-3">
+                      <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-4">
+                        <div className="text-sm font-semibold text-white">Fast IFR copy flow</div>
+                        <div className="mt-2 space-y-2 text-xs text-zinc-400">
+                          <div>1. Write the readback freehand while ATC is talking.</div>
+                          <div>2. Use Undo if you miss a stroke.</div>
+                          <div>3. Switch to CRAFT fields if you want a cleaner final copy.</div>
+                        </div>
+                      </div>
+                      <div className="rounded-xl border border-zinc-700 bg-zinc-900 p-4">
+                        <div className="text-sm font-semibold text-white">Current plan prefill</div>
+                        <div className="mt-2 space-y-1 text-xs text-zinc-400">
+                          <div>Departure: <span className="font-mono text-zinc-200">{form.departure || "-"}</span></div>
+                          <div>Destination: <span className="font-mono text-zinc-200">{form.destination || "-"}</span></div>
+                          <div>Altitude: <span className="font-mono text-zinc-200">{plannedAltitudeFt ? `${plannedAltitudeFt} ft` : "-"}</span></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="craft" className="mt-0 focus-visible:outline-none">
+                <div className="mx-auto max-w-3xl space-y-3">
+                  <ScratchField
+                    label="C — Clearance Limit"
+                    hint="Usually destination airport or fix"
+                    value={scratchPad.clearanceLimit}
+                    onChange={(v) => setScratchField("clearanceLimit", v)}
+                  />
+
+                  <ScratchField
+                    label="R — Route"
+                    hint="Departure procedure, airways, fixes"
+                    value={scratchPad.route}
+                    onChange={(v) => setScratchField("route", v)}
+                    multiline
+                  />
+
+                  <ScratchField
+                    label="A — Altitude"
+                    hint="Initial altitude / expect altitude / time"
+                    value={scratchPad.altitude}
+                    onChange={(v) => setScratchField("altitude", v)}
+                  />
+
+                  <ScratchField
+                    label="F — Frequency"
+                    hint="Departure control frequency"
+                    value={scratchPad.frequency}
+                    onChange={(v) => setScratchField("frequency", v)}
+                  />
+
+                  <ScratchField
+                    label="T — Transponder / Squawk"
+                    hint="4-digit squawk code"
+                    value={scratchPad.squawk}
+                    onChange={(v) => setScratchField("squawk", v)}
+                  />
+
+                  <div className="border-t border-zinc-700 pt-3">
+                    <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                      Additional
+                    </div>
+                  </div>
+
+                  <ScratchField
+                    label="Departure Airport"
+                    hint="ICAO identifier"
+                    value={scratchPad.departure}
+                    onChange={(v) => setScratchField("departure", v)}
+                  />
+
+                  <ScratchField
+                    label="Void / Release Time"
+                    hint="IFR void time if clearance on ground"
+                    value={scratchPad.void}
+                    onChange={(v) => setScratchField("void", v)}
+                  />
+
+                  <ScratchField
+                    label="Notes"
+                    hint="Anything else — hold instructions, restrictions, remarks"
+                    value={scratchPad.notes}
+                    onChange={(v) => setScratchField("notes", v)}
+                    multiline
+                    tall
+                  />
+                </div>
+              </TabsContent>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-zinc-700 px-4 py-2 text-xs text-zinc-500">
+              <span>Content auto-saved - Escape to close</span>
+              <span className="font-mono">
+                {scratchPadHasContent
+                  ? "● Notes present"
+                  : "○ Empty"}
+              </span>
+            </div>
+          </Tabs>
         </div>
       )}
     </PageShell>

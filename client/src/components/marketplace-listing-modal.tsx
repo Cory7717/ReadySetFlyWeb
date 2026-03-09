@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
+import { pixelEvent } from "@/lib/pixel";
 import { resolveImageUrl } from "@/lib/images";
 import { Link } from "wouter";
 import { JobApplicationModal } from "./job-application-modal";
@@ -228,6 +229,10 @@ export function MarketplaceListingModal({ listingId, open, onOpenChange }: Marke
       });
     },
     onSuccess: () => {
+      pixelEvent("Lead", {
+        content_name: "Marketplace Inquiry",
+        content_category: "Marketplace",
+      });
       toast({
         title: "Message sent",
         description: "Your inquiry was sent to the advertiser.",

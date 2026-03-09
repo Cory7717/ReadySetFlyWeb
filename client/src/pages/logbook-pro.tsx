@@ -9,6 +9,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, type MembershipTier } from "@shared/membership-plans";
 import { trackEvent } from "@/lib/analytics";
+import { pixelEvent } from "@/lib/pixel";
 
 export default function LogbookProPage() {
   const { user, isAuthenticated } = useAuth();
@@ -67,6 +68,11 @@ export default function LogbookProPage() {
         tier: selectedTier,
         interval: selectedPlan.interval,
         totalToday: selectedPlanTotal,
+      });
+      pixelEvent("StartTrial", {
+        content_name: selectedTier === "pro_plus" ? "RSF Pro Plus Trial" : "RSF Pro Core Trial",
+        currency: "USD",
+        value: selectedTier === "pro_plus" ? 11.99 : 5.99,
       });
       const res = await apiRequest("POST", "/api/paypal/membership/subscribe", {
         tier: selectedTier,

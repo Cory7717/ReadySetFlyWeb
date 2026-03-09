@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { pixelEvent } from "@/lib/pixel";
 
 const LEGAL_VERSION = "2025-01";
 
@@ -97,6 +98,10 @@ export default function CfiRequestPage() {
     },
     onSuccess: () => {
       trackEvent("cfi_request_submit", { slug });
+      pixelEvent("Lead", {
+        content_name: "CFI Contact Request",
+        content_category: "CFI Directory",
+      });
       toast({ title: "Request sent", description: "The CFI will follow up to confirm details." });
       if (profile?.slug) {
         navigate(`/cfi/${profile.slug}`);

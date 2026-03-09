@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { Plane } from 'lucide-react';
 import { trackEvent } from "@/lib/analytics";
+import { pixelEvent } from "@/lib/pixel";
 
 const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -63,6 +64,10 @@ export default function RegisterPage() {
       // Invalidate user query to refetch with new session
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       trackEvent("sign_up", { method: "email" });
+      pixelEvent("CompleteRegistration", {
+        content_name: "RSF Free Account",
+        status: true,
+      });
       toast({
         title: 'Account created!',
         description: data.message || 'Please check your email to verify your account.',

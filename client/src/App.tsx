@@ -9,6 +9,7 @@ import { Header } from "./components/header";
 import { Footer } from "./components/footer";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent, trackSessionPing } from "@/lib/analytics";
+import { pixelPageView } from "@/lib/pixel";
 import { SignupNudgeBanner } from "@/components/SignupNudgeBanner";
 import { FreeAccountValueBar } from "@/components/FreeAccountValueBar";
 import { AiWeatherTranslatorAnnouncement } from "@/components/AiWeatherTranslatorAnnouncement";
@@ -118,6 +119,7 @@ function AnalyticsTracker() {
   useEffect(() => {
     trackEvent("page_view", { page: path });
     trackSessionPing(path);
+    pixelPageView();
     const normalized = path.startsWith("/") ? path : `/${path}`;
     const toolPrefixes = [
       "/tool-hub",

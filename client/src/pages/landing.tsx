@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { pixelEvent } from "@/lib/pixel";
 import { useAuth } from "@/hooks/useAuth";
 import { extractAtisIdentifier, extractRunwayInUse, parseFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -372,6 +373,10 @@ export default function Landing() {
     setSearchIcao(normalized);
     setHasUsedTool(true);
     setHasUsedWeatherTool(true);
+    pixelEvent("Search", {
+      search_string: normalized,
+      content_category: "Airport Weather Search",
+    });
   };
 
   const applySuggestion = (suggestion: AirportSearchResult) => {
@@ -774,12 +779,21 @@ export default function Landing() {
                   Plain-English summary of METAR and TAF for {searchIcao}.
                 </div>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                className="w-full"
-                onClick={() => setShowAiWeatherSummary((current) => !current)}
-              >
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    const next = !showAiWeatherSummary;
+                    setShowAiWeatherSummary(next);
+                    if (next) {
+                      pixelEvent("ViewContent", {
+                        content_name: "AI Weather Summary",
+                        content_category: "Aviation Tools",
+                      });
+                    }
+                  }}
+                >
                 {showAiWeatherSummary ? "Hide AI summary" : "Open AI summary"}
               </Button>
               {showAiWeatherSummary && (
@@ -800,13 +814,22 @@ export default function Landing() {
                   Plain-English operational impacts for active NOTAMs at {searchIcao}.
                 </div>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowAiNotamTranslator((current) => !current)}
-              >
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    const next = !showAiNotamTranslator;
+                    setShowAiNotamTranslator(next);
+                    if (next) {
+                      pixelEvent("ViewContent", {
+                        content_name: "AI NOTAM Translator",
+                        content_category: "Aviation Tools",
+                      });
+                    }
+                  }}
+                >
                 {showAiNotamTranslator ? "Hide AI translator" : "Open AI translator"}
               </Button>
               {showAiNotamTranslator && (
@@ -2237,7 +2260,16 @@ export default function Landing() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => setShowAiWeatherSummary((current) => !current)}
+                      onClick={() => {
+                        const next = !showAiWeatherSummary;
+                        setShowAiWeatherSummary(next);
+                        if (next) {
+                          pixelEvent("ViewContent", {
+                            content_name: "AI Weather Summary",
+                            content_category: "Aviation Tools",
+                          });
+                        }
+                      }}
                       className="w-full sm:w-auto"
                     >
                       {showAiWeatherSummary ? "Hide AI summary" : "Open AI summary"}
@@ -2365,7 +2397,16 @@ export default function Landing() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => setShowAiNotamTranslator((current) => !current)}
+                      onClick={() => {
+                        const next = !showAiNotamTranslator;
+                        setShowAiNotamTranslator(next);
+                        if (next) {
+                          pixelEvent("ViewContent", {
+                            content_name: "AI NOTAM Translator",
+                            content_category: "Aviation Tools",
+                          });
+                        }
+                      }}
                       className="w-full sm:w-auto"
                     >
                       {showAiNotamTranslator ? "Hide AI translator" : "Open AI translator"}

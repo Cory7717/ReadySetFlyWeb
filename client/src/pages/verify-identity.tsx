@@ -412,6 +412,8 @@ export default function VerifyIdentity() {
                       id="checkbox-renter-insurance"
                       type="checkbox"
                       className="mt-1"
+                      aria-label="Confirm renter insurance"
+                      title="Confirm renter insurance"
                       checked={formData.renterInsuranceConfirmed}
                       onChange={(e) =>
                         setFormData((prev) => ({ ...prev, renterInsuranceConfirmed: e.target.checked }))
@@ -428,6 +430,8 @@ export default function VerifyIdentity() {
                       id="checkbox-renter-terms"
                       type="checkbox"
                       className="mt-1"
+                      aria-label="Accept renter terms"
+                      title="Accept renter terms"
                       checked={formData.renterTermsAccepted}
                       onChange={(e) => setFormData((prev) => ({ ...prev, renterTermsAccepted: e.target.checked }))}
                       data-testid="checkbox-renter-terms"

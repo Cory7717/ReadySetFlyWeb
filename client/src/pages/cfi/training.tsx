@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -929,36 +930,51 @@ export default function CfiTrainingCenter() {
             ) : (
               <>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <Input
-                    placeholder="Milestone title"
-                    value={milestoneForm.title}
-                    onChange={(event) => setMilestoneForm({ ...milestoneForm, title: event.target.value })}
-                  />
-                  <Select
-                    value={milestoneForm.status}
-                    onValueChange={(value) => setMilestoneForm({ ...milestoneForm, status: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MILESTONE_STATUSES.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    type="date"
-                    value={milestoneForm.dueDate}
-                    onChange={(event) => setMilestoneForm({ ...milestoneForm, dueDate: event.target.value })}
-                  />
-                  <Input
-                    placeholder="ACS area or reference (optional)"
-                    value={milestoneForm.description}
-                    onChange={(event) => setMilestoneForm({ ...milestoneForm, description: event.target.value })}
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="milestone-title">Milestone title</Label>
+                    <Input
+                      id="milestone-title"
+                      placeholder="Milestone title"
+                      value={milestoneForm.title}
+                      onChange={(event) => setMilestoneForm({ ...milestoneForm, title: event.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="milestone-status">Status</Label>
+                    <Select
+                      value={milestoneForm.status}
+                      onValueChange={(value) => setMilestoneForm({ ...milestoneForm, status: value })}
+                    >
+                      <SelectTrigger id="milestone-status">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MILESTONE_STATUSES.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="milestone-due-date">Due date</Label>
+                    <Input
+                      id="milestone-due-date"
+                      type="date"
+                      value={milestoneForm.dueDate}
+                      onChange={(event) => setMilestoneForm({ ...milestoneForm, dueDate: event.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="milestone-description">Reference</Label>
+                    <Input
+                      id="milestone-description"
+                      placeholder="ACS area or reference (optional)"
+                      value={milestoneForm.description}
+                      onChange={(event) => setMilestoneForm({ ...milestoneForm, description: event.target.value })}
+                    />
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <Button

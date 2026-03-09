@@ -175,6 +175,7 @@ export default function AdminDashboard() {
   const [userSearch, setUserSearch] = useState("");
   const [activeTab, setActiveTab] = useState("analytics");
   const [featureUsageRange, setFeatureUsageRange] = useState("7");
+  const [featureEngagementOpen, setFeatureEngagementOpen] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState<VerificationSubmission | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [rejectionNotes, setRejectionNotes] = useState("");
@@ -252,6 +253,7 @@ export default function AdminDashboard() {
       canAccess("withdrawals") && "withdrawals",
       canAccess("notifications") && "notifications",
       canAccess("banners") && "banners",
+      canSeeFinance && "finance",
       canSeeFinance && "personal-finance",
       isSuperAdmin && "admins",
     ].filter(Boolean) as string[];
@@ -528,7 +530,7 @@ export default function AdminDashboard() {
     };
   }>({
     queryKey: ["/api/admin/analytics"],
-    enabled: activeTab === "analytics",
+    enabled: activeTab === "analytics" || activeTab === "finance",
   });
 
   const { data: featureUsage, isLoading: featureUsageLoading } = useQuery<{
@@ -566,7 +568,7 @@ export default function AdminDashboard() {
   // Expenses query
   const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
     queryKey: ["/api/admin/expenses"],
-    enabled: activeTab === "analytics",
+    enabled: activeTab === "finance",
   });
 
   // Promo alerts query (admin endpoint fetches all, including disabled)
@@ -2551,6 +2553,284 @@ export default function AdminDashboard() {
     `/api/admin/hk-metrics/pdf?start=${hkMonthRange.startDate}&end=${hkMonthRange.endDate}${hkPropertyParam}&mporStandard=${hkSettings.mporStandard}${hkBudgetParam}${hkRoomInventoryParam}`
   );
 
+  const financeOverviewCards = (
+    <>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${analytics?.revenueToday || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              {analytics?.transactionsToday || 0} transactions
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Revenue This Week</CardTitle>
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${analytics?.revenueWeek || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              {analytics?.transactionsWeek || 0} transactions
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Revenue This Month</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${analytics?.revenueMonth || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              {analytics?.transactionsMonth || 0} transactions
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Revenue This Year</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${analytics?.revenueYear || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              {analytics?.transactionsYear || 0} transactions
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Expenses Today</CardTitle>
+            <TrendingUp className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-destructive">${analytics?.expensesToday || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              Server & database costs
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Expenses This Week</CardTitle>
+            <TrendingUp className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-destructive">${analytics?.expensesWeek || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              Platform operating costs
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Expenses This Month</CardTitle>
+            <TrendingUp className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-destructive">${analytics?.expensesMonth || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              Monthly operational costs
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Expenses This Year</CardTitle>
+            <TrendingUp className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-destructive">${analytics?.expensesYear || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              Annual operational costs
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Profit Today</CardTitle>
+            <DollarSign className="h-4 w-4 text-chart-2" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-chart-2">${analytics?.profitToday || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              Margin: {analytics?.profitMarginToday || "0.00"}%
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Profit This Week</CardTitle>
+            <DollarSign className="h-4 w-4 text-chart-2" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-chart-2">${analytics?.profitWeek || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              Margin: {analytics?.profitMarginWeek || "0.00"}%
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Profit This Month</CardTitle>
+            <DollarSign className="h-4 w-4 text-chart-2" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-chart-2">${analytics?.profitMonth || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              Margin: {analytics?.profitMarginMonth || "0.00"}%
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Profit This Year</CardTitle>
+            <DollarSign className="h-4 w-4 text-chart-2" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-chart-2">${analytics?.profitYear || "0.00"}</div>
+            <p className="text-xs text-muted-foreground">
+              Margin: {analytics?.profitMarginYear || "0.00"}%
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    </>
+  );
+
+  const expenseTrackingCard = (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div>
+          <CardTitle>Expense Tracking</CardTitle>
+          <CardDescription>Track server, database, and operational costs</CardDescription>
+        </div>
+        <Button
+          onClick={() => {
+            expenseForm.reset();
+            setEditingExpense(null);
+            setExpenseDialogOpen(true);
+          }}
+          data-testid="button-add-expense"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Expense
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {expensesLoading && (
+          <div className="text-center py-8 text-muted-foreground">
+            Loading expenses...
+          </div>
+        )}
+
+        {!expensesLoading && expenses.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            No expenses tracked yet. Add your first expense to start tracking costs.
+          </div>
+        )}
+
+        {!expensesLoading && expenses.length > 0 && (
+          <div className="border rounded-md">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="text-left p-3 text-sm font-medium">Date</th>
+                  <th className="text-left p-3 text-sm font-medium">Category</th>
+                  <th className="text-left p-3 text-sm font-medium">Description</th>
+                  <th className="text-left p-3 text-sm font-medium">Invoice</th>
+                  <th className="text-right p-3 text-sm font-medium">Amount</th>
+                  <th className="text-right p-3 text-sm font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expenses.map((expense) => (
+                  <tr key={expense.id} className="border-b last:border-0" data-testid={`expense-row-${expense.id}`}>
+                    <td className="p-3 text-sm" data-testid={`text-date-${expense.id}`}>
+                      {expense.expenseDate ? new Date(expense.expenseDate).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="p-3">
+                      <Badge variant="outline" className="capitalize" data-testid={`badge-category-${expense.id}`}>
+                        {expense.category}
+                      </Badge>
+                    </td>
+                    <td className="p-3 text-sm text-muted-foreground" data-testid={`text-description-${expense.id}`}>
+                      {expense.description || "—"}
+                    </td>
+                    <td className="p-3 text-sm">
+                      {expense.invoiceUrl ? (
+                        <a
+                          href={resolveInvoiceUrl(expense.invoiceUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline flex items-center gap-1"
+                          data-testid={`link-invoice-${expense.id}`}
+                        >
+                          <FileText className="h-4 w-4" />
+                          View
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-sm text-right font-medium text-destructive" data-testid={`text-amount-${expense.id}`}>
+                      ${expense.amount}
+                    </td>
+                    <td className="p-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => handleEditExpense(expense)}
+                          data-testid={`button-edit-expense-${expense.id}`}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            if (confirm("Are you sure you want to delete this expense?")) {
+                              deleteExpenseMutation.mutate(expense.id);
+                            }
+                          }}
+                          data-testid={`button-delete-expense-${expense.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-8">
@@ -2664,6 +2944,12 @@ export default function AdminDashboard() {
             </TabsTrigger>
           )}
           {canSeeFinance && (
+            <TabsTrigger value="finance" data-testid="tab-finance" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
+              <Wallet className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+              <span>Finance</span>
+            </TabsTrigger>
+          )}
+          {canSeeFinance && (
             <TabsTrigger value="personal-finance" data-testid="tab-personal-finance" className="flex-col sm:flex-row gap-1 text-xs sm:text-sm">
               <Wallet className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
               <span>Personal Finance</span>
@@ -2679,171 +2965,6 @@ export default function AdminDashboard() {
 
         {/* Analytics Tab */}
         <TabsContent value="analytics" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {/* Revenue Cards */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">${analytics?.revenueToday || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  {analytics?.transactionsToday || 0} transactions
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Revenue This Week</CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">${analytics?.revenueWeek || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  {analytics?.transactionsWeek || 0} transactions
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Revenue This Month</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">${analytics?.revenueMonth || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  {analytics?.transactionsMonth || 0} transactions
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Revenue This Year</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">${analytics?.revenueYear || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  {analytics?.transactionsYear || 0} transactions
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Expense Cards */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Expenses Today</CardTitle>
-                <TrendingUp className="h-4 w-4 text-destructive" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-destructive">${analytics?.expensesToday || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  Server & database costs
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Expenses This Week</CardTitle>
-                <TrendingUp className="h-4 w-4 text-destructive" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-destructive">${analytics?.expensesWeek || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  Platform operating costs
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Expenses This Month</CardTitle>
-                <TrendingUp className="h-4 w-4 text-destructive" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-destructive">${analytics?.expensesMonth || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  Monthly operational costs
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Expenses This Year</CardTitle>
-                <TrendingUp className="h-4 w-4 text-destructive" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-destructive">${analytics?.expensesYear || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  Annual operational costs
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Profit Cards */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Profit Today</CardTitle>
-                <DollarSign className="h-4 w-4 text-chart-2" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-chart-2">${analytics?.profitToday || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  Margin: {analytics?.profitMarginToday || "0.00"}%
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Profit This Week</CardTitle>
-                <DollarSign className="h-4 w-4 text-chart-2" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-chart-2">${analytics?.profitWeek || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  Margin: {analytics?.profitMarginWeek || "0.00"}%
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Profit This Month</CardTitle>
-                <DollarSign className="h-4 w-4 text-chart-2" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-chart-2">${analytics?.profitMonth || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  Margin: {analytics?.profitMarginMonth || "0.00"}%
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Profit This Year</CardTitle>
-                <DollarSign className="h-4 w-4 text-chart-2" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-chart-2">${analytics?.profitYear || "0.00"}</div>
-                <p className="text-xs text-muted-foreground">
-                  Margin: {analytics?.profitMarginYear || "0.00"}%
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
           {/* Feature Engagement */}
           <Card>
             <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -2851,18 +2972,47 @@ export default function AdminDashboard() {
                 <CardTitle>Feature Engagement</CardTitle>
                 <CardDescription>Usage across tools, training, and marketplace</CardDescription>
               </div>
-              <Select value={featureUsageRange} onValueChange={setFeatureUsageRange}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Select range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7">Last 7 days</SelectItem>
-                  <SelectItem value="30">Last 30 days</SelectItem>
-                  <SelectItem value="90">Last 90 days</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select value={featureUsageRange} onValueChange={setFeatureUsageRange}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Select range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">Last 7 days</SelectItem>
+                    <SelectItem value="30">Last 30 days</SelectItem>
+                    <SelectItem value="90">Last 90 days</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFeatureEngagementOpen((current) => !current)}
+                >
+                  {featureEngagementOpen ? (
+                    <>
+                      <ChevronDown className="h-4 w-4 mr-1" />
+                      Collapse
+                    </>
+                  ) : (
+                    <>
+                      <ChevronRight className="h-4 w-4 mr-1" />
+                      Expand
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4">
+              {!featureEngagementOpen && (
+                <div className="text-sm text-muted-foreground">
+                  {featureUsageLoading
+                    ? "Loading usage..."
+                    : `${featureUsage?.totalEvents || 0} events across ${featureUsage?.uniqueVisitors || 0} unique visitors in the last ${featureUsageRange} days.`}
+                </div>
+              )}
+              {featureEngagementOpen && (
+                <div className="space-y-6">
               <div className="grid gap-4 md:grid-cols-4">
                 <div className="rounded-lg border p-4">
                   <div className="text-xs text-muted-foreground">Total events</div>
@@ -2906,6 +3056,8 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -3246,117 +3398,6 @@ export default function AdminDashboard() {
               </Card>
             </div>
           </div>
-
-          {/* Expense Management */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <div>
-                <CardTitle>Expense Tracking</CardTitle>
-                <CardDescription>Track server, database, and operational costs</CardDescription>
-              </div>
-              <Button 
-                onClick={() => { 
-                  expenseForm.reset(); 
-                  setEditingExpense(null); 
-                  setExpenseDialogOpen(true); 
-                }} 
-                data-testid="button-add-expense"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Expense
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {expensesLoading && (
-                <div className="text-center py-8 text-muted-foreground">
-                  Loading expenses...
-                </div>
-              )}
-
-              {!expensesLoading && expenses.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No expenses tracked yet. Add your first expense to start tracking costs.
-                </div>
-              )}
-
-              {!expensesLoading && expenses.length > 0 && (
-                <div className="border rounded-md">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-muted/50">
-                        <th className="text-left p-3 text-sm font-medium">Date</th>
-                        <th className="text-left p-3 text-sm font-medium">Category</th>
-                        <th className="text-left p-3 text-sm font-medium">Description</th>
-                        <th className="text-left p-3 text-sm font-medium">Invoice</th>
-                        <th className="text-right p-3 text-sm font-medium">Amount</th>
-                        <th className="text-right p-3 text-sm font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {expenses.map((expense) => (
-                        <tr key={expense.id} className="border-b last:border-0" data-testid={`expense-row-${expense.id}`}>
-                          <td className="p-3 text-sm" data-testid={`text-date-${expense.id}`}>
-                            {expense.expenseDate ? new Date(expense.expenseDate).toLocaleDateString() : '—'}
-                          </td>
-                          <td className="p-3">
-                            <Badge variant="outline" className="capitalize" data-testid={`badge-category-${expense.id}`}>
-                              {expense.category}
-                            </Badge>
-                          </td>
-                          <td className="p-3 text-sm text-muted-foreground" data-testid={`text-description-${expense.id}`}>
-                            {expense.description || "—"}
-                          </td>
-                          <td className="p-3 text-sm">
-                            {expense.invoiceUrl ? (
-                              <a 
-                                href={resolveInvoiceUrl(expense.invoiceUrl)} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline flex items-center gap-1"
-                                data-testid={`link-invoice-${expense.id}`}
-                              >
-                                <FileText className="h-4 w-4" />
-                                View
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-sm text-right font-medium text-destructive" data-testid={`text-amount-${expense.id}`}>
-                            ${expense.amount}
-                          </td>
-                          <td className="p-3 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => handleEditExpense(expense)}
-                                data-testid={`button-edit-expense-${expense.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => {
-                                  if (confirm("Are you sure you want to delete this expense?")) {
-                                    deleteExpenseMutation.mutate(expense.id);
-                                  }
-                                }}
-                                data-testid={`button-delete-expense-${expense.id}`}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
           {analyticsLoading && (
             <div className="flex items-center justify-center py-12">
@@ -6141,6 +6182,24 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {canSeeFinance && (
+          <TabsContent value="finance" className="space-y-6">
+            <div className="space-y-2">
+              <h2 className="text-xl font-semibold">Finance</h2>
+              <p className="text-sm text-muted-foreground">
+                Revenue, expense, and margin visibility live here so analytics stays focused on product usage.
+              </p>
+            </div>
+            {financeOverviewCards}
+            {expenseTrackingCard}
+            {analyticsLoading && (
+              <div className="flex items-center justify-center py-12">
+                <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+              </div>
+            )}
+          </TabsContent>
+        )}
 
         {canSeeFinance && (
           <TabsContent value="personal-finance" className="space-y-6">

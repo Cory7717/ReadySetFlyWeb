@@ -88,6 +88,14 @@ export default function Messages() {
     }
   }, [conversations, selectedConversation]);
 
+  useEffect(() => {
+    if (!selectedConversation) return;
+    const exists = conversations.some((conv) => (conv.rentalId || conv.id) === selectedConversation);
+    if (!exists) {
+      setSelectedConversation(conversations[0]?.rentalId || conversations[0]?.id || null);
+    }
+  }, [conversations, selectedConversation]);
+
   const filteredConversations = conversations.filter(conv =>
     conv.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     conv.aircraftName?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -172,7 +180,7 @@ export default function Messages() {
                         onClick={() => setSelectedConversation(conv.rentalId || conv.id)}
                         className={`
                           p-4 border-b cursor-pointer hover-elevate transition-colors
-                          ${selectedConversation === conv.id ? "bg-accent/10" : ""}
+                          ${selectedConversation === (conv.rentalId || conv.id) ? "bg-accent/10" : ""}
                         `}
                         data-testid={`conversation-${conv.id}`}
                       >

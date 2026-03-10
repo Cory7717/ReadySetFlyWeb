@@ -1764,9 +1764,10 @@ export class DatabaseStorage implements IStorage {
     const baseCost = hourlyRate * estimatedHours;
     
     // Calculate fees and taxes
-    const salesTax = baseCost * 0.0825; // 8.25% sales tax
     const platformFeeRenter = baseCost * 0.075; // 7.5% platform fee for renter
     const platformFeeOwner = baseCost * 0.075; // 7.5% platform fee for owner
+    const taxableSubtotal = baseCost + platformFeeRenter;
+    const salesTax = taxableSubtotal * 0.0825; // 8.25% sales tax on rental + renter fee
     
     // Calculate subtotal before processing fee
     const subtotal = baseCost + salesTax + platformFeeRenter;

@@ -3,7 +3,6 @@ import { useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { AircraftListing, User } from "@shared/schema";
 import { MapPin, Gauge, Shield, Calendar, Share2, Star, Info, Eye } from "lucide-react";
-import { RentalMessaging } from "@/components/rental-messaging";
 import { StarRating } from "@/components/star-rating";
 import { FavoriteButton } from "@/components/favorite-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,14 +40,6 @@ export default function AircraftDetail() {
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  
-  // Mock active rental for demo - in real app would fetch from /api/rentals
-  const [mockActiveRental] = useState({
-    id: "rental-demo-123",
-    status: "active" as const,
-    userId: "user-123",
-  });
-
   const { data: aircraft, isLoading, error } = useQuery<AircraftListing>({
     queryKey: ["/api/aircraft", params?.id],
     enabled: !!params?.id,
@@ -155,9 +146,9 @@ export default function AircraftDetail() {
     const hourlyRate = parseFloat(aircraft!.hourlyRate);
     const hours = parseFloat(estimatedHours);
     const baseCost = hours * hourlyRate;
-    const salesTax = baseCost * 0.0825; // 8.25%
     const platformFeeRenter = baseCost * 0.075; // 7.5% renter fee
     const platformFeeOwner = baseCost * 0.075; // 7.5% owner fee
+    const salesTax = (baseCost + platformFeeRenter) * 0.0825; // 8.25% on rental + renter fee
     const subtotal = baseCost + salesTax + platformFeeRenter;
     const processingFee = subtotal * 0.03; // 3%
     const totalCostRenter = subtotal + processingFee;
@@ -204,8 +195,8 @@ export default function AircraftDetail() {
 
   const hourlyRate = parseFloat(aircraft.hourlyRate);
   const baseCost = parseFloat(estimatedHours) * hourlyRate;
-  const salesTax = baseCost * 0.0825; // 8.25% sales tax
   const platformFee = baseCost * 0.075; // 7.5% platform fee
+  const salesTax = (baseCost + platformFee) * 0.0825; // 8.25% sales tax on rental + renter fee
   const subtotal = baseCost + salesTax + platformFee;
   const processingFee = subtotal * 0.03; // 3% processing fee
   const total = subtotal + processingFee;
@@ -346,15 +337,6 @@ export default function AircraftDetail() {
               </CardContent>
             </Card>
 
-            {/* Messaging (if user has active rental) */}
-            {isAuthenticated && mockActiveRental && (
-              <RentalMessaging
-                rentalId={mockActiveRental.id}
-                userId={mockActiveRental.userId}
-                rentalStatus={mockActiveRental.status}
-              />
-            )}
-
             {/* Owner Info */}
             <Card>
               <CardHeader>
@@ -397,6 +379,10 @@ export default function AircraftDetail() {
                         setLoginPromptOpen(true);
                         return;
                       }
+                      toast({
+                        title: "Messaging opens after payment",
+                        description: "Owner and renter messaging is only available for active rentals.",
+                      });
                     }}
                   >
                     Message Owner

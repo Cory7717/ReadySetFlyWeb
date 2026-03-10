@@ -118,6 +118,8 @@ export default function Dashboard() {
   // Renter's rental requests
   const myPendingRequests = renterRentals.filter(r => r.status === "pending");
   const approvedRentalsAwaitingPayment = renterRentals.filter(r => r.status === "approved" && !r.isPaid);
+  const myActiveRentals = renterRentals.filter(r => r.status === "active");
+  const myCompletedRentals = renterRentals.filter(r => r.status === "completed");
   
   const totalEarnings = completedRentals
     .filter(r => r.payoutCompleted)
@@ -172,6 +174,29 @@ export default function Dashboard() {
       toast({
         title: "Error",
         description: error.message || "Failed to decline request",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const completeRentalMutation = useMutation({
+    mutationFn: async (rentalId: string) => {
+      return await apiRequest("POST", `/api/rentals/${rentalId}/complete`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/rentals/owner", authUser?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/rentals/renter", authUser?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/balance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/withdrawals"] });
+      toast({
+        title: "Rental completed",
+        description: "Messaging has been closed for this rental.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Unable to complete rental",
+        description: error.message || "Please try again later.",
         variant: "destructive",
       });
     },
@@ -515,7 +540,7 @@ export default function Dashboard() {
           <TabsContent value="active" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Active Rentals</CardTitle>
+                <CardTitle>Owner Active Rentals</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -544,15 +569,88 @@ export default function Dashboard() {
                               <p className="font-bold">${parseFloat(rental.totalCostRenter).toFixed(2)}</p>
                               <p className="text-sm text-muted-foreground">Your payout: ${parseFloat(rental.ownerPayout).toFixed(2)}</p>
                             </div>
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                              <Badge className="bg-chart-2 text-white text-center">Active</Badge>
+                              <Button
+                                size="sm"
+                                className="w-full sm:w-auto"
+                                data-testid={`button-message-${rental.id}`}
+                                onClick={() => navigate(`/messages?rentalId=${rental.id}`)}
+                              >
+                                Message
+                              </Button>
+                              {new Date(rental.endDate).getTime() <= Date.now() && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full sm:w-auto"
+                                  disabled={completeRentalMutation.isPending}
+                                  onClick={() => completeRentalMutation.mutate(rental.id)}
+                                  data-testid={`button-complete-rental-${rental.id}`}
+                                >
+                                  Complete Rental
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>My Active Rentals</CardTitle>
+                <CardDescription>Rentals you have paid for and can message about while active</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {myActiveRentals.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No active renter rentals at this time
+                    </div>
+                  ) : (
+                    myActiveRentals.map((rental) => {
+                      const aircraft = allAircraft.find((a) => a.id === rental.aircraftId);
+                      const owner = allUsers.find((u) => u.id === rental.ownerId);
+                      return (
+                        <div key={rental.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg hover-elevate" data-testid={`renter-rental-active-${rental.id}`}>
+                          <div className="flex-1 space-y-1">
+                            <h4 className="font-semibold">
+                              {aircraft?.year || ""} {aircraft?.make || "Unknown"} {aircraft?.model || ""}
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              Owner: {owner?.firstName || ""} {owner?.lastName || ""}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                             <Badge className="bg-chart-2 text-white text-center">Active</Badge>
                             <Button
                               size="sm"
                               className="w-full sm:w-auto"
-                              data-testid={`button-message-${rental.id}`}
                               onClick={() => navigate(`/messages?rentalId=${rental.id}`)}
+                              data-testid={`button-renter-message-${rental.id}`}
                             >
                               Message
                             </Button>
+                            {new Date(rental.endDate).getTime() <= Date.now() && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full sm:w-auto"
+                                disabled={completeRentalMutation.isPending}
+                                onClick={() => completeRentalMutation.mutate(rental.id)}
+                                data-testid={`button-renter-complete-rental-${rental.id}`}
+                              >
+                                Complete Rental
+                              </Button>
+                            )}
                           </div>
                         </div>
                       );
@@ -615,7 +713,7 @@ export default function Dashboard() {
           <TabsContent value="past" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Past Rentals</CardTitle>
+                <CardTitle>Past Owner Rentals</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -648,6 +746,46 @@ export default function Dashboard() {
                               rentalId={rental.id}
                               revieweeId={renter.id}
                               revieweeName={`${renter.firstName || ""} ${renter.lastName || ""}`.trim() || "Renter"}
+                            />
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>My Completed Rentals</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {myCompletedRentals.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">No completed renter rentals yet</div>
+                  ) : (
+                    myCompletedRentals.map((rental) => {
+                      const aircraft = allAircraft.find((a) => a.id === rental.aircraftId);
+                      const owner = allUsers.find((u) => u.id === rental.ownerId);
+                      return (
+                        <div key={rental.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg hover-elevate" data-testid={`renter-rental-past-${rental.id}`}>
+                          <div className="flex-1 space-y-1">
+                            <h4 className="font-semibold">
+                              {aircraft?.year || ""} {aircraft?.make || "Unknown"} {aircraft?.model || ""}
+                            </h4>
+                            <p className="text-sm text-muted-foreground">
+                              Owner: {owner?.firstName || ""} {owner?.lastName || ""}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Dates flown: {new Date(rental.startDate).toLocaleDateString()} - {new Date(rental.endDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {owner && (
+                            <RentalReviewAction
+                              rentalId={rental.id}
+                              revieweeId={owner.id}
+                              revieweeName={`${owner.firstName || ""} ${owner.lastName || ""}`.trim() || "Owner"}
                             />
                           )}
                         </div>

@@ -7564,8 +7564,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/rentals/renter/:renterId", async (req, res) => {
+  app.get("/api/rentals/renter/:renterId", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
+      if (req.params.renterId !== userId && !req.user?.isSuperAdmin) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const rentals = await storage.getRentalsByRenter(req.params.renterId);
       res.json(rentals);
     } catch (error) {
@@ -7573,8 +7577,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/rentals/owner/:ownerId", async (req, res) => {
+  app.get("/api/rentals/owner/:ownerId", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
+      if (req.params.ownerId !== userId && !req.user?.isSuperAdmin) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const rentals = await storage.getRentalsByOwner(req.params.ownerId);
       res.json(rentals);
     } catch (error) {
@@ -7591,11 +7599,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/rentals/:id", async (req, res) => {
+  app.get("/api/rentals/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const rental = await storage.getRental(req.params.id);
       if (!rental) {
         return res.status(404).json({ error: "Rental not found" });
+      }
+      if (rental.ownerId !== userId && rental.renterId !== userId && !req.user?.isSuperAdmin) {
+        return res.status(403).json({ error: "Access denied" });
       }
       res.json(rental);
     } catch (error) {
@@ -7606,17 +7618,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/rentals", isAuthenticated, isVerified, async (req: any, res) => {
     try {
       const renterId = req.user.claims.sub;
-      
-      // Add renterId from session and ensure dates/hours are properly formatted
+      const aircraft = await storage.getAircraftListing(req.body.aircraftId);
+      if (!aircraft || !aircraft.isListed) {
+        return res.status(404).json({ error: "Aircraft not available for rental" });
+      }
+
+      if (aircraft.ownerId === renterId) {
+        return res.status(400).json({ error: "You cannot rent your own aircraft" });
+      }
+
+      const renter = await storage.getUser(renterId);
+      if (!renter) {
+        return res.status(404).json({ error: "Renter not found" });
+      }
+      const renterHours = Number(renter.totalFlightHours || 0);
+      if (renterHours < Number(aircraft.minFlightHours || 0)) {
+        return res.status(400).json({
+          error: `This aircraft requires at least ${aircraft.minFlightHours || 0} total flight hours`,
+        });
+      }
+      const renterCertifications = new Set((renter.certifications || []).map((cert) => cert.toLowerCase()));
+      const missingCertifications = (aircraft.requiredCertifications || []).filter(
+        (cert) => !renterCertifications.has(cert.toLowerCase()),
+      );
+      if (missingCertifications.length > 0) {
+        return res.status(400).json({
+          error: `Missing required certifications: ${missingCertifications.join(", ")}`,
+        });
+      }
+
+      const startDate = new Date(req.body.startDate);
+      const endDate = new Date(req.body.endDate);
+      if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+        return res.status(400).json({ error: "Invalid rental dates" });
+      }
+      if (endDate < startDate) {
+        return res.status(400).json({ error: "End date must be on or after start date" });
+      }
+
+      const overlappingRentals = await storage.getRentalsByAircraft(aircraft.id);
+      const hasConflict = overlappingRentals.some((existingRental) => {
+        if (existingRental.status !== "approved" && existingRental.status !== "active") {
+          return false;
+        }
+        const existingStart = new Date(existingRental.startDate);
+        const existingEnd = new Date(existingRental.endDate);
+        return startDate < existingEnd && endDate > existingStart;
+      });
+
+      if (hasConflict) {
+        return res.status(400).json({ error: "Aircraft is not available for the selected dates" });
+      }
+
       const rentalData = {
-        ...req.body,
+        aircraftId: aircraft.id,
         renterId,
-        // Convert dates to ISO strings if they aren't already
         startDate: req.body.startDate,
         endDate: req.body.endDate,
-        // Ensure estimatedHours and hourlyRate are strings
         estimatedHours: String(req.body.estimatedHours),
-        hourlyRate: String(req.body.hourlyRate),
+        hourlyRate: String(aircraft.hourlyRate),
+        ownerId: aircraft.ownerId,
       };
       
       const validatedData = insertRentalSchema.parse(rentalData);
@@ -7628,15 +7689,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/rentals/:id", async (req, res) => {
+  app.patch("/api/rentals/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const rental = await storage.updateRental(req.params.id, req.body);
+      const userId = req.user.claims.sub;
+      const rental = await storage.getRental(req.params.id);
       if (!rental) {
         return res.status(404).json({ error: "Rental not found" });
       }
-      res.json(rental);
+
+      const nextStatus = typeof req.body.status === "string" ? req.body.status : null;
+      if (!nextStatus) {
+        return res.status(400).json({ error: "Status update required" });
+      }
+
+      if (nextStatus === "approved") {
+        if (rental.ownerId !== userId) {
+          return res.status(403).json({ error: "Only the aircraft owner can approve this rental" });
+        }
+        if (rental.status !== "pending") {
+          return res.status(400).json({ error: "Only pending rentals can be approved" });
+        }
+      } else if (nextStatus === "cancelled") {
+        if (rental.ownerId !== userId && rental.renterId !== userId) {
+          return res.status(403).json({ error: "Only rental participants can cancel this rental" });
+        }
+        if (rental.status !== "pending" && rental.status !== "approved") {
+          return res.status(400).json({ error: "Only pending or approved rentals can be cancelled" });
+        }
+      } else {
+        return res.status(400).json({ error: "Unsupported rental update" });
+      }
+
+      const updatedRental = await storage.updateRental(req.params.id, { status: nextStatus });
+      res.json(updatedRental);
     } catch (error) {
       res.status(500).json({ error: "Failed to update rental" });
+    }
+  });
+
+  app.post("/api/rentals/:id/complete", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const rental = await storage.getRental(req.params.id);
+      if (!rental) {
+        return res.status(404).json({ error: "Rental not found" });
+      }
+      if (rental.ownerId !== userId && rental.renterId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      if (rental.status !== "active") {
+        return res.status(400).json({ error: "Only active rentals can be completed" });
+      }
+      if (new Date(rental.endDate).getTime() > Date.now()) {
+        return res.status(400).json({ error: "Rental cannot be completed before the scheduled end date" });
+      }
+
+      if (!rental.payoutCompleted) {
+        const ownerPayoutAmount = parseFloat(rental.ownerPayout || "0");
+        if (ownerPayoutAmount > 0) {
+          await storage.addToUserBalance(rental.ownerId, ownerPayoutAmount);
+          logDebug(`[RENTAL COMPLETE] Credited $${ownerPayoutAmount} to owner ${rental.ownerId} for rental ${rental.id}`);
+        }
+      }
+
+      const updatedRental = await storage.updateRental(req.params.id, {
+        status: "completed",
+        payoutCompleted: true,
+      });
+
+      res.json(updatedRental);
+    } catch (error: any) {
+      console.error("Complete rental error:", error);
+      res.status(500).json({ error: error.message || "Failed to complete rental" });
     }
   });
 
@@ -7746,16 +7870,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error("Failed to record platform fee transaction:", error);
         }
 
-        // Update rental to mark as paid and active
-        const updatedRental = await storage.updateRental(req.params.id, {
-          isPaid: true,
-          status: "active",
-        });
-
-      // Credit owner's balance with their payout amount
-      const ownerPayoutAmount = parseFloat(rental.ownerPayout);
-      await storage.addToUserBalance(rental.ownerId, ownerPayoutAmount);
-      logDebug(`[RENTAL PAYMENT] Credited $${ownerPayoutAmount} to owner ${rental.ownerId} for rental ${rental.id}`);
+      const updatedRental = await storage.updateRental(req.params.id, {
+        isPaid: true,
+        status: "active",
+      });
 
       res.json(updatedRental);
     } catch (error: any) {
@@ -7765,8 +7883,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Messages
-  app.get("/api/rentals/:rentalId/messages", async (req, res) => {
+  app.get("/api/rentals/:rentalId/messages", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       // Verify rental exists and is active
       const rental = await storage.getRental(req.params.rentalId);
       if (!rental) {
@@ -7774,6 +7893,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (rental.status !== "active") {
         return res.status(403).json({ error: "Messaging only available for active rentals" });
+      }
+      if (rental.ownerId !== userId && rental.renterId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
       }
 
       const messages = await storage.getMessagesByRental(req.params.rentalId);
@@ -7791,7 +7913,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         storage.getRentalsByRenter(userId),
       ]);
 
-      const rentalsById = new Map([...ownerRentals, ...renterRentals].map((rental) => [rental.id, rental]));
+      const rentalsById = new Map(
+        [...ownerRentals, ...renterRentals]
+          .filter((rental) => rental.status === "active")
+          .map((rental) => [rental.id, rental]),
+      );
       const conversations = await Promise.all(
         Array.from(rentalsById.values()).map(async (rental) => {
           const [messages, aircraft, otherUser] = await Promise.all([
@@ -7800,7 +7926,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             storage.getUser(rental.ownerId === userId ? rental.renterId : rental.ownerId),
           ]);
 
-          const latestMessage = messages[0];
+          const latestMessage = messages[messages.length - 1];
           const unreadCount = messages.filter((message) => !message.isRead && message.receiverId === userId).length;
 
           return {
@@ -7837,6 +7963,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (rental.ownerId !== userId && rental.renterId !== userId) {
         return res.status(403).json({ error: "Access denied" });
+      }
+      if (rental.status !== "active") {
+        return res.status(403).json({ error: "Messaging is no longer available for this rental" });
       }
 
       const [messages, ownerUser, renterUser] = await Promise.all([

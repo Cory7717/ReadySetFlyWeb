@@ -298,10 +298,11 @@ export async function sendContactFormEmail(data: {
   email: string;
   subject: string;
   message: string;
+  recipientEmail?: string;
 }) {
   const { getUncachableResendClient } = await import('./resendClient');
   const { client: resend, fromEmail } = await getUncachableResendClient();
-  const supportEmail = process.env.SUPPORT_EMAIL || "support@readysetfly.us";
+  const supportEmail = data.recipientEmail || process.env.SUPPORT_EMAIL || "support@readysetfly.us";
   
   const htmlBody = `
 <!DOCTYPE html>

@@ -6018,6 +6018,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/investor/contact", contactFormRateLimiter, async (req, res) => {
+    try {
+      const contactFormSchema = z.object({
+        firstName: z.string().min(1, "First name is required").max(100),
+        lastName: z.string().min(1, "Last name is required").max(100),
+        email: z.string().email("Valid email is required").max(255),
+        subject: z.string().min(1, "Subject is required").max(200),
+        message: z.string().min(10, "Message must be at least 10 characters").max(2000),
+      });
+
+      const validationResult = contactFormSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Invalid form data",
+          details: validationResult.error.errors,
+        });
+      }
+
+      const data = validationResult.data;
+      const ip = req.ip || req.connection.remoteAddress || "unknown";
+
+      const submission = await storage.createContactSubmission({
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        subject: `[Investor Deck] ${data.subject}`,
+        message: data.message,
+        ipAddress: ip,
+      });
+
+      sendContactFormEmail({
+        ...data,
+        subject: `[Investor Deck] ${data.subject}`,
+        recipientEmail: "cory@readysetfly.us",
+      })
+        .then(async () => {
+          await storage.updateContactSubmissionEmailStatus(submission.id, true);
+        })
+        .catch((error) => {
+          console.error(`Failed to send investor deck email for submission ${submission.id}:`, error);
+        });
+
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Investor contact form error:", error);
+      return res.status(500).json({ error: "Failed to process investor inquiry" });
+    }
+  });
+
   // Cron endpoint: Send expiration reminders for banner ads and marketplace listings
   // SECURITY: Requires CRON_SECRET header to prevent unauthorized access
   app.post("/api/cron/send-expiration-reminders", async (req, res) => {

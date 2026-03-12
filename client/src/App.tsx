@@ -76,7 +76,7 @@ import CfiSchoolDashboard from "@/pages/cfi/school-dashboard";
 import CfiTrainingCenter from "@/pages/cfi/training";
 import CfiTerms from "@/pages/cfi/terms";
 import CfiStudentTerms from "@/pages/cfi/student-terms";
-import InvestorDeckPage, { InvestorDeckSharePage, INVESTOR_DECK_SHARE_PATH } from "@/pages/investor-deck";
+import InvestorDeck, { INVESTOR_DECK_SHARE_PATH } from "@/pages/investor-deck";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
 const StudentWizard = lazy(() => import("@/pages/student/wizard"));
@@ -188,7 +188,8 @@ function Router() {
       <Route path="/cfi/:slug" component={CfiProfile} />
       <Route path="/delete-account" component={DeleteAccount} />
       <Route path="/tools/eb6" component={() => <RedirectTo to="/tools/e6b" />} />
-      <Route path={INVESTOR_DECK_SHARE_PATH} component={InvestorDeckSharePage} />
+      <Route path="/investor-deck" component={InvestorDeck} />
+      <Route path={INVESTOR_DECK_SHARE_PATH} component={InvestorDeck} />
       <Route path="/404" component={NotFound} />
       
       {/* Protected routes - require authentication */}
@@ -197,7 +198,6 @@ function Router() {
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/dashboard/cfi" component={CfiDashboard} />
           <Route path="/dashboard/cfi-school" component={CfiSchoolDashboard} />
-          <Route path="/investor-deck" component={InvestorDeckPage} />
           <Route path="/dashboard/cfi-training" component={CfiTrainingCenter} />
           <Route path="/profile" component={Profile} />
           <Route path="/my-listings" component={MyListings} />
@@ -262,7 +262,6 @@ function Router() {
           {/* Show "Sign In Required" page for unauthenticated users trying to access protected routes */}
           <Route path="/dashboard" component={RequireAuth} />
           <Route path="/dashboard/cfi" component={RequireAuth} />
-          <Route path="/investor-deck" component={RequireAuth} />
           <Route path="/dashboard/cfi-training" component={RequireAuth} />
           <Route path="/profile" component={RequireAuth} />
           <Route path="/my-listings" component={RequireAuth} />
@@ -341,7 +340,6 @@ function AppShell() {
     <ThemeProvider defaultTheme="light">
       <TooltipProvider>
         <div className="min-h-screen bg-background flex flex-col">
-          {/* Show Header for all users (authenticated and anonymous) */}
           <Header />
           <FreeAccountValueBar />
           <div className="flex-1">

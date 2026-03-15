@@ -1571,6 +1571,39 @@ export default function Landing() {
         </div>
       </div>
 
+      {activeMobileTab === "find" && (
+        <div className="border-b border-sky-100 bg-sky-50/70 md:hidden">
+          <div className="container mx-auto px-4 py-4">
+            <Card className="border-sky-200 bg-white/90 shadow-sm">
+              <CardContent className="flex flex-col gap-3 p-4">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-700">
+                    Cabin Brief - For Passengers
+                  </div>
+                  <div className="text-base font-semibold text-slate-900">
+                    Traveling with someone who is not a pilot?
+                  </div>
+                  <div className="text-sm text-slate-600">
+                    Open a plain-English weather briefing built for passengers and nervous flyers.
+                  </div>
+                </div>
+                <Button
+                  asChild
+                  className="w-full bg-[#F0B429] text-slate-950 hover:bg-[#e4aa22]"
+                >
+                  <Link
+                    href="/cabin-brief"
+                    onClick={() => trackEvent("cta_click", { label: "landing_mobile_cabin_brief", target: "/cabin-brief" })}
+                  >
+                    Open Cabin Brief
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
       {!isAuthenticated && hasUsedTool && (
         <div className="border-t border-primary/10 bg-primary/[0.03]">
           <div className="container mx-auto px-4 py-5">

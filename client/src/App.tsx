@@ -51,6 +51,7 @@ import Logbook from "@/pages/logbook";
 import PilotTools from "@/pages/pilot-tools";
 import ToolHub from "@/pages/tool-hub";
 import AviationWeatherHub from "@/pages/aviation-weather";
+import CabinBrief from "@/pages/cabin-brief";
 import TfrMap from "@/pages/tfr-map";
 import OwnershipCostCalculator from "@/pages/ownership-cost-calculator";
 import WeightBalance from "@/pages/weight-balance";
@@ -182,6 +183,7 @@ function Router() {
       <Route path="/banner-advertise" component={BannerAdvertise} />
       <Route path="/tools" component={() => <RedirectTo to="/tool-hub" />} />
       <Route path="/tool-hub" component={ToolHub} />
+      <Route path="/cabin-brief" component={CabinBrief} />
       <Route path="/cfi" component={CfiDirectory} />
       <Route path="/cfi/terms" component={CfiTerms} />
       <Route path="/cfi/student-terms" component={CfiStudentTerms} />

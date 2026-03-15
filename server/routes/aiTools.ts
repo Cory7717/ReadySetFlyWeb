@@ -130,6 +130,27 @@ function buildLimitErrorMessage(isAuthenticated: boolean) {
   return "Free AI usage limit reached. Sign in and upgrade to Pro Core to continue using AI weather and NOTAM translation.";
 }
 
+function parseCabinBriefContent(content: string) {
+  const normalized = content.replace(/\r\n/g, "\n").trim();
+  const departureMatch = normalized.match(/Departure:\s*([\s\S]*?)(?=\n\s*En Route:|\n\s*Arrival:|\n\s*Trip Summary:|$)/i);
+  const enRouteMatch = normalized.match(/En Route:\s*([\s\S]*?)(?=\n\s*Arrival:|\n\s*Trip Summary:|$)/i);
+  const arrivalMatch = normalized.match(/Arrival:\s*([\s\S]*?)(?=\n\s*Trip Summary:|$)/i);
+  const summaryMatch = normalized.match(/Trip Summary:\s*([\s\S]*?)$/i);
+
+  const paragraphs = normalized
+    .split(/\n{2,}/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    departure: departureMatch?.[1]?.trim() || paragraphs[0] || "",
+    enRoute: enRouteMatch?.[1]?.trim() || paragraphs[1] || "",
+    arrival: arrivalMatch?.[1]?.trim() || paragraphs[2] || "",
+    overall: summaryMatch?.[1]?.trim() || "",
+    raw: normalized,
+  };
+}
+
 export const aiToolsRouter = Router();
 
 aiToolsRouter.post("/weather-summary", async (req, res) => {
@@ -265,5 +286,84 @@ ${notams}`.trim();
   } catch (error) {
     console.error("[notam-translate]", error);
     return res.status(502).json({ error: "AI summarizer temporarily unavailable" });
+  }
+});
+
+aiToolsRouter.post("/cabin-brief", async (req, res) => {
+  const departureLabel = truncateField(req.body?.departureLabel, 3000);
+  const arrivalLabel = truncateField(req.body?.arrivalLabel, 3000);
+  const dateLabel = truncateField(req.body?.dateLabel, 200);
+  const departureMetar = truncateField(req.body?.departureMetar, 3000);
+  const departureTaf = truncateField(req.body?.departureTaf, 3000);
+  const arrivalMetar = truncateField(req.body?.arrivalMetar, 3000);
+  const arrivalTaf = truncateField(req.body?.arrivalTaf, 3000);
+  const routeNotes = truncateField(req.body?.routeNotes, 4000);
+
+  if ((!departureMetar && !departureTaf) || (!arrivalMetar && !arrivalTaf)) {
+    return res.status(400).json({ error: "Departure and arrival weather data are required" });
+  }
+
+  if (!openaiApiKey) {
+    console.error("[cabin-brief]", "Missing OpenAI API key");
+    return res.status(502).json({ error: "Cabin Brief is temporarily unavailable" });
+  }
+
+  try {
+    const userPrompt = `Create a passenger-friendly Cabin Brief for a trip from ${departureLabel || "the departure airport"} to ${arrivalLabel || "the destination airport"}${dateLabel ? ` on ${dateLabel}` : ""}.
+
+Use exactly this format:
+Departure:
+[3-4 sentences]
+
+En Route:
+[3-4 sentences]
+
+Arrival:
+[3-4 sentences]
+
+Trip Summary:
+[1 sentence]
+
+Departure weather:
+${departureMetar ? `METAR:\n${departureMetar}\n` : ""}${departureTaf ? `TAF:\n${departureTaf}\n` : ""}
+
+Arrival weather:
+${arrivalMetar ? `METAR:\n${arrivalMetar}\n` : ""}${arrivalTaf ? `TAF:\n${arrivalTaf}\n` : ""}
+
+Route notes:
+${routeNotes || "No route-wide pilot reports were available, so be careful not to overstate en route conditions."}`.trim();
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a friendly, reassuring flight weather assistant writing for nervous or curious airline and GA passengers - not pilots. Your job is to translate raw aviation weather data into plain, warm, conversational English that anyone can understand.\n\nRules:\n- Never use ICAO codes, METAR abbreviations, or pilot jargon without immediately explaining them in plain English\n- Use everyday language: 'partly cloudy' not 'SCT045', 'light breeze' not '8 knots', 'some bumpiness' not 'moderate turbulence'\n- Be reassuring but honest - do not hide real weather, just contextualize it ('some light choppiness is completely normal and expected')\n- Structure your response in exactly three sections: Departure, En Route, Arrival\n- Keep each section to 3-4 sentences max - conversational, not clinical\n- End with one sentence of overall trip summary in a warm tone",
+        },
+        {
+          role: "user",
+          content: userPrompt,
+        },
+      ],
+      max_tokens: 1000,
+      temperature: 0.3,
+    });
+
+    const content = completion.choices[0]?.message?.content?.trim() ?? "";
+    const parsed = parseCabinBriefContent(content);
+
+    return res.json({
+      departure: parsed.departure,
+      enRoute: parsed.enRoute,
+      arrival: parsed.arrival,
+      overall: parsed.overall,
+      raw: parsed.raw,
+      model: "gpt-4o-mini",
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[cabin-brief]", error);
+    return res.status(502).json({ error: "Cabin Brief is temporarily unavailable" });
   }
 });

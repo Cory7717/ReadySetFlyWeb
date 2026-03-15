@@ -9,6 +9,7 @@ import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { FeaturedPartnerToolCard } from "@/components/partners/FeaturedPartnerToolCard";
 import WeatherBriefingSummarizer from "@/components/ai/WeatherBriefingSummarizer";
 import NotamTranslator from "@/components/ai/NotamTranslator";
+import CabinBriefSearchForm from "@/components/CabinBriefSearchForm";
 import { BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plane, CheckCircle2, AlertTriangle, Tent, UtensilsCrossed, Home, Anchor, Wrench, Calculator, ShoppingBag, FileText, Users, Search, MapPin, X, DollarSign, UserPlus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
@@ -1524,6 +1525,46 @@ export default function Landing() {
                 placement="home"
                 variant="compact"
                 showLeadIn={false}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-b border-sky-200/70 bg-[linear-gradient(135deg,hsl(206_68%_95%),hsl(212_72%_97%))]">
+        <div className="container mx-auto px-4 py-6 sm:py-8">
+          <div className="rounded-[1.35rem] border border-sky-200/80 bg-white/80 p-5 shadow-[var(--shadow-rsf-panel)] backdrop-blur sm:p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-3xl space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-[#F0B429]/40 bg-[#F0B429]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8b6500]">
+                    ✈ Cabin Brief
+                  </span>
+                  <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#8b6500]/90">
+                    - For Passengers
+                  </span>
+                </div>
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+                  Know what&apos;s ahead. Plain-English flight weather for every passenger.
+                </h2>
+                <p className="text-sm text-slate-700 sm:text-base">
+                  No pilot license required - just your departure and destination.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <CabinBriefSearchForm
+                submitLabel="Get My Cabin Brief"
+                onSubmit={({ from, to, date }) => {
+                  trackEvent("cabin_brief_search", {
+                    from: from.icao,
+                    to: to.icao,
+                  });
+                  navigate(
+                    `/cabin-brief?from=${encodeURIComponent(from.icao)}&to=${encodeURIComponent(to.icao)}&date=${encodeURIComponent(date)}`,
+                  );
+                }}
               />
             </div>
           </div>

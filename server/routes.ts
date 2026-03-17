@@ -1630,7 +1630,6 @@ const FAA_TFR_ARCGIS_URLS = [
   "https://services1.arcgis.com/n4Ot9Qz0t5espY4s/ArcGIS/rest/services/FAA_TFRs/FeatureServer/0/query",
   "https://services1.arcgis.com/n4Ot9Qz0t5espY4s/arcgis/rest/services/FAA_TFRs/FeatureServer/0/query",
   "https://gis.faa.gov/arcgis/rest/services/TFMS/TFR/MapServer/0/query",
-  "https://tfr.faa.gov/tfr_map_ims/MapServer/0/query",
 ].filter((value, index, arr) => value && arr.indexOf(value) === index);
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
 
@@ -2125,7 +2124,6 @@ async function fetchArcGisTfrs(bbox?: { minLon: number; minLat: number; maxLon: 
             attempts,
           };
         } catch (error: any) {
-          console.error("ArcGIS TFR fetch failed:", error);
           lastError = error?.message || "ArcGIS fetch failed";
           attempts.push({ url, ok: false, error: `${lastError} (${variant.label})` });
         }
@@ -13527,24 +13525,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         | null = null;
 
       const buildPayload = async () => {
-        const arcgisResult = await fetchArcGisTfrs();
-        arcgisMeta = {
-          attempted: true,
-          ok: Boolean(arcgisResult?.data),
-          error: arcgisResult?.error,
-          attempts: arcgisResult?.attempts,
-        };
-        if (arcgisResult?.data) {
-          const enrichedFeatures = await enrichArcGisTfrFeatures(arcgisResult.data.features || []);
-          return {
-            payload: {
-              ...arcgisResult.data,
-              features: enrichedFeatures,
-            },
-            staleHint: false,
-          };
-        }
-
         const wfsResult = await fetchSuaWfsTfrs();
         wfsMeta = {
           attempted: true,
@@ -13557,6 +13537,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           return {
             payload: {
               ...wfsResult.data,
+              features: enrichedFeatures,
+            },
+            staleHint: false,
+          };
+        }
+
+        const arcgisResult = await fetchArcGisTfrs();
+        arcgisMeta = {
+          attempted: true,
+          ok: Boolean(arcgisResult?.data),
+          error: arcgisResult?.error,
+          attempts: arcgisResult?.attempts,
+        };
+        if (arcgisResult?.data) {
+          const enrichedFeatures = await enrichArcGisTfrFeatures(arcgisResult.data.features || []);
+          return {
+            payload: {
+              ...arcgisResult.data,
               features: enrichedFeatures,
             },
             staleHint: false,
@@ -13710,26 +13708,30 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         };
       }
 
-      if (arcgisMeta?.attempted && !arcgisMeta.ok) {
-        console.error(
+      const liveUpstreamSucceeded = payload?.source === "faa-sua-wfs" || payload?.source === "faa-arcgis";
+
+      if (!liveUpstreamSucceeded && arcgisMeta?.attempted && !arcgisMeta.ok) {
+        console.warn(
           JSON.stringify({
-            event: "tfr_upstream_error",
+            event: "tfr_upstream_degraded",
             requestId,
             error: arcgisMeta.error,
             attempts: arcgisMeta.attempts,
+            fallbackSource: payload?.source || "unknown",
           })
         );
       }
 
       const wfsMetaSnapshot = wfsMeta as TfrFetchMeta | null;
       const failedWfsMeta = wfsMetaSnapshot && wfsMetaSnapshot.attempted && !wfsMetaSnapshot.ok ? wfsMetaSnapshot : null;
-      if (failedWfsMeta) {
-        console.error(
+      if (!liveUpstreamSucceeded && failedWfsMeta) {
+        console.warn(
           JSON.stringify({
-            event: "tfr_wfs_upstream_error",
+            event: "tfr_wfs_upstream_degraded",
             requestId,
             error: failedWfsMeta.error,
             attempts: failedWfsMeta.attempts,
+            fallbackSource: payload?.source || "unknown",
           })
         );
       }

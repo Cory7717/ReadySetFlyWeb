@@ -101,8 +101,14 @@ app.use((req, res, next) => {
     const shouldStartSwim = process.env.SWIM_RUN_MODE !== "worker";
     const swimRunInApi = String(process.env.SWIM_RUN_IN_API ?? "").toLowerCase();
     const nmsEnabled = String(process.env.NMS_ENABLED ?? "").toLowerCase() === "true";
+    const nmsRunMode = String(process.env.NMS_RUN_MODE ?? "").toLowerCase();
+    const nmsRunInApi = String(process.env.NMS_RUN_IN_API ?? "").toLowerCase();
+    const shouldStartNms =
+      nmsEnabled &&
+      nmsRunMode !== "worker" &&
+      (nmsRunInApi === "true" || (!isProd && nmsRunInApi !== "false"));
 
-    if (nmsEnabled) {
+    if (shouldStartNms) {
       try {
         const { startNmsNotamWorker } = await import("./nms-notam-worker");
         const started = startNmsNotamWorker();

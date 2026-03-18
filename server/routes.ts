@@ -109,6 +109,11 @@ const logDebug = (...args: unknown[]) => {
   }
 };
 
+const getRequestUserId = (req: any): string | null => {
+  const userId = req.user?.claims?.sub || req.session?.userId;
+  return userId ? String(userId) : null;
+};
+
 const TAILWINDS_PROMO_CODE = "TAILWINDS";
 const TAILWINDS_CATEGORY_LIMIT = 5;
 const TAILWINDS_DURATION_DAYS = 90;
@@ -3548,6 +3553,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!rawPath) {
         return res.status(400).json({ error: "path is required" });
       }
+      const requesterId = getRequestUserId(req);
+      if (!requesterId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
 
       const access = typeof req.body?.access === "string" ? req.body.access.toLowerCase() : "private";
       const visibility = access === "publicread" || access === "public" ? "public" : "private";
@@ -3570,7 +3579,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const objectStorageService = new ObjectStorageService();
       const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(rawPath, {
-        owner: req.user.claims.sub,
+        owner: requesterId,
         visibility,
       });
       return res.status(200).json({ objectPath });
@@ -3587,7 +3596,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'imageURL is required' });
       }
 
-      const requesterId = req.user.claims.sub;
+      const requesterId = getRequestUserId(req);
+      if (!requesterId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       
       // Use S3 for production, fallback to ObjectStorage for Replit
       if (process.env.AWS_S3_BUCKET) {
@@ -3864,7 +3876,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Listing category is required" });
       }
 
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const user = await storage.getUser(userId);
       const feeBreakdown = buildMarketplaceListingFeeBreakdown({ category, tier, user });
 
@@ -4316,7 +4331,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/paypal/create-order-listing", isAuthenticated, async (req: any, res) => {
     try {
       const { category, tier, promoCode, finalAmount } = req.body;
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       
       if (!category) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -4490,7 +4508,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/paypal/create-order-rental", isAuthenticated, isVerified, async (req: any, res) => {
     try {
       const { rentalId } = req.body;
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       
       if (!rentalId) {
         return res.status(400).json({ error: "Missing required fields" });
@@ -4863,7 +4884,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Complete marketplace listing creation after PayPal payment
   app.post("/api/marketplace/complete-create", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const { orderId, listingData } = req.body;
 
       if (!orderId || !listingData) {
@@ -5061,7 +5085,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // SECURITY: Requires cryptographically signed token to prevent unauthorized completion
   app.post("/api/marketplace/complete-free-listing", isAuthenticated, async (req: any, res) => {
     try {
-      const requesterId = req.user.claims.sub;
+      const requesterId = getRequestUserId(req);
+      if (!requesterId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const { completionToken, listingData } = req.body;
       
       // SECURITY: Validate completion token is provided
@@ -7613,7 +7640,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/rentals/renter/:renterId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       if (req.params.renterId !== userId && !req.user?.isSuperAdmin) {
         return res.status(403).json({ error: "Access denied" });
       }
@@ -7626,7 +7656,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/rentals/owner/:ownerId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       if (req.params.ownerId !== userId && !req.user?.isSuperAdmin) {
         return res.status(403).json({ error: "Access denied" });
       }
@@ -7648,7 +7681,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/rentals/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const rental = await storage.getRental(req.params.id);
       if (!rental) {
         return res.status(404).json({ error: "Rental not found" });
@@ -8194,7 +8230,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Favorites
   app.post("/api/favorites", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       
       // Validate request body with Zod
       const validatedData = insertFavoriteSchema.parse({
@@ -8212,7 +8251,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/favorites/:listingType/:listingId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const { listingType, listingId } = req.params;
 
       if (listingType !== "marketplace" && listingType !== "aircraft") {
@@ -8232,7 +8274,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/favorites/check/:listingType/:listingId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const { listingType, listingId } = req.params;
 
       if (listingType !== "marketplace" && listingType !== "aircraft") {
@@ -8249,7 +8294,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/favorites", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const favorites = await storage.getUserFavorites(userId);
       res.json(favorites);
     } catch (error) {

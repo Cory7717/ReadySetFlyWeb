@@ -1048,9 +1048,13 @@ export default function AdminDashboard() {
       window.location.href = "/create-marketplace-listing?adminFree=1";
     },
     onError: (error: Error) => {
+      const message = error.message || "Could not issue admin grant";
+      const isMissingUserForEmail = message.includes("User not found for the provided email");
       toast({
         title: "Failed to start free listing",
-        description: error.message || "Could not issue admin grant",
+        description: isMissingUserForEmail
+          ? "That email is not an existing RSF account. Check 'Advertiser does not have an account yet' to create the listing under your admin account and keep the advertiser email as the contact."
+          : message,
         variant: "destructive",
       });
     },
@@ -7099,7 +7103,7 @@ export default function AdminDashboard() {
                 onChange={(e) => setAdminFreeListingEmail(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Optional. If blank, the listing will be created under your admin account.
+                If this email belongs to an existing RSF user, leave the checkbox below off. If they do not have an RSF account yet, turn the checkbox on.
               </p>
             </div>
             <div className="space-y-2">
@@ -7121,7 +7125,7 @@ export default function AdminDashboard() {
                 data-testid="checkbox-admin-free-email-only"
               />
               <div className="text-xs text-muted-foreground">
-                Advertiser does not have an account yet (create listing under your admin account and use the contact email above).
+                Use this when the advertiser does not have an RSF account yet. The listing will be created under your admin account and the email above will be used as the public contact email.
               </div>
             </div>
             <div className="space-y-2">

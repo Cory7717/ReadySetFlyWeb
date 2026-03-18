@@ -86,6 +86,28 @@ function makePassportUser(internalUserId: string, profile: GoogleProfile) {
   };
 }
 
+function makeRequestUserFromDbUser(dbUser: {
+  id: string;
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  profileImageUrl?: string | null;
+  isAdmin?: boolean | null;
+  isSuperAdmin?: boolean | null;
+}) {
+  return {
+    claims: {
+      sub: dbUser.id,
+      email: dbUser.email ?? null,
+      first_name: dbUser.firstName ?? null,
+      last_name: dbUser.lastName ?? null,
+      profile_image_url: dbUser.profileImageUrl ?? null,
+    },
+    isAdmin: Boolean(dbUser.isAdmin),
+    isSuperAdmin: Boolean(dbUser.isSuperAdmin),
+  };
+}
+
 // Resolve user from OAuth profile WITHOUT changing existing IDs:
 // 1) If existing user by email, use that (keeps uuid ids)
 // 2) Else create user (uuid default via DB if you omit id)
@@ -134,7 +156,16 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
     }
 
     // Email/password web session (set in /api/auth/web-login)
-    if (req.session?.userId) return next();
+    if (req.session?.userId) {
+      if (!req.user?.claims?.sub) {
+        const dbUser = await storage.getUser(String(req.session.userId));
+        if (!dbUser) {
+          return res.status(401).json({ message: "Unauthorized" });
+        }
+        req.user = makeRequestUserFromDbUser(dbUser);
+      }
+      return next();
+    }
 
     return res.status(401).json({ message: "Unauthorized" });
   };
@@ -184,6 +215,19 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
   // Passport init
   app.use(passport.initialize());
   app.use(passport.session());
+  app.use(async (req: any, _res, next) => {
+    try {
+      if (!req.user?.claims?.sub && req.session?.userId) {
+        const dbUser = await storage.getUser(String(req.session.userId));
+        if (dbUser) {
+          req.user = makeRequestUserFromDbUser(dbUser);
+        }
+      }
+      next();
+    } catch (error) {
+      next(error as any);
+    }
+  });
 
   passport.serializeUser((user: any, done) => {
     // store internal user id in session
@@ -196,19 +240,7 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
       if (!id) return done(null, false);
       const dbUser = await storage.getUser(String(id));
       if (!dbUser) return done(null, false);
-
-      // Rehydrate into the same shape code expects
-      const passportUser = {
-        claims: {
-          sub: dbUser.id,
-          email: dbUser.email,
-          first_name: dbUser.firstName,
-          last_name: dbUser.lastName,
-          profile_image_url: dbUser.profileImageUrl,
-        },
-      };
-
-      done(null, passportUser);
+      done(null, makeRequestUserFromDbUser(dbUser));
     } catch (e) {
       done(e as any);
     }

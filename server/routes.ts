@@ -3335,7 +3335,10 @@ const airportSearchRateLimiter = createSoftAuthRateLimiter({
 // verification is ALWAYS enforced for safety and security, regardless of any flags
 const isVerified = async (req: any, res: any, next: any) => {
   try {
-    const userId = req.user.claims.sub;
+    const userId = getRequestUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     const user = await storage.getUser(userId);
     
     if (!user) {
@@ -7228,7 +7231,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (resolvedContext === "marketplace") {
-        if (!req.user?.claims?.sub) {
+        const requesterId = getRequestUserId(req);
+        if (!requesterId) {
           return res.status(401).json({ valid: false, message: "Sign in to validate marketplace promo codes" });
         }
 
@@ -7238,7 +7242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             : Number(amount);
         const resolvedPromo = await resolveMarketplacePromoCode({
           code,
-          userId: req.user.claims.sub,
+          userId: requesterId,
           category,
           amount: amountNumber,
         });

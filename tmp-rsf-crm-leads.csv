@@ -1,0 +1,58 @@
+first_name,last_name,email,phone,company,title,source,category,status,notes
+Sales,Team,sales@controller.com,,Controller.com,,RSF Outreach,Aircraft for Sale,New,Largest aviation marketplace - partnership or cross-listing angle
+Advertising,Team,advertising@trade-a-plane.com,,Trade-A-Plane,,RSF Outreach,Aircraft for Sale,New,Legacy listing platform - cross-post audience opportunity
+Info,Team,info@barnstormers.com,,Barnstormers.com,,RSF Outreach,Aircraft for Sale,New,GA classifieds - partnership or listing migration pitch
+Advertising,Team,advertising@aopa.org,,AOPA Pilot Magazine,,RSF Outreach,Aircraft for Sale,New,Ad and listing partnership - large GA membership audience
+Info,Team,info@avbuyer.com,,AvBuyer,,RSF Outreach,Aircraft for Sale,New,Business aviation sales platform - listing partnership
+Sales,Team,sales@globalair.com,,GlobalAir.com,,RSF Outreach,Aircraft for Sale,New,Aircraft sales and charter listings - partnership angle
+Info,Team,info@jetcraft.com,,Jetcraft,,RSF Outreach,Aircraft for Sale,New,High-end aircraft brokerage - premium listing tier
+Info,Team,cpa@cessna.org,,Cessna Pilots Association,,RSF Outreach,Aircraft for Sale,New,172/182 owner community - direct seller audience
+Info,Team,info@piperowner.org,,Piper Owner Society,,RSF Outreach,Aircraft for Sale,New,Piper aircraft owner community - direct seller audience
+Info,Team,info@acsf.aero,,Air Charter Safety Foundation,,RSF Outreach,Charter Services,New,Industry association - partnership and listing referral angle
+NATA,Team,nata@nata.aero,,National Air Transport Association,,RSF Outreach,Charter Services,New,Charter operator membership org - bulk outreach to members
+Partnerships,Team,partnerships@wheelsup.com,,Wheels Up,,RSF Outreach,Charter Services,New,Large Part 135 operator - charter listing partnership
+Info,Team,info@blade.com,,Blade Air Mobility,,RSF Outreach,Charter Services,New,Urban air and charter - listing and partnership
+Info,Team,info@southernairways.com,,Southern Airways Express,,RSF Outreach,Charter Services,New,Regional charter/commuter operator
+Info,Team,info@shorelineaviation.net,,Shoreline Aviation,,RSF Outreach,Charter Services,New,New England charter operator
+Info,Team,info@advancedair.com,,Advanced Air,,RSF Outreach,Charter Services,New,Western US charter operator
+Charter,Team,charter@lat33aviation.com,,Latitude 33 Aviation,,RSF Outreach,Charter Services,New,Southern CA charter operator
+Info,Team,info@claylacy.com,,Clay Lacy Aviation,,RSF Outreach,Charter Services,New,West Coast charter and FBO
+Info,Team,info@tempusjets.com,,Tempus Jets,,RSF Outreach,Charter Services,New,TX-based charter - local to RSF - priority outreach
+Jobs,Team,jobs@aopa.org,,AOPA,,RSF Outreach,Aviation Jobs,New,Post jobs to AOPA membership - large pilot audience
+Info,Team,info@avjobs.com,,AVjobs.com,,RSF Outreach,Aviation Jobs,New,Aviation job board - co-marketing or partnership
+Info,Team,info@aerocrew.com,,AeroCrew Solutions,,RSF Outreach,Aviation Jobs,New,Pilot staffing firm - job board partnership
+Support,Team,support@airlineapps.com,,Airline Apps,,RSF Outreach,Aviation Jobs,New,Pilot application platform - integration or partnership
+Info,Team,info@skyhop.com,,SkyHop Networks,,RSF Outreach,Aviation Jobs,New,Pilot commuter network - job listing crossover
+RAA,Team,raa@raa.org,,Regional Airline Association,,RSF Outreach,Aviation Jobs,New,Regional carrier hiring pipeline - job board anchor tenant
+WAI,Team,wai@wai.org,,Women in Aviation International,,RSF Outreach,Aviation Jobs,New,Diversity pipeline - job board and community partnership
+Recruiting,Team,recruiting@atpflightschool.com,,ATP Flight School,,RSF Outreach,Aviation Jobs,New,Major pilot pipeline - job board and school listing
+Admissions,Team,admissions@atpflightschool.com,,ATP Flight School,,RSF Outreach,Flight Schools,New,70+ locations nationwide - enterprise CFI dashboard deal potential
+Info,Team,info@usaero.com,,USAERO Flight Academy,,RSF Outreach,Flight Schools,New,FL-based Part 141 - CFI dashboard and rental listing
+Admissions,Team,admissions@epicflightacademy.com,,Epic Flight Academy,,RSF Outreach,Flight Schools,New,Large Part 141 New Smyrna Beach FL - CFI and student tools pitch
+Training,Team,training@cae.com,,CAE Civil Aviation Training,,RSF Outreach,Flight Schools,New,Global flight training enterprise - institutional licensing
+Training,Team,training@flightsafety.com,,FlightSafety International,,RSF Outreach,Flight Schools,New,Simulator and training - partnership and tool integration
+Info,Team,info@americanflyers.net,,American Flyers,,RSF Outreach,Flight Schools,New,Multi-location Part 141 - CFI dashboard enterprise deal
+Info,Team,info@iasco.com,,IASCO Flight Training,,RSF Outreach,Flight Schools,New,CA-based international students - logbook and tool pitch
+Admissions,Team,admissions@spartan.edu,,Spartan College of Aeronautics,,RSF Outreach,Flight Schools,New,Tulsa OK - maintenance and flight - dual category opportunity
+Admissions,Team,admissions@erau.edu,,Embry-Riddle Aeronautical University,,RSF Outreach,Flight Schools,New,Largest aviation university - high-value institutional partnership
+Aviation,Team,aviation@und.edu,,University of North Dakota Aviation,,RSF Outreach,Flight Schools,New,Major aviation program - student logbook and CFI tools
+Aviation,Team,aviation@tstc.edu,,Texas State Technical College,,RSF Outreach,Flight Schools,New,Texas-based - local to RSF - priority outreach
+Aviation,Team,aviation@austincc.edu,,Austin Community College Aviation,,RSF Outreach,Flight Schools,New,Right in RSFs backyard - first in-person meeting target
+Maintenance,Team,maintenance@aopa.org,,AOPA Maintenance,,RSF Outreach,Mechanics,New,Member referral network for mechanics and MRO
+HQ,Team,hq@amfanatl.org,,Aircraft Mechanics Fraternal Association,,RSF Outreach,Mechanics,New,Union org - job board and directory listing angle
+Info,Team,info@gama.aero,,General Aviation Manufacturers Association,,RSF Outreach,Mechanics,New,OEM and MRO network - partnership and directory
+Info,Team,info@duncanaviation.aero,,Duncan Aviation,,RSF Outreach,Mechanics,New,Large MRO - directory listing and partnership
+Info,Team,info@standardaero.com,,StandardAero,,RSF Outreach,Mechanics,New,Major MRO enterprise - directory and job board
+Info,Team,info@constantaviation.com,,Constant Aviation,,RSF Outreach,Mechanics,New,Mid-size MRO - directory listing
+Service,Team,service@textronaviation.com,,Textron Aviation Service,,RSF Outreach,Mechanics,New,Cessna/Beechcraft MRO - OEM service network
+Info,Team,info@airborne.com,,Airborne Maintenance and Engineering,,RSF Outreach,Mechanics,New,Regional MRO - directory listing
+Info,Team,info@leadingedgeaviation.com,,Leading Edge Aviation Services,,RSF Outreach,Mechanics,New,CA-based MRO - directory listing
+Info,Team,info@amtsociety.org,,AMT Society,,RSF Outreach,Mechanics,New,Aviation maintenance technician org - job board partnership
+Info,Team,info@austinaeroclub.com,,Austin Aero Club,,RSF Outreach,Rental Reach Out,New,Local Austin flying club - first call to make - in-person meeting
+Info,Team,info@texasflyinglegends.com,,Texas Flying Legends Museum,,RSF Outreach,Rental Reach Out,New,TX warbird - unique listing opportunity
+Info,Team,info@aerocentury.com,,AeroCentury,,RSF Outreach,Rental Reach Out,New,Aircraft leasing - leaseback rental listing angle
+Editor,Team,editor@piperflyer.com,,Piper Flyer Association,,RSF Outreach,Rental Reach Out,New,Active rental community - listing outreach and advertising
+Info,Team,info@flyaeroguard.com,,AeroGuard Flight Training,,RSF Outreach,Rental Reach Out,New,AZ-based with rental fleet - TAILWINDS promo pitch
+Info,Team,info@cirrusowners.org,,Cirrus Aircraft Owners,,RSF Outreach,Rental Reach Out,New,High-value rental demographic - premium listing tier
+Info,Team,info@skyhawkassociation.org,,Cessna 172 Skyhawk Association,,RSF Outreach,Rental Reach Out,New,Most rented aircraft in the world - high volume listing target
+AOPA,Club,club@aopa.org,,AOPA Flying Clubs,,RSF Outreach,Rental Reach Out,New,2000+ flying clubs listed at aopa.org/find-a-club - bulk outreach anchor

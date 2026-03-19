@@ -91,6 +91,7 @@ const SOURCE_ALIASES: Record<string, InsertCrmLead["source"]> = {
   advertising: "advertising",
   ads: "advertising",
   "cold outreach": "cold_outreach",
+  "rsf outreach": "cold_outreach",
   cold: "cold_outreach",
   event: "event",
   other: "other",

@@ -49,6 +49,7 @@ import { fuelPricesRouter } from "./routes/fuelPrices";
 import { aiToolsRouter } from "./routes/aiTools";
 import { flightPlanFilingProvider, validateFlightPlanForAction } from "./services/flight-plan-filing/provider";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
+import { buildWeeklyDigestProfile } from "./weeklyEmailPersonalization";
 import {
   fetchMetar,
   fetchTaf,
@@ -6537,9 +6538,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
               eq(users.isSuspended, false),
               inArray(users.id, activeUserIds),
             ));
+      const recentEvents = activeUserIds.length === 0
+        ? []
+        : await db
+            .select({
+              userId: analyticsEvents.userId,
+              event: analyticsEvents.event,
+              page: analyticsEvents.page,
+              createdAt: analyticsEvents.createdAt,
+            })
+            .from(analyticsEvents)
+            .where(and(
+              isNotNull(analyticsEvents.userId),
+              gte(analyticsEvents.createdAt, activeCutoff),
+              inArray(analyticsEvents.userId, activeUserIds),
+            ));
+      const eventsByUserId = new Map<string, typeof recentEvents>();
+      for (const event of recentEvents) {
+        if (!event.userId) continue;
+        const userEvents = eventsByUserId.get(event.userId) || [];
+        userEvents.push(event);
+        eventsByUserId.set(event.userId, userEvents);
+      }
 
       let emailsSent = 0;
       const errors: string[] = [];
+      const segmentBreakdown: Record<string, number> = {};
 
       for (const user of candidates) {
         if (!user.email) continue;
@@ -6548,14 +6572,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const firstName = user.firstName || user.email.split("@")[0];
         const token = signMarketingToken({ userId: user.id, action: "weekly_opt_out" });
         const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+        const digestProfile = buildWeeklyDigestProfile({
+          user,
+          events: eventsByUserId.get(user.id) || [],
+        });
+        segmentBreakdown[digestProfile.segment] = (segmentBreakdown[digestProfile.segment] || 0) + 1;
 
         try {
           await client.emails.send({
             from: fromEmail,
             to: user.email,
-            subject: "Your weekly Ready Set Fly pilot tools rundown",
-            html: getWeeklyEngagementEmailHtml({ firstName, unsubscribeUrl }),
-            text: getWeeklyEngagementEmailText({ firstName, unsubscribeUrl }),
+            subject: digestProfile.subject,
+            html: getWeeklyEngagementEmailHtml({
+              firstName,
+              unsubscribeUrl,
+              headline: digestProfile.headline,
+              intro: digestProfile.intro,
+              reasonLine: digestProfile.reasonLine,
+              modules: digestProfile.modules,
+            }),
+            text: getWeeklyEngagementEmailText({
+              firstName,
+              unsubscribeUrl,
+              headline: digestProfile.headline,
+              intro: digestProfile.intro,
+              reasonLine: digestProfile.reasonLine,
+              modules: digestProfile.modules,
+            }),
           });
 
           await storage.updateUser(user.id, {
@@ -6574,6 +6617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         activeWindowDays,
         totalCandidates: candidates.length,
         emailsSent,
+        segmentBreakdown,
         errors: errors.length > 0 ? errors : undefined,
       });
     } catch (error: any) {

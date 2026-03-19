@@ -1224,6 +1224,15 @@ You’re receiving this email because RSF Pro alerts are enabled on your account
 export function getWeeklyEngagementEmailHtml(data: {
   firstName: string;
   unsubscribeUrl: string;
+  headline: string;
+  intro: string;
+  reasonLine: string;
+  modules: Array<{
+    title: string;
+    description: string;
+    ctaLabel: string;
+    ctaUrl: string;
+  }>;
 }): string {
   const appUrl = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
   return `
@@ -1239,24 +1248,31 @@ export function getWeeklyEngagementEmailHtml(data: {
     .cta { display: inline-block; background: #1e40af; color: #fff !important; padding: 12px 18px; border-radius: 8px; text-decoration: none; font-weight: 600; }
     .muted { color: #6b7280; font-size: 12px; }
     .list { margin: 16px 0; padding-left: 18px; }
+    .module { margin-top: 16px; padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
       <div class="header">
-        <h2 style="margin:0;">Your Weekly Ready Set Fly Rundown</h2>
+        <h2 style="margin:0;">${data.headline}</h2>
       </div>
       <p style="margin-top: 20px;">Hi ${data.firstName},</p>
-      <p>Here are a few ways to get more out of Ready Set Fly this week:</p>
-      <ul class="list">
-        <li>Build a route, review weather, and get a risk summary in the Flight Planner.</li>
-        <li>Browse marketplace listings for aircraft, charter, flight schools, CFIs, jobs, and aviation services.</li>
-        <li>Use RSF pilot tools to stay current on planning, logbook, and flying workflows.</li>
-      </ul>
-      <div style="margin-top: 18px;">
-        <a class="cta" href="${appUrl}">Open Ready Set Fly</a>
-      </div>
+      <p>${data.intro}</p>
+      <p class="muted" style="font-size: 13px;">${data.reasonLine}</p>
+      ${data.modules
+        .map(
+          (module) => `
+            <div class="module">
+              <div style="font-weight: 700; margin-bottom: 6px;">${module.title}</div>
+              <div>${module.description}</div>
+              <div style="margin-top: 12px;">
+                <a class="cta" href="${appUrl}${module.ctaUrl}">${module.ctaLabel}</a>
+              </div>
+            </div>
+          `,
+        )
+        .join("")}
       <p class="muted" style="margin-top: 20px;">
         You are receiving this weekly email because you have an account with Ready Set Fly.
         <a href="${data.unsubscribeUrl}">Unsubscribe</a>.
@@ -1271,19 +1287,35 @@ export function getWeeklyEngagementEmailHtml(data: {
 export function getWeeklyEngagementEmailText(data: {
   firstName: string;
   unsubscribeUrl: string;
+  headline: string;
+  intro: string;
+  reasonLine: string;
+  modules: Array<{
+    title: string;
+    description: string;
+    ctaLabel: string;
+    ctaUrl: string;
+  }>;
 }): string {
   const appUrl = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
   return `
-Weekly Ready Set Fly Rundown
+${data.headline}
 
 Hi ${data.firstName},
 
-Get more out of Ready Set Fly this week:
-- Build a route, review weather, and get a risk summary in the Flight Planner.
-- Browse marketplace listings for aircraft, charter, flight schools, CFIs, jobs, and aviation services.
-- Use RSF pilot tools to stay current on planning, logbook, and flying workflows.
+${data.intro}
 
-Open Ready Set Fly: ${appUrl}
+${data.reasonLine}
+
+${data.modules
+  .map(
+    (module) => `
+${module.title}
+${module.description}
+${module.ctaLabel}: ${appUrl}${module.ctaUrl}
+    `.trim(),
+  )
+  .join("\n\n")}
 
 Unsubscribe: ${data.unsubscribeUrl}
   `.trim();

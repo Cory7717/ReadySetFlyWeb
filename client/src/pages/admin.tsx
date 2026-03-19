@@ -4814,6 +4814,8 @@ export default function AdminDashboard() {
                   ref={crmLeadImportInputRef}
                   type="file"
                   accept=".csv,.xlsx"
+                  aria-label="Upload CRM lead template"
+                  title="Upload CRM lead template"
                   className="hidden"
                   onChange={handleCrmLeadImport}
                 />
@@ -4858,7 +4860,7 @@ export default function AdminDashboard() {
             <CardContent>
               <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="text-sm text-muted-foreground">
-                  Export a blank CSV or XLSX template to hand to AI or your team, then upload the completed file back here. CRM imports accept headers like name, email, phone, company, title, source, category, status, and notes.
+                  Export a blank CSV or XLSX template, then upload the completed file back here. CRM imports accept headers like name, email, phone, company, title, source, category, status, and notes.
                 </div>
                 <div className="w-full md:w-64">
                   <Select

@@ -6877,18 +6877,20 @@ export default function AdminDashboard() {
           }
         }}
       >
-        <DialogContent className="max-w-4xl" data-testid="dialog-sales-email-preview">
-          <DialogHeader>
-            <DialogTitle>Review Sales Email</DialogTitle>
-            <DialogDescription>
-              {selectedSalesLead
-                ? `Preview the email for ${selectedSalesLead.firstName} ${selectedSalesLead.lastName} at ${selectedSalesLead.email} before sending.`
-                : "Preview and review the CRM sales email before sending."}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden p-0" data-testid="dialog-sales-email-preview">
+          <div className="flex h-full max-h-[90vh] flex-col">
+            <DialogHeader className="border-b px-6 pb-4 pt-6 pr-12">
+              <DialogTitle>Review Sales Email</DialogTitle>
+              <DialogDescription>
+                {selectedSalesLead
+                  ? `Preview the email for ${selectedSalesLead.firstName} ${selectedSalesLead.lastName} at ${selectedSalesLead.email} before sending.`
+                  : "Preview and review the CRM sales email before sending."}
+              </DialogDescription>
+            </DialogHeader>
 
-          <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+              <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+                <div className="space-y-4">
               <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
                 <div className="text-sm font-semibold">Lead</div>
                 {selectedSalesLead ? (
@@ -7004,76 +7006,78 @@ export default function AdminDashboard() {
                   data-testid="textarea-sales-email-note"
                 />
               </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="rounded-lg border bg-background">
-                <div className="border-b px-4 py-3">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Subject</div>
-                  <div className="mt-1 text-sm font-medium">
-                    {salesEmailPreviewLoading
-                      ? "Loading preview..."
-                      : salesEmailPreview?.subject || "No preview available"}
-                  </div>
                 </div>
-                <div className="max-h-[460px] overflow-y-auto p-4">
-                  {salesEmailPreviewLoading ? (
-                    <div className="text-sm text-muted-foreground">Generating preview...</div>
-                  ) : salesEmailPreviewError ? (
-                    <div className="text-sm text-destructive">
-                      {salesEmailPreviewError instanceof Error
-                        ? salesEmailPreviewError.message
-                        : "Unable to load preview."}
+
+                <div className="space-y-3">
+                  <div className="rounded-lg border bg-background">
+                    <div className="border-b px-4 py-3">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Subject</div>
+                      <div className="mt-1 text-sm font-medium">
+                        {salesEmailPreviewLoading
+                          ? "Loading preview..."
+                          : salesEmailPreview?.subject || "No preview available"}
+                      </div>
                     </div>
-                  ) : salesEmailPreview ? (
-                    <iframe
-                      title="Sales email preview"
-                      srcDoc={salesEmailPreview.html}
-                      className="min-h-[420px] w-full rounded-md border bg-white"
-                    />
-                  ) : (
-                    <div className="text-sm text-muted-foreground">Select a lead to preview this email.</div>
-                  )}
+                    <div className="max-h-[460px] overflow-y-auto p-4">
+                      {salesEmailPreviewLoading ? (
+                        <div className="text-sm text-muted-foreground">Generating preview...</div>
+                      ) : salesEmailPreviewError ? (
+                        <div className="text-sm text-destructive">
+                          {salesEmailPreviewError instanceof Error
+                            ? salesEmailPreviewError.message
+                            : "Unable to load preview."}
+                        </div>
+                      ) : salesEmailPreview ? (
+                        <iframe
+                          title="Sales email preview"
+                          srcDoc={salesEmailPreview.html}
+                          className="min-h-[420px] w-full rounded-md border bg-white"
+                        />
+                      ) : (
+                        <div className="text-sm text-muted-foreground">Select a lead to preview this email.</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleCloseSalesEmailDialog}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                if (!selectedSalesLead) return;
-                sendLeadSalesEmailMutation.mutate({
-                  id: selectedSalesLead.id,
-                  templateType: salesEmailTemplateType,
-                  greetingName: salesEmailGreetingName.trim() || undefined,
-                  subjectOverride: salesEmailSubjectOverride.trim() || undefined,
-                  introOverride: salesEmailIntroOverride.trim() || undefined,
-                  customNote: salesEmailCustomNote.trim() || undefined,
-                  promoCode: salesEmailPromoCode.trim() || undefined,
-                  promoDetails: salesEmailPromoDetails.trim() || undefined,
-                });
-              }}
-              disabled={
-                !selectedSalesLead ||
-                sendLeadSalesEmailMutation.isPending ||
-                salesEmailPreviewLoading ||
-                !!salesEmailPreviewError ||
-                Boolean(selectedSalesLead?.marketingEmailOptOutAt)
-              }
-              data-testid="button-send-sales-email-confirm"
-            >
-              {sendLeadSalesEmailMutation.isPending ? "Sending..." : "Send Sales Email"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter className="border-t px-6 py-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCloseSalesEmailDialog}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (!selectedSalesLead) return;
+                  sendLeadSalesEmailMutation.mutate({
+                    id: selectedSalesLead.id,
+                    templateType: salesEmailTemplateType,
+                    greetingName: salesEmailGreetingName.trim() || undefined,
+                    subjectOverride: salesEmailSubjectOverride.trim() || undefined,
+                    introOverride: salesEmailIntroOverride.trim() || undefined,
+                    customNote: salesEmailCustomNote.trim() || undefined,
+                    promoCode: salesEmailPromoCode.trim() || undefined,
+                    promoDetails: salesEmailPromoDetails.trim() || undefined,
+                  });
+                }}
+                disabled={
+                  !selectedSalesLead ||
+                  sendLeadSalesEmailMutation.isPending ||
+                  salesEmailPreviewLoading ||
+                  !!salesEmailPreviewError ||
+                  Boolean(selectedSalesLead?.marketingEmailOptOutAt)
+                }
+                data-testid="button-send-sales-email-confirm"
+              >
+                {sendLeadSalesEmailMutation.isPending ? "Sending..." : "Send Sales Email"}
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

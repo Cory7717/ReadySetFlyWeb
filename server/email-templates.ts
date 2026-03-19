@@ -1245,17 +1245,17 @@ export function getWeeklyEngagementEmailHtml(data: {
   <div class="container">
     <div class="card">
       <div class="header">
-        <h2 style="margin:0;">Your Weekly Pilot Tools Rundown</h2>
+        <h2 style="margin:0;">Your Weekly Ready Set Fly Rundown</h2>
       </div>
       <p style="margin-top: 20px;">Hi ${data.firstName},</p>
-      <p>We saved a few quick wins to help you plan safer, faster flights this week:</p>
+      <p>Here are a few ways to get more out of Ready Set Fly this week:</p>
       <ul class="list">
-        <li>Build a new route and get a risk summary in the Flight Planner.</li>
-        <li>Check live weather layers before your next departure.</li>
-        <li>Keep your logbook and currency alerts up to date.</li>
+        <li>Build a route, review weather, and get a risk summary in the Flight Planner.</li>
+        <li>Browse marketplace listings for aircraft, charter, flight schools, CFIs, jobs, and aviation services.</li>
+        <li>Use RSF pilot tools to stay current on planning, logbook, and flying workflows.</li>
       </ul>
       <div style="margin-top: 18px;">
-        <a class="cta" href="${appUrl}/flight-planner">Open the Flight Planner</a>
+        <a class="cta" href="${appUrl}">Open Ready Set Fly</a>
       </div>
       <p class="muted" style="margin-top: 20px;">
         You are receiving this weekly email because you have an account with Ready Set Fly.
@@ -1274,16 +1274,16 @@ export function getWeeklyEngagementEmailText(data: {
 }): string {
   const appUrl = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
   return `
-Weekly Pilot Tools Rundown
+Weekly Ready Set Fly Rundown
 
 Hi ${data.firstName},
 
-Plan safer flights this week:
-- Build a new route and get a risk summary in the Flight Planner.
-- Check live weather layers before your next departure.
-- Keep your logbook and currency alerts up to date.
+Get more out of Ready Set Fly this week:
+- Build a route, review weather, and get a risk summary in the Flight Planner.
+- Browse marketplace listings for aircraft, charter, flight schools, CFIs, jobs, and aviation services.
+- Use RSF pilot tools to stay current on planning, logbook, and flying workflows.
 
-Open the Flight Planner: ${appUrl}/flight-planner
+Open Ready Set Fly: ${appUrl}
 
 Unsubscribe: ${data.unsubscribeUrl}
   `.trim();
@@ -1784,6 +1784,194 @@ ${config.bullets.map((bullet) => `- ${bullet}`).join("\n")}
 ${promoLine}
 ${customNote}
 ${config.ctaLabel}: ${ctaUrl}${browseLine}
+
+If you would rather not receive sales emails from Ready Set Fly, unsubscribe here:
+${data.unsubscribeUrl}
+  `.trim();
+}
+
+type CrmPlatformOverviewEmailConfig = {
+  subject: string;
+  headline: string;
+  intro: string;
+  bullets: string[];
+  ctaLabel: string;
+  ctaUrl: string;
+  secondaryLabel: string;
+  secondaryUrl: string;
+};
+
+function buildCrmPlatformOverviewEmailConfig(
+  data: CrmSalesEmailTemplateData,
+): CrmPlatformOverviewEmailConfig & { promoCode?: string; promoDetails?: string } {
+  const { promoCode, promoDetails } = getPromoCopy(data);
+
+  if (data.templateType === "relist") {
+    const relistConfig = {
+      subject: "Put your aviation business back in front of Ready Set Fly users",
+      headline: "Restart your visibility across Ready Set Fly",
+      intro:
+        "If your business has gone quiet on Ready Set Fly, this is a good time to relaunch your presence and get back in front of pilots, students, and operators already using the platform.",
+      bullets: [
+        "Refresh your marketplace presence for services, rentals, schools, charter, jobs, or aircraft",
+        "Reconnect with users already browsing aviation listings and business categories",
+        "Pair listings with flight-planning and pilot-tool visibility across the platform",
+      ],
+      ctaLabel: "Relaunch on Ready Set Fly",
+      ctaUrl: "/marketplace",
+      secondaryLabel: "Open Flight Planner",
+      secondaryUrl: "/flight-planner",
+      promoCode,
+      promoDetails,
+    };
+    return {
+      ...relistConfig,
+      subject: data.subjectOverride?.trim() || relistConfig.subject,
+      intro: data.introOverride?.trim() || relistConfig.intro,
+    };
+  }
+
+  if (data.templateType === "promo_offer") {
+    const promoConfig = {
+      subject: promoCode
+        ? `Use promo code ${promoCode} to launch on Ready Set Fly`
+        : "A limited-time Ready Set Fly offer for your aviation business",
+      headline: "A limited-time Ready Set Fly offer is available",
+      intro: promoDetails
+        ? `We are currently running a Ready Set Fly offer that could make it easier to get your business in front of our aviation audience. ${promoDetails}`
+        : "We are currently running a limited-time Ready Set Fly offer that could make it easier to launch or relaunch your visibility on the platform.",
+      bullets: [
+        promoCode ? `Apply promo code ${promoCode} when you get started` : "Ask about the current Ready Set Fly offer when you get started",
+        "Promote your business across listings, business categories, and marketplace discovery",
+        "Stay visible to users who are also using RSF flight planning and pilot tools",
+      ],
+      ctaLabel: promoCode ? "Use This Offer" : "Explore Ready Set Fly",
+      ctaUrl: "/marketplace",
+      secondaryLabel: "See Flight Tools",
+      secondaryUrl: "/flight-planner",
+      promoCode,
+      promoDetails,
+    };
+    return {
+      ...promoConfig,
+      subject: data.subjectOverride?.trim() || promoConfig.subject,
+      intro: data.introOverride?.trim() || promoConfig.intro,
+    };
+  }
+
+  const defaultConfig = {
+    subject: "Promote your aviation business across Ready Set Fly",
+    headline: "One aviation platform for visibility, listings, and pilot tools",
+    intro:
+      "Ready Set Fly helps aviation businesses get discovered through marketplace listings while also staying in front of pilots using flight planning, weather, and other pilot tools on the platform.",
+    bullets: [
+      "List aircraft, charter services, flight schools, CFI services, jobs, rentals, and aviation businesses",
+      "Reach users already using RSF for flight planning, weather checks, and pilot workflow tools",
+      "Create more visibility with marketplace placement, business discovery, and advertising options",
+    ],
+    ctaLabel: "Explore Ready Set Fly",
+    ctaUrl: "/marketplace",
+    secondaryLabel: "Open Flight Planner",
+    secondaryUrl: "/flight-planner",
+    promoCode,
+    promoDetails,
+  };
+
+  return {
+    ...defaultConfig,
+    subject: data.subjectOverride?.trim() || defaultConfig.subject,
+    intro: data.introOverride?.trim() || defaultConfig.intro,
+  };
+}
+
+export function getCrmPlatformOverviewEmailSubject(data: CrmSalesEmailTemplateData): string {
+  return buildCrmPlatformOverviewEmailConfig(data).subject;
+}
+
+export function getCrmPlatformOverviewEmailHtml(data: CrmSalesEmailTemplateData): string {
+  const appUrl = getMarketingAppUrl();
+  const config = buildCrmPlatformOverviewEmailConfig(data);
+  const recipientName = getRecipientName(data);
+  const ctaUrl = `${appUrl}${config.ctaUrl}`;
+  const secondaryUrl = `${appUrl}${config.secondaryUrl}`;
+  const promoBlock = config.promoCode || config.promoDetails
+    ? `
+      <div class="promo">
+        <div style="font-weight: 700; margin-bottom: 8px;">${config.promoCode ? `Promo Code: ${config.promoCode}` : "Limited-Time Offer"}</div>
+        ${config.promoDetails ? `<div>${config.promoDetails}</div>` : ""}
+      </div>
+    `
+    : "";
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+    .card { background: #ffffff; border-radius: 12px; padding: 28px; border: 1px solid #e5e7eb; }
+    .header { background: linear-gradient(135deg, #0f172a, #1d4ed8); color: #ffffff; border-radius: 10px; padding: 20px 24px; }
+    .cta { display: inline-block; background: #1d4ed8; color: #ffffff !important; padding: 12px 18px; border-radius: 8px; text-decoration: none; font-weight: 700; }
+    .secondary { display: inline-block; margin-top: 12px; color: #1d4ed8; text-decoration: none; font-weight: 600; }
+    .list { margin: 16px 0; padding-left: 18px; }
+    .promo { margin-top: 18px; padding: 14px 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+    .note { margin-top: 22px; font-size: 12px; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <h2 style="margin: 0;">${config.headline}</h2>
+      </div>
+      <p style="margin-top: 20px;">Hi ${recipientName},</p>
+      <p>${config.intro}</p>
+      <ul class="list">
+        ${config.bullets.map((bullet) => `<li>${bullet}</li>`).join("")}
+      </ul>
+      ${promoBlock}
+      ${data.customNote?.trim() ? `<p style="margin-top: 18px;">${data.customNote.trim()}</p>` : ""}
+      <div style="margin-top: 20px;">
+        <a class="cta" href="${ctaUrl}">${config.ctaLabel}</a>
+      </div>
+      <div><a class="secondary" href="${secondaryUrl}">${config.secondaryLabel}</a></div>
+      <p style="margin-top: 20px;">If you would rather not receive sales emails from Ready Set Fly, you can <a href="${data.unsubscribeUrl}">unsubscribe</a>.</p>
+      <p class="note">
+        This message was sent because your business was added as a CRM lead for Ready Set Fly.<br />
+        <a href="${data.unsubscribeUrl}">Unsubscribe</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+export function getCrmPlatformOverviewEmailText(data: CrmSalesEmailTemplateData): string {
+  const appUrl = getMarketingAppUrl();
+  const config = buildCrmPlatformOverviewEmailConfig(data);
+  const recipientName = getRecipientName(data);
+  const ctaUrl = `${appUrl}${config.ctaUrl}`;
+  const secondaryUrl = `${appUrl}${config.secondaryUrl}`;
+  const promoLine = config.promoCode || config.promoDetails
+    ? `\n${config.promoCode ? `Promo code: ${config.promoCode}` : "Limited-time offer"}${config.promoDetails ? `\n${config.promoDetails}` : ""}\n`
+    : "\n";
+  const customNote = data.customNote?.trim() ? `\n${data.customNote.trim()}\n` : "\n";
+
+  return `
+${config.headline}
+
+Hi ${recipientName},
+
+${config.intro}
+
+${config.bullets.map((bullet) => `- ${bullet}`).join("\n")}
+${promoLine}
+${customNote}
+${config.ctaLabel}: ${ctaUrl}
+${config.secondaryLabel}: ${secondaryUrl}
 
 If you would rather not receive sales emails from Ready Set Fly, unsubscribe here:
 ${data.unsubscribeUrl}

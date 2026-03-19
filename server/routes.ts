@@ -15,16 +15,16 @@ import OpenAI from "openai";
 import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-server-sdk";
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type PromoCode } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
-import { getCrmLeadSalesEmailHtml, getCrmLeadSalesEmailSubject, getCrmLeadSalesEmailText, sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail } from "./email-templates";
+import { getCrmLeadSalesEmailHtml, getCrmLeadSalesEmailSubject, getCrmLeadSalesEmailText, getCrmPlatformOverviewEmailHtml, getCrmPlatformOverviewEmailSubject, getCrmPlatformOverviewEmailText, sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail } from "./email-templates";
 import { ADMIN_PERMISSIONS, ADMIN_ROLE_PERMISSIONS, normalizeAdminPermissions, type AdminPermission, type AdminRole } from "@shared/config/adminAccess";
 import { canSendEmail, logger as crmLogger } from "./crmEmailSuppression";
 import { buildCrmLeadTemplateCsv, buildCrmLeadTemplateXlsx, findCrmLeadImportDuplicates, mapImportedCrmLeadRows, mergeImportedLeadData, parseCrmLeadImportFile } from "./crmLeadImport";
@@ -437,6 +437,126 @@ function parseCrmSalesTemplateInput(body: any): {
     subjectOverride: subjectOverride || undefined,
     introOverride: introOverride || undefined,
     customNote: customNote || undefined,
+  };
+}
+
+const crmCampaignAudienceTypes = [
+  "all_eligible",
+  "by_category",
+  "by_status",
+  "never_emailed",
+] as const;
+
+type CrmCampaignAudienceType = typeof crmCampaignAudienceTypes[number];
+
+function parseCrmCampaignRequest(body: any): {
+  audienceType: CrmCampaignAudienceType;
+  category?: LeadCategory;
+  status?: LeadStatus;
+  minDaysSinceLastEmail: number;
+  templateType: CrmSalesEmailTemplateType;
+  promoCode?: string;
+  promoDetails?: string;
+  subjectOverride?: string;
+  introOverride?: string;
+  customNote?: string;
+} {
+  const audienceType = typeof body?.audienceType === "string" ? body.audienceType : "";
+  if (!crmCampaignAudienceTypes.includes(audienceType as CrmCampaignAudienceType)) {
+    throw new Error("Invalid CRM campaign audience");
+  }
+
+  const category = typeof body?.category === "string" ? body.category : "";
+  const status = typeof body?.status === "string" ? body.status : "";
+  if (audienceType === "by_category" && !leadCategories.includes(category as LeadCategory)) {
+    throw new Error("Invalid CRM campaign category");
+  }
+  if (audienceType === "by_status" && !leadStatuses.includes(status as LeadStatus)) {
+    throw new Error("Invalid CRM campaign status");
+  }
+
+  const requestedCooldown = Number(body?.minDaysSinceLastEmail);
+  const minDaysSinceLastEmail = [0, 30, 45, 60].includes(requestedCooldown) ? requestedCooldown : 45;
+  const templateInput = parseCrmSalesTemplateInput(body);
+
+  return {
+    audienceType: audienceType as CrmCampaignAudienceType,
+    category: category ? (category as LeadCategory) : undefined,
+    status: status ? (status as LeadStatus) : undefined,
+    minDaysSinceLastEmail,
+    ...templateInput,
+  };
+}
+
+function getCrmCampaignAudienceLabel(options: {
+  audienceType: CrmCampaignAudienceType;
+  category?: LeadCategory;
+  status?: LeadStatus;
+}) {
+  if (options.audienceType === "by_category" && options.category) {
+    return `Category: ${options.category}`;
+  }
+  if (options.audienceType === "by_status" && options.status) {
+    return `Status: ${options.status}`;
+  }
+  if (options.audienceType === "never_emailed") {
+    return "Never emailed";
+  }
+  return "All eligible";
+}
+
+async function buildCrmCampaignAudience(options: {
+  audienceType: CrmCampaignAudienceType;
+  category?: LeadCategory;
+  status?: LeadStatus;
+  minDaysSinceLastEmail: number;
+}) {
+  const allLeads = await storage.getAllLeads();
+  let matchedLeads = allLeads;
+
+  if (options.audienceType === "by_category" && options.category) {
+    matchedLeads = matchedLeads.filter((lead) => (lead.category || "other") === options.category);
+  } else if (options.audienceType === "by_status" && options.status) {
+    matchedLeads = matchedLeads.filter((lead) => (lead.status || "new") === options.status);
+  } else if (options.audienceType === "never_emailed") {
+    matchedLeads = matchedLeads.filter((lead) => !lead.salesEmailLastSentAt);
+  }
+
+  const cooldownCutoff = options.minDaysSinceLastEmail > 0
+    ? new Date(Date.now() - options.minDaysSinceLastEmail * 24 * 60 * 60 * 1000)
+    : null;
+
+  let excludedMissingEmail = 0;
+  let excludedUnsubscribed = 0;
+  let excludedRecentlyEmailed = 0;
+  const eligibleLeads = matchedLeads.filter((lead) => {
+    if (!lead.email?.trim()) {
+      excludedMissingEmail += 1;
+      return false;
+    }
+    if (!canSendEmail(lead) || Boolean(lead.marketingEmailOptOutAt)) {
+      excludedUnsubscribed += 1;
+      return false;
+    }
+    if (cooldownCutoff && lead.salesEmailLastSentAt && new Date(lead.salesEmailLastSentAt) > cooldownCutoff) {
+      excludedRecentlyEmailed += 1;
+      return false;
+    }
+    return true;
+  });
+
+  return {
+    matchedLeads,
+    eligibleLeads,
+    summary: {
+      audienceLabel: getCrmCampaignAudienceLabel(options),
+      totalMatched: matchedLeads.length,
+      eligibleCount: eligibleLeads.length,
+      excludedMissingEmail,
+      excludedUnsubscribed,
+      excludedRecentlyEmailed,
+      minDaysSinceLastEmail: options.minDaysSinceLastEmail,
+    },
   };
 }
 
@@ -6391,18 +6511,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { getWeeklyEngagementEmailHtml, getWeeklyEngagementEmailText } = await import('./email-templates');
       const { client, fromEmail } = await getUncachableResendClient();
 
-      const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const candidates = await db
-        .select()
+      const weeklyCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const activeWindowDays = 30;
+      const activeCutoff = new Date(Date.now() - activeWindowDays * 24 * 60 * 60 * 1000);
+      const activeAnalyticsRows = await db
+        .select({ userId: analyticsEvents.userId })
+        .from(analyticsEvents)
+        .where(and(isNotNull(analyticsEvents.userId), gte(analyticsEvents.createdAt, activeCutoff)))
+        .groupBy(analyticsEvents.userId);
+      const recentUsers = await db
+        .select({ id: users.id })
         .from(users)
-        .where(and(eq(users.weeklyEmailOptIn, true), eq(users.isSuspended, false)));
+        .where(gte(users.createdAt, activeCutoff));
+      const activeUserIds = Array.from(new Set([
+        ...activeAnalyticsRows.map((row) => row.userId).filter((userId): userId is string => Boolean(userId)),
+        ...recentUsers.map((row) => row.id),
+      ]));
+      const candidates = activeUserIds.length === 0
+        ? []
+        : await db
+            .select()
+            .from(users)
+            .where(and(
+              eq(users.weeklyEmailOptIn, true),
+              eq(users.isSuspended, false),
+              inArray(users.id, activeUserIds),
+            ));
 
       let emailsSent = 0;
       const errors: string[] = [];
 
       for (const user of candidates) {
         if (!user.email) continue;
-        if (user.weeklyEmailLastSentAt && user.weeklyEmailLastSentAt > cutoff) continue;
+        if (user.weeklyEmailLastSentAt && user.weeklyEmailLastSentAt > weeklyCutoff) continue;
 
         const firstName = user.firstName || user.email.split("@")[0];
         const token = signMarketingToken({ userId: user.id, action: "weekly_opt_out" });
@@ -6430,6 +6571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
+        activeWindowDays,
         totalCandidates: candidates.length,
         emailsSent,
         errors: errors.length > 0 ? errors : undefined,
@@ -10081,6 +10223,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/crm/campaigns/platform-overview/preview", isAuthenticated, isSuperAdmin, async (req, res) => {
+    try {
+      const campaignInput = parseCrmCampaignRequest(req.body);
+      const audience = await buildCrmCampaignAudience(campaignInput);
+      const sampleLead = audience.eligibleLeads[0] || audience.matchedLeads[0];
+      const sampleToken = signMarketingToken({
+        action: "crm_sales_opt_out",
+        leadId: sampleLead?.id || "preview-lead",
+        email: sampleLead?.email || "preview@readysetfly.us",
+      });
+      const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(sampleToken)}`;
+
+      const previewData = {
+        firstName: sampleLead?.firstName || "Aviation",
+        lastName: sampleLead?.lastName || "Business",
+        company: sampleLead?.company || "Your Company",
+        unsubscribeUrl,
+        templateType: campaignInput.templateType,
+        promoCode: campaignInput.promoCode,
+        promoDetails: campaignInput.promoDetails,
+        subjectOverride: campaignInput.subjectOverride,
+        introOverride: campaignInput.introOverride,
+        customNote: campaignInput.customNote,
+      };
+
+      res.json({
+        summary: audience.summary,
+        subject: getCrmPlatformOverviewEmailSubject(previewData),
+        html: getCrmPlatformOverviewEmailHtml(previewData),
+        text: getCrmPlatformOverviewEmailText(previewData),
+        recipientsPreview: audience.eligibleLeads.slice(0, 10).map((lead) => ({
+          id: lead.id,
+          firstName: lead.firstName,
+          lastName: lead.lastName,
+          email: lead.email,
+          company: lead.company,
+          category: lead.category,
+          status: lead.status,
+          salesEmailLastSentAt: lead.salesEmailLastSentAt,
+        })),
+      });
+    } catch (error: any) {
+      console.error("Failed to build CRM campaign preview:", error);
+      res.status(400).json({ error: error?.message || "Failed to build CRM campaign preview" });
+    }
+  });
+
+  app.post("/api/crm/campaigns/platform-overview/send", isAuthenticated, isSuperAdmin, async (req, res) => {
+    try {
+      const campaignInput = parseCrmCampaignRequest(req.body);
+      const audience = await buildCrmCampaignAudience(campaignInput);
+      const { client } = await getUncachableResendClient();
+      const crmSalesFromEmail = process.env.SUPPORT_EMAIL || "Ready Set Fly <support@readysetfly.us>";
+      const errors: string[] = [];
+      let emailsSent = 0;
+
+      for (const lead of audience.eligibleLeads) {
+        const token = signMarketingToken({
+          action: "crm_sales_opt_out",
+          leadId: lead.id,
+          email: lead.email,
+        });
+        const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+
+        try {
+          await client.emails.send({
+            from: crmSalesFromEmail,
+            replyTo: crmSalesFromEmail,
+            to: lead.email,
+            subject: getCrmPlatformOverviewEmailSubject({
+              firstName: lead.firstName,
+              lastName: lead.lastName,
+              company: lead.company,
+              unsubscribeUrl,
+              templateType: campaignInput.templateType,
+              promoCode: campaignInput.promoCode,
+              promoDetails: campaignInput.promoDetails,
+              subjectOverride: campaignInput.subjectOverride,
+              introOverride: campaignInput.introOverride,
+              customNote: campaignInput.customNote,
+            }),
+            html: getCrmPlatformOverviewEmailHtml({
+              firstName: lead.firstName,
+              lastName: lead.lastName,
+              company: lead.company,
+              unsubscribeUrl,
+              templateType: campaignInput.templateType,
+              promoCode: campaignInput.promoCode,
+              promoDetails: campaignInput.promoDetails,
+              subjectOverride: campaignInput.subjectOverride,
+              introOverride: campaignInput.introOverride,
+              customNote: campaignInput.customNote,
+            }),
+            text: getCrmPlatformOverviewEmailText({
+              firstName: lead.firstName,
+              lastName: lead.lastName,
+              company: lead.company,
+              unsubscribeUrl,
+              templateType: campaignInput.templateType,
+              promoCode: campaignInput.promoCode,
+              promoDetails: campaignInput.promoDetails,
+              subjectOverride: campaignInput.subjectOverride,
+              introOverride: campaignInput.introOverride,
+              customNote: campaignInput.customNote,
+            }),
+          });
+
+          await storage.updateLead(lead.id, {
+            salesEmailLastSentAt: new Date(),
+          });
+          emailsSent += 1;
+        } catch (error: any) {
+          console.error(`Failed to send CRM campaign email to ${lead.email}:`, error);
+          errors.push(`${lead.email}: ${error?.message || "send failed"}`);
+        }
+      }
+
+      res.json({
+        success: true,
+        audience: audience.summary,
+        emailsSent,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    } catch (error: any) {
+      console.error("Failed to send CRM campaign:", error);
+      res.status(400).json({ error: error?.message || "Failed to send CRM campaign" });
+    }
+  });
+
   app.post("/api/crm/leads/:id/sales-email-preview", isAuthenticated, isSuperAdmin, async (req, res) => {
     try {
       const lead = await storage.getLead(req.params.id);
@@ -10339,6 +10610,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete activity" });
+    }
+  });
+
+  app.get("/api/crm/weekly-reports", isAuthenticated, requireCrmAdmin, async (req, res) => {
+    try {
+      const reports = await storage.getAllWeeklyReports();
+      res.json(reports);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch weekly reports" });
+    }
+  });
+
+  app.post("/api/crm/weekly-reports", isAuthenticated, requireCrmAdmin, async (req: any, res) => {
+    try {
+      const parsed = insertCrmWeeklyReportSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid weekly report", details: parsed.error.flatten() });
+      }
+
+      const report = await storage.createWeeklyReport({
+        ...parsed.data,
+        preparedBy: req.user.claims.sub,
+      });
+      res.json(report);
+    } catch (error) {
+      console.error("Failed to create CRM weekly report:", error);
+      res.status(500).json({ error: "Failed to create weekly report" });
+    }
+  });
+
+  app.patch("/api/crm/weekly-reports/:id", isAuthenticated, requireCrmAdmin, async (req, res) => {
+    try {
+      const parsed = insertCrmWeeklyReportSchema.partial().safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid weekly report update", details: parsed.error.flatten() });
+      }
+
+      const report = await storage.updateWeeklyReport(req.params.id, parsed.data);
+      if (!report) {
+        return res.status(404).json({ error: "Weekly report not found" });
+      }
+      res.json(report);
+    } catch (error) {
+      console.error("Failed to update CRM weekly report:", error);
+      res.status(500).json({ error: "Failed to update weekly report" });
+    }
+  });
+
+  app.delete("/api/crm/weekly-reports/:id", isAuthenticated, requireCrmAdmin, async (req, res) => {
+    try {
+      const success = await storage.deleteWeeklyReport(req.params.id);
+      if (!success) {
+        return res.status(404).json({ error: "Weekly report not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete CRM weekly report:", error);
+      res.status(500).json({ error: "Failed to delete weekly report" });
     }
   });
 

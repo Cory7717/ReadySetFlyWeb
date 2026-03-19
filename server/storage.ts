@@ -31,6 +31,8 @@ import {
   type InsertCrmDeal,
   type CrmActivity,
   type InsertCrmActivity,
+  type CrmWeeklyReport,
+  type InsertCrmWeeklyReport,
   type Expense,
   type InsertExpense,
   type AdminNotification,
@@ -138,6 +140,7 @@ import {
   crmContacts,
   crmDeals,
   crmActivities,
+  crmWeeklyReports,
   expenses,
   adminNotifications,
   bannerAds,
@@ -463,6 +466,13 @@ export interface IStorage {
   createActivity(activity: InsertCrmActivity): Promise<CrmActivity>;
   updateActivity(id: string, updates: Partial<CrmActivity>): Promise<CrmActivity | undefined>;
   deleteActivity(id: string): Promise<boolean>;
+
+  // CRM - Weekly Reports
+  getAllWeeklyReports(): Promise<CrmWeeklyReport[]>;
+  getWeeklyReport(id: string): Promise<CrmWeeklyReport | undefined>;
+  createWeeklyReport(report: InsertCrmWeeklyReport & { preparedBy: string }): Promise<CrmWeeklyReport>;
+  updateWeeklyReport(id: string, updates: Partial<CrmWeeklyReport>): Promise<CrmWeeklyReport | undefined>;
+  deleteWeeklyReport(id: string): Promise<boolean>;
   
   // Expenses (for admin analytics)
   getAllExpenses(): Promise<Expense[]>;
@@ -2638,6 +2648,38 @@ export class DatabaseStorage implements IStorage {
 
   async deleteActivity(id: string): Promise<boolean> {
     const result = await db.delete(crmActivities).where(eq(crmActivities.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // CRM - Weekly Reports
+  async getAllWeeklyReports(): Promise<CrmWeeklyReport[]> {
+    return await db
+      .select()
+      .from(crmWeeklyReports)
+      .orderBy(desc(crmWeeklyReports.weekStart), desc(crmWeeklyReports.createdAt));
+  }
+
+  async getWeeklyReport(id: string): Promise<CrmWeeklyReport | undefined> {
+    const [report] = await db.select().from(crmWeeklyReports).where(eq(crmWeeklyReports.id, id));
+    return report;
+  }
+
+  async createWeeklyReport(insertReport: InsertCrmWeeklyReport & { preparedBy: string }): Promise<CrmWeeklyReport> {
+    const [report] = await db.insert(crmWeeklyReports).values(insertReport).returning();
+    return report;
+  }
+
+  async updateWeeklyReport(id: string, updates: Partial<CrmWeeklyReport>): Promise<CrmWeeklyReport | undefined> {
+    const [report] = await db
+      .update(crmWeeklyReports)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(crmWeeklyReports.id, id))
+      .returning();
+    return report;
+  }
+
+  async deleteWeeklyReport(id: string): Promise<boolean> {
+    const result = await db.delete(crmWeeklyReports).where(eq(crmWeeklyReports.id, id));
     return result.rowCount ? result.rowCount > 0 : false;
   }
 

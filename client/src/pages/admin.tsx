@@ -21,7 +21,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { crmSalesEmailTemplateTypes, insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, leadCategories, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric, type PartnerToolMetric, type LeadCategory, type BannerVideoOrientation, type CrmSalesEmailTemplateType } from "@shared/schema";
+import { crmSalesEmailTemplateTypes, crmWeeklyReportStatuses, insertCrmLeadSchema, insertCrmWeeklyReportSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, leadCategories, leadStatuses, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type CrmWeeklyReport, type InsertCrmLead, type InsertCrmWeeklyReport, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric, type PartnerToolMetric, type LeadCategory, type LeadStatus, type CrmWeeklyReportStatus, type BannerVideoOrientation, type CrmSalesEmailTemplateType } from "@shared/schema";
 import { ADMIN_ROLE_LABELS, ADMIN_ROLE_PERMISSIONS, type AdminRole, type AdminPermission } from "@shared/config/adminAccess";
 import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
 import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
@@ -103,6 +103,49 @@ type CrmSalesEmailPreview = {
   text: string;
 };
 
+const CRM_CAMPAIGN_AUDIENCE_TYPES = [
+  "all_eligible",
+  "by_category",
+  "by_status",
+  "never_emailed",
+] as const;
+
+type CrmCampaignAudienceType = typeof CRM_CAMPAIGN_AUDIENCE_TYPES[number];
+
+const CRM_CAMPAIGN_AUDIENCE_LABELS: Record<CrmCampaignAudienceType, string> = {
+  all_eligible: "All Eligible Leads",
+  by_category: "By Category",
+  by_status: "By Status",
+  never_emailed: "Never Emailed",
+};
+
+const CRM_CAMPAIGN_COOLDOWN_OPTIONS = [0, 30, 45, 60] as const;
+
+type CrmCampaignPreview = {
+  summary: {
+    audienceLabel: string;
+    totalMatched: number;
+    eligibleCount: number;
+    excludedMissingEmail: number;
+    excludedUnsubscribed: number;
+    excludedRecentlyEmailed: number;
+    minDaysSinceLastEmail: number;
+  };
+  subject: string;
+  html: string;
+  text: string;
+  recipientsPreview: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    company?: string | null;
+    category?: string | null;
+    status?: string | null;
+    salesEmailLastSentAt?: string | null;
+  }>;
+};
+
 type CrmLeadImportSummary = {
   success: boolean;
   fileName: string;
@@ -144,6 +187,31 @@ type CrmLeadImportPreview = {
   }>;
   duplicates: CrmLeadImportDuplicate[];
 };
+
+const createDefaultWeeklyReportValues = (): InsertCrmWeeklyReport => ({
+  weekStart: format(startOfISOWeek(new Date()), "yyyy-MM-dd"),
+  weekEnd: format(endOfISOWeek(new Date()), "yyyy-MM-dd"),
+  title: `Weekly Sales Report - ${format(new Date(), "MMM d, yyyy")}`,
+  status: "draft",
+  recipientName: "",
+  recipientRole: "Owner / Manager",
+  newLeadsAdded: 0,
+  leadsWorked: 0,
+  outreachEmailsSent: 0,
+  followUpsSent: 0,
+  callsCompleted: 0,
+  meetingsBooked: 0,
+  proposalsSent: 0,
+  dealsAdvanced: 0,
+  closedWonCount: 0,
+  estimatedPipelineValue: "",
+  executiveSummary: "",
+  wins: "",
+  pipelineUpdates: "",
+  blockers: "",
+  nextWeekFocus: "",
+  supportNeeded: "",
+});
 
 const FINANCE_EMAILS = ["coryarmer@gmail.com", "bentley.amy24@gmail.com"];
 
@@ -338,6 +406,24 @@ export default function AdminDashboard() {
   const [crmLeadDuplicateSkipRows, setCrmLeadDuplicateSkipRows] = useState<Record<number, boolean>>({});
   const [crmLeadImportSummary, setCrmLeadImportSummary] = useState<CrmLeadImportSummary | null>(null);
   const [crmLeadImportDialogOpen, setCrmLeadImportDialogOpen] = useState(false);
+  const [weeklyReportDialogOpen, setWeeklyReportDialogOpen] = useState(false);
+  const [editingWeeklyReport, setEditingWeeklyReport] = useState<CrmWeeklyReport | null>(null);
+  const [crmCampaignDialogOpen, setCrmCampaignDialogOpen] = useState(false);
+  const [crmCampaignAudienceType, setCrmCampaignAudienceType] = useState<CrmCampaignAudienceType>("all_eligible");
+  const [crmCampaignCategory, setCrmCampaignCategory] = useState<LeadCategory>("aircraft_sales");
+  const [crmCampaignStatus, setCrmCampaignStatus] = useState<LeadStatus>("new");
+  const [crmCampaignCooldownDays, setCrmCampaignCooldownDays] = useState<(typeof CRM_CAMPAIGN_COOLDOWN_OPTIONS)[number]>(45);
+  const [crmCampaignTemplateType, setCrmCampaignTemplateType] = useState<CrmSalesEmailTemplateType>("new_listing");
+  const [crmCampaignSubjectOverride, setCrmCampaignSubjectOverride] = useState("");
+  const [crmCampaignIntroOverride, setCrmCampaignIntroOverride] = useState("");
+  const [crmCampaignCustomNote, setCrmCampaignCustomNote] = useState("");
+  const [crmCampaignPromoCode, setCrmCampaignPromoCode] = useState("");
+  const [crmCampaignPromoDetails, setCrmCampaignPromoDetails] = useState("");
+  const deferredCrmCampaignSubjectOverride = useDeferredValue(crmCampaignSubjectOverride);
+  const deferredCrmCampaignIntroOverride = useDeferredValue(crmCampaignIntroOverride);
+  const deferredCrmCampaignCustomNote = useDeferredValue(crmCampaignCustomNote);
+  const deferredCrmCampaignPromoCode = useDeferredValue(crmCampaignPromoCode);
+  const deferredCrmCampaignPromoDetails = useDeferredValue(crmCampaignPromoDetails);
   const [salesEmailDialogOpen, setSalesEmailDialogOpen] = useState(false);
   const [selectedSalesLead, setSelectedSalesLead] = useState<CrmLead | null>(null);
   const [salesEmailTemplateType, setSalesEmailTemplateType] = useState<CrmSalesEmailTemplateType>("new_listing");
@@ -413,6 +499,11 @@ export default function AdminDashboard() {
       category: "other",
       notes: "",
     },
+  });
+
+  const weeklyReportForm = useForm<InsertCrmWeeklyReport>({
+    resolver: zodResolver(insertCrmWeeklyReportSchema),
+    defaultValues: createDefaultWeeklyReportValues(),
   });
 
   // Expense form with Zod validation
@@ -643,6 +734,11 @@ export default function AdminDashboard() {
     enabled: activeTab === "crm",
   });
 
+  const { data: weeklyReports = [], isLoading: weeklyReportsLoading } = useQuery<CrmWeeklyReport[]>({
+    queryKey: ["/api/crm/weekly-reports"],
+    enabled: activeTab === "crm",
+  });
+
   const filteredLeads = useMemo(
     () =>
       leadCategoryFilter === "all"
@@ -686,6 +782,49 @@ export default function AdminDashboard() {
 
       if (!response.ok) {
         const message = (await response.text()) || "Failed to load email preview";
+        throw new Error(message);
+      }
+
+      return response.json();
+    },
+  });
+
+  const { data: crmCampaignPreview, isLoading: crmCampaignPreviewLoading, error: crmCampaignPreviewError } = useQuery<CrmCampaignPreview>({
+    queryKey: [
+      "/api/crm/campaigns/platform-overview/preview",
+      crmCampaignAudienceType,
+      crmCampaignCategory,
+      crmCampaignStatus,
+      crmCampaignCooldownDays,
+      crmCampaignTemplateType,
+      deferredCrmCampaignSubjectOverride,
+      deferredCrmCampaignIntroOverride,
+      deferredCrmCampaignCustomNote,
+      deferredCrmCampaignPromoCode,
+      deferredCrmCampaignPromoDetails,
+    ],
+    enabled: crmCampaignDialogOpen && isSuperAdmin,
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/api/crm/campaigns/platform-overview/preview"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          audienceType: crmCampaignAudienceType,
+          category: crmCampaignCategory,
+          status: crmCampaignStatus,
+          minDaysSinceLastEmail: crmCampaignCooldownDays,
+          templateType: crmCampaignTemplateType,
+          subjectOverride: deferredCrmCampaignSubjectOverride,
+          introOverride: deferredCrmCampaignIntroOverride,
+          customNote: deferredCrmCampaignCustomNote,
+          promoCode: deferredCrmCampaignPromoCode,
+          promoDetails: deferredCrmCampaignPromoDetails,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || "Failed to load campaign preview";
         throw new Error(message);
       }
 
@@ -1016,6 +1155,95 @@ export default function AdminDashboard() {
     onError: (error: Error) => {
       toast({
         title: "Failed to send sales email",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const sendCrmCampaignMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/crm/campaigns/platform-overview/send", {
+        audienceType: crmCampaignAudienceType,
+        category: crmCampaignCategory,
+        status: crmCampaignStatus,
+        minDaysSinceLastEmail: crmCampaignCooldownDays,
+        templateType: crmCampaignTemplateType,
+        subjectOverride: crmCampaignSubjectOverride.trim() || undefined,
+        introOverride: crmCampaignIntroOverride.trim() || undefined,
+        customNote: crmCampaignCustomNote.trim() || undefined,
+        promoCode: crmCampaignPromoCode.trim() || undefined,
+        promoDetails: crmCampaignPromoDetails.trim() || undefined,
+      });
+      return response.json();
+    },
+    onSuccess: (data: { emailsSent: number; audience?: { eligibleCount?: number } }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
+      toast({
+        title: "CRM campaign sent",
+        description: `Sent ${data.emailsSent} email(s).`,
+      });
+      handleCloseCrmCampaignDialog();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to send CRM campaign",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const createWeeklyReportMutation = useMutation({
+    mutationFn: async (data: InsertCrmWeeklyReport) => {
+      return await apiRequest("POST", "/api/crm/weekly-reports", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/weekly-reports"] });
+      toast({ title: "Weekly report saved" });
+      handleCloseWeeklyReportDialog();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to save weekly report",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateWeeklyReportMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<CrmWeeklyReport> }) => {
+      return await apiRequest("PATCH", `/api/crm/weekly-reports/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/weekly-reports"] });
+      toast({ title: "Weekly report updated" });
+      handleCloseWeeklyReportDialog();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update weekly report",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteWeeklyReportMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return await apiRequest("DELETE", `/api/crm/weekly-reports/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/weekly-reports"] });
+      toast({ title: "Weekly report deleted" });
+      if (editingWeeklyReport) {
+        handleCloseWeeklyReportDialog();
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete weekly report",
         description: error.message,
         variant: "destructive",
       });
@@ -1885,6 +2113,41 @@ export default function AdminDashboard() {
     setLeadDialogOpen(true);
   };
 
+  const handleOpenWeeklyReportDialog = () => {
+    setEditingWeeklyReport(null);
+    weeklyReportForm.reset(createDefaultWeeklyReportValues());
+    setWeeklyReportDialogOpen(true);
+  };
+
+  const handleEditWeeklyReport = (report: CrmWeeklyReport) => {
+    setEditingWeeklyReport(report);
+    weeklyReportForm.reset({
+      weekStart: report.weekStart ? String(report.weekStart) : createDefaultWeeklyReportValues().weekStart,
+      weekEnd: report.weekEnd ? String(report.weekEnd) : createDefaultWeeklyReportValues().weekEnd,
+      title: report.title || "",
+      status: (report.status as CrmWeeklyReportStatus) || "draft",
+      recipientName: report.recipientName || "",
+      recipientRole: report.recipientRole || "",
+      newLeadsAdded: report.newLeadsAdded ?? 0,
+      leadsWorked: report.leadsWorked ?? 0,
+      outreachEmailsSent: report.outreachEmailsSent ?? 0,
+      followUpsSent: report.followUpsSent ?? 0,
+      callsCompleted: report.callsCompleted ?? 0,
+      meetingsBooked: report.meetingsBooked ?? 0,
+      proposalsSent: report.proposalsSent ?? 0,
+      dealsAdvanced: report.dealsAdvanced ?? 0,
+      closedWonCount: report.closedWonCount ?? 0,
+      estimatedPipelineValue: report.estimatedPipelineValue?.toString() || "",
+      executiveSummary: report.executiveSummary || "",
+      wins: report.wins || "",
+      pipelineUpdates: report.pipelineUpdates || "",
+      blockers: report.blockers || "",
+      nextWeekFocus: report.nextWeekFocus || "",
+      supportNeeded: report.supportNeeded || "",
+    });
+    setWeeklyReportDialogOpen(true);
+  };
+
   const handleOpenSalesEmailDialog = (lead: CrmLead) => {
     setSelectedSalesLead(lead);
     setSalesEmailTemplateType("new_listing");
@@ -2031,6 +2294,52 @@ export default function AdminDashboard() {
     } finally {
       setCrmLeadTemplateExporting(null);
     }
+  };
+
+  const handleCloseWeeklyReportDialog = () => {
+    setWeeklyReportDialogOpen(false);
+    setEditingWeeklyReport(null);
+    weeklyReportForm.reset(createDefaultWeeklyReportValues());
+  };
+
+  const handleSubmitWeeklyReport = (data: InsertCrmWeeklyReport) => {
+    if (editingWeeklyReport) {
+      updateWeeklyReportMutation.mutate({
+        id: editingWeeklyReport.id,
+        data,
+      });
+      return;
+    }
+
+    createWeeklyReportMutation.mutate(data);
+  };
+
+  const handleOpenCrmCampaignDialog = () => {
+    setCrmCampaignAudienceType("all_eligible");
+    setCrmCampaignCategory("aircraft_sales");
+    setCrmCampaignStatus("new");
+    setCrmCampaignCooldownDays(45);
+    setCrmCampaignTemplateType("new_listing");
+    setCrmCampaignSubjectOverride("");
+    setCrmCampaignIntroOverride("");
+    setCrmCampaignCustomNote("");
+    setCrmCampaignPromoCode("");
+    setCrmCampaignPromoDetails("");
+    setCrmCampaignDialogOpen(true);
+  };
+
+  const handleCloseCrmCampaignDialog = () => {
+    setCrmCampaignDialogOpen(false);
+    setCrmCampaignAudienceType("all_eligible");
+    setCrmCampaignCategory("aircraft_sales");
+    setCrmCampaignStatus("new");
+    setCrmCampaignCooldownDays(45);
+    setCrmCampaignTemplateType("new_listing");
+    setCrmCampaignSubjectOverride("");
+    setCrmCampaignIntroOverride("");
+    setCrmCampaignCustomNote("");
+    setCrmCampaignPromoCode("");
+    setCrmCampaignPromoDetails("");
   };
 
   const handleCloseSalesEmailDialog = () => {
@@ -4481,6 +4790,26 @@ export default function AdminDashboard() {
                 <CardDescription>Manage leads, contacts, and deal pipeline</CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleOpenWeeklyReportDialog}
+                  data-testid="button-open-weekly-report"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Weekly Report
+                </Button>
+                {isSuperAdmin && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleOpenCrmCampaignDialog}
+                    data-testid="button-open-crm-campaign"
+                  >
+                    <Rocket className="h-4 w-4 mr-2" />
+                    Send Platform Overview
+                  </Button>
+                )}
                 <input
                   ref={crmLeadImportInputRef}
                   type="file"
@@ -4548,6 +4877,63 @@ export default function AdminDashboard() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              <div className="mb-6 rounded-lg border bg-muted/20 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">Weekly Sales Reports</div>
+                    <div className="text-sm text-muted-foreground">
+                      Draft weekly updates for owners or managers with KPI counts, wins, blockers, pipeline movement, and next-week priorities.
+                    </div>
+                  </div>
+                  <Button type="button" variant="outline" onClick={handleOpenWeeklyReportDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Weekly Report
+                  </Button>
+                </div>
+                <div className="mt-4">
+                  {weeklyReportsLoading ? (
+                    <div className="text-sm text-muted-foreground">Loading reports...</div>
+                  ) : weeklyReports.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No weekly reports saved yet.</div>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {weeklyReports.slice(0, 6).map((report) => (
+                        <button
+                          key={report.id}
+                          type="button"
+                          onClick={() => handleEditWeeklyReport(report)}
+                          className="rounded-lg border bg-background p-4 text-left transition-colors hover:border-primary/50"
+                          data-testid={`button-edit-weekly-report-${report.id}`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-medium">{report.title}</div>
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {report.weekStart} to {report.weekEnd}
+                              </div>
+                            </div>
+                            <Badge variant={report.status === "submitted" ? "default" : "secondary"}>
+                              {report.status}
+                            </Badge>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <div>Leads worked: {report.leadsWorked ?? 0}</div>
+                            <div>Meetings: {report.meetingsBooked ?? 0}</div>
+                            <div>Deals advanced: {report.dealsAdvanced ?? 0}</div>
+                            <div>Closed won: {report.closedWonCount ?? 0}</div>
+                          </div>
+                          {report.executiveSummary ? (
+                            <div className="mt-3 line-clamp-2 text-xs text-muted-foreground">
+                              {report.executiveSummary}
+                            </div>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
               {leadsLoading && (
@@ -7097,6 +7483,389 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={weeklyReportDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setWeeklyReportDialogOpen(true);
+          } else {
+            handleCloseWeeklyReportDialog();
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-hidden p-0" data-testid="dialog-weekly-report">
+          <div className="flex h-full max-h-[90vh] flex-col">
+            <DialogHeader className="border-b px-6 pb-4 pt-6 pr-12">
+              <DialogTitle>{editingWeeklyReport ? "Edit Weekly Sales Report" : "New Weekly Sales Report"}</DialogTitle>
+              <DialogDescription>
+                Draft an owner or manager update with leadership summary, KPI totals, pipeline progress, blockers, and next-week priorities.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+              <Form {...weeklyReportForm}>
+                <form onSubmit={weeklyReportForm.handleSubmit(handleSubmitWeeklyReport)} className="space-y-6">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="title"
+                      render={({ field }) => (
+                        <FormItem className="xl:col-span-2">
+                          <FormLabel>Report Title</FormLabel>
+                          <FormControl>
+                            <Input {...field} data-testid="input-weekly-report-title" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Status</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-weekly-report-status">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {crmWeeklyReportStatuses.map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {status}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="recipientRole"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Audience</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} placeholder="Owner / Manager" data-testid="input-weekly-report-recipient-role" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="weekStart"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Week Start</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} data-testid="input-weekly-report-week-start" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="weekEnd"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Week End</FormLabel>
+                          <FormControl>
+                            <Input type="date" {...field} data-testid="input-weekly-report-week-end" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="recipientName"
+                      render={({ field }) => (
+                        <FormItem className="xl:col-span-2">
+                          <FormLabel>Recipient Name</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} placeholder="Example: Cory / Ownership Team" data-testid="input-weekly-report-recipient-name" />
+                          </FormControl>
+                          <FormDescription>Use this for the specific owner, manager, or leadership group receiving the report.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/20 p-4">
+                    <div className="mb-4">
+                      <div className="text-sm font-semibold">Weekly KPI Snapshot</div>
+                      <div className="text-xs text-muted-foreground">
+                        These are the numbers leadership typically wants first: activity volume, pipeline movement, and wins.
+                      </div>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                      <FormField
+                        control={weeklyReportForm.control}
+                        name="newLeadsAdded"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>New Leads</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" value={field.value ?? 0} onChange={handleNumberInput(field.onChange)} data-testid="input-weekly-report-new-leads" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={weeklyReportForm.control}
+                        name="leadsWorked"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Leads Worked</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" value={field.value ?? 0} onChange={handleNumberInput(field.onChange)} data-testid="input-weekly-report-leads-worked" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={weeklyReportForm.control}
+                        name="outreachEmailsSent"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Outreach Emails</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" value={field.value ?? 0} onChange={handleNumberInput(field.onChange)} data-testid="input-weekly-report-outreach-emails" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={weeklyReportForm.control}
+                        name="followUpsSent"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Follow-Ups</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" value={field.value ?? 0} onChange={handleNumberInput(field.onChange)} data-testid="input-weekly-report-follow-ups" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={weeklyReportForm.control}
+                        name="callsCompleted"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Calls Completed</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" value={field.value ?? 0} onChange={handleNumberInput(field.onChange)} data-testid="input-weekly-report-calls" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={weeklyReportForm.control}
+                        name="meetingsBooked"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Meetings Booked</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" value={field.value ?? 0} onChange={handleNumberInput(field.onChange)} data-testid="input-weekly-report-meetings" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={weeklyReportForm.control}
+                        name="proposalsSent"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Proposals Sent</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" value={field.value ?? 0} onChange={handleNumberInput(field.onChange)} data-testid="input-weekly-report-proposals" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={weeklyReportForm.control}
+                        name="dealsAdvanced"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Deals Advanced</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" value={field.value ?? 0} onChange={handleNumberInput(field.onChange)} data-testid="input-weekly-report-deals-advanced" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={weeklyReportForm.control}
+                        name="closedWonCount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Closed Won</FormLabel>
+                            <FormControl>
+                              <Input type="number" min="0" value={field.value ?? 0} onChange={handleNumberInput(field.onChange)} data-testid="input-weekly-report-closed-won" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={weeklyReportForm.control}
+                        name="estimatedPipelineValue"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Pipeline Value</FormLabel>
+                            <FormControl>
+                              <Input value={field.value || ""} onChange={handleDecimalInput(field.onChange)} placeholder="25000.00" data-testid="input-weekly-report-pipeline-value" />
+                            </FormControl>
+                            <FormDescription>Optional estimated pipeline value discussed this week.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 xl:grid-cols-2">
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="executiveSummary"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Executive Summary</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} value={field.value || ""} rows={5} placeholder="What leadership should know first about this week." data-testid="textarea-weekly-report-summary" />
+                          </FormControl>
+                          <FormDescription>Use 3-5 sentences to summarize momentum, key changes, and overall performance.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="wins"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Key Wins</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} value={field.value || ""} rows={5} placeholder="New listings, strong calls, positive replies, campaigns launched, partner momentum, etc." data-testid="textarea-weekly-report-wins" />
+                          </FormControl>
+                          <FormDescription>Capture notable wins, not just raw counts.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="pipelineUpdates"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Pipeline Updates</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} value={field.value || ""} rows={5} placeholder="Call out major leads, category traction, proposal movement, or deals at risk." data-testid="textarea-weekly-report-pipeline-updates" />
+                          </FormControl>
+                          <FormDescription>Focus on what moved forward, what stalled, and which categories are hottest.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="blockers"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Blockers / Risks</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} value={field.value || ""} rows={5} placeholder="List any friction slowing down conversion, outreach, approvals, pricing, assets, or response times." data-testid="textarea-weekly-report-blockers" />
+                          </FormControl>
+                          <FormDescription>Leadership needs to see what is slowing sales down before it compounds.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="nextWeekFocus"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Next Week Priorities</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} value={field.value || ""} rows={4} placeholder="What the sales rep plans to push next week and which leads or categories matter most." data-testid="textarea-weekly-report-next-week" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={weeklyReportForm.control}
+                      name="supportNeeded"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Leadership Support Needed</FormLabel>
+                          <FormControl>
+                            <Textarea {...field} value={field.value || ""} rows={4} placeholder="What ownership or management needs to provide: promo approval, pricing guidance, collateral, introductions, or priority decisions." data-testid="textarea-weekly-report-support-needed" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <DialogFooter className="border-t pt-4">
+                    {editingWeeklyReport ? (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => deleteWeeklyReportMutation.mutate(editingWeeklyReport.id)}
+                        disabled={deleteWeeklyReportMutation.isPending}
+                      >
+                        {deleteWeeklyReportMutation.isPending ? "Deleting..." : "Delete Report"}
+                      </Button>
+                    ) : <div />}
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" onClick={handleCloseWeeklyReportDialog}>
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={
+                          createWeeklyReportMutation.isPending ||
+                          updateWeeklyReportMutation.isPending
+                        }
+                        data-testid="button-save-weekly-report"
+                      >
+                        {createWeeklyReportMutation.isPending || updateWeeklyReportMutation.isPending
+                          ? "Saving..."
+                          : editingWeeklyReport
+                            ? "Update Report"
+                            : "Save Report"}
+                      </Button>
+                    </div>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={crmLeadImportDialogOpen} onOpenChange={setCrmLeadImportDialogOpen}>
         <DialogContent className="max-w-2xl" data-testid="dialog-crm-import-summary">
           <DialogHeader>
@@ -7148,6 +7917,312 @@ export default function AdminDashboard() {
           <DialogFooter>
             <Button onClick={() => setCrmLeadImportDialogOpen(false)}>Close</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={crmCampaignDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setCrmCampaignDialogOpen(true);
+          } else {
+            handleCloseCrmCampaignDialog();
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-hidden p-0" data-testid="dialog-crm-campaign-preview">
+          <div className="flex h-full max-h-[90vh] flex-col">
+            <DialogHeader className="border-b px-6 pb-4 pt-6 pr-12">
+              <DialogTitle>Review Platform Overview Campaign</DialogTitle>
+              <DialogDescription>
+                Send a broad Ready Set Fly overview to a filtered CRM audience, with unsubscribe and resend guardrails applied automatically.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+              <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="crm-campaign-audience">Audience</Label>
+                    <Select
+                      value={crmCampaignAudienceType}
+                      onValueChange={(value) => setCrmCampaignAudienceType(value as CrmCampaignAudienceType)}
+                    >
+                      <SelectTrigger id="crm-campaign-audience" data-testid="select-crm-campaign-audience">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CRM_CAMPAIGN_AUDIENCE_TYPES.map((audienceType) => (
+                          <SelectItem key={audienceType} value={audienceType}>
+                            {CRM_CAMPAIGN_AUDIENCE_LABELS[audienceType]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {crmCampaignAudienceType === "by_category" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="crm-campaign-category">Category</Label>
+                      <Select
+                        value={crmCampaignCategory}
+                        onValueChange={(value) => setCrmCampaignCategory(value as LeadCategory)}
+                      >
+                        <SelectTrigger id="crm-campaign-category" data-testid="select-crm-campaign-category">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {leadCategories.map((category) => (
+                            <SelectItem key={category} value={category}>
+                              {CRM_LEAD_CATEGORY_LABELS[category]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  {crmCampaignAudienceType === "by_status" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="crm-campaign-status">Lead status</Label>
+                      <Select
+                        value={crmCampaignStatus}
+                        onValueChange={(value) => setCrmCampaignStatus(value as LeadStatus)}
+                      >
+                        <SelectTrigger id="crm-campaign-status" data-testid="select-crm-campaign-status">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {leadStatuses.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="crm-campaign-cooldown">Resend guard</Label>
+                    <Select
+                      value={String(crmCampaignCooldownDays)}
+                      onValueChange={(value) => setCrmCampaignCooldownDays(Number(value) as (typeof CRM_CAMPAIGN_COOLDOWN_OPTIONS)[number])}
+                    >
+                      <SelectTrigger id="crm-campaign-cooldown" data-testid="select-crm-campaign-cooldown">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">No cooldown</SelectItem>
+                        <SelectItem value="30">Skip leads emailed in last 30 days</SelectItem>
+                        <SelectItem value="45">Skip leads emailed in last 45 days</SelectItem>
+                        <SelectItem value="60">Skip leads emailed in last 60 days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="crm-campaign-template">Email option</Label>
+                    <Select
+                      value={crmCampaignTemplateType}
+                      onValueChange={(value) => setCrmCampaignTemplateType(value as CrmSalesEmailTemplateType)}
+                    >
+                      <SelectTrigger id="crm-campaign-template" data-testid="select-crm-campaign-template">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {crmSalesEmailTemplateTypes.map((templateType) => (
+                          <SelectItem key={templateType} value={templateType}>
+                            {CRM_SALES_TEMPLATE_LABELS[templateType]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {CRM_SALES_TEMPLATE_DESCRIPTIONS[crmCampaignTemplateType]}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="crm-campaign-subject">Subject override</Label>
+                    <Input
+                      id="crm-campaign-subject"
+                      value={crmCampaignSubjectOverride}
+                      onChange={(e) => setCrmCampaignSubjectOverride(e.target.value)}
+                      placeholder="Leave blank to use the campaign subject"
+                      data-testid="input-crm-campaign-subject"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="crm-campaign-intro">Opening paragraph override</Label>
+                    <Textarea
+                      id="crm-campaign-intro"
+                      value={crmCampaignIntroOverride}
+                      onChange={(e) => setCrmCampaignIntroOverride(e.target.value)}
+                      placeholder="Customize the opening paragraph for this campaign."
+                      rows={4}
+                      data-testid="textarea-crm-campaign-intro"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="crm-campaign-promo-code">Promo code (optional)</Label>
+                    <Input
+                      id="crm-campaign-promo-code"
+                      value={crmCampaignPromoCode}
+                      onChange={(e) => setCrmCampaignPromoCode(e.target.value)}
+                      placeholder="TAILWINDS"
+                      data-testid="input-crm-campaign-promo-code"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="crm-campaign-promo-details">Offer details (optional)</Label>
+                    <Textarea
+                      id="crm-campaign-promo-details"
+                      value={crmCampaignPromoDetails}
+                      onChange={(e) => setCrmCampaignPromoDetails(e.target.value)}
+                      placeholder="Example: 20% off your first month or waived setup fee."
+                      rows={3}
+                      data-testid="textarea-crm-campaign-promo-details"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="crm-campaign-note">Custom note (optional)</Label>
+                    <Textarea
+                      id="crm-campaign-note"
+                      value={crmCampaignCustomNote}
+                      onChange={(e) => setCrmCampaignCustomNote(e.target.value)}
+                      placeholder="Add a short custom note before the call to action."
+                      rows={3}
+                      data-testid="textarea-crm-campaign-note"
+                    />
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                    <div className="text-sm font-semibold">Audience Summary</div>
+                    {crmCampaignPreviewLoading ? (
+                      <div className="text-sm text-muted-foreground">Loading campaign audience...</div>
+                    ) : crmCampaignPreviewError ? (
+                      <div className="text-sm text-destructive">
+                        {crmCampaignPreviewError instanceof Error
+                          ? crmCampaignPreviewError.message
+                          : "Unable to load campaign preview."}
+                      </div>
+                    ) : crmCampaignPreview ? (
+                      <>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <div className="rounded-md border bg-background p-3">
+                            <div className="text-xs uppercase tracking-wide text-muted-foreground">Matched</div>
+                            <div className="text-lg font-semibold">{crmCampaignPreview.summary.totalMatched}</div>
+                          </div>
+                          <div className="rounded-md border bg-background p-3">
+                            <div className="text-xs uppercase tracking-wide text-muted-foreground">Eligible</div>
+                            <div className="text-lg font-semibold">{crmCampaignPreview.summary.eligibleCount}</div>
+                          </div>
+                          <div className="rounded-md border bg-background p-3">
+                            <div className="text-xs uppercase tracking-wide text-muted-foreground">Unsubscribed</div>
+                            <div className="text-lg font-semibold">{crmCampaignPreview.summary.excludedUnsubscribed}</div>
+                          </div>
+                          <div className="rounded-md border bg-background p-3">
+                            <div className="text-xs uppercase tracking-wide text-muted-foreground">Recent Sends</div>
+                            <div className="text-lg font-semibold">{crmCampaignPreview.summary.excludedRecentlyEmailed}</div>
+                          </div>
+                        </div>
+                        {crmCampaignPreview.summary.excludedMissingEmail > 0 && (
+                          <div className="text-xs text-muted-foreground">
+                            Missing email excluded: {crmCampaignPreview.summary.excludedMissingEmail}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground">
+                          Audience: {crmCampaignPreview.summary.audienceLabel}
+                        </div>
+                        <div className="space-y-2">
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Sample recipients
+                          </div>
+                          <div className="max-h-40 overflow-y-auto rounded-md border bg-background">
+                            {crmCampaignPreview.recipientsPreview.length > 0 ? (
+                              crmCampaignPreview.recipientsPreview.map((recipient) => (
+                                <div key={recipient.id} className="border-b px-3 py-2 text-xs last:border-b-0">
+                                  <div className="font-medium">
+                                    {recipient.firstName} {recipient.lastName}
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {recipient.email}
+                                    {recipient.company ? ` • ${recipient.company}` : ""}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="px-3 py-2 text-xs text-muted-foreground">
+                                No eligible recipients for the current filter.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No preview available.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="rounded-lg border bg-background">
+                    <div className="border-b px-4 py-3">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Subject</div>
+                      <div className="mt-1 text-sm font-medium">
+                        {crmCampaignPreviewLoading
+                          ? "Loading preview..."
+                          : crmCampaignPreview?.subject || "No preview available"}
+                      </div>
+                    </div>
+                    <div className="max-h-[560px] overflow-y-auto p-4">
+                      {crmCampaignPreviewLoading ? (
+                        <div className="text-sm text-muted-foreground">Generating preview...</div>
+                      ) : crmCampaignPreviewError ? (
+                        <div className="text-sm text-destructive">
+                          {crmCampaignPreviewError instanceof Error
+                            ? crmCampaignPreviewError.message
+                            : "Unable to load preview."}
+                        </div>
+                      ) : crmCampaignPreview ? (
+                        <iframe
+                          title="CRM campaign preview"
+                          srcDoc={crmCampaignPreview.html}
+                          className="min-h-[500px] w-full rounded-md border bg-white"
+                        />
+                      ) : (
+                        <div className="text-sm text-muted-foreground">No preview available.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="border-t px-6 py-4">
+              <Button type="button" variant="outline" onClick={handleCloseCrmCampaignDialog}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => sendCrmCampaignMutation.mutate()}
+                disabled={
+                  sendCrmCampaignMutation.isPending ||
+                  crmCampaignPreviewLoading ||
+                  !!crmCampaignPreviewError ||
+                  !crmCampaignPreview?.summary?.eligibleCount
+                }
+                data-testid="button-send-crm-campaign"
+              >
+                {sendCrmCampaignMutation.isPending ? "Sending..." : "Send Campaign Email"}
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

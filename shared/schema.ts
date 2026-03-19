@@ -13,6 +13,7 @@ export const listingTiers = ["basic", "standard", "premium"] as const;
 export const leadStatuses = ["new", "contacted", "qualified", "proposal", "negotiation", "won", "lost"] as const;
 export const dealStages = ["lead", "prospect", "proposal", "negotiation", "closed_won", "closed_lost"] as const;
 export const activityTypes = ["call", "email", "meeting", "note", "task"] as const;
+export const crmWeeklyReportStatuses = ["draft", "submitted"] as const;
 export const leadSources = ["website", "referral", "social_media", "advertising", "cold_outreach", "event", "other"] as const;
 export const leadCategories = [
   "aircraft_sales",
@@ -1346,6 +1347,44 @@ export const crmActivities = pgTable("crm_activities", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const crmWeeklyReports = pgTable("crm_weekly_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Reporting window
+  weekStart: date("week_start").notNull(),
+  weekEnd: date("week_end").notNull(),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("draft"),
+
+  // Ownership / recipients
+  preparedBy: varchar("prepared_by").notNull().references(() => users.id),
+  recipientName: text("recipient_name"),
+  recipientRole: text("recipient_role"),
+
+  // Numeric workflow metrics
+  newLeadsAdded: integer("new_leads_added").default(0),
+  leadsWorked: integer("leads_worked").default(0),
+  outreachEmailsSent: integer("outreach_emails_sent").default(0),
+  followUpsSent: integer("follow_ups_sent").default(0),
+  callsCompleted: integer("calls_completed").default(0),
+  meetingsBooked: integer("meetings_booked").default(0),
+  proposalsSent: integer("proposals_sent").default(0),
+  dealsAdvanced: integer("deals_advanced").default(0),
+  closedWonCount: integer("closed_won_count").default(0),
+  estimatedPipelineValue: decimal("estimated_pipeline_value", { precision: 10, scale: 2 }),
+
+  // Narrative sections for leadership reporting
+  executiveSummary: text("executive_summary"),
+  wins: text("wins"),
+  pipelineUpdates: text("pipeline_updates"),
+  blockers: text("blockers"),
+  nextWeekFocus: text("next_week_focus"),
+  supportNeeded: text("support_needed"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -2359,6 +2398,36 @@ export const insertCrmActivitySchema = createInsertSchema(crmActivities).omit({
   type: z.enum(activityTypes),
 });
 
+export const insertCrmWeeklyReportSchema = createInsertSchema(crmWeeklyReports).omit({
+  id: true,
+  preparedBy: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  weekStart: z.string().min(1, "Week start is required"),
+  weekEnd: z.string().min(1, "Week end is required"),
+  title: z.string().min(1, "Title is required"),
+  status: z.enum(crmWeeklyReportStatuses).default("draft"),
+  recipientName: z.string().optional(),
+  recipientRole: z.string().optional(),
+  newLeadsAdded: z.number().int().min(0).default(0),
+  leadsWorked: z.number().int().min(0).default(0),
+  outreachEmailsSent: z.number().int().min(0).default(0),
+  followUpsSent: z.number().int().min(0).default(0),
+  callsCompleted: z.number().int().min(0).default(0),
+  meetingsBooked: z.number().int().min(0).default(0),
+  proposalsSent: z.number().int().min(0).default(0),
+  dealsAdvanced: z.number().int().min(0).default(0),
+  closedWonCount: z.number().int().min(0).default(0),
+  estimatedPipelineValue: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  executiveSummary: z.string().optional(),
+  wins: z.string().optional(),
+  pipelineUpdates: z.string().optional(),
+  blockers: z.string().optional(),
+  nextWeekFocus: z.string().optional(),
+  supportNeeded: z.string().optional(),
+});
+
 export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({
   id: true,
   createdAt: true,
@@ -2680,6 +2749,9 @@ export type InsertCrmDeal = z.infer<typeof insertCrmDealSchema>;
 export type CrmActivity = typeof crmActivities.$inferSelect;
 export type InsertCrmActivity = z.infer<typeof insertCrmActivitySchema>;
 
+export type CrmWeeklyReport = typeof crmWeeklyReports.$inferSelect;
+export type InsertCrmWeeklyReport = z.infer<typeof insertCrmWeeklyReportSchema>;
+
 export type PromoCode = typeof promoCodes.$inferSelect;
 export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
 
@@ -2796,6 +2868,7 @@ export type ActivityType = typeof activityTypes[number];
 export type LeadSource = typeof leadSources[number];
 export type LeadCategory = typeof leadCategories[number];
 export type CrmSalesEmailTemplateType = typeof crmSalesEmailTemplateTypes[number];
+export type CrmWeeklyReportStatus = typeof crmWeeklyReportStatuses[number];
 export type FlightPlanFilingStatus = typeof flightPlanFilingStatuses[number];
 export type FlightPlanFilingAction = typeof flightPlanFilingActions[number];
 export type ExpenseCategory = typeof expenseCategories[number];

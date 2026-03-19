@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { getCurrentReturnTo, withReturnTo } from "@/lib/returnTo";
 import { dismissSignupBanner, isSoftAuthEnabled, shouldShowSignupBanner } from "@/utils/anonUsage";
 
 export function SignupNudgeBanner() {
@@ -52,7 +53,7 @@ export function SignupNudgeBanner() {
 
   const handleSignup = () => {
     trackEvent("signup_banner_clicked");
-    window.location.href = apiUrl("/api/auth/google");
+    window.location.href = apiUrl(withReturnTo("/api/auth/google", getCurrentReturnTo()));
   };
 
   if (!isSoftAuthEnabled() || isAuthenticated || !ready) return null;
@@ -66,9 +67,9 @@ export function SignupNudgeBanner() {
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold text-foreground">Make RSF Yours</div>
+            <div className="text-sm font-semibold text-foreground">Keep Your Workflow Moving</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Create a free account to save flight plans, track logbook history, keep training progress, and sync across devices.
+              Create a free account to save plans, keep your logbook tied together, and return to the same tools later.
             </p>
           </div>
           <button
@@ -82,7 +83,7 @@ export function SignupNudgeBanner() {
         </div>
         <div className="mt-4 flex items-center gap-2">
           <Button size="sm" className="flex-1" onClick={handleSignup}>
-            Create Free Account
+            Continue with Google
           </Button>
           <Button size="sm" variant="ghost" onClick={handleDismiss}>
             Maybe Later

@@ -17,6 +17,7 @@ import type { LogbookEntry, InsertLogbookEntry, Endorsement, LogbookArchive } fr
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { getCurrentReturnTo, withReturnTo, withSourceParam } from "@/lib/returnTo";
 import { useAuth } from "@/hooks/useAuth";
 import { Switch } from "@/components/ui/switch";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
@@ -708,14 +709,14 @@ export default function Logbook() {
             )}
             {isGuest && (
               <div className="rounded-[1rem] border border-primary/20 bg-primary/5 px-4 py-3">
-                <div className="text-sm font-semibold text-slate-900">Create a free account to keep your logbook tied to RSF.</div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  Save entries, export anytime, and grow into Pro only when you want alerts and advanced workflow.
+              <div className="text-sm font-semibold text-slate-900">Create a free account to keep your logbook tied to RSF.</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                  Save entries, export anytime, and move into Pro only when alerts, currency tracking, and saved workflow become worth it.
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button asChild size="sm">
                     <Link
-                      href="/register"
+                      href={withReturnTo("/register", getCurrentReturnTo())}
                       onClick={() => trackEvent("cta_click", { label: "logbook_guest_register", target: "/register" })}
                     >
                       Create free account
@@ -723,7 +724,7 @@ export default function Logbook() {
                   </Button>
                   <Button asChild size="sm" variant="outline">
                     <Link
-                      href="/login"
+                      href={withReturnTo("/login", getCurrentReturnTo())}
                       onClick={() => trackEvent("cta_click", { label: "logbook_guest_sign_in", target: "/login" })}
                     >
                       Sign in
@@ -736,13 +737,16 @@ export default function Logbook() {
               <div className="rounded-[1rem] border border-emerald-200 bg-emerald-50/90 px-4 py-3">
                 <div className="text-sm font-semibold text-emerald-900">Ready for alerts, endorsements, and deeper currency tracking?</div>
                 <div className="mt-1 text-xs text-emerald-800">
-                  Start a 14-day Pro trial once the free logbook workflow is working for you.
+                  Start a 14-day Pro trial once the free logbook workflow is already saving you time.
                 </div>
                 <div className="mt-3">
                   <Button asChild size="sm" variant="outline" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100">
                     <Link
-                      href="/logbook/pro"
-                      onClick={() => trackEvent("cta_click", { label: "logbook_start_trial_banner", target: "/logbook/pro" })}
+                      href={withSourceParam("/logbook/pro", "/logbook")}
+                      onClick={() => {
+                        trackEvent("cta_click", { label: "logbook_start_trial_banner", target: "/logbook/pro" });
+                        trackEvent("subscription_cta_click", { source_page: "/logbook", target: "/logbook/pro", context: "logbook_trial_banner" });
+                      }}
                     >
                       Start 14-day Pro trial
                     </Link>
@@ -1435,7 +1439,12 @@ export default function Logbook() {
               Tip: <strong>Your logbook data stays free and exportable.</strong> Pro adds saved workflow value through currency tracking, reminders, and instructor-ready records.
             </p>
             <Button variant="default" asChild>
-              <Link href="/logbook/pro">{isPro ? "Manage Membership" : "Upgrade to RSF Pro"}</Link>
+              <Link
+                href={withSourceParam("/logbook/pro", "/logbook")}
+                onClick={() => trackEvent("subscription_cta_click", { source_page: "/logbook", target: "/logbook/pro", context: "logbook_footer_cta" })}
+              >
+                {isPro ? "Manage Membership" : "Upgrade to RSF Pro"}
+              </Link>
             </Button>
             <p className="text-[11px] text-muted-foreground text-center">
               Cancel anytime. Free logbook access stays available.

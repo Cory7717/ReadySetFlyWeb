@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, type MembershipTier } from "@shared/membership-plans";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
+import { getSourceFromWindow } from "@/lib/returnTo";
 
 export default function LogbookProPage() {
   const { user, isAuthenticated } = useAuth();
@@ -17,10 +18,12 @@ export default function LogbookProPage() {
   const [selectedTier, setSelectedTier] = useState<MembershipTier>("pro");
   const [selectedInterval, setSelectedInterval] = useState<MembershipInterval>("monthly");
   const [loading, setLoading] = useState(false);
+  const sourcePage = getSourceFromWindow();
 
   useEffect(() => {
-    trackEvent("upgrade_page_viewed", { page: "/logbook/pro" });
-  }, []);
+    trackEvent("upgrade_page_viewed", { page: "/logbook/pro", source_page: sourcePage });
+    trackEvent("subscription_offer_viewed", { page: "/logbook/pro", source_page: sourcePage });
+  }, [sourcePage]);
 
   if (!isAuthenticated) {
     return (
@@ -65,6 +68,7 @@ export default function LogbookProPage() {
     try {
       trackEvent("subscription_checkout_started", {
         page: "/logbook/pro",
+        source_page: sourcePage,
         tier: selectedTier,
         interval: selectedPlan.interval,
         totalToday: selectedPlanTotal,
@@ -112,8 +116,8 @@ export default function LogbookProPage() {
   return (
     <PageShell
       kicker="Membership"
-      title="Choose the RSF plan that fits how you fly."
-      description="Start with free tools and marketplace access. Upgrade when you want saved plans, digital logbook continuity, training history, and currency tracking in one place."
+      title="Upgrade when RSF starts saving you real time."
+      description="Free gets you browsing, core tools, and basic workflow. RSF Pro becomes worth it once you want saved planning, repeat-flight convenience, cleaner records, and fewer moving parts."
       actions={
         <>
           <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">14-day monthly trial</Badge>
@@ -133,15 +137,39 @@ export default function LogbookProPage() {
             <div className="grid gap-3 md:grid-cols-3">
               <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
                 <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Save your work</div>
-                <div className="mt-2 text-sm text-slate-700">Keep routes, aircraft profiles, favorites, and training history tied together.</div>
+                <div className="mt-2 text-sm text-slate-700">Keep routes, aircraft profiles, and training history from disappearing between sessions.</div>
               </div>
               <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
                 <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Stay current</div>
-                <div className="mt-2 text-sm text-slate-700">Track landings, IFR recency, medical, flight review, and IPC dates without a spreadsheet.</div>
+                <div className="mt-2 text-sm text-slate-700">Track landings, IFR recency, medical, flight review, and IPC deadlines without separate reminders.</div>
               </div>
               <div className="rounded-[1.05rem] border border-primary/14 bg-[linear-gradient(180deg,rgba(255,255,255,0.84),rgba(255,255,255,0.56))] px-4 py-4 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
                 <div className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Train with context</div>
-                <div className="mt-2 text-sm text-slate-700">Keep logbook records, saved trainer history, and guided workflows in one system.</div>
+                <div className="mt-2 text-sm text-slate-700">Keep logbook records, radio comms practice, and guided training workflows in one system.</div>
+              </div>
+            </div>
+
+            <div className="rounded-[1.25rem] border border-primary/16 bg-white/80 p-4 shadow-[0_12px_26px_rgba(15,23,42,0.08)] sm:p-5">
+              <span className="rsf-kicker">When pilots upgrade</span>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div className="rounded-[1rem] border border-primary/12 bg-white/78 p-4">
+                  <div className="text-sm font-semibold text-slate-900">Repeat routes start piling up</div>
+                  <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Pro pays off when you are rebuilding the same planning setup, notes, and aircraft assumptions more than once.
+                  </div>
+                </div>
+                <div className="rounded-[1rem] border border-primary/12 bg-white/78 p-4">
+                  <div className="text-sm font-semibold text-slate-900">Deadlines matter</div>
+                  <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Alerts become valuable when medical, flight review, IPC, and landing currency need one system of record.
+                  </div>
+                </div>
+                <div className="rounded-[1rem] border border-primary/12 bg-white/78 p-4">
+                  <div className="text-sm font-semibold text-slate-900">You want continuity</div>
+                  <div className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Saved training history, logbook depth, and cross-tool continuity matter more than one-off feature access.
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -169,7 +197,7 @@ export default function LogbookProPage() {
               </div>
 
               <div className="mt-4 rounded-[1rem] border border-primary/14 bg-white/72 p-4">
-                <div className="text-sm font-semibold">Included with {membershipTierInfo[selectedTier].title}</div>
+                <div className="text-sm font-semibold">What {membershipTierInfo[selectedTier].title} changes in daily use</div>
                 <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
                   {membershipTierInfo[selectedTier].features.map((feature) => (
                     <li key={feature}>{feature}</li>
@@ -196,7 +224,7 @@ export default function LogbookProPage() {
           <div className="space-y-4 rounded-[1.4rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.78),rgba(255,255,255,0.56))] p-5 shadow-[0_18px_38px_rgba(15,23,42,0.12)]">
             <div>
               <span className="rsf-kicker">Choose a plan</span>
-              <h3 className="mt-2 text-2xl font-semibold text-slate-900">Pick the RSF plan that fits your workflow.</h3>
+              <h3 className="mt-2 text-2xl font-semibold text-slate-900">Pick the point where saved workflow becomes worth paying for.</h3>
             </div>
             <div className="flex flex-wrap gap-3">
               {(Object.keys(membershipTierInfo) as MembershipTier[]).map((tier) => {
@@ -241,9 +269,7 @@ export default function LogbookProPage() {
                           {plan.badge ? <Badge variant="outline">{plan.badge}</Badge> : null}
                         </div>
                         <div className="mt-2 text-2xl font-semibold text-slate-900">${plan.price.toFixed(2)}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {membershipTierInfo[selectedTier].subtitle}
-                        </div>
+                        <div className="text-xs text-muted-foreground">{membershipTierInfo[selectedTier].subtitle}</div>
                         {plan.trialDays ? (
                           <div className="mt-2 text-xs text-emerald-600">{plan.trialDays}-day free trial</div>
                         ) : null}
@@ -274,8 +300,8 @@ export default function LogbookProPage() {
                   {loading
                     ? "Redirecting..."
                     : hasTrial
-                      ? "Start free trial with PayPal Business/Commerce"
-                      : "Subscribe with PayPal Business/Commerce"}
+                      ? "Start 14-day trial"
+                      : "Start subscription"}
                 </Button>
                 <p className="text-xs text-muted-foreground">
                   Recurring billing applies at the selected interval.

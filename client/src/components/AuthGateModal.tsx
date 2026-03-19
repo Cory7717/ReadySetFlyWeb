@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiUrl } from "@/lib/api";
 import { queryClient } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
+import { getCurrentReturnTo, withReturnTo } from "@/lib/returnTo";
 import { cancelAuthGate, completeAuthGate, subscribeAuthGate } from "@/utils/authGate";
 
 const POPUP_NAME = "rsf_auth_popup";
@@ -74,13 +75,18 @@ export function AuthGateModal() {
 
   const handleContinue = () => {
     setWaiting(true);
+    trackEvent("auth_gate_continue", {
+      action: actionName,
+      source_page: getCurrentReturnTo(),
+    });
+    const authUrl = apiUrl(withReturnTo("/api/auth/google", getCurrentReturnTo()));
     const popup = window.open(
-      apiUrl("/api/auth/google"),
+      authUrl,
       POPUP_NAME,
       "width=520,height=720,menubar=no,toolbar=no,location=no,status=no"
     );
     if (!popup) {
-      window.location.href = apiUrl("/api/auth/google");
+      window.location.href = authUrl;
     }
   };
 

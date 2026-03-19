@@ -22,6 +22,7 @@ import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useStudentProfile } from "@/hooks/useStudentProfile";
 import { trackEvent } from "@/lib/analytics";
+import { getCurrentReturnTo, withReturnTo, withSourceParam } from "@/lib/returnTo";
 import { runWithAuth } from "@/utils/authGate";
 import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/flightPlanner";
 import { cn } from "@/lib/utils";
@@ -2765,9 +2766,12 @@ export default function FlightPlanner() {
             asChild
             variant="outline"
             className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10"
-            onClick={() => trackEvent("planner_upgrade_click", { target: "/logbook/pro" })}
+            onClick={() => {
+              trackEvent("planner_upgrade_click", { target: "/logbook/pro" });
+              trackEvent("subscription_cta_click", { source_page: "/flight-planner", target: "/logbook/pro", context: "planner_header" });
+            }}
           >
-            <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
+            <Link href={withSourceParam("/logbook/pro", "/flight-planner")}>Upgrade to RSF Pro</Link>
           </Button>
         </>
       }
@@ -3675,14 +3679,14 @@ export default function FlightPlanner() {
             <div className="space-y-3 max-w-sm">
               <div className="text-lg font-semibold">Create a free account to continue</div>
               <p className="text-sm text-white/80">
-                Save your planning history and unlock additional route analysis.
+                Save this route, return to it later, and keep your planning workflow moving across devices.
               </p>
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
                 <Button asChild variant="secondary">
-                  <Link href="/register">Create free account</Link>
+                  <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create free account</Link>
                 </Button>
                 <Button asChild variant="outline">
-                  <Link href="/login">Sign in</Link>
+                  <Link href={withReturnTo("/login", getCurrentReturnTo())}>Sign in</Link>
                 </Button>
               </div>
             </div>
@@ -3899,7 +3903,7 @@ export default function FlightPlanner() {
           {isGuest && (
             <Alert>
               <AlertDescription>
-                Create a free RSF account to save your first flight plan, return to it later, and build toward logbook and currency workflows.
+                Create a free RSF account to save your first flight plan, come back to it later, and keep building toward a cleaner logbook and currency workflow.
               </AlertDescription>
             </Alert>
           )}
@@ -3907,7 +3911,7 @@ export default function FlightPlanner() {
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button asChild variant="outline">
                 <Link
-                  href="/register"
+                  href={withReturnTo("/register", getCurrentReturnTo())}
                   onClick={() => trackEvent("cta_click", { label: "planner_save_register", target: "/register" })}
                 >
                   Create Free Account
@@ -3915,7 +3919,7 @@ export default function FlightPlanner() {
               </Button>
               <Button asChild variant="ghost">
                 <Link
-                  href="/login"
+                  href={withReturnTo("/login", getCurrentReturnTo())}
                   onClick={() => trackEvent("cta_click", { label: "planner_save_sign_in", target: "/login" })}
                 >
                   Sign In
@@ -3941,8 +3945,11 @@ export default function FlightPlanner() {
               <div className="mt-3">
                 <Button asChild size="sm" variant="outline" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100">
                   <Link
-                    href="/logbook/pro"
-                    onClick={() => trackEvent("cta_click", { label: "planner_save_start_trial", target: "/logbook/pro" })}
+                    href={withSourceParam("/logbook/pro", "/flight-planner")}
+                    onClick={() => {
+                      trackEvent("cta_click", { label: "planner_save_start_trial", target: "/logbook/pro" });
+                      trackEvent("subscription_cta_click", { source_page: "/flight-planner", target: "/logbook/pro", context: "planner_save_banner" });
+                    }}
                   >
                     Start 14-day Pro trial
                   </Link>
@@ -4033,8 +4040,11 @@ export default function FlightPlanner() {
                 <div className="mt-3">
                   <Button asChild size="sm" variant="outline">
                     <Link
-                      href="/logbook/pro"
-                      onClick={() => trackEvent("cta_click", { label: "planner_saved_plans_start_trial", target: "/logbook/pro" })}
+                      href={withSourceParam("/logbook/pro", "/flight-planner")}
+                      onClick={() => {
+                        trackEvent("cta_click", { label: "planner_saved_plans_start_trial", target: "/logbook/pro" });
+                        trackEvent("subscription_cta_click", { source_page: "/flight-planner", target: "/logbook/pro", context: "planner_saved_plans" });
+                      }}
                     >
                       Start 14-day Pro trial
                     </Link>
@@ -4459,12 +4469,12 @@ export default function FlightPlanner() {
             {!isAuthenticated && routePoints.length > 0 && (
               <Alert className="mt-3">
                 <AlertDescription className="flex flex-wrap items-center gap-3">
-                  <span>Save this route and get planning reminders with a free account.</span>
+                  <span>Save this route and keep repeat planning faster with a free account.</span>
                   <Button asChild size="sm">
-                    <Link href="/register">Create free account</Link>
+                    <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create free account</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link href="/login">Sign in</Link>
+                    <Link href={withReturnTo("/login", getCurrentReturnTo())}>Sign in</Link>
                   </Button>
                 </AlertDescription>
               </Alert>

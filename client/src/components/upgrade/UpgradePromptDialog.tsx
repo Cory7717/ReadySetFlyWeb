@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { trackEvent } from "@/lib/analytics";
+import { withSourceParam } from "@/lib/returnTo";
 import { membershipTierInfo } from "@shared/membership-plans";
 
 const defaultFreeFeatures = [
@@ -34,13 +36,15 @@ export function UpgradePromptDialog({
   toolSummary,
   freeFeatures = defaultFreeFeatures,
 }: UpgradePromptDialogProps) {
+  const [path] = useLocation();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Unlock full pilot tooling with RSF Pro</DialogTitle>
+          <DialogTitle>Keep the workflow, upgrade the outcome.</DialogTitle>
           <DialogDescription>
-            {toolName} works free. RSF Pro and Pro+ unlock saved workflows, alerts, and advanced analytics.
+            {toolName} works free. RSF Pro and Pro+ become worth it when you want saved time, repeat-use convenience, and cleaner records.
           </DialogDescription>
         </DialogHeader>
 
@@ -74,8 +78,12 @@ export function UpgradePromptDialog({
                   <li key={feature}>{feature}</li>
                 ))}
               </ul>
-              <Button className="mt-4 w-full" asChild>
-                <Link href="/logbook/pro">Upgrade to RSF Pro</Link>
+              <Button
+                className="mt-4 w-full"
+                asChild
+                onClick={() => trackEvent("subscription_cta_click", { source_page: path || "/", target: "/logbook/pro", context: toolName, tier: "pro" })}
+              >
+                <Link href={withSourceParam("/logbook/pro", path || "/")}>See Pro workflow value</Link>
               </Button>
             </CardContent>
           </Card>
@@ -92,8 +100,13 @@ export function UpgradePromptDialog({
                   <li key={feature}>{feature}</li>
                 ))}
               </ul>
-              <Button className="mt-4 w-full" variant="outline" asChild>
-                <Link href="/logbook/pro">Upgrade to Pro+</Link>
+              <Button
+                className="mt-4 w-full"
+                variant="outline"
+                asChild
+                onClick={() => trackEvent("subscription_cta_click", { source_page: path || "/", target: "/logbook/pro", context: toolName, tier: "pro_plus" })}
+              >
+                <Link href={withSourceParam("/logbook/pro", path || "/")}>Compare Pro+</Link>
               </Button>
             </CardContent>
           </Card>
@@ -104,7 +117,7 @@ export function UpgradePromptDialog({
             <Button variant="ghost">Continue with Free</Button>
           </DialogClose>
           <div className="text-xs text-muted-foreground">
-            Upgrade anytime to unlock full planning, alerts, and analytics.
+            Upgrade once repeat flights, saved history, and cleaner records are worth paying for.
           </div>
         </DialogFooter>
       </DialogContent>

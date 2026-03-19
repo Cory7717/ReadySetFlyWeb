@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { trackEvent } from "@/lib/analytics";
+import { getCurrentReturnTo, withReturnTo } from "@/lib/returnTo";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
@@ -588,14 +589,14 @@ export default function RadioCommsTrainer() {
       {isGuest && (
         <Alert>
           <AlertDescription>
-            Guest preview includes one scenario with limited steps. Create a free account to unlock daily practice.
+            Guest preview includes one scenario with limited steps. Create a free account to keep practicing without losing momentum.
           </AlertDescription>
         </Alert>
       )}
       {isFree && (
         <Alert>
           <AlertDescription>
-            Free accounts get one full scenario per day. Upgrade to RSF Pro for unlimited scenarios, scoring, and history.
+            Free accounts get one full scenario per day. Upgrade when daily repetition, saved scoring, and history become worth paying for.
           </AlertDescription>
         </Alert>
       )}
@@ -635,7 +636,7 @@ export default function RadioCommsTrainer() {
           ))}
           {!isPro && (
             <Button asChild variant="outline">
-              <Link href={isAuthenticated ? "/logbook/pro" : "/register"}>
+              <Link href={isAuthenticated ? "/logbook/pro" : withReturnTo("/register", getCurrentReturnTo())}>
                 {isAuthenticated ? "Unlock full trainer" : "Create free account"}
               </Link>
             </Button>
@@ -915,7 +916,7 @@ export default function RadioCommsTrainer() {
           {!isPro && (
             <Alert>
               <AlertDescription>
-                Upgrade to RSF Pro or Pro+ to unlock full scenario examples, scoring, and practice history. Save, alerts, analytics require RSF Pro membership.
+                Upgrade to RSF Pro or Pro+ once you want full scenario examples, saved scoring, and a repeatable training record instead of one-off practice.
               </AlertDescription>
             </Alert>
           )}

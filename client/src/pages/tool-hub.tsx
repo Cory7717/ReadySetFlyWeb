@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AlertTriangle, BookOpen, Calculator, CloudSun, FileText, Navigation, Plane, Radio, Route, Search, Signal } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
+import { getCurrentReturnTo, withReturnTo, withSourceParam } from "@/lib/returnTo";
 import { RSF_TOOLS, TOOL_GROUP_LABELS, type ToolGroupId, type ToolRegistryItem } from "@/lib/tool-registry";
 
 const RECENT_TOOLS_KEY = "rsf.toolHub.recent";
@@ -119,7 +120,7 @@ export default function ToolHub() {
           <span className="rsf-kicker border-white/10 bg-white/10 text-slate-100">PILOT TOOL HUB</span>
           <h1 className="font-display text-3xl sm:text-4xl font-bold">Aviation tools for every phase of flight.</h1>
           <p className="max-w-3xl text-slate-300">
-            Plan routes, check weather, run calculations, and train — all without leaving RSF.
+            Start free with planning, weather, and calculators. Upgrade later when saved workflow, repeat-use speed, and cleaner records start to matter.
           </p>
           <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200/90">
             <span className="rounded-full border border-white/14 bg-white/8 px-3 py-1">FLIGHT PLANNING</span>
@@ -172,6 +173,52 @@ export default function ToolHub() {
                 )}
               </div>
             ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="border-primary/20 bg-primary/5 text-slate-900 shadow-sm">
+          <CardContent className="grid gap-4 p-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="space-y-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">Why RSF Pro Exists</div>
+              <h2 className="text-2xl font-semibold">Pilots do not pay for “advanced features.” They pay to stop redoing work.</h2>
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                RSF Pro becomes useful when you want saved plans, saved aircraft assumptions, practice history, logbook continuity, and reminders that keep repeat flying easier.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border bg-background px-4 py-3">
+                  <div className="text-sm font-semibold">Free</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Explore tools, plan one-offs, browse marketplace value.</div>
+                </div>
+                <div className="rounded-xl border bg-background px-4 py-3">
+                  <div className="text-sm font-semibold">Pro</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Save repeat workflows, keep history, and reduce planning/admin friction.</div>
+                </div>
+                <div className="rounded-xl border bg-background px-4 py-3">
+                  <div className="text-sm font-semibold">Pro+</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Layer on deeper planning context and power-user tools as they ship.</div>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3 rounded-2xl border bg-background p-4">
+              <div className="text-sm font-semibold">Best next step</div>
+              <div className="text-sm text-muted-foreground">
+                Use the free tools first. If you keep coming back to the same workflows, that is your upgrade moment.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {!isAuthenticated ? (
+                  <Button asChild>
+                    <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create free account</Link>
+                  </Button>
+                ) : null}
+                <Button
+                  asChild
+                  variant="outline"
+                  onClick={() => trackEvent("subscription_cta_click", { source_page: "/tool-hub", target: "/logbook/pro", context: "tool_hub_value_panel" })}
+                >
+                  <Link href={withSourceParam("/logbook/pro", "/tool-hub")}>See Pro plans</Link>
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -296,7 +343,7 @@ export default function ToolHub() {
                 </Button>
                 {!isAuthenticated ? (
                   <Button asChild>
-                    <Link href="/register">Create free account</Link>
+                    <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create free account</Link>
                   </Button>
                 ) : null}
               </div>

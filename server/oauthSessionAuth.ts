@@ -39,6 +39,21 @@ function getGoogleCallbackUrl(): string {
   return `${getApiBaseUrl()}/api/auth/google/callback`;
 }
 
+function normalizeFrontendReturnTo(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  if (!value.startsWith("/") || value.startsWith("//")) return null;
+
+  try {
+    const parsed = new URL(value, "http://readysetfly.local");
+    if (parsed.pathname === "/login" || parsed.pathname === "/register") {
+      return "/";
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 // Postgres-backed sessions (shared by Passport + your /api/auth/web-login routes)
 export function getSession() {
   const sessionTtlSeconds = 7 * 24 * 60 * 60; // 1 week
@@ -286,6 +301,15 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
     // Start Google auth (web)
     app.get(
       "/api/auth/google",
+      (req: any, _res, next) => {
+        const returnTo = normalizeFrontendReturnTo(req.query?.redirect);
+        if (returnTo) {
+          req.session.oauthReturnTo = returnTo;
+        } else if (req.session.oauthReturnTo) {
+          delete req.session.oauthReturnTo;
+        }
+        next();
+      },
       passport.authenticate("google", { scope: ["profile", "email"] })
     );
 
@@ -305,6 +329,8 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
       (req: any, res: any) => {
         const userId = req.user?.claims?.sub;
         if (userId) req.session.userId = userId;
+        const returnTo = normalizeFrontendReturnTo(req.session.oauthReturnTo) || "/";
+        delete req.session.oauthReturnTo;
 
         req.session.save((saveErr: any) => {
           if (saveErr) {
@@ -312,8 +338,21 @@ async function resolveUserFromGoogle(profile: GoogleProfile) {
             return res.status(500).json({ message: "Session save failed", detail: String(saveErr) });
           }
 
+          void storage.createAnalyticsEvent({
+            event: "oauth_login_completed",
+            page: returnTo,
+            visitorId: req.sessionID || `oauth_${userId || Date.now()}`,
+            userId: userId || undefined,
+            meta: {
+              provider: "google",
+              source_page: returnTo,
+            },
+          }).catch((error) => {
+            console.warn("[AUTH][google callback] failed to record analytics:", error);
+          });
+
           const frontend = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
-          return res.redirect(frontend);
+          return res.redirect(new URL(returnTo, frontend).toString());
         });
       }
     );

@@ -15,6 +15,7 @@ import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, C
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent } from "@/lib/analytics";
+import { getCurrentReturnTo, withReturnTo, withSourceParam } from "@/lib/returnTo";
 import { cn } from "@/lib/utils";
 import { extractAtisIdentifier, extractRunwayInUse, parseFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 
@@ -410,9 +411,55 @@ export default function PilotTools() {
             Pilot Tools
           </h1>
           <p className="text-muted-foreground">
-            Aviation weather, NOTAMs, and airport information
+            Start with free aviation tools. Upgrade only when saved workflow and repeat-use speed become worth it.
           </p>
         </div>
+
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="grid gap-4 p-5 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="space-y-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary">Subscription Value</div>
+              <h2 className="text-2xl font-semibold text-slate-900">RSF Pro is about reducing repeat work, not collecting “advanced features.”</h2>
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                Use the free tools to plan, calculate, and browse. Upgrade when you want saved plans, saved aircraft assumptions, practice history, and a cleaner pilot workflow across sessions.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border bg-background px-4 py-3">
+                  <div className="text-sm font-semibold">Plan faster</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Reuse saved route setups instead of rebuilding them.</div>
+                </div>
+                <div className="rounded-xl border bg-background px-4 py-3">
+                  <div className="text-sm font-semibold">Train with continuity</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Keep comms and training history tied to your account.</div>
+                </div>
+                <div className="rounded-xl border bg-background px-4 py-3">
+                  <div className="text-sm font-semibold">Keep records cleaner</div>
+                  <div className="mt-1 text-xs text-muted-foreground">Tie planning, logbook, and reminders together in one workflow.</div>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3 rounded-2xl border bg-background p-4">
+              <div className="text-sm font-semibold">Best next step</div>
+              <div className="text-sm text-muted-foreground">
+                If you are still exploring, stay free. If you are flying often enough that repeated setup feels annoying, that is the time to trial Pro.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {!user ? (
+                  <Button asChild>
+                    <Link href={withReturnTo("/register", getCurrentReturnTo())}>Create free account</Link>
+                  </Button>
+                ) : null}
+                <Button
+                  asChild
+                  variant="outline"
+                  onClick={() => trackEvent("subscription_cta_click", { source_page: "/pilot-tools", target: "/logbook/pro", context: "pilot_tools_value_panel" })}
+                >
+                  <Link href={withSourceParam("/logbook/pro", "/pilot-tools")}>See Pro plans</Link>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="border-slate-200 bg-slate-50">
           <CardHeader>
@@ -469,7 +516,7 @@ export default function PilotTools() {
               <Plane className="h-5 w-5" />
               Flight Planner (RSF Pro)
             </CardTitle>
-            <CardDescription>Save common routes, fuel notes, and timing.</CardDescription>
+            <CardDescription>Preview the planner free. Pro becomes valuable when you want saved routes, saved aircraft assumptions, and faster repeat planning.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
             <Button asChild>
@@ -487,7 +534,7 @@ export default function PilotTools() {
               <Radio className="h-5 w-5" />
               Radio Comms Trainer (RSF Pro)
             </CardTitle>
-            <CardDescription>Practice ATC phraseology with guided scenarios.</CardDescription>
+            <CardDescription>Try guided scenarios free. Pro unlocks full practice history, scoring, and repeat training continuity.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
             <Button asChild>

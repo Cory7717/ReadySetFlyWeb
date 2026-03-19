@@ -784,6 +784,95 @@ Founder, Ready Set Fly ✈️
   }
 }
 
+export async function sendMembershipGrantEmail(data: {
+  email: string;
+  firstName?: string | null;
+  tier: "pro" | "pro_plus";
+  durationDays: number;
+  endsAt: Date;
+  reason?: string | null;
+}) {
+  const { getUncachableResendClient } = await import("./resendClient");
+  const { client: resend } = await getUncachableResendClient();
+  const supportFrom = process.env.SUPPORT_EMAIL || "Ready Set Fly <support@readysetfly.us>";
+  const frontendBase = process.env.FRONTEND_BASE_URL || "https://readysetfly.us";
+  const firstName = data.firstName || "Pilot";
+  const tierLabel = data.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro Core";
+  const endsAtLabel = data.endsAt.toLocaleString();
+  const reasonLine = data.reason?.trim()
+    ? `<p style="margin: 16px 0 0 0; color: #475569;"><strong>Note from RSF:</strong> ${data.reason.trim()}</p>`
+    : "";
+  const reasonText = data.reason?.trim() ? `\n\nNote from RSF: ${data.reason.trim()}` : "";
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a; background: #f8fafc; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+    .card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 30px; }
+    .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #dbeafe; color: #1d4ed8; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .cta { display: inline-block; margin-top: 22px; background: #1d4ed8; color: #ffffff !important; padding: 12px 20px; border-radius: 8px; text-decoration: none; font-weight: 600; }
+    .panel { margin-top: 20px; border: 1px solid #dbeafe; background: #eff6ff; border-radius: 12px; padding: 16px; }
+    .footer { margin-top: 22px; font-size: 12px; color: #64748b; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="badge">Account Upgrade</div>
+      <h1 style="margin: 14px 0 8px 0;">RSF has upgraded your account to ${tierLabel}</h1>
+      <p>Hi ${firstName},</p>
+      <p>Ready Set Fly has granted your account <strong>${tierLabel}</strong> access for <strong>${data.durationDays} day${data.durationDays === 1 ? "" : "s"}</strong> so you can experience the full workflow.</p>
+      <div class="panel">
+        <div><strong>Access level:</strong> ${tierLabel}</div>
+        <div><strong>Access ends:</strong> ${endsAtLabel}</div>
+      </div>
+      <p style="margin-top: 20px;">During this access window, you can explore the full RSF Pro experience including saved workflow, planning continuity, training history, and the broader premium toolset tied to your account.</p>
+      ${reasonLine}
+      <a class="cta" href="${frontendBase}/logbook/pro">Open RSF Pro</a>
+      <p style="margin-top: 22px;">If you have questions, reply to this email and the RSF team will help.</p>
+    </div>
+    <div class="footer">Ready Set Fly account update</div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  const text = `
+RSF has upgraded your account to ${tierLabel}
+
+Hi ${firstName},
+
+Ready Set Fly has granted your account ${tierLabel} access for ${data.durationDays} day${data.durationDays === 1 ? "" : "s"} so you can experience the full workflow.
+
+Access level: ${tierLabel}
+Access ends: ${endsAtLabel}
+
+During this access window, you can explore the full RSF Pro experience including saved workflow, planning continuity, training history, and the broader premium toolset tied to your account.${reasonText}
+
+Open RSF Pro: ${frontendBase}/logbook/pro
+
+If you have questions, reply to this email and the RSF team will help.
+  `.trim();
+
+  try {
+    await resend.emails.send({
+      from: supportFrom,
+      replyTo: supportFrom,
+      to: data.email,
+      subject: `RSF upgraded your account to ${tierLabel}`,
+      html,
+      text,
+    });
+  } catch (error) {
+    console.error("Failed to send membership grant email:", error);
+    throw error;
+  }
+}
+
 export async function sendAdminInviteEmail(data: {
   email: string;
   inviteToken: string;

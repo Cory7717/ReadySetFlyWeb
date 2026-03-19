@@ -12,24 +12,24 @@ export type MembershipPlanOption = {
 export const membershipTierInfo: Record<MembershipTier, { title: string; subtitle: string; features: string[] }> = {
   pro: {
     title: "RSF Pro (Core)",
-    subtitle: "Save your planning and logbook workflow after a 14-day trial.",
+    subtitle: "For active pilots who want saved workflow, cleaner records, and fewer repeat steps.",
     features: [
-      "14-day free trial on the monthly plan to test the full workflow before you pay.",
-      "Save flight plans, aircraft profiles, and digital logbook entries with cloud sync.",
-      "Currency tracking with alerts (medical, flight review, IPC) and instructor sign-offs.",
-      "Saved training progress, radio comms scoring history, and export-ready summaries.",
-      "10% listing-fee discount on traditional marketplace listings.",
+      "Keep saved flight plans, aircraft profiles, and digital logbook entries synced across devices.",
+      "Stop rebuilding repeat trips by reusing planning setups, notes, and saved aircraft assumptions.",
+      "Track currency, medical, flight review, and IPC deadlines without a spreadsheet.",
+      "Keep radio comms practice history, training progress, and export-ready summaries in one place.",
+      "Includes a 14-day free monthly trial so pilots can test the workflow before paying.",
     ],
   },
   pro_plus: {
     title: "RSF Pro+ (Advanced / Power Pilot)",
-    subtitle: "Advanced planning workspace for heavier-use pilots.",
+    subtitle: "For heavier-use pilots who want deeper planning context and power-user tooling.",
     features: [
-      "Everything in RSF Pro (Core).",
-      "14-day free trial on the monthly plan before billing starts.",
-      "Advanced planning overlays and power-user tooling as they ship.",
-      "Priority access to beta releases and higher-end workflow tools.",
-      "20% listing-fee discount on traditional marketplace listings.",
+      "Everything in RSF Pro (Core), plus higher-end planning support as advanced tooling ships.",
+      "Best fit for repeat IFR planning, workflow depth, and heavier training volume.",
+      "Priority access to beta releases, advanced overlays, and new power-pilot features.",
+      "Keeps your planning, training, and records workflow under one paid tier instead of scattered tools.",
+      "Includes a 14-day free monthly trial before billing starts.",
     ],
   },
 };

@@ -24,7 +24,7 @@ import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfIS
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
-import { getCrmLeadSalesEmailHtml, getCrmLeadSalesEmailSubject, getCrmLeadSalesEmailText, getCrmPlatformOverviewEmailHtml, getCrmPlatformOverviewEmailSubject, getCrmPlatformOverviewEmailText, sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail } from "./email-templates";
+import { getCrmLeadSalesEmailHtml, getCrmLeadSalesEmailSubject, getCrmLeadSalesEmailText, getCrmPlatformOverviewEmailHtml, getCrmPlatformOverviewEmailSubject, getCrmPlatformOverviewEmailText, sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail, sendMembershipGrantEmail } from "./email-templates";
 import { ADMIN_PERMISSIONS, ADMIN_ROLE_PERMISSIONS, normalizeAdminPermissions, type AdminPermission, type AdminRole } from "@shared/config/adminAccess";
 import { canSendEmail, logger as crmLogger } from "./crmEmailSuppression";
 import { buildCrmLeadTemplateCsv, buildCrmLeadTemplateXlsx, findCrmLeadImportDuplicates, mapImportedCrmLeadRows, mergeImportedLeadData, parseCrmLeadImportFile } from "./crmLeadImport";
@@ -9308,6 +9308,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         membershipGrantGrantedAt: now,
         membershipGrantReason: reason,
       });
+
+      const tierLabel = tier === "pro_plus" ? "RSF Pro+" : "RSF Pro Core";
+      await storage.createUserNotification({
+        userId: req.params.userId,
+        type: "membership_grant",
+        title: `${tierLabel} access granted`,
+        message: `RSF upgraded your account to ${tierLabel} for ${durationDays} day${durationDays === 1 ? "" : "s"}. Access is scheduled to end on ${grantEndsAt.toLocaleString()}.`,
+        channels: targetUser.email ? ["in_app", "email"] : ["in_app"],
+        referenceDate: null,
+        meta: {
+          tier,
+          durationDays,
+          grantEndsAt: grantEndsAt.toISOString(),
+          grantedBy: String(adminId),
+          reason: reason || undefined,
+        },
+      });
+
+      if (targetUser.email) {
+        void sendMembershipGrantEmail({
+          email: targetUser.email,
+          firstName: targetUser.firstName,
+          tier,
+          durationDays,
+          endsAt: grantEndsAt,
+          reason,
+        }).catch((error) => {
+          console.error("Membership grant email delivery failed:", error);
+        });
+      }
 
       res.json({
         membershipGrantTier: tier,

@@ -1252,6 +1252,8 @@ export const crmLeads = pgTable("crm_leads", {
   // Additional context
   notes: text("notes"),
   tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  marketingEmailOptOutAt: timestamp("marketing_email_opt_out_at"),
+  salesEmailLastSentAt: timestamp("sales_email_last_sent_at"),
   
   // Conversion tracking
   convertedToContactId: varchar("converted_to_contact_id"),
@@ -2310,6 +2312,8 @@ export const insertCrmLeadSchema = createInsertSchema(crmLeads).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  marketingEmailOptOutAt: true,
+  salesEmailLastSentAt: true,
   convertedToContactId: true,
   convertedToDealId: true,
   convertedAt: true,

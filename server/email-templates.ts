@@ -1,3 +1,5 @@
+import type { LeadCategory } from "@shared/schema";
+
 export function getListingReminderEmailHtml(userName: string, aircraftCount: number, marketplaceCount: number): string {
   const totalListings = aircraftCount + marketplaceCount;
   const dashboardUrl = process.env.APP_BASE_URL || process.env.WEB_BASE_URL || "https://readysetfly.us";
@@ -1358,6 +1360,271 @@ Start your trial: ${appUrl}/logbook-pro
 
 Monthly plans start at $5.99 after the free trial. Cancel any time before renewal.
 Unsubscribe: ${data.unsubscribeUrl}
+  `.trim();
+}
+
+type CrmSalesEmailTemplateData = {
+  firstName: string;
+  company?: string | null;
+  unsubscribeUrl: string;
+};
+
+type CrmSalesEmailConfig = {
+  subject: string;
+  headline: string;
+  intro: string;
+  bullets: string[];
+  ctaLabel: string;
+  ctaUrl: string;
+  browseUrl?: string;
+  browseLabel?: string;
+};
+
+const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
+  aircraft_sales: {
+    subject: "List your aircraft on Ready Set Fly",
+    headline: "Put your aircraft listing in front of active pilots",
+    intro: "Ready Set Fly gives aircraft sellers a direct way to showcase inventory, photos, specs, and contact details in one place.",
+    bullets: [
+      "Highlight aircraft details and photos in a dedicated listing",
+      "Reach pilots and buyers already browsing aviation inventory",
+      "Make it easy for interested buyers to contact your team",
+    ],
+    ctaLabel: "Create Aircraft Listing",
+    ctaUrl: "/create-marketplace-listing",
+    browseLabel: "View aircraft listings",
+    browseUrl: "/marketplace?category=aircraft-sale",
+  },
+  aviation_jobs: {
+    subject: "Post your aviation jobs on Ready Set Fly",
+    headline: "Reach aviation talent from one marketplace listing",
+    intro: "Use Ready Set Fly to publish aviation openings and connect with pilots, mechanics, and support staff already using the platform.",
+    bullets: [
+      "Share job details, location, and application instructions",
+      "Reach aviation professionals searching for their next role",
+      "Keep your openings visible in a category built for aviation employers",
+    ],
+    ctaLabel: "Post Aviation Job",
+    ctaUrl: "/create-marketplace-listing",
+    browseLabel: "View aviation jobs",
+    browseUrl: "/marketplace?category=job",
+  },
+  flight_schools: {
+    subject: "List your flight school on Ready Set Fly",
+    headline: "Showcase your flight school to Ready Set Fly pilots",
+    intro: "Create a marketplace listing for your flight school so prospective students can find your programs, location, and contact information quickly.",
+    bullets: [
+      "Promote discovery flights, training programs, and school details",
+      "Give future students a single place to learn about your operation",
+      "Capture inbound interest from pilots already browsing the marketplace",
+    ],
+    ctaLabel: "List Flight School",
+    ctaUrl: "/create-marketplace-listing",
+    browseLabel: "View flight schools",
+    browseUrl: "/marketplace?category=flight-school",
+  },
+  rentals: {
+    subject: "List your aircraft rental on Ready Set Fly",
+    headline: "Put your rental aircraft in front of verified pilots",
+    intro: "Ready Set Fly helps rental operators present aircraft availability, pricing, and contact details to pilots looking for their next booking.",
+    bullets: [
+      "Create a dedicated rental listing with aircraft details and photos",
+      "Reach pilots searching for rental options on the platform",
+      "Keep inquiries and listing information in one workflow",
+    ],
+    ctaLabel: "List Rental Aircraft",
+    ctaUrl: "/list-aircraft",
+    browseLabel: "Browse rental marketplace",
+    browseUrl: "/rentals",
+  },
+  cfi_services: {
+    subject: "List your CFI services on Ready Set Fly",
+    headline: "Promote your instruction services to active students and pilots",
+    intro: "Ready Set Fly lets instructors publish their services, ratings, and home base so pilots can find the right fit faster.",
+    bullets: [
+      "Highlight ratings, specialties, and service area",
+      "Create a profile that students can find from the marketplace and CFI directory",
+      "Give pilots a simple way to reach out and book interest",
+    ],
+    ctaLabel: "List CFI Services",
+    ctaUrl: "/create-marketplace-listing",
+    browseLabel: "View CFI listings",
+    browseUrl: "/marketplace?category=cfi",
+  },
+  charter_services: {
+    subject: "List your charter company on Ready Set Fly",
+    headline: "Showcase your charter service where pilots and travelers are browsing",
+    intro: "Create a charter marketplace listing that makes your fleet, service area, and contact details easy to discover on Ready Set Fly.",
+    bullets: [
+      "Feature your charter company in a dedicated aviation marketplace category",
+      "Share fleet highlights, service area, and contact information",
+      "Turn marketplace traffic into qualified charter inquiries",
+    ],
+    ctaLabel: "List Charter Company",
+    ctaUrl: "/create-marketplace-listing",
+    browseLabel: "View charter listings",
+    browseUrl: "/marketplace?category=charter",
+  },
+  mechanic_services: {
+    subject: "List your mechanic services on Ready Set Fly",
+    headline: "Help aircraft owners find your maintenance services",
+    intro: "Ready Set Fly gives mechanics and maintenance shops a straightforward listing page to highlight services, location, and contact information.",
+    bullets: [
+      "Promote your maintenance specialties and service area",
+      "Reach owners and operators looking for trusted support",
+      "Keep your business visible in a mechanic-specific marketplace category",
+    ],
+    ctaLabel: "List Mechanic Services",
+    ctaUrl: "/create-marketplace-listing",
+    browseLabel: "View mechanic listings",
+    browseUrl: "/marketplace?category=mechanic",
+  },
+  banner_ads: {
+    subject: "Advertise your aviation business on Ready Set Fly",
+    headline: "Promote your brand across the Ready Set Fly audience",
+    intro: "Banner campaigns on Ready Set Fly put your business in front of pilots across the marketplace, directory, and tool surfaces.",
+    bullets: [
+      "Choose placements that match the audience you want to reach",
+      "Use branded artwork or video to promote offers and awareness",
+      "Add a measurable marketing channel focused on aviation users",
+    ],
+    ctaLabel: "View Advertising Options",
+    ctaUrl: "/banner-advertise",
+  },
+  marketplace_services: {
+    subject: "List your aviation service on Ready Set Fly",
+    headline: "Add your service business to the Ready Set Fly marketplace",
+    intro: "If your business serves pilots or aircraft owners, a marketplace listing is the fastest way to get in front of the right audience on Ready Set Fly.",
+    bullets: [
+      "Create a focused listing around the service you offer",
+      "Keep business details, contact info, and description in one place",
+      "Turn marketplace discovery into qualified inbound leads",
+    ],
+    ctaLabel: "Create Service Listing",
+    ctaUrl: "/create-marketplace-listing",
+    browseLabel: "Open marketplace",
+    browseUrl: "/marketplace",
+  },
+  sponsorships: {
+    subject: "Sponsor Ready Set Fly and reach more pilots",
+    headline: "Put your aviation brand in front of the Ready Set Fly audience",
+    intro: "Ready Set Fly sponsorships help aviation businesses build awareness across high-intent surfaces where pilots already spend time.",
+    bullets: [
+      "Explore sponsor placements across marketplace and tool pages",
+      "Position your brand alongside aviation-focused content and listings",
+      "Create a repeatable way to reach active pilots and operators",
+    ],
+    ctaLabel: "Explore Sponsorship Options",
+    ctaUrl: "/banner-advertise",
+  },
+  other: {
+    subject: "Promote your aviation business on Ready Set Fly",
+    headline: "Get your business in front of the Ready Set Fly audience",
+    intro: "Ready Set Fly helps aviation businesses create visibility with listings and advertising options built for pilots, students, and operators.",
+    bullets: [
+      "Create a listing or promotion that matches your business model",
+      "Reach aviation users already browsing for services and opportunities",
+      "Keep your contact details and offer visible in one place",
+    ],
+    ctaLabel: "Explore Ready Set Fly",
+    ctaUrl: "/marketplace",
+  },
+};
+
+function getMarketingAppUrl() {
+  return process.env.FRONTEND_BASE_URL || process.env.APP_BASE_URL || process.env.WEB_BASE_URL || "https://readysetfly.us";
+}
+
+function getCrmSalesEmailConfig(category: LeadCategory): CrmSalesEmailConfig {
+  return CRM_SALES_EMAIL_CONFIG[category] ?? CRM_SALES_EMAIL_CONFIG.other;
+}
+
+function getRecipientName(firstName: string, company?: string | null) {
+  return firstName?.trim() || company?.trim() || "there";
+}
+
+export function getCrmLeadSalesEmailSubject(category: LeadCategory): string {
+  return getCrmSalesEmailConfig(category).subject;
+}
+
+export function getCrmLeadSalesEmailHtml(
+  category: LeadCategory,
+  data: CrmSalesEmailTemplateData,
+): string {
+  const appUrl = getMarketingAppUrl();
+  const config = getCrmSalesEmailConfig(category);
+  const recipientName = getRecipientName(data.firstName, data.company);
+  const ctaUrl = `${appUrl}${config.ctaUrl}`;
+  const browseUrl = config.browseUrl ? `${appUrl}${config.browseUrl}` : "";
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
+    .container { max-width: 640px; margin: 0 auto; padding: 24px; }
+    .card { background: #ffffff; border-radius: 12px; padding: 28px; border: 1px solid #e5e7eb; }
+    .header { background: linear-gradient(135deg, #0f172a, #1d4ed8); color: #ffffff; border-radius: 10px; padding: 20px 24px; }
+    .cta { display: inline-block; background: #1d4ed8; color: #ffffff !important; padding: 12px 18px; border-radius: 8px; text-decoration: none; font-weight: 700; }
+    .secondary { display: inline-block; margin-top: 12px; color: #1d4ed8; text-decoration: none; font-weight: 600; }
+    .list { margin: 16px 0; padding-left: 18px; }
+    .note { margin-top: 22px; font-size: 12px; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="header">
+        <h2 style="margin: 0;">${config.headline}</h2>
+      </div>
+      <p style="margin-top: 20px;">Hi ${recipientName},</p>
+      <p>${config.intro}</p>
+      <ul class="list">
+        ${config.bullets.map((bullet) => `<li>${bullet}</li>`).join("")}
+      </ul>
+      <div style="margin-top: 20px;">
+        <a class="cta" href="${ctaUrl}">${config.ctaLabel}</a>
+      </div>
+      ${browseUrl && config.browseLabel ? `<div><a class="secondary" href="${browseUrl}">${config.browseLabel}</a></div>` : ""}
+      <p style="margin-top: 20px;">If you would rather not receive sales emails from Ready Set Fly, you can <a href="${data.unsubscribeUrl}">unsubscribe</a>.</p>
+      <p class="note">
+        This message was sent because your business was added as a CRM lead for Ready Set Fly.<br />
+        <a href="${data.unsubscribeUrl}">Unsubscribe</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+}
+
+export function getCrmLeadSalesEmailText(
+  category: LeadCategory,
+  data: CrmSalesEmailTemplateData,
+): string {
+  const appUrl = getMarketingAppUrl();
+  const config = getCrmSalesEmailConfig(category);
+  const recipientName = getRecipientName(data.firstName, data.company);
+  const ctaUrl = `${appUrl}${config.ctaUrl}`;
+  const browseLine = config.browseUrl && config.browseLabel
+    ? `\n${config.browseLabel}: ${appUrl}${config.browseUrl}`
+    : "";
+
+  return `
+${config.headline}
+
+Hi ${recipientName},
+
+${config.intro}
+
+${config.bullets.map((bullet) => `- ${bullet}`).join("\n")}
+
+${config.ctaLabel}: ${ctaUrl}${browseLine}
+
+If you would rather not receive sales emails from Ready Set Fly, unsubscribe here:
+${data.unsubscribeUrl}
   `.trim();
 }
 

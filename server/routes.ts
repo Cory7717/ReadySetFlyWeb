@@ -18,13 +18,13 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, type BannerAdOrder, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type PromoCode } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, type BannerAdOrder, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type PromoCode } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
-import { sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail } from "./email-templates";
+import { getCrmLeadSalesEmailHtml, getCrmLeadSalesEmailSubject, getCrmLeadSalesEmailText, sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail } from "./email-templates";
 import { ADMIN_PERMISSIONS, ADMIN_ROLE_PERMISSIONS, normalizeAdminPermissions, type AdminPermission, type AdminRole } from "@shared/config/adminAccess";
 import registerMobileAuthRoutes from "./mobile-auth-routes";
 import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
@@ -6214,29 +6214,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const payload = verifyMarketingToken(token);
-      if (!payload || payload.action !== "weekly_opt_out" || !payload.userId) {
+      if (!payload || typeof payload.action !== "string") {
         return res.status(400).send("Invalid or expired unsubscribe token.");
       }
 
-      const updated = await storage.updateUser(String(payload.userId), {
-        weeklyEmailOptIn: false,
-        weeklyEmailOptOutAt: new Date(),
-      });
+      if (payload.action === "weekly_opt_out" && payload.userId) {
+        const updated = await storage.updateUser(String(payload.userId), {
+          weeklyEmailOptIn: false,
+          weeklyEmailOptOutAt: new Date(),
+        });
 
-      if (!updated) {
-        return res.status(404).send("User not found.");
+        if (!updated) {
+          return res.status(404).send("User not found.");
+        }
+
+        return res.status(200).send(`
+          <!DOCTYPE html>
+          <html>
+            <head><meta charset="utf-8"><title>Unsubscribed</title></head>
+            <body style="font-family: Arial, sans-serif; padding: 24px;">
+              <h2>You are unsubscribed.</h2>
+              <p>You will no longer receive weekly Ready Set Fly emails.</p>
+            </body>
+          </html>
+        `);
       }
 
-      res.status(200).send(`
-        <!DOCTYPE html>
-        <html>
-          <head><meta charset="utf-8"><title>Unsubscribed</title></head>
-          <body style="font-family: Arial, sans-serif; padding: 24px;">
-            <h2>You are unsubscribed.</h2>
-            <p>You will no longer receive weekly Ready Set Fly emails.</p>
-          </body>
-        </html>
-      `);
+      if (payload.action === "crm_sales_opt_out" && payload.leadId) {
+        const updatedLead = await storage.updateLead(String(payload.leadId), {
+          marketingEmailOptOutAt: new Date(),
+        });
+
+        if (!updatedLead) {
+          return res.status(404).send("Lead not found.");
+        }
+
+        return res.status(200).send(`
+          <!DOCTYPE html>
+          <html>
+            <head><meta charset="utf-8"><title>Unsubscribed</title></head>
+            <body style="font-family: Arial, sans-serif; padding: 24px;">
+              <h2>You are unsubscribed.</h2>
+              <p>You will no longer receive Ready Set Fly sales outreach for this lead.</p>
+            </body>
+          </html>
+        `);
+      }
+
+      return res.status(400).send("Invalid or expired unsubscribe token.");
     } catch (error) {
       console.error("Unsubscribe error:", error);
       res.status(500).send("Unable to process unsubscribe request.");
@@ -9820,6 +9845,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(lead);
     } catch (error) {
       res.status(500).json({ error: "Failed to update lead" });
+    }
+  });
+
+  app.post("/api/crm/leads/:id/send-sales-email", isAuthenticated, isSuperAdmin, async (req, res) => {
+    try {
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+
+      if (!lead.email) {
+        return res.status(400).json({ error: "Lead is missing an email address" });
+      }
+
+      if (lead.marketingEmailOptOutAt) {
+        return res.status(409).json({ error: "Lead has unsubscribed from CRM sales emails" });
+      }
+
+      const category = (lead.category || "other") as LeadCategory;
+      const token = signMarketingToken({
+        action: "crm_sales_opt_out",
+        leadId: lead.id,
+        email: lead.email,
+      });
+      const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+      const { client, fromEmail } = await getUncachableResendClient();
+
+      await client.emails.send({
+        from: fromEmail,
+        to: lead.email,
+        subject: getCrmLeadSalesEmailSubject(category),
+        html: getCrmLeadSalesEmailHtml(category, {
+          firstName: lead.firstName,
+          company: lead.company,
+          unsubscribeUrl,
+        }),
+        text: getCrmLeadSalesEmailText(category, {
+          firstName: lead.firstName,
+          company: lead.company,
+          unsubscribeUrl,
+        }),
+      });
+
+      const updatedLead = await storage.updateLead(lead.id, {
+        salesEmailLastSentAt: new Date(),
+      });
+
+      res.json({
+        success: true,
+        lead: updatedLead ?? lead,
+      });
+    } catch (error: any) {
+      console.error("Failed to send CRM sales email:", error);
+      res.status(500).json({ error: error?.message || "Failed to send sales email" });
     }
   });
 

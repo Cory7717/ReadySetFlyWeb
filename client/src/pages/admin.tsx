@@ -858,6 +858,24 @@ export default function AdminDashboard() {
     },
   });
 
+  const sendLeadSalesEmailMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("POST", `/api/crm/leads/${id}/send-sales-email`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
+      toast({ title: "Sales email sent" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to send sales email",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   // Expense mutations
   const createExpenseMutation = useMutation({
     mutationFn: async (data: InsertExpense) => {
@@ -4247,7 +4265,35 @@ export default function AdminDashboard() {
                               {lead.status}
                             </Badge>
                           </td>
-                          <td className="p-3 text-sm text-muted-foreground">{lead.source || "-"}</td>
+                          <td className="p-3">
+                            <div className="flex flex-col items-start gap-2">
+                              <span className="text-sm text-muted-foreground">{lead.source || "-"}</span>
+                              {isSuperAdmin && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8"
+                                  onClick={() => sendLeadSalesEmailMutation.mutate(lead.id)}
+                                  disabled={sendLeadSalesEmailMutation.isPending || Boolean(lead.marketingEmailOptOutAt)}
+                                  data-testid={`button-send-sales-email-${lead.id}`}
+                                >
+                                  <Mail className="h-3.5 w-3.5 mr-2" />
+                                  {sendLeadSalesEmailMutation.isPending && sendLeadSalesEmailMutation.variables === lead.id
+                                    ? "Sending..."
+                                    : "Send Sales Email"}
+                                </Button>
+                              )}
+                              {lead.marketingEmailOptOutAt ? (
+                                <span className="text-xs text-destructive">
+                                  Unsubscribed {format(parseISO(String(lead.marketingEmailOptOutAt)), "MMM d, yyyy")}
+                                </span>
+                              ) : lead.salesEmailLastSentAt ? (
+                                <span className="text-xs text-muted-foreground">
+                                  Last sent {format(parseISO(String(lead.salesEmailLastSentAt)), "MMM d, yyyy")}
+                                </span>
+                              ) : null}
+                            </div>
+                          </td>
                           <td className="p-3">
                             <div className="flex items-center justify-end gap-2">
                               <Button

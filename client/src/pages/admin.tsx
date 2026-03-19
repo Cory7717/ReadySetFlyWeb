@@ -85,17 +85,70 @@ const CRM_LEAD_CATEGORY_LABELS: Record<LeadCategory, string> = {
   other: "Other",
 };
 
-const CRM_SALES_TEMPLATE_LABELS: Record<CrmSalesEmailTemplateType, string> = {
-  new_listing: "New Listing Outreach",
-  relist: "Relist / Reactivate",
-  promo_offer: "Promo Offer",
-};
+function getCrmDirectPitchLabel(category?: LeadCategory) {
+  switch (category) {
+    case "aircraft_sales":
+      return "List Aircraft for Sale";
+    case "aviation_jobs":
+      return "Post Aviation Jobs";
+    case "flight_schools":
+      return "List Flight School";
+    case "rentals":
+      return "List Aircraft for Rent";
+    case "cfi_services":
+      return "List CFI Services";
+    case "charter_services":
+      return "List Charter Company";
+    case "mechanic_services":
+      return "List Mechanic Services";
+    case "banner_ads":
+      return "Advertise on RSF";
+    case "marketplace_services":
+      return "List Aviation Service";
+    case "sponsorships":
+      return "Sponsor Ready Set Fly";
+    default:
+      return "List Your Business";
+  }
+}
 
-const CRM_SALES_TEMPLATE_DESCRIPTIONS: Record<CrmSalesEmailTemplateType, string> = {
-  new_listing: "Best for first-touch outreach to get a new listing or campaign live.",
-  relist: "Best for restarting a stale listing, relaunching, or re-engaging an older lead.",
-  promo_offer: "Best when you want to include a current promo code or limited-time incentive.",
-};
+function getCrmSalesTemplateLabel(templateType: CrmSalesEmailTemplateType, category?: LeadCategory) {
+  switch (templateType) {
+    case "initial_outreach":
+      return "Initial Outreach";
+    case "direct_pitch":
+      return getCrmDirectPitchLabel(category);
+    case "partnership_pitch":
+      return "Partnership / Cross-Listing";
+    case "relist":
+      return "Relist / Reactivate";
+    case "promo_offer":
+      return "Promo Offer";
+    default:
+      return "Sales Email";
+  }
+}
+
+function getCrmSalesTemplateDescription(templateType: CrmSalesEmailTemplateType, category?: LeadCategory) {
+  switch (templateType) {
+    case "initial_outreach":
+      return category === "rentals"
+        ? "Best for a first-touch email introducing Ready Set Fly and inviting operators to list aircraft for rent."
+        : "Best for a first-touch email that introduces Ready Set Fly and explains the category-specific value.";
+    case "direct_pitch":
+      return category === "rentals"
+        ? "Best when you want a direct rentals listing ask focused on getting aircraft availability onto the marketplace."
+        : "Best when you want a direct CTA to launch a listing, profile, ad, or sponsorship.";
+    case "partnership_pitch":
+      return "Best for directories, associations, publishers, brokerages, or operators where a partnership, referral, or cross-listing angle fits better than a simple listing ask.";
+    case "relist":
+      return "Best for restarting a stale listing, relaunching, or re-engaging an older lead.";
+    case "promo_offer":
+      return "Best when you want to include a current promo code or limited-time incentive.";
+    default:
+      return "";
+  }
+}
 
 type CrmSalesEmailPreview = {
   subject: string;
@@ -454,7 +507,7 @@ export default function AdminDashboard() {
   const [crmCampaignCategory, setCrmCampaignCategory] = useState<LeadCategory>("aircraft_sales");
   const [crmCampaignStatus, setCrmCampaignStatus] = useState<LeadStatus>("new");
   const [crmCampaignCooldownDays, setCrmCampaignCooldownDays] = useState<(typeof CRM_CAMPAIGN_COOLDOWN_OPTIONS)[number]>(45);
-  const [crmCampaignTemplateType, setCrmCampaignTemplateType] = useState<CrmSalesEmailTemplateType>("new_listing");
+  const [crmCampaignTemplateType, setCrmCampaignTemplateType] = useState<CrmSalesEmailTemplateType>("initial_outreach");
   const [crmCampaignSubjectOverride, setCrmCampaignSubjectOverride] = useState("");
   const [crmCampaignIntroOverride, setCrmCampaignIntroOverride] = useState("");
   const [crmCampaignCustomNote, setCrmCampaignCustomNote] = useState("");
@@ -467,7 +520,7 @@ export default function AdminDashboard() {
   const deferredCrmCampaignPromoDetails = useDeferredValue(crmCampaignPromoDetails);
   const [salesEmailDialogOpen, setSalesEmailDialogOpen] = useState(false);
   const [selectedSalesLead, setSelectedSalesLead] = useState<CrmLead | null>(null);
-  const [salesEmailTemplateType, setSalesEmailTemplateType] = useState<CrmSalesEmailTemplateType>("new_listing");
+  const [salesEmailTemplateType, setSalesEmailTemplateType] = useState<CrmSalesEmailTemplateType>("initial_outreach");
   const [salesEmailGreetingName, setSalesEmailGreetingName] = useState("");
   const [salesEmailSubjectOverride, setSalesEmailSubjectOverride] = useState("");
   const [salesEmailIntroOverride, setSalesEmailIntroOverride] = useState("");
@@ -2282,7 +2335,7 @@ export default function AdminDashboard() {
 
   const handleOpenSalesEmailDialog = (lead: CrmLead) => {
     setSelectedSalesLead(lead);
-    setSalesEmailTemplateType("new_listing");
+    setSalesEmailTemplateType("initial_outreach");
     setSalesEmailGreetingName("");
     setSalesEmailSubjectOverride("");
     setSalesEmailIntroOverride("");
@@ -2451,7 +2504,7 @@ export default function AdminDashboard() {
     setCrmCampaignCategory("aircraft_sales");
     setCrmCampaignStatus("new");
     setCrmCampaignCooldownDays(45);
-    setCrmCampaignTemplateType("new_listing");
+    setCrmCampaignTemplateType("initial_outreach");
     setCrmCampaignSubjectOverride("");
     setCrmCampaignIntroOverride("");
     setCrmCampaignCustomNote("");
@@ -2466,7 +2519,7 @@ export default function AdminDashboard() {
     setCrmCampaignCategory("aircraft_sales");
     setCrmCampaignStatus("new");
     setCrmCampaignCooldownDays(45);
-    setCrmCampaignTemplateType("new_listing");
+    setCrmCampaignTemplateType("initial_outreach");
     setCrmCampaignSubjectOverride("");
     setCrmCampaignIntroOverride("");
     setCrmCampaignCustomNote("");
@@ -2477,7 +2530,7 @@ export default function AdminDashboard() {
   const handleCloseSalesEmailDialog = () => {
     setSalesEmailDialogOpen(false);
     setSelectedSalesLead(null);
-    setSalesEmailTemplateType("new_listing");
+    setSalesEmailTemplateType("initial_outreach");
     setSalesEmailGreetingName("");
     setSalesEmailSubjectOverride("");
     setSalesEmailIntroOverride("");
@@ -5087,7 +5140,7 @@ export default function AdminDashboard() {
               {!leadsLoading && filteredLeads.length > 0 && (
                 <div className="border rounded-lg overflow-hidden">
                   <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1180px]">
+                  <table className="w-full min-w-[1040px]">
                     <thead className="bg-muted/50">
                       <tr className="border-b">
                         <th className="text-left p-3 font-medium text-sm">Name</th>
@@ -5096,8 +5149,8 @@ export default function AdminDashboard() {
                         <th className="text-left p-3 font-medium text-sm">Category</th>
                         <th className="text-left p-3 font-medium text-sm">Status</th>
                         <th className="text-left p-3 font-medium text-sm">Source</th>
-                        <th className="text-left p-3 font-medium text-sm min-w-[220px]">Sales Email</th>
-                        <th className="text-right p-3 font-medium text-sm min-w-[110px]">Actions</th>
+                        <th className="text-left p-3 font-medium text-sm min-w-[160px]">Sales Email</th>
+                        <th className="text-right p-3 font-medium text-sm min-w-[88px]">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -5136,12 +5189,12 @@ export default function AdminDashboard() {
                           </td>
                           <td className="p-3 text-sm text-muted-foreground">{lead.source || "-"}</td>
                           <td className="p-3">
-                            <div className="flex flex-col items-start gap-2">
+                            <div className="flex min-w-[150px] flex-col items-start gap-1.5">
                               {isSuperAdmin ? (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  className="h-8"
+                                  className="h-8 px-2.5 text-xs"
                                   onClick={() => handleOpenSalesEmailDialog(lead)}
                                   disabled={sendLeadSalesEmailMutation.isPending || Boolean(lead.emailUnsubscribed || lead.marketingEmailOptOutAt)}
                                   data-testid={`button-send-sales-email-${lead.id}`}
@@ -5149,18 +5202,18 @@ export default function AdminDashboard() {
                                   <Mail className="h-3.5 w-3.5 mr-2" />
                                   {sendLeadSalesEmailMutation.isPending && sendLeadSalesEmailMutation.variables?.id === lead.id
                                     ? "Sending..."
-                                    : "Send Sales Email"}
+                                    : "Send Email"}
                                 </Button>
                               ) : (
                                 <span className="text-sm text-muted-foreground">-</span>
                               )}
                               {(lead.emailUnsubscribedAt || lead.marketingEmailOptOutAt) ? (
-                                <span className="text-xs text-destructive">
-                                  Unsubscribed {format(parseISO(String(lead.emailUnsubscribedAt || lead.marketingEmailOptOutAt)), "MMM d, yyyy h:mm a")}
+                                <span className="text-xs leading-tight text-destructive">
+                                  Opted out {format(parseISO(String(lead.emailUnsubscribedAt || lead.marketingEmailOptOutAt)), "MMM d, h:mm a")}
                                 </span>
                               ) : lead.salesEmailLastSentAt ? (
-                                <span className="text-xs text-muted-foreground">
-                                  Last sent {format(parseISO(String(lead.salesEmailLastSentAt)), "MMM d, yyyy h:mm a")}
+                                <span className="text-xs leading-tight text-muted-foreground">
+                                  Sent {format(parseISO(String(lead.salesEmailLastSentAt)), "MMM d, h:mm a")}
                                 </span>
                               ) : null}
                             </div>
@@ -8347,16 +8400,22 @@ export default function AdminDashboard() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {crmSalesEmailTemplateTypes.map((templateType) => (
-                          <SelectItem key={templateType} value={templateType}>
-                            {CRM_SALES_TEMPLATE_LABELS[templateType]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {CRM_SALES_TEMPLATE_DESCRIPTIONS[crmCampaignTemplateType]}
-                    </p>
+                            {crmSalesEmailTemplateTypes.map((templateType) => (
+                              <SelectItem key={templateType} value={templateType}>
+                                {getCrmSalesTemplateLabel(
+                                  templateType,
+                                  crmCampaignAudienceType === "by_category" ? crmCampaignCategory : undefined,
+                                )}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          {getCrmSalesTemplateDescription(
+                            crmCampaignTemplateType,
+                            crmCampaignAudienceType === "by_category" ? crmCampaignCategory : undefined,
+                          )}
+                        </p>
                   </div>
 
                   <div className="space-y-2">
@@ -8704,13 +8763,19 @@ export default function AdminDashboard() {
                   <SelectContent>
                     {crmSalesEmailTemplateTypes.map((templateType) => (
                       <SelectItem key={templateType} value={templateType}>
-                        {CRM_SALES_TEMPLATE_LABELS[templateType]}
+                        {getCrmSalesTemplateLabel(
+                          templateType,
+                          (selectedSalesLead?.category as LeadCategory | undefined) || undefined,
+                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {CRM_SALES_TEMPLATE_DESCRIPTIONS[salesEmailTemplateType]}
+                  {getCrmSalesTemplateDescription(
+                    salesEmailTemplateType,
+                    (selectedSalesLead?.category as LeadCategory | undefined) || undefined,
+                  )}
                 </p>
               </div>
 

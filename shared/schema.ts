@@ -28,7 +28,7 @@ export const leadCategories = [
   "sponsorships",
   "other",
 ] as const;
-export const crmSalesEmailTemplateTypes = ["new_listing", "relist", "promo_offer"] as const;
+export const crmSalesEmailTemplateTypes = ["initial_outreach", "direct_pitch", "partnership_pitch", "relist", "promo_offer"] as const;
 export const flightPlanFilingStatuses = ["draft", "staged", "filed", "activated", "cancelled", "closed"] as const;
 export const flightPlanFilingActions = ["file", "amend", "activate", "cancel", "close"] as const;
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;

@@ -1729,12 +1729,299 @@ function getPromoCopy(data: CrmSalesEmailTemplateData) {
   return { promoCode, promoDetails };
 }
 
+type CrmSalesEmailVariantOverride = Partial<Omit<CrmSalesEmailConfig, "kind">>;
+
+function applyCrmLeadVariantConfig(
+  base: CrmSalesEmailConfig,
+  override: CrmSalesEmailVariantOverride,
+): CrmSalesEmailConfig {
+  return {
+    ...base,
+    ...override,
+    bullets: override.bullets ?? base.bullets,
+  };
+}
+
+function getInitialOutreachLeadOverride(category: LeadCategory): CrmSalesEmailVariantOverride {
+  switch (category) {
+    case "aircraft_sales":
+      return {
+        subject: "Would you be open to listing aircraft for sale on Ready Set Fly?",
+        headline: "Put aircraft inventory in front of active aviation buyers",
+        intro: "We are growing Ready Set Fly as a marketplace where pilots and buyers can discover aircraft inventory, compare listings, and contact sellers directly. Your aircraft listings would be a strong fit for that audience.",
+        bullets: [
+          "Show photos, specs, and contact details in a dedicated aircraft listing",
+          "Reach buyers already browsing aviation inventory on the platform",
+          "Create another inbound channel without building a separate campaign page",
+        ],
+      };
+    case "aviation_jobs":
+      return {
+        subject: "Would you like to promote aviation jobs on Ready Set Fly?",
+        headline: "Reach aviation talent already using Ready Set Fly",
+        intro: "Ready Set Fly is building a stronger aviation marketplace for pilots, mechanics, instructors, and operators. We would love to feature your openings where aviation professionals are already spending time.",
+        bullets: [
+          "Post openings with role details, location, and application info",
+          "Reach aviation professionals browsing roles in a niche marketplace",
+          "Keep hiring visibility tied to an aviation-specific audience",
+        ],
+      };
+    case "flight_schools":
+      return {
+        subject: "Would you like to feature your flight school on Ready Set Fly?",
+        headline: "Help future students discover your flight school faster",
+        intro: "We are expanding Ready Set Fly as a destination for pilots and future students to find schools, compare programs, and reach training providers directly. Your school would be a strong fit for that audience.",
+        bullets: [
+          "Promote discovery flights, ratings, and training programs in one place",
+          "Give prospective students a clear page with your location and contact details",
+          "Capture inbound interest from pilots already using Ready Set Fly",
+        ],
+      };
+    case "rentals":
+      return {
+        subject: "Would you like to list aircraft for rent on Ready Set Fly?",
+        headline: "Put your rental aircraft in front of pilots ready to fly",
+        intro: "We are growing Ready Set Fly into a stronger destination for pilots looking for rental aircraft, flying clubs, and training access. We would love to feature your rental fleet on the marketplace.",
+        bullets: [
+          "Show aircraft availability, pricing, photos, and contact details",
+          "Reach pilots actively looking for rental options on the platform",
+          "Create a clean inbound path for rental inquiries and repeat visibility",
+        ],
+      };
+    case "cfi_services":
+      return {
+        subject: "Would you like to promote your instruction services on Ready Set Fly?",
+        headline: "Make it easier for students to find your CFI services",
+        intro: "Ready Set Fly is building a stronger marketplace for active pilots and students. Featuring your instruction services on the platform can help more students find the right instructor faster.",
+        bullets: [
+          "Highlight ratings, specialties, and service area",
+          "Give students a focused place to learn about your instruction offering",
+          "Create another inbound source for flight training demand",
+        ],
+      };
+    case "charter_services":
+      return {
+        subject: "Would you like to list your charter company on Ready Set Fly?",
+        headline: "Showcase your charter operation to a high-intent aviation audience",
+        intro: "We are expanding Ready Set Fly as a marketplace where aviation users can discover charter operators, compare service options, and connect directly. Your charter company would be a strong fit.",
+        bullets: [
+          "Present fleet highlights, service area, and booking contact details",
+          "Stay visible inside a charter-focused marketplace category",
+          "Turn Ready Set Fly traffic into qualified charter inquiries",
+        ],
+      };
+    case "mechanic_services":
+      return {
+        subject: "Would you like to list your maintenance services on Ready Set Fly?",
+        headline: "Help aircraft owners find your maintenance operation",
+        intro: "Ready Set Fly is growing its aviation business marketplace, and maintenance services are an important part of that ecosystem. We would love to feature your shop or independent services on the platform.",
+        bullets: [
+          "Promote specialties, service area, and contact details in one listing",
+          "Reach owners and operators already searching for aviation support",
+          "Build another inbound channel for maintenance work",
+        ],
+      };
+    case "banner_ads":
+      return {
+        subject: "Would you like to advertise across Ready Set Fly?",
+        headline: "Put your aviation brand in front of Ready Set Fly users",
+        intro: "Ready Set Fly offers ad placements across marketplace, planning, and pilot-tool surfaces. If you want more visibility with an aviation audience, we would be happy to show you the available options.",
+        bullets: [
+          "Choose placements aligned with pilots, students, and operators",
+          "Promote a brand, offer, event, or listing with aviation-focused traffic",
+          "Add another measurable channel for aviation audience growth",
+        ],
+      };
+    case "marketplace_services":
+      return {
+        subject: "Would you like to list your aviation service on Ready Set Fly?",
+        headline: "Get your aviation service in front of the right audience",
+        intro: "Ready Set Fly is building a stronger marketplace for aviation businesses that serve pilots, owners, and operators. We would love to feature your service business on the platform.",
+        bullets: [
+          "Create a focused service listing with your core offer and contact details",
+          "Reach users already browsing aviation services and opportunities",
+          "Turn marketplace discovery into qualified inbound leads",
+        ],
+      };
+    case "sponsorships":
+      return {
+        subject: "Would you be open to sponsoring Ready Set Fly?",
+        headline: "Explore sponsorship visibility across Ready Set Fly",
+        intro: "Ready Set Fly gives aviation brands the opportunity to appear alongside marketplace discovery, pilot tools, and planning workflows. If brand visibility is a priority, sponsorship may be a strong fit.",
+        bullets: [
+          "Position your brand across aviation-focused surfaces",
+          "Reach active pilots where they already plan and browse",
+          "Create repeat exposure with a targeted aviation audience",
+        ],
+      };
+    default:
+      return {
+        subject: "Would you like to promote your aviation business on Ready Set Fly?",
+        headline: "Get your business in front of active aviation users",
+        intro: "Ready Set Fly is building a stronger marketplace for aviation businesses, services, and opportunities. We would love to feature your business where pilots and operators are already spending time.",
+        bullets: [
+          "Create a listing, promotion, or campaign that matches your business model",
+          "Reach aviation users already browsing for services and opportunities",
+          "Build visibility with a platform designed around aviation workflows",
+        ],
+      };
+  }
+}
+
+function getPartnershipLeadOverride(category: LeadCategory): CrmSalesEmailVariantOverride {
+  switch (category) {
+    case "aircraft_sales":
+      return {
+        subject: "Would you be open to a cross-listing partnership with Ready Set Fly?",
+        headline: "Explore a cross-listing or referral partnership for aircraft inventory",
+        intro: "If you manage aircraft inventory, a partnership with Ready Set Fly could create another visibility channel for sellers and buyers. We would be open to discussing cross-listing, referral, or promotional opportunities.",
+        bullets: [
+          "Cross-promote inventory to a growing aviation marketplace audience",
+          "Create referral or listing pathways that fit your current workflow",
+          "Explore a partnership structure that benefits both audiences",
+        ],
+      };
+    case "aviation_jobs":
+      return {
+        subject: "Would you be open to a hiring partnership with Ready Set Fly?",
+        headline: "Explore a hiring or employer visibility partnership",
+        intro: "If your organization supports aviation hiring at scale, there may be a strong partnership fit with Ready Set Fly around employer visibility, job distribution, or referral traffic.",
+        bullets: [
+          "Expand job visibility through an aviation-specific audience",
+          "Discuss cross-promotion, referral, or employer package options",
+          "Create a repeatable recruiting channel tied to aviation users",
+        ],
+      };
+    case "flight_schools":
+      return {
+        subject: "Would you be open to a student referral partnership with Ready Set Fly?",
+        headline: "Explore a flight training partnership with Ready Set Fly",
+        intro: "If your school is interested in more discovery and student visibility, we would be open to discussing listing, referral, or co-marketing opportunities with Ready Set Fly.",
+        bullets: [
+          "Highlight your school to pilots and prospective students using the platform",
+          "Explore referral or co-marketing opportunities around training demand",
+          "Build a repeatable channel for flight-school visibility",
+        ],
+      };
+    case "rentals":
+      return {
+        subject: "Would you be open to a rental listing partnership with Ready Set Fly?",
+        headline: "Explore a cross-listing or referral path for rental aircraft",
+        intro: "If your organization already manages rental demand, Ready Set Fly could be a strong complementary channel. We would be open to discussing cross-listing, referral, or promotional options for rental aircraft visibility.",
+        bullets: [
+          "Cross-promote rental inventory to pilots using Ready Set Fly",
+          "Create a listing or referral path that matches your current workflow",
+          "Expand rental discovery without rebuilding your existing funnel",
+        ],
+      };
+    case "cfi_services":
+      return {
+        subject: "Would you be open to a CFI referral partnership with Ready Set Fly?",
+        headline: "Explore a student and instructor visibility partnership",
+        intro: "If your goal is to reach more students or expand instructor visibility, we would be open to discussing listing, referral, or co-marketing opportunities with Ready Set Fly.",
+        bullets: [
+          "Promote instructors to students already using aviation tools on RSF",
+          "Discuss referral or co-marketing options that fit your workflow",
+          "Build a repeatable pipeline for instruction demand",
+        ],
+      };
+    case "charter_services":
+      return {
+        subject: "Would you be open to a charter visibility partnership with Ready Set Fly?",
+        headline: "Explore a charter listing or referral partnership",
+        intro: "If your organization already serves charter demand, Ready Set Fly could become a complementary visibility channel. We would be open to discussing listing, referral, or co-marketing options.",
+        bullets: [
+          "Expand charter visibility through a growing aviation marketplace",
+          "Create referral or lead-routing options that fit your team",
+          "Use Ready Set Fly as another qualified discovery channel",
+        ],
+      };
+    case "mechanic_services":
+      return {
+        subject: "Would you be open to a maintenance visibility partnership with Ready Set Fly?",
+        headline: "Explore a maintenance listing or referral partnership",
+        intro: "If your shop or service network is open to additional owner visibility, we would be happy to discuss listing, referral, or co-marketing opportunities with Ready Set Fly.",
+        bullets: [
+          "Promote maintenance services to owners and operators on the platform",
+          "Create a referral path that matches your existing workflow",
+          "Turn Ready Set Fly into another inbound discovery channel",
+        ],
+      };
+    case "banner_ads":
+      return {
+        subject: "Would you be open to a co-marketing campaign with Ready Set Fly?",
+        headline: "Explore a co-marketing or ad partnership with Ready Set Fly",
+        intro: "If your team is looking for aviation audience reach, we would be happy to discuss campaign placements, co-marketing ideas, or broader advertising packages on Ready Set Fly.",
+        bullets: [
+          "Build a campaign around marketplace, pilot-tool, and planning traffic",
+          "Discuss custom placements or co-branded promotion opportunities",
+          "Align spend with an aviation-specific audience",
+        ],
+      };
+    case "marketplace_services":
+      return {
+        subject: "Would you be open to a marketplace partnership with Ready Set Fly?",
+        headline: "Explore a service listing or referral partnership",
+        intro: "If your business already serves aviation customers, there may be a strong fit for listing, referral, or co-marketing opportunities with Ready Set Fly.",
+        bullets: [
+          "Promote your service to aviation users already browsing the marketplace",
+          "Discuss partnership options that fit your sales workflow",
+          "Turn Ready Set Fly into another visibility and lead source",
+        ],
+      };
+    case "sponsorships":
+      return {
+        subject: "Would you be open to a sponsorship partnership with Ready Set Fly?",
+        headline: "Explore sponsorship and brand placement opportunities",
+        intro: "If brand visibility with pilots is a priority, we would be happy to discuss sponsorship placements, custom packages, and broader partnership opportunities across Ready Set Fly.",
+        bullets: [
+          "Position your brand across high-intent aviation surfaces",
+          "Discuss sponsorship packages aligned to your goals",
+          "Build repeat visibility with an aviation-focused audience",
+        ],
+      };
+    default:
+      return {
+        subject: "Would you be open to a partnership with Ready Set Fly?",
+        headline: "Explore a listing, referral, or co-marketing partnership",
+        intro: "If your business serves aviation customers, there may be a strong fit for listing, referral, or co-marketing opportunities with Ready Set Fly.",
+        bullets: [
+          "Find a partnership structure that matches your business model",
+          "Reach aviation users already engaging with marketplace and tool surfaces",
+          "Build another growth channel through a focused aviation platform",
+        ],
+      };
+  }
+}
+
 function buildCrmLeadSalesEmailConfig(
   category: LeadCategory,
   data: CrmSalesEmailTemplateData,
 ): CrmSalesEmailConfig & { promoCode?: string; promoDetails?: string } {
   const config = getCrmSalesEmailConfig(category);
   const { promoCode, promoDetails } = getPromoCopy(data);
+
+  if (data.templateType === "initial_outreach") {
+    const outreachConfig = applyCrmLeadVariantConfig(config, getInitialOutreachLeadOverride(category));
+    return {
+      ...outreachConfig,
+      subject: data.subjectOverride?.trim() || outreachConfig.subject,
+      intro: data.introOverride?.trim() || outreachConfig.intro,
+      promoCode,
+      promoDetails,
+    };
+  }
+
+  if (data.templateType === "partnership_pitch") {
+    const partnershipConfig = applyCrmLeadVariantConfig(config, getPartnershipLeadOverride(category));
+    return {
+      ...partnershipConfig,
+      subject: data.subjectOverride?.trim() || partnershipConfig.subject,
+      intro: data.introOverride?.trim() || partnershipConfig.intro,
+      promoCode,
+      promoDetails,
+    };
+  }
 
   if (data.templateType === "relist") {
     const relistConfig = {
@@ -1926,6 +2213,56 @@ function buildCrmPlatformOverviewEmailConfig(
   data: CrmSalesEmailTemplateData,
 ): CrmPlatformOverviewEmailConfig & { promoCode?: string; promoDetails?: string } {
   const { promoCode, promoDetails } = getPromoCopy(data);
+
+  if (data.templateType === "initial_outreach") {
+    const outreachConfig = {
+      subject: "Would you like to get your aviation business in front of Ready Set Fly users?",
+      headline: "Introduce your aviation business to the Ready Set Fly audience",
+      intro:
+        "Ready Set Fly helps aviation businesses create visibility through marketplace listings while also staying in front of pilots using planning, weather, and other pilot workflow tools on the platform.",
+      bullets: [
+        "Introduce your business to pilots, students, owners, and operators already on RSF",
+        "Launch listings, business visibility, or promotional placement from one platform",
+        "Build another inbound channel tied to aviation-specific traffic",
+      ],
+      ctaLabel: "Explore Ready Set Fly",
+      ctaUrl: "/marketplace",
+      secondaryLabel: "Open Flight Planner",
+      secondaryUrl: "/flight-planner",
+      promoCode,
+      promoDetails,
+    };
+    return {
+      ...outreachConfig,
+      subject: data.subjectOverride?.trim() || outreachConfig.subject,
+      intro: data.introOverride?.trim() || outreachConfig.intro,
+    };
+  }
+
+  if (data.templateType === "partnership_pitch") {
+    const partnershipConfig = {
+      subject: "Would you be open to a partnership with Ready Set Fly?",
+      headline: "Explore a visibility or co-marketing partnership with Ready Set Fly",
+      intro:
+        "If your business already serves aviation customers, there may be a strong fit for listing, referral, sponsorship, or co-marketing opportunities with Ready Set Fly.",
+      bullets: [
+        "Discuss cross-promotion, referral, or visibility packages that fit your goals",
+        "Reach users across marketplace discovery, pilot tools, and flight-planning workflows",
+        "Build a repeatable aviation audience channel through partnership instead of a one-off campaign",
+      ],
+      ctaLabel: "Explore Partnership Options",
+      ctaUrl: "/marketplace",
+      secondaryLabel: "See Flight Tools",
+      secondaryUrl: "/flight-planner",
+      promoCode,
+      promoDetails,
+    };
+    return {
+      ...partnershipConfig,
+      subject: data.subjectOverride?.trim() || partnershipConfig.subject,
+      intro: data.introOverride?.trim() || partnershipConfig.intro,
+    };
+  }
 
   if (data.templateType === "relist") {
     const relistConfig = {

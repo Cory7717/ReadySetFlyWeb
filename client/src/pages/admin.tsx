@@ -288,8 +288,16 @@ export default function AdminDashboard() {
   const [salesEmailDialogOpen, setSalesEmailDialogOpen] = useState(false);
   const [selectedSalesLead, setSelectedSalesLead] = useState<CrmLead | null>(null);
   const [salesEmailTemplateType, setSalesEmailTemplateType] = useState<CrmSalesEmailTemplateType>("new_listing");
+  const [salesEmailGreetingName, setSalesEmailGreetingName] = useState("");
+  const [salesEmailSubjectOverride, setSalesEmailSubjectOverride] = useState("");
+  const [salesEmailIntroOverride, setSalesEmailIntroOverride] = useState("");
+  const [salesEmailCustomNote, setSalesEmailCustomNote] = useState("");
   const [salesEmailPromoCode, setSalesEmailPromoCode] = useState("");
   const [salesEmailPromoDetails, setSalesEmailPromoDetails] = useState("");
+  const deferredSalesEmailGreetingName = useDeferredValue(salesEmailGreetingName);
+  const deferredSalesEmailSubjectOverride = useDeferredValue(salesEmailSubjectOverride);
+  const deferredSalesEmailIntroOverride = useDeferredValue(salesEmailIntroOverride);
+  const deferredSalesEmailCustomNote = useDeferredValue(salesEmailCustomNote);
   const deferredSalesEmailPromoCode = useDeferredValue(salesEmailPromoCode);
   const deferredSalesEmailPromoDetails = useDeferredValue(salesEmailPromoDetails);
   
@@ -595,6 +603,10 @@ export default function AdminDashboard() {
       "/api/crm/leads/sales-email-preview",
       selectedSalesLead?.id ?? "",
       salesEmailTemplateType,
+      deferredSalesEmailGreetingName,
+      deferredSalesEmailSubjectOverride,
+      deferredSalesEmailIntroOverride,
+      deferredSalesEmailCustomNote,
       deferredSalesEmailPromoCode,
       deferredSalesEmailPromoDetails,
     ],
@@ -610,6 +622,10 @@ export default function AdminDashboard() {
         credentials: "include",
         body: JSON.stringify({
           templateType: salesEmailTemplateType,
+          greetingName: deferredSalesEmailGreetingName,
+          subjectOverride: deferredSalesEmailSubjectOverride,
+          introOverride: deferredSalesEmailIntroOverride,
+          customNote: deferredSalesEmailCustomNote,
           promoCode: deferredSalesEmailPromoCode,
           promoDetails: deferredSalesEmailPromoDetails,
         }),
@@ -921,11 +937,19 @@ export default function AdminDashboard() {
     mutationFn: async (payload: {
       id: string;
       templateType: CrmSalesEmailTemplateType;
+      greetingName?: string;
+      subjectOverride?: string;
+      introOverride?: string;
+      customNote?: string;
       promoCode?: string;
       promoDetails?: string;
     }) => {
       const response = await apiRequest("POST", `/api/crm/leads/${payload.id}/send-sales-email`, {
         templateType: payload.templateType,
+        greetingName: payload.greetingName,
+        subjectOverride: payload.subjectOverride,
+        introOverride: payload.introOverride,
+        customNote: payload.customNote,
         promoCode: payload.promoCode,
         promoDetails: payload.promoDetails,
       });
@@ -1811,6 +1835,10 @@ export default function AdminDashboard() {
   const handleOpenSalesEmailDialog = (lead: CrmLead) => {
     setSelectedSalesLead(lead);
     setSalesEmailTemplateType("new_listing");
+    setSalesEmailGreetingName("");
+    setSalesEmailSubjectOverride("");
+    setSalesEmailIntroOverride("");
+    setSalesEmailCustomNote("");
     setSalesEmailPromoCode("");
     setSalesEmailPromoDetails("");
     setSalesEmailDialogOpen(true);
@@ -1820,6 +1848,10 @@ export default function AdminDashboard() {
     setSalesEmailDialogOpen(false);
     setSelectedSalesLead(null);
     setSalesEmailTemplateType("new_listing");
+    setSalesEmailGreetingName("");
+    setSalesEmailSubjectOverride("");
+    setSalesEmailIntroOverride("");
+    setSalesEmailCustomNote("");
     setSalesEmailPromoCode("");
     setSalesEmailPromoDetails("");
   };
@@ -6895,6 +6927,47 @@ export default function AdminDashboard() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="sales-email-greeting">Greeting name override</Label>
+                <Input
+                  id="sales-email-greeting"
+                  value={salesEmailGreetingName}
+                  onChange={(e) => setSalesEmailGreetingName(e.target.value)}
+                  placeholder={
+                    selectedSalesLead
+                      ? `${selectedSalesLead.firstName} ${selectedSalesLead.lastName}`.trim() || selectedSalesLead.company || "Pilot"
+                      : "Jane Smith"
+                  }
+                  data-testid="input-sales-email-greeting"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Use this if the default greeting is too generic, like `Front` or `Info`.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sales-email-subject">Subject override</Label>
+                <Input
+                  id="sales-email-subject"
+                  value={salesEmailSubjectOverride}
+                  onChange={(e) => setSalesEmailSubjectOverride(e.target.value)}
+                  placeholder="Leave blank to use the selected template subject"
+                  data-testid="input-sales-email-subject"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sales-email-intro">Opening paragraph override</Label>
+                <Textarea
+                  id="sales-email-intro"
+                  value={salesEmailIntroOverride}
+                  onChange={(e) => setSalesEmailIntroOverride(e.target.value)}
+                  placeholder="Customize the opening paragraph if you want a more specific message."
+                  rows={4}
+                  data-testid="textarea-sales-email-intro"
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="sales-email-promo-code">Promo code (optional)</Label>
                 <Input
                   id="sales-email-promo-code"
@@ -6918,6 +6991,18 @@ export default function AdminDashboard() {
                 <p className="text-xs text-muted-foreground">
                   Add any discount or limited-time details you want included in the email preview.
                 </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sales-email-note">Custom note (optional)</Label>
+                <Textarea
+                  id="sales-email-note"
+                  value={salesEmailCustomNote}
+                  onChange={(e) => setSalesEmailCustomNote(e.target.value)}
+                  placeholder="Add a short custom note before the call to action."
+                  rows={3}
+                  data-testid="textarea-sales-email-note"
+                />
               </div>
             </div>
 
@@ -6969,6 +7054,10 @@ export default function AdminDashboard() {
                 sendLeadSalesEmailMutation.mutate({
                   id: selectedSalesLead.id,
                   templateType: salesEmailTemplateType,
+                  greetingName: salesEmailGreetingName.trim() || undefined,
+                  subjectOverride: salesEmailSubjectOverride.trim() || undefined,
+                  introOverride: salesEmailIntroOverride.trim() || undefined,
+                  customNote: salesEmailCustomNote.trim() || undefined,
                   promoCode: salesEmailPromoCode.trim() || undefined,
                   promoDetails: salesEmailPromoDetails.trim() || undefined,
                 });

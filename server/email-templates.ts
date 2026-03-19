@@ -1365,11 +1365,16 @@ Unsubscribe: ${data.unsubscribeUrl}
 
 type CrmSalesEmailTemplateData = {
   firstName: string;
+  lastName?: string | null;
   company?: string | null;
   unsubscribeUrl: string;
   templateType: CrmSalesEmailTemplateType;
   promoCode?: string | null;
   promoDetails?: string | null;
+  greetingName?: string | null;
+  subjectOverride?: string | null;
+  introOverride?: string | null;
+  customNote?: string | null;
 };
 
 type CrmSalesEmailConfig = {
@@ -1566,8 +1571,35 @@ function getCrmSalesEmailConfig(category: LeadCategory): CrmSalesEmailConfig {
   return CRM_SALES_EMAIL_CONFIG[category] ?? CRM_SALES_EMAIL_CONFIG.other;
 }
 
-function getRecipientName(firstName: string, company?: string | null) {
-  return firstName?.trim() || company?.trim() || "there";
+const GENERIC_GREETING_NAMES = new Set([
+  "admin",
+  "booking",
+  "contact",
+  "desk",
+  "front",
+  "hello",
+  "info",
+  "office",
+  "operations",
+  "reservations",
+  "sales",
+  "support",
+  "team",
+]);
+
+function getRecipientName(data: CrmSalesEmailTemplateData) {
+  const greetingName = data.greetingName?.trim();
+  if (greetingName) return greetingName;
+
+  const firstName = data.firstName?.trim() || "";
+  const lastName = data.lastName?.trim() || "";
+  const company = data.company?.trim() || "";
+  const normalizedFirstName = firstName.toLowerCase();
+
+  if (firstName && lastName) return `${firstName} ${lastName}`;
+  if (firstName && !GENERIC_GREETING_NAMES.has(normalizedFirstName)) return firstName;
+  if (company) return company;
+  return firstName || "there";
 }
 
 function getPromoCopy(data: CrmSalesEmailTemplateData) {
@@ -1584,7 +1616,7 @@ function buildCrmLeadSalesEmailConfig(
   const { promoCode, promoDetails } = getPromoCopy(data);
 
   if (data.templateType === "relist") {
-    return {
+    const relistConfig = {
       ...config,
       subject: config.kind === "campaign"
         ? `Restart your ${config.entityName} on Ready Set Fly`
@@ -1608,10 +1640,15 @@ function buildCrmLeadSalesEmailConfig(
           ],
       ctaLabel: config.kind === "campaign" ? "Restart Campaign" : "Relist Now",
     };
+    return {
+      ...relistConfig,
+      subject: data.subjectOverride?.trim() || relistConfig.subject,
+      intro: data.introOverride?.trim() || relistConfig.intro,
+    };
   }
 
   if (data.templateType === "promo_offer") {
-    return {
+    const promoConfig = {
       ...config,
       subject: promoCode
         ? `${config.subject} with promo code ${promoCode}`
@@ -1633,10 +1670,17 @@ function buildCrmLeadSalesEmailConfig(
       promoCode,
       promoDetails,
     };
+    return {
+      ...promoConfig,
+      subject: data.subjectOverride?.trim() || promoConfig.subject,
+      intro: data.introOverride?.trim() || promoConfig.intro,
+    };
   }
 
   return {
     ...config,
+    subject: data.subjectOverride?.trim() || config.subject,
+    intro: data.introOverride?.trim() || config.intro,
     promoCode,
     promoDetails,
   };
@@ -1655,7 +1699,7 @@ export function getCrmLeadSalesEmailHtml(
 ): string {
   const appUrl = getMarketingAppUrl();
   const config = buildCrmLeadSalesEmailConfig(category, data);
-  const recipientName = getRecipientName(data.firstName, data.company);
+  const recipientName = getRecipientName(data);
   const ctaUrl = `${appUrl}${config.ctaUrl}`;
   const browseUrl = config.browseUrl ? `${appUrl}${config.browseUrl}` : "";
   const promoBlock = config.promoCode || config.promoDetails
@@ -1696,6 +1740,7 @@ export function getCrmLeadSalesEmailHtml(
         ${config.bullets.map((bullet) => `<li>${bullet}</li>`).join("")}
       </ul>
       ${promoBlock}
+      ${data.customNote?.trim() ? `<p style="margin-top: 18px;">${data.customNote.trim()}</p>` : ""}
       <div style="margin-top: 20px;">
         <a class="cta" href="${ctaUrl}">${config.ctaLabel}</a>
       </div>
@@ -1718,7 +1763,7 @@ export function getCrmLeadSalesEmailText(
 ): string {
   const appUrl = getMarketingAppUrl();
   const config = buildCrmLeadSalesEmailConfig(category, data);
-  const recipientName = getRecipientName(data.firstName, data.company);
+  const recipientName = getRecipientName(data);
   const ctaUrl = `${appUrl}${config.ctaUrl}`;
   const browseLine = config.browseUrl && config.browseLabel
     ? `\n${config.browseLabel}: ${appUrl}${config.browseUrl}`
@@ -1726,6 +1771,7 @@ export function getCrmLeadSalesEmailText(
   const promoLine = config.promoCode || config.promoDetails
     ? `\n${config.promoCode ? `Promo code: ${config.promoCode}` : "Limited-time offer"}${config.promoDetails ? `\n${config.promoDetails}` : ""}\n`
     : "\n";
+  const customNote = data.customNote?.trim() ? `\n${data.customNote.trim()}\n` : "\n";
 
   return `
 ${config.headline}
@@ -1736,6 +1782,7 @@ ${config.intro}
 
 ${config.bullets.map((bullet) => `- ${bullet}`).join("\n")}
 ${promoLine}
+${customNote}
 ${config.ctaLabel}: ${ctaUrl}${browseLine}
 
 If you would rather not receive sales emails from Ready Set Fly, unsubscribe here:

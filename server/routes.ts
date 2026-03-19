@@ -410,6 +410,10 @@ function parseCrmSalesTemplateInput(body: any): {
   templateType: CrmSalesEmailTemplateType;
   promoCode?: string;
   promoDetails?: string;
+  greetingName?: string;
+  subjectOverride?: string;
+  introOverride?: string;
+  customNote?: string;
 } {
   const templateType = typeof body?.templateType === "string" ? body.templateType : "";
   if (!crmSalesEmailTemplateTypes.includes(templateType as CrmSalesEmailTemplateType)) {
@@ -418,11 +422,19 @@ function parseCrmSalesTemplateInput(body: any): {
 
   const promoCode = typeof body?.promoCode === "string" ? body.promoCode.trim() : "";
   const promoDetails = typeof body?.promoDetails === "string" ? body.promoDetails.trim() : "";
+  const greetingName = typeof body?.greetingName === "string" ? body.greetingName.trim() : "";
+  const subjectOverride = typeof body?.subjectOverride === "string" ? body.subjectOverride.trim() : "";
+  const introOverride = typeof body?.introOverride === "string" ? body.introOverride.trim() : "";
+  const customNote = typeof body?.customNote === "string" ? body.customNote.trim() : "";
 
   return {
     templateType: templateType as CrmSalesEmailTemplateType,
     promoCode: promoCode || undefined,
     promoDetails: promoDetails || undefined,
+    greetingName: greetingName || undefined,
+    subjectOverride: subjectOverride || undefined,
+    introOverride: introOverride || undefined,
+    customNote: customNote || undefined,
   };
 }
 
@@ -9887,18 +9899,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         subject: getCrmLeadSalesEmailSubject(category, {
           firstName: lead.firstName,
+          lastName: lead.lastName,
           company: lead.company,
           unsubscribeUrl,
           ...templateInput,
         }),
         html: getCrmLeadSalesEmailHtml(category, {
           firstName: lead.firstName,
+          lastName: lead.lastName,
           company: lead.company,
           unsubscribeUrl,
           ...templateInput,
         }),
         text: getCrmLeadSalesEmailText(category, {
           firstName: lead.firstName,
+          lastName: lead.lastName,
           company: lead.company,
           unsubscribeUrl,
           ...templateInput,
@@ -9941,18 +9956,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         to: lead.email,
         subject: getCrmLeadSalesEmailSubject(category, {
           firstName: lead.firstName,
+          lastName: lead.lastName,
           company: lead.company,
           unsubscribeUrl,
           ...templateInput,
         }),
         html: getCrmLeadSalesEmailHtml(category, {
           firstName: lead.firstName,
+          lastName: lead.lastName,
           company: lead.company,
           unsubscribeUrl,
           ...templateInput,
         }),
         text: getCrmLeadSalesEmailText(category, {
           firstName: lead.firstName,
+          lastName: lead.lastName,
           company: lead.company,
           unsubscribeUrl,
           ...templateInput,

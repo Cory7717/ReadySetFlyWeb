@@ -1,5 +1,6 @@
 import AdmZip from "adm-zip";
 import { XMLParser } from "fast-xml-parser";
+import { leadCategories, leadSources, leadStatuses } from "@shared/schema";
 import type { CrmLead, InsertCrmLead, LeadCategory } from "@shared/schema";
 
 type RawRow = Record<string, string>;
@@ -44,24 +45,41 @@ const CATEGORY_ALIASES: Record<string, LeadCategory> = {
   "aircraft sales": "aircraft_sales",
   "aircraft sale": "aircraft_sales",
   "aircraft for sale": "aircraft_sales",
+  "aircraft listing": "aircraft_sales",
+  "aircraft listings": "aircraft_sales",
   "aviation jobs": "aviation_jobs",
+  "aviation job": "aviation_jobs",
   "jobs": "aviation_jobs",
+  "job": "aviation_jobs",
   "flight schools": "flight_schools",
   "flight school": "flight_schools",
   "rentals": "rentals",
   "rental": "rentals",
+  "rental service": "rentals",
+  "rental services": "rentals",
+  "aircraft rental": "rentals",
+  "aircraft rentals": "rentals",
   "cfi": "cfi_services",
+  "cfi service": "cfi_services",
   "cfi services": "cfi_services",
   "charter": "charter_services",
+  "charter service": "charter_services",
   "charter services": "charter_services",
+  "charter company": "charter_services",
   "mechanic": "mechanic_services",
+  "mechanic service": "mechanic_services",
   "mechanic services": "mechanic_services",
   "banner ads": "banner_ads",
   "banner ad": "banner_ads",
+  "display ads": "banner_ads",
   "marketplace services": "marketplace_services",
+  "marketplace service": "marketplace_services",
   "marketplace": "marketplace_services",
+  "marketplace listing": "marketplace_services",
+  "marketplace listings": "marketplace_services",
   "sponsorship": "sponsorships",
   "sponsorships": "sponsorships",
+  sponsor: "sponsorships",
   "other": "other",
 };
 
@@ -244,6 +262,10 @@ function normalizeLabel(value: string) {
   return value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
 }
 
+const DIRECT_CATEGORY_VALUES = new Set<string>(leadCategories.map((value) => String(value)));
+const DIRECT_SOURCE_VALUES = new Set<string>(leadSources.map((value) => String(value)));
+const DIRECT_STATUS_VALUES = new Set<string>(leadStatuses.map((value) => String(value)));
+
 function normalizeDuplicateKey(value: string | undefined) {
   return (value || "").trim().toLowerCase();
 }
@@ -282,16 +304,31 @@ function inferNameFromEmail(email: string) {
 }
 
 function normalizeCategory(value: string): LeadCategory {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return "other";
+  if (DIRECT_CATEGORY_VALUES.has(trimmed)) {
+    return trimmed as LeadCategory;
+  }
   const normalized = normalizeLabel(value);
   return CATEGORY_ALIASES[normalized] ?? "other";
 }
 
 function normalizeSource(value: string): InsertCrmLead["source"] {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return "other";
+  if (DIRECT_SOURCE_VALUES.has(trimmed)) {
+    return trimmed as InsertCrmLead["source"];
+  }
   const normalized = normalizeLabel(value);
   return SOURCE_ALIASES[normalized] ?? "other";
 }
 
 function normalizeStatus(value: string): InsertCrmLead["status"] {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return "new";
+  if (DIRECT_STATUS_VALUES.has(trimmed)) {
+    return trimmed as InsertCrmLead["status"];
+  }
   const normalized = normalizeLabel(value);
   return STATUS_ALIASES[normalized] ?? "new";
 }
@@ -584,7 +621,7 @@ export function mapImportedCrmLeadRows(rows: RawRow[]) {
     const title = getStringValue(row, ["title", "job_title", "role", "position"]);
     const rawStatus = getStringValue(row, ["status"]);
     const rawSource = getStringValue(row, ["source", "lead_source"]);
-    const rawCategory = getStringValue(row, ["category", "lead_category", "segment"]);
+    const rawCategory = getStringValue(row, ["category", "categories", "lead_category", "lead_type", "segment", "industry"]);
     const notes = getStringValue(row, ["notes", "note", "comments", "comment"]);
 
     let firstName = explicitFirstName;
@@ -639,16 +676,19 @@ export function mapImportedCrmLeadRows(rows: RawRow[]) {
 
 export function mergeImportedLeadData(existing: CrmLead, incoming: ImportedCrmLeadRow): Partial<CrmLead> {
   const { lead, providedFields } = incoming;
-  return {
-    firstName: providedFields.firstName ? lead.firstName : existing.firstName,
-    lastName: providedFields.lastName ? lead.lastName : existing.lastName,
+  const updates: Partial<CrmLead> = {
     email: existing.email,
-    phone: providedFields.phone ? lead.phone : existing.phone,
-    company: providedFields.company ? lead.company : existing.company,
-    title: providedFields.title ? lead.title : existing.title,
-    status: providedFields.status ? lead.status : existing.status,
-    source: providedFields.source ? lead.source : existing.source,
-    category: providedFields.category ? lead.category : existing.category,
-    notes: providedFields.notes ? lead.notes : existing.notes,
   };
+
+  if (providedFields.firstName) updates.firstName = lead.firstName;
+  if (providedFields.lastName) updates.lastName = lead.lastName;
+  if (providedFields.phone) updates.phone = lead.phone;
+  if (providedFields.company) updates.company = lead.company;
+  if (providedFields.title) updates.title = lead.title;
+  if (providedFields.status) updates.status = lead.status;
+  if (providedFields.source) updates.source = lead.source;
+  if (providedFields.category) updates.category = lead.category;
+  if (providedFields.notes) updates.notes = lead.notes;
+
+  return updates;
 }

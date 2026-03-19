@@ -5086,7 +5086,8 @@ export default function AdminDashboard() {
 
               {!leadsLoading && filteredLeads.length > 0 && (
                 <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full">
+                  <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1180px]">
                     <thead className="bg-muted/50">
                       <tr className="border-b">
                         <th className="text-left p-3 font-medium text-sm">Name</th>
@@ -5095,8 +5096,8 @@ export default function AdminDashboard() {
                         <th className="text-left p-3 font-medium text-sm">Category</th>
                         <th className="text-left p-3 font-medium text-sm">Status</th>
                         <th className="text-left p-3 font-medium text-sm">Source</th>
-                        <th className="text-left p-3 font-medium text-sm">Sales Email</th>
-                        <th className="text-right p-3 font-medium text-sm">Actions</th>
+                        <th className="text-left p-3 font-medium text-sm min-w-[220px]">Sales Email</th>
+                        <th className="text-right p-3 font-medium text-sm min-w-[110px]">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -5192,6 +5193,7 @@ export default function AdminDashboard() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -7585,14 +7587,16 @@ export default function AdminDashboard() {
 
       {/* Lead Form Dialog */}
       <Dialog open={leadDialogOpen} onOpenChange={setLeadDialogOpen}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-lead-form">
-          <DialogHeader>
-            <DialogTitle>{editingLead ? "Edit Lead" : "Add New Lead"}</DialogTitle>
-            <DialogDescription>
-              {editingLead ? "Update lead information" : "Add a new sales lead to your CRM"}
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden p-0" data-testid="dialog-lead-form">
+          <div className="flex h-full max-h-[90vh] flex-col">
+            <DialogHeader className="border-b px-6 pb-4 pt-6 pr-12">
+              <DialogTitle>{editingLead ? "Edit Lead" : "Add New Lead"}</DialogTitle>
+              <DialogDescription>
+                {editingLead ? "Update lead information" : "Add a new sales lead to your CRM"}
+              </DialogDescription>
+            </DialogHeader>
 
+            <div className="flex-1 overflow-y-auto px-6 py-6">
           <Form {...leadForm}>
             <form onSubmit={leadForm.handleSubmit(handleSubmitLead)} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -7768,7 +7772,7 @@ export default function AdminDashboard() {
                 )}
               />
 
-              <DialogFooter>
+              <DialogFooter className="border-t bg-background px-0 pb-0 pt-4">
                 <Button
                   type="button"
                   variant="outline"
@@ -7790,6 +7794,8 @@ export default function AdminDashboard() {
               </DialogFooter>
             </form>
           </Form>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

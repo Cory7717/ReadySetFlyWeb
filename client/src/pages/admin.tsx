@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, Fragment } from "react";
+import { useDeferredValue, useEffect, useState, useMemo, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,7 +20,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, leadCategories, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric, type PartnerToolMetric, type LeadCategory, type BannerVideoOrientation } from "@shared/schema";
+import { crmSalesEmailTemplateTypes, insertCrmLeadSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, leadCategories, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type InsertCrmLead, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric, type PartnerToolMetric, type LeadCategory, type BannerVideoOrientation, type CrmSalesEmailTemplateType } from "@shared/schema";
 import { ADMIN_ROLE_LABELS, ADMIN_ROLE_PERMISSIONS, type AdminRole, type AdminPermission } from "@shared/config/adminAccess";
 import { BANNER_AD_TIERS, calculateBannerAdPricing, type BannerAdTier } from "@shared/config/bannerPricing";
 import { validatePromoCode, calculatePromoDiscount } from "@shared/config/promoCodes";
@@ -82,6 +82,24 @@ const CRM_LEAD_CATEGORY_LABELS: Record<LeadCategory, string> = {
   marketplace_services: "Marketplace Services",
   sponsorships: "Sponsorships",
   other: "Other",
+};
+
+const CRM_SALES_TEMPLATE_LABELS: Record<CrmSalesEmailTemplateType, string> = {
+  new_listing: "New Listing Outreach",
+  relist: "Relist / Reactivate",
+  promo_offer: "Promo Offer",
+};
+
+const CRM_SALES_TEMPLATE_DESCRIPTIONS: Record<CrmSalesEmailTemplateType, string> = {
+  new_listing: "Best for first-touch outreach to get a new listing or campaign live.",
+  relist: "Best for restarting a stale listing, relaunching, or re-engaging an older lead.",
+  promo_offer: "Best when you want to include a current promo code or limited-time incentive.",
+};
+
+type CrmSalesEmailPreview = {
+  subject: string;
+  html: string;
+  text: string;
 };
 
 const FINANCE_EMAILS = ["coryarmer@gmail.com", "bentley.amy24@gmail.com"];
@@ -267,6 +285,13 @@ export default function AdminDashboard() {
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
   const [leadCategoryFilter, setLeadCategoryFilter] = useState<LeadCategory | "all">("all");
   const [editingLead, setEditingLead] = useState<CrmLead | null>(null);
+  const [salesEmailDialogOpen, setSalesEmailDialogOpen] = useState(false);
+  const [selectedSalesLead, setSelectedSalesLead] = useState<CrmLead | null>(null);
+  const [salesEmailTemplateType, setSalesEmailTemplateType] = useState<CrmSalesEmailTemplateType>("new_listing");
+  const [salesEmailPromoCode, setSalesEmailPromoCode] = useState("");
+  const [salesEmailPromoDetails, setSalesEmailPromoDetails] = useState("");
+  const deferredSalesEmailPromoCode = useDeferredValue(salesEmailPromoCode);
+  const deferredSalesEmailPromoDetails = useDeferredValue(salesEmailPromoDetails);
   
   // Expense management state
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
@@ -565,6 +590,40 @@ export default function AdminDashboard() {
     [leads, leadCategoryFilter],
   );
 
+  const { data: salesEmailPreview, isLoading: salesEmailPreviewLoading, error: salesEmailPreviewError } = useQuery<CrmSalesEmailPreview>({
+    queryKey: [
+      "/api/crm/leads/sales-email-preview",
+      selectedSalesLead?.id ?? "",
+      salesEmailTemplateType,
+      deferredSalesEmailPromoCode,
+      deferredSalesEmailPromoDetails,
+    ],
+    enabled: salesEmailDialogOpen && Boolean(selectedSalesLead?.id),
+    queryFn: async () => {
+      if (!selectedSalesLead?.id) {
+        throw new Error("No lead selected");
+      }
+
+      const response = await fetch(apiUrl(`/api/crm/leads/${selectedSalesLead.id}/sales-email-preview`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          templateType: salesEmailTemplateType,
+          promoCode: deferredSalesEmailPromoCode,
+          promoDetails: deferredSalesEmailPromoDetails,
+        }),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()) || "Failed to load email preview";
+        throw new Error(message);
+      }
+
+      return response.json();
+    },
+  });
+
   // Expenses query
   const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
     queryKey: ["/api/admin/expenses"],
@@ -859,13 +918,23 @@ export default function AdminDashboard() {
   });
 
   const sendLeadSalesEmailMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await apiRequest("POST", `/api/crm/leads/${id}/send-sales-email`, {});
+    mutationFn: async (payload: {
+      id: string;
+      templateType: CrmSalesEmailTemplateType;
+      promoCode?: string;
+      promoDetails?: string;
+    }) => {
+      const response = await apiRequest("POST", `/api/crm/leads/${payload.id}/send-sales-email`, {
+        templateType: payload.templateType,
+        promoCode: payload.promoCode,
+        promoDetails: payload.promoDetails,
+      });
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
       toast({ title: "Sales email sent" });
+      handleCloseSalesEmailDialog();
     },
     onError: (error: Error) => {
       toast({
@@ -1737,6 +1806,22 @@ export default function AdminDashboard() {
       notes: lead.notes || "",
     });
     setLeadDialogOpen(true);
+  };
+
+  const handleOpenSalesEmailDialog = (lead: CrmLead) => {
+    setSelectedSalesLead(lead);
+    setSalesEmailTemplateType("new_listing");
+    setSalesEmailPromoCode("");
+    setSalesEmailPromoDetails("");
+    setSalesEmailDialogOpen(true);
+  };
+
+  const handleCloseSalesEmailDialog = () => {
+    setSalesEmailDialogOpen(false);
+    setSelectedSalesLead(null);
+    setSalesEmailTemplateType("new_listing");
+    setSalesEmailPromoCode("");
+    setSalesEmailPromoDetails("");
   };
 
   const handleEditExpense = (expense: Expense) => {
@@ -4228,6 +4313,7 @@ export default function AdminDashboard() {
                         <th className="text-left p-3 font-medium text-sm">Category</th>
                         <th className="text-left p-3 font-medium text-sm">Status</th>
                         <th className="text-left p-3 font-medium text-sm">Source</th>
+                        <th className="text-left p-3 font-medium text-sm">Sales Email</th>
                         <th className="text-right p-3 font-medium text-sm">Actions</th>
                       </tr>
                     </thead>
@@ -4265,31 +4351,33 @@ export default function AdminDashboard() {
                               {lead.status}
                             </Badge>
                           </td>
+                          <td className="p-3 text-sm text-muted-foreground">{lead.source || "-"}</td>
                           <td className="p-3">
                             <div className="flex flex-col items-start gap-2">
-                              <span className="text-sm text-muted-foreground">{lead.source || "-"}</span>
-                              {isSuperAdmin && (
+                              {isSuperAdmin ? (
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   className="h-8"
-                                  onClick={() => sendLeadSalesEmailMutation.mutate(lead.id)}
+                                  onClick={() => handleOpenSalesEmailDialog(lead)}
                                   disabled={sendLeadSalesEmailMutation.isPending || Boolean(lead.marketingEmailOptOutAt)}
                                   data-testid={`button-send-sales-email-${lead.id}`}
                                 >
                                   <Mail className="h-3.5 w-3.5 mr-2" />
-                                  {sendLeadSalesEmailMutation.isPending && sendLeadSalesEmailMutation.variables === lead.id
+                                  {sendLeadSalesEmailMutation.isPending && sendLeadSalesEmailMutation.variables?.id === lead.id
                                     ? "Sending..."
                                     : "Send Sales Email"}
                                 </Button>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">-</span>
                               )}
                               {lead.marketingEmailOptOutAt ? (
                                 <span className="text-xs text-destructive">
-                                  Unsubscribed {format(parseISO(String(lead.marketingEmailOptOutAt)), "MMM d, yyyy")}
+                                  Unsubscribed {format(parseISO(String(lead.marketingEmailOptOutAt)), "MMM d, yyyy h:mm a")}
                                 </span>
                               ) : lead.salesEmailLastSentAt ? (
                                 <span className="text-xs text-muted-foreground">
-                                  Last sent {format(parseISO(String(lead.salesEmailLastSentAt)), "MMM d, yyyy")}
+                                  Last sent {format(parseISO(String(lead.salesEmailLastSentAt)), "MMM d, yyyy h:mm a")}
                                 </span>
                               ) : null}
                             </div>
@@ -6744,6 +6832,159 @@ export default function AdminDashboard() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={salesEmailDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setSalesEmailDialogOpen(true);
+          } else {
+            handleCloseSalesEmailDialog();
+          }
+        }}
+      >
+        <DialogContent className="max-w-4xl" data-testid="dialog-sales-email-preview">
+          <DialogHeader>
+            <DialogTitle>Review Sales Email</DialogTitle>
+            <DialogDescription>
+              {selectedSalesLead
+                ? `Preview the email for ${selectedSalesLead.firstName} ${selectedSalesLead.lastName} at ${selectedSalesLead.email} before sending.`
+                : "Preview and review the CRM sales email before sending."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="space-y-4">
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                <div className="text-sm font-semibold">Lead</div>
+                {selectedSalesLead ? (
+                  <>
+                    <div className="text-sm">{selectedSalesLead.firstName} {selectedSalesLead.lastName}</div>
+                    <div className="text-sm text-muted-foreground">{selectedSalesLead.email}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Category: {CRM_LEAD_CATEGORY_LABELS[(selectedSalesLead.category as LeadCategory) || "other"]}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-sm text-muted-foreground">No lead selected.</div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sales-email-template">Email option</Label>
+                <Select
+                  value={salesEmailTemplateType}
+                  onValueChange={(value) => setSalesEmailTemplateType(value as CrmSalesEmailTemplateType)}
+                >
+                  <SelectTrigger id="sales-email-template" data-testid="select-sales-email-template">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {crmSalesEmailTemplateTypes.map((templateType) => (
+                      <SelectItem key={templateType} value={templateType}>
+                        {CRM_SALES_TEMPLATE_LABELS[templateType]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {CRM_SALES_TEMPLATE_DESCRIPTIONS[salesEmailTemplateType]}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sales-email-promo-code">Promo code (optional)</Label>
+                <Input
+                  id="sales-email-promo-code"
+                  value={salesEmailPromoCode}
+                  onChange={(e) => setSalesEmailPromoCode(e.target.value)}
+                  placeholder="TAILWINDS"
+                  data-testid="input-sales-email-promo-code"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="sales-email-promo-details">Offer details (optional)</Label>
+                <Textarea
+                  id="sales-email-promo-details"
+                  value={salesEmailPromoDetails}
+                  onChange={(e) => setSalesEmailPromoDetails(e.target.value)}
+                  placeholder="Example: 20% off the first month or 3 free months for new listings."
+                  rows={4}
+                  data-testid="textarea-sales-email-promo-details"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Add any discount or limited-time details you want included in the email preview.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-lg border bg-background">
+                <div className="border-b px-4 py-3">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Subject</div>
+                  <div className="mt-1 text-sm font-medium">
+                    {salesEmailPreviewLoading
+                      ? "Loading preview..."
+                      : salesEmailPreview?.subject || "No preview available"}
+                  </div>
+                </div>
+                <div className="max-h-[460px] overflow-y-auto p-4">
+                  {salesEmailPreviewLoading ? (
+                    <div className="text-sm text-muted-foreground">Generating preview...</div>
+                  ) : salesEmailPreviewError ? (
+                    <div className="text-sm text-destructive">
+                      {salesEmailPreviewError instanceof Error
+                        ? salesEmailPreviewError.message
+                        : "Unable to load preview."}
+                    </div>
+                  ) : salesEmailPreview ? (
+                    <iframe
+                      title="Sales email preview"
+                      srcDoc={salesEmailPreview.html}
+                      className="min-h-[420px] w-full rounded-md border bg-white"
+                    />
+                  ) : (
+                    <div className="text-sm text-muted-foreground">Select a lead to preview this email.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCloseSalesEmailDialog}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!selectedSalesLead) return;
+                sendLeadSalesEmailMutation.mutate({
+                  id: selectedSalesLead.id,
+                  templateType: salesEmailTemplateType,
+                  promoCode: salesEmailPromoCode.trim() || undefined,
+                  promoDetails: salesEmailPromoDetails.trim() || undefined,
+                });
+              }}
+              disabled={
+                !selectedSalesLead ||
+                sendLeadSalesEmailMutation.isPending ||
+                salesEmailPreviewLoading ||
+                !!salesEmailPreviewError ||
+                Boolean(selectedSalesLead?.marketingEmailOptOutAt)
+              }
+              data-testid="button-send-sales-email-confirm"
+            >
+              {sendLeadSalesEmailMutation.isPending ? "Sending..." : "Send Sales Email"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

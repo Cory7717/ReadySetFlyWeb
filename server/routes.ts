@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, type BannerAdOrder, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type PromoCode } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, partnerRedirects, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type PromoCode } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -404,6 +404,26 @@ function verifyMarketingToken(token: string): Record<string, any> | null {
   } catch {
     return null;
   }
+}
+
+function parseCrmSalesTemplateInput(body: any): {
+  templateType: CrmSalesEmailTemplateType;
+  promoCode?: string;
+  promoDetails?: string;
+} {
+  const templateType = typeof body?.templateType === "string" ? body.templateType : "";
+  if (!crmSalesEmailTemplateTypes.includes(templateType as CrmSalesEmailTemplateType)) {
+    throw new Error("Invalid CRM sales email template");
+  }
+
+  const promoCode = typeof body?.promoCode === "string" ? body.promoCode.trim() : "";
+  const promoDetails = typeof body?.promoDetails === "string" ? body.promoDetails.trim() : "";
+
+  return {
+    templateType: templateType as CrmSalesEmailTemplateType,
+    promoCode: promoCode || undefined,
+    promoDetails: promoDetails || undefined,
+  };
 }
 
 function parsePayPalCustomId(customId: string) {
@@ -9848,6 +9868,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/crm/leads/:id/sales-email-preview", isAuthenticated, isSuperAdmin, async (req, res) => {
+    try {
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+
+      const category = (lead.category || "other") as LeadCategory;
+      const templateInput = parseCrmSalesTemplateInput(req.body);
+      const token = signMarketingToken({
+        action: "crm_sales_opt_out",
+        leadId: lead.id,
+        email: lead.email,
+      });
+      const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+
+      res.json({
+        subject: getCrmLeadSalesEmailSubject(category, {
+          firstName: lead.firstName,
+          company: lead.company,
+          unsubscribeUrl,
+          ...templateInput,
+        }),
+        html: getCrmLeadSalesEmailHtml(category, {
+          firstName: lead.firstName,
+          company: lead.company,
+          unsubscribeUrl,
+          ...templateInput,
+        }),
+        text: getCrmLeadSalesEmailText(category, {
+          firstName: lead.firstName,
+          company: lead.company,
+          unsubscribeUrl,
+          ...templateInput,
+        }),
+      });
+    } catch (error: any) {
+      console.error("Failed to build CRM sales email preview:", error);
+      res.status(400).json({ error: error?.message || "Failed to build email preview" });
+    }
+  });
+
   app.post("/api/crm/leads/:id/send-sales-email", isAuthenticated, isSuperAdmin, async (req, res) => {
     try {
       const lead = await storage.getLead(req.params.id);
@@ -9864,28 +9926,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const category = (lead.category || "other") as LeadCategory;
+      const templateInput = parseCrmSalesTemplateInput(req.body);
       const token = signMarketingToken({
         action: "crm_sales_opt_out",
         leadId: lead.id,
         email: lead.email,
       });
       const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
-      const { client, fromEmail } = await getUncachableResendClient();
+      const { client } = await getUncachableResendClient();
+      const crmSalesFromEmail = process.env.SUPPORT_EMAIL || "Ready Set Fly <support@readysetfly.us>";
 
       await client.emails.send({
-        from: fromEmail,
+        from: crmSalesFromEmail,
         to: lead.email,
-        subject: getCrmLeadSalesEmailSubject(category),
+        subject: getCrmLeadSalesEmailSubject(category, {
+          firstName: lead.firstName,
+          company: lead.company,
+          unsubscribeUrl,
+          ...templateInput,
+        }),
         html: getCrmLeadSalesEmailHtml(category, {
           firstName: lead.firstName,
           company: lead.company,
           unsubscribeUrl,
+          ...templateInput,
         }),
         text: getCrmLeadSalesEmailText(category, {
           firstName: lead.firstName,
           company: lead.company,
           unsubscribeUrl,
+          ...templateInput,
         }),
+        replyTo: crmSalesFromEmail,
       });
 
       const updatedLead = await storage.updateLead(lead.id, {
@@ -9898,7 +9970,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Failed to send CRM sales email:", error);
-      res.status(500).json({ error: error?.message || "Failed to send sales email" });
+      const status = error?.message === "Invalid CRM sales email template" ? 400 : 500;
+      res.status(status).json({ error: error?.message || "Failed to send sales email" });
     }
   });
 

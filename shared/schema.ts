@@ -27,6 +27,7 @@ export const leadCategories = [
   "sponsorships",
   "other",
 ] as const;
+export const crmSalesEmailTemplateTypes = ["new_listing", "relist", "promo_offer"] as const;
 export const flightPlanFilingStatuses = ["draft", "staged", "filed", "activated", "cancelled", "closed"] as const;
 export const flightPlanFilingActions = ["file", "amend", "activate", "cancel", "close"] as const;
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
@@ -2786,6 +2787,7 @@ export type DealStage = typeof dealStages[number];
 export type ActivityType = typeof activityTypes[number];
 export type LeadSource = typeof leadSources[number];
 export type LeadCategory = typeof leadCategories[number];
+export type CrmSalesEmailTemplateType = typeof crmSalesEmailTemplateTypes[number];
 export type FlightPlanFilingStatus = typeof flightPlanFilingStatuses[number];
 export type FlightPlanFilingAction = typeof flightPlanFilingActions[number];
 export type ExpenseCategory = typeof expenseCategories[number];

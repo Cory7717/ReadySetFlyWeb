@@ -1,4 +1,4 @@
-import type { LeadCategory } from "@shared/schema";
+import type { CrmSalesEmailTemplateType, LeadCategory } from "@shared/schema";
 
 export function getListingReminderEmailHtml(userName: string, aircraftCount: number, marketplaceCount: number): string {
   const totalListings = aircraftCount + marketplaceCount;
@@ -1367,9 +1367,14 @@ type CrmSalesEmailTemplateData = {
   firstName: string;
   company?: string | null;
   unsubscribeUrl: string;
+  templateType: CrmSalesEmailTemplateType;
+  promoCode?: string | null;
+  promoDetails?: string | null;
 };
 
 type CrmSalesEmailConfig = {
+  kind: "listing" | "campaign";
+  entityName: string;
   subject: string;
   headline: string;
   intro: string;
@@ -1382,6 +1387,8 @@ type CrmSalesEmailConfig = {
 
 const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
   aircraft_sales: {
+    kind: "listing",
+    entityName: "aircraft listing",
     subject: "List your aircraft on Ready Set Fly",
     headline: "Put your aircraft listing in front of active pilots",
     intro: "Ready Set Fly gives aircraft sellers a direct way to showcase inventory, photos, specs, and contact details in one place.",
@@ -1396,6 +1403,8 @@ const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
     browseUrl: "/marketplace?category=aircraft-sale",
   },
   aviation_jobs: {
+    kind: "listing",
+    entityName: "aviation job listing",
     subject: "Post your aviation jobs on Ready Set Fly",
     headline: "Reach aviation talent from one marketplace listing",
     intro: "Use Ready Set Fly to publish aviation openings and connect with pilots, mechanics, and support staff already using the platform.",
@@ -1410,6 +1419,8 @@ const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
     browseUrl: "/marketplace?category=job",
   },
   flight_schools: {
+    kind: "listing",
+    entityName: "flight school listing",
     subject: "List your flight school on Ready Set Fly",
     headline: "Showcase your flight school to Ready Set Fly pilots",
     intro: "Create a marketplace listing for your flight school so prospective students can find your programs, location, and contact information quickly.",
@@ -1424,6 +1435,8 @@ const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
     browseUrl: "/marketplace?category=flight-school",
   },
   rentals: {
+    kind: "listing",
+    entityName: "rental aircraft listing",
     subject: "List your aircraft rental on Ready Set Fly",
     headline: "Put your rental aircraft in front of verified pilots",
     intro: "Ready Set Fly helps rental operators present aircraft availability, pricing, and contact details to pilots looking for their next booking.",
@@ -1438,6 +1451,8 @@ const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
     browseUrl: "/rentals",
   },
   cfi_services: {
+    kind: "listing",
+    entityName: "CFI services listing",
     subject: "List your CFI services on Ready Set Fly",
     headline: "Promote your instruction services to active students and pilots",
     intro: "Ready Set Fly lets instructors publish their services, ratings, and home base so pilots can find the right fit faster.",
@@ -1452,6 +1467,8 @@ const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
     browseUrl: "/marketplace?category=cfi",
   },
   charter_services: {
+    kind: "listing",
+    entityName: "charter company listing",
     subject: "List your charter company on Ready Set Fly",
     headline: "Showcase your charter service where pilots and travelers are browsing",
     intro: "Create a charter marketplace listing that makes your fleet, service area, and contact details easy to discover on Ready Set Fly.",
@@ -1466,6 +1483,8 @@ const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
     browseUrl: "/marketplace?category=charter",
   },
   mechanic_services: {
+    kind: "listing",
+    entityName: "mechanic services listing",
     subject: "List your mechanic services on Ready Set Fly",
     headline: "Help aircraft owners find your maintenance services",
     intro: "Ready Set Fly gives mechanics and maintenance shops a straightforward listing page to highlight services, location, and contact information.",
@@ -1480,6 +1499,8 @@ const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
     browseUrl: "/marketplace?category=mechanic",
   },
   banner_ads: {
+    kind: "campaign",
+    entityName: "banner campaign",
     subject: "Advertise your aviation business on Ready Set Fly",
     headline: "Promote your brand across the Ready Set Fly audience",
     intro: "Banner campaigns on Ready Set Fly put your business in front of pilots across the marketplace, directory, and tool surfaces.",
@@ -1492,6 +1513,8 @@ const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
     ctaUrl: "/banner-advertise",
   },
   marketplace_services: {
+    kind: "listing",
+    entityName: "service listing",
     subject: "List your aviation service on Ready Set Fly",
     headline: "Add your service business to the Ready Set Fly marketplace",
     intro: "If your business serves pilots or aircraft owners, a marketplace listing is the fastest way to get in front of the right audience on Ready Set Fly.",
@@ -1506,6 +1529,8 @@ const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
     browseUrl: "/marketplace",
   },
   sponsorships: {
+    kind: "campaign",
+    entityName: "sponsorship campaign",
     subject: "Sponsor Ready Set Fly and reach more pilots",
     headline: "Put your aviation brand in front of the Ready Set Fly audience",
     intro: "Ready Set Fly sponsorships help aviation businesses build awareness across high-intent surfaces where pilots already spend time.",
@@ -1518,6 +1543,8 @@ const CRM_SALES_EMAIL_CONFIG: Record<LeadCategory, CrmSalesEmailConfig> = {
     ctaUrl: "/banner-advertise",
   },
   other: {
+    kind: "listing",
+    entityName: "aviation business listing",
     subject: "Promote your aviation business on Ready Set Fly",
     headline: "Get your business in front of the Ready Set Fly audience",
     intro: "Ready Set Fly helps aviation businesses create visibility with listings and advertising options built for pilots, students, and operators.",
@@ -1543,8 +1570,83 @@ function getRecipientName(firstName: string, company?: string | null) {
   return firstName?.trim() || company?.trim() || "there";
 }
 
-export function getCrmLeadSalesEmailSubject(category: LeadCategory): string {
-  return getCrmSalesEmailConfig(category).subject;
+function getPromoCopy(data: CrmSalesEmailTemplateData) {
+  const promoCode = data.promoCode?.trim() || "";
+  const promoDetails = data.promoDetails?.trim() || "";
+  return { promoCode, promoDetails };
+}
+
+function buildCrmLeadSalesEmailConfig(
+  category: LeadCategory,
+  data: CrmSalesEmailTemplateData,
+): CrmSalesEmailConfig & { promoCode?: string; promoDetails?: string } {
+  const config = getCrmSalesEmailConfig(category);
+  const { promoCode, promoDetails } = getPromoCopy(data);
+
+  if (data.templateType === "relist") {
+    return {
+      ...config,
+      subject: config.kind === "campaign"
+        ? `Restart your ${config.entityName} on Ready Set Fly`
+        : `Bring your ${config.entityName} back on Ready Set Fly`,
+      headline: config.kind === "campaign"
+        ? `Put your ${config.entityName} back in front of the Ready Set Fly audience`
+        : `Put your ${config.entityName} back in front of active pilots`,
+      intro: config.kind === "campaign"
+        ? `If you have advertised with Ready Set Fly before, this is a good time to relaunch your ${config.entityName} and get back in front of pilots using the platform.`
+        : `If you have listed with Ready Set Fly before, this is a good time to relist your ${config.entityName} and start capturing fresh inbound interest again.`,
+      bullets: config.kind === "campaign"
+        ? [
+            "Refresh your creative, offer, and landing page before relaunching",
+            "Return to placements that already reach active aviation users",
+            "Turn past awareness into a fresh wave of qualified inbound traffic",
+          ]
+        : [
+            "Refresh your details, photos, availability, and contact information",
+            "Put your business back in front of pilots browsing the right category",
+            "Turn older interest into new qualified inquiries",
+          ],
+      ctaLabel: config.kind === "campaign" ? "Restart Campaign" : "Relist Now",
+    };
+  }
+
+  if (data.templateType === "promo_offer") {
+    return {
+      ...config,
+      subject: promoCode
+        ? `${config.subject} with promo code ${promoCode}`
+        : `${config.subject} with a limited-time offer`,
+      headline: `A limited-time Ready Set Fly offer for your ${config.entityName}`,
+      intro: promoDetails
+        ? `We are currently running a Ready Set Fly offer that may be a fit for your ${config.entityName}. ${promoDetails}`
+        : `We are currently running a limited-time Ready Set Fly offer that could make it easier to launch your ${config.entityName}.`,
+      bullets: [
+        promoCode
+          ? `Use promo code ${promoCode} when you get started`
+          : "Ask about the current Ready Set Fly offer when you get started",
+        config.kind === "campaign"
+          ? "Pair the offer with a fresh campaign or sponsorship push"
+          : "Use the offer to make a new listing or relisting easier to launch",
+        "Get in front of pilots, students, and operators already browsing the platform",
+      ],
+      ctaLabel: promoCode ? "Use Promo Offer" : config.ctaLabel,
+      promoCode,
+      promoDetails,
+    };
+  }
+
+  return {
+    ...config,
+    promoCode,
+    promoDetails,
+  };
+}
+
+export function getCrmLeadSalesEmailSubject(
+  category: LeadCategory,
+  data: CrmSalesEmailTemplateData,
+): string {
+  return buildCrmLeadSalesEmailConfig(category, data).subject;
 }
 
 export function getCrmLeadSalesEmailHtml(
@@ -1552,10 +1654,18 @@ export function getCrmLeadSalesEmailHtml(
   data: CrmSalesEmailTemplateData,
 ): string {
   const appUrl = getMarketingAppUrl();
-  const config = getCrmSalesEmailConfig(category);
+  const config = buildCrmLeadSalesEmailConfig(category, data);
   const recipientName = getRecipientName(data.firstName, data.company);
   const ctaUrl = `${appUrl}${config.ctaUrl}`;
   const browseUrl = config.browseUrl ? `${appUrl}${config.browseUrl}` : "";
+  const promoBlock = config.promoCode || config.promoDetails
+    ? `
+      <div class="promo">
+        <div style="font-weight: 700; margin-bottom: 8px;">${config.promoCode ? `Promo Code: ${config.promoCode}` : "Limited-Time Offer"}</div>
+        ${config.promoDetails ? `<div>${config.promoDetails}</div>` : ""}
+      </div>
+    `
+    : "";
 
   return `
 <!DOCTYPE html>
@@ -1570,6 +1680,7 @@ export function getCrmLeadSalesEmailHtml(
     .cta { display: inline-block; background: #1d4ed8; color: #ffffff !important; padding: 12px 18px; border-radius: 8px; text-decoration: none; font-weight: 700; }
     .secondary { display: inline-block; margin-top: 12px; color: #1d4ed8; text-decoration: none; font-weight: 600; }
     .list { margin: 16px 0; padding-left: 18px; }
+    .promo { margin-top: 18px; padding: 14px 16px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; }
     .note { margin-top: 22px; font-size: 12px; color: #6b7280; }
   </style>
 </head>
@@ -1584,6 +1695,7 @@ export function getCrmLeadSalesEmailHtml(
       <ul class="list">
         ${config.bullets.map((bullet) => `<li>${bullet}</li>`).join("")}
       </ul>
+      ${promoBlock}
       <div style="margin-top: 20px;">
         <a class="cta" href="${ctaUrl}">${config.ctaLabel}</a>
       </div>
@@ -1605,12 +1717,15 @@ export function getCrmLeadSalesEmailText(
   data: CrmSalesEmailTemplateData,
 ): string {
   const appUrl = getMarketingAppUrl();
-  const config = getCrmSalesEmailConfig(category);
+  const config = buildCrmLeadSalesEmailConfig(category, data);
   const recipientName = getRecipientName(data.firstName, data.company);
   const ctaUrl = `${appUrl}${config.ctaUrl}`;
   const browseLine = config.browseUrl && config.browseLabel
     ? `\n${config.browseLabel}: ${appUrl}${config.browseUrl}`
     : "";
+  const promoLine = config.promoCode || config.promoDetails
+    ? `\n${config.promoCode ? `Promo code: ${config.promoCode}` : "Limited-time offer"}${config.promoDetails ? `\n${config.promoDetails}` : ""}\n`
+    : "\n";
 
   return `
 ${config.headline}
@@ -1620,7 +1735,7 @@ Hi ${recipientName},
 ${config.intro}
 
 ${config.bullets.map((bullet) => `- ${bullet}`).join("\n")}
-
+${promoLine}
 ${config.ctaLabel}: ${ctaUrl}${browseLine}
 
 If you would rather not receive sales emails from Ready Set Fly, unsubscribe here:

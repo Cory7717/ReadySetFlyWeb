@@ -186,6 +186,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, or, ilike, gte, lte, sql, inArray, isNull, arrayOverlaps } from "drizzle-orm";
+import { buildCrmEmailResubscribeUpdate, buildCrmEmailUnsubscribeUpdate, canSendEmail, preserveLeadEmailSuppression } from "./crmEmailSuppression";
 
 function normalizeDateOnly(value: string | Date | null | undefined): string | undefined {
   if (value == null) return undefined;
@@ -434,6 +435,10 @@ export interface IStorage {
   // CRM - Leads
   getAllLeads(): Promise<CrmLead[]>;
   getLead(id: string): Promise<CrmLead | undefined>;
+  getLeadByEmail(email: string): Promise<CrmLead | undefined>;
+  unsubscribeLeadsByEmail(email: string): Promise<number>;
+  isLeadEmailSuppressed(email: string): Promise<boolean>;
+  resubscribeLeadEmail(id: string): Promise<CrmLead | undefined>;
   createLead(lead: InsertCrmLead): Promise<CrmLead>;
   updateLead(id: string, updates: Partial<CrmLead>): Promise<CrmLead | undefined>;
   deleteLead(id: string): Promise<boolean>;
@@ -2473,13 +2478,86 @@ export class DatabaseStorage implements IStorage {
     return lead;
   }
 
+  async getLeadByEmail(email: string): Promise<CrmLead | undefined> {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return undefined;
+
+    const [suppressedLead] = await db
+      .select()
+      .from(crmLeads)
+      .where(sql`lower(${crmLeads.email}) = ${normalizedEmail} AND (${crmLeads.emailUnsubscribed} = true OR ${crmLeads.marketingEmailOptOutAt} IS NOT NULL)`)
+      .orderBy(desc(crmLeads.updatedAt), desc(crmLeads.createdAt))
+      .limit(1);
+    if (suppressedLead) return suppressedLead;
+
+    const [lead] = await db
+      .select()
+      .from(crmLeads)
+      .where(sql`lower(${crmLeads.email}) = ${normalizedEmail}`)
+      .orderBy(desc(crmLeads.updatedAt), desc(crmLeads.createdAt))
+      .limit(1);
+    return lead;
+  }
+
+  async unsubscribeLeadsByEmail(email: string): Promise<number> {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return 0;
+
+    const existingLead = await this.getLeadByEmail(normalizedEmail);
+    const result = await db
+      .update(crmLeads)
+      .set({
+        ...buildCrmEmailUnsubscribeUpdate(existingLead?.emailPreferences),
+        updatedAt: new Date(),
+      })
+      .where(sql`lower(${crmLeads.email}) = ${normalizedEmail}`);
+
+    return result.rowCount ?? 0;
+  }
+
+  async isLeadEmailSuppressed(email: string): Promise<boolean> {
+    const lead = await this.getLeadByEmail(email);
+    if (!lead) return false;
+    return canSendEmail(lead) === false;
+  }
+
+  async resubscribeLeadEmail(id: string): Promise<CrmLead | undefined> {
+    const existingLead = await this.getLead(id);
+    if (!existingLead) return undefined;
+
+    const [lead] = await db
+      .update(crmLeads)
+      .set({
+        ...buildCrmEmailResubscribeUpdate(existingLead.emailPreferences),
+        updatedAt: new Date(),
+      })
+      .where(eq(crmLeads.id, id))
+      .returning();
+    return lead;
+  }
+
   async createLead(insertLead: InsertCrmLead): Promise<CrmLead> {
-    const [lead] = await db.insert(crmLeads).values(insertLead).returning();
+    const existingLead = await this.getLeadByEmail(insertLead.email);
+    const leadToCreate = preserveLeadEmailSuppression(insertLead, existingLead);
+    const [lead] = await db.insert(crmLeads).values(leadToCreate).returning();
     return lead;
   }
 
   async updateLead(id: string, updates: Partial<CrmLead>): Promise<CrmLead | undefined> {
-    const [lead] = await db.update(crmLeads).set({ ...updates, updatedAt: new Date() }).where(eq(crmLeads.id, id)).returning();
+    const existingLead = await this.getLead(id);
+    if (!existingLead) return undefined;
+
+    const matchingLeadForEmail =
+      updates.email && updates.email.toLowerCase() !== existingLead.email.toLowerCase()
+        ? await this.getLeadByEmail(updates.email)
+        : existingLead;
+    const safeUpdates = preserveLeadEmailSuppression(updates, matchingLeadForEmail);
+
+    const [lead] = await db
+      .update(crmLeads)
+      .set({ ...safeUpdates, updatedAt: new Date() })
+      .where(eq(crmLeads.id, id))
+      .returning();
     return lead;
   }
 

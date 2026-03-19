@@ -1253,6 +1253,10 @@ export const crmLeads = pgTable("crm_leads", {
   // Additional context
   notes: text("notes"),
   tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  emailUnsubscribed: boolean("email_unsubscribed").default(false),
+  emailUnsubscribedAt: timestamp("email_unsubscribed_at"),
+  emailSuppressionReason: text("email_suppression_reason"),
+  emailPreferences: jsonb("email_preferences").$type<Record<string, boolean>>(),
   marketingEmailOptOutAt: timestamp("marketing_email_opt_out_at"),
   salesEmailLastSentAt: timestamp("sales_email_last_sent_at"),
   
@@ -2313,6 +2317,10 @@ export const insertCrmLeadSchema = createInsertSchema(crmLeads).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  emailUnsubscribed: true,
+  emailUnsubscribedAt: true,
+  emailSuppressionReason: true,
+  emailPreferences: true,
   marketingEmailOptOutAt: true,
   salesEmailLastSentAt: true,
   convertedToContactId: true,

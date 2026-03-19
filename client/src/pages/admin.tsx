@@ -4392,7 +4392,7 @@ export default function AdminDashboard() {
                                   variant="outline"
                                   className="h-8"
                                   onClick={() => handleOpenSalesEmailDialog(lead)}
-                                  disabled={sendLeadSalesEmailMutation.isPending || Boolean(lead.marketingEmailOptOutAt)}
+                                  disabled={sendLeadSalesEmailMutation.isPending || Boolean(lead.emailUnsubscribed || lead.marketingEmailOptOutAt)}
                                   data-testid={`button-send-sales-email-${lead.id}`}
                                 >
                                   <Mail className="h-3.5 w-3.5 mr-2" />
@@ -4403,9 +4403,9 @@ export default function AdminDashboard() {
                               ) : (
                                 <span className="text-sm text-muted-foreground">-</span>
                               )}
-                              {lead.marketingEmailOptOutAt ? (
+                              {(lead.emailUnsubscribedAt || lead.marketingEmailOptOutAt) ? (
                                 <span className="text-xs text-destructive">
-                                  Unsubscribed {format(parseISO(String(lead.marketingEmailOptOutAt)), "MMM d, yyyy h:mm a")}
+                                  Unsubscribed {format(parseISO(String(lead.emailUnsubscribedAt || lead.marketingEmailOptOutAt)), "MMM d, yyyy h:mm a")}
                                 </span>
                               ) : lead.salesEmailLastSentAt ? (
                                 <span className="text-xs text-muted-foreground">
@@ -7066,14 +7066,14 @@ export default function AdminDashboard() {
                   });
                 }}
                 disabled={
-                  !selectedSalesLead ||
-                  sendLeadSalesEmailMutation.isPending ||
-                  salesEmailPreviewLoading ||
-                  !!salesEmailPreviewError ||
-                  Boolean(selectedSalesLead?.marketingEmailOptOutAt)
-                }
-                data-testid="button-send-sales-email-confirm"
-              >
+                !selectedSalesLead ||
+                sendLeadSalesEmailMutation.isPending ||
+                salesEmailPreviewLoading ||
+                !!salesEmailPreviewError ||
+                Boolean(selectedSalesLead?.emailUnsubscribed || selectedSalesLead?.marketingEmailOptOutAt)
+              }
+              data-testid="button-send-sales-email-confirm"
+            >
                 {sendLeadSalesEmailMutation.isPending ? "Sending..." : "Send Sales Email"}
               </Button>
             </DialogFooter>

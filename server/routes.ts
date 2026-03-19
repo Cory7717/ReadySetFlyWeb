@@ -26,6 +26,7 @@ import { setupAuth, isAuthenticated, isAdmin, isSuperAdmin } from "./auth";
 import { getUncachableResendClient } from "./resendClient";
 import { getCrmLeadSalesEmailHtml, getCrmLeadSalesEmailSubject, getCrmLeadSalesEmailText, sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail } from "./email-templates";
 import { ADMIN_PERMISSIONS, ADMIN_ROLE_PERMISSIONS, normalizeAdminPermissions, type AdminPermission, type AdminRole } from "@shared/config/adminAccess";
+import { canSendEmail, logger as crmLogger } from "./crmEmailSuppression";
 import registerMobileAuthRoutes from "./mobile-auth-routes";
 import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -6238,6 +6239,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const unsubscribeCrmLeadEmail = async (email: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return;
+
+    await storage.unsubscribeLeadsByEmail(normalizedEmail);
+    crmLogger.info("crm_unsubscribe", {
+      email: normalizedEmail,
+      timestamp: new Date().toISOString(),
+    });
+  };
+
+  app.post("/api/crm/unsubscribe", async (req, res) => {
+    try {
+      const email = typeof req.body?.email === "string" ? req.body.email : "";
+      if (email.trim()) {
+        await unsubscribeCrmLeadEmail(email);
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("CRM unsubscribe error:", error);
+      res.json({ success: true });
+    }
+  });
+
+  app.get("/api/crm/unsubscribe", async (req, res) => {
+    try {
+      const email = typeof req.query?.email === "string" ? req.query.email : "";
+      if (email.trim()) {
+        await unsubscribeCrmLeadEmail(email);
+      }
+
+      res.status(200).send(`
+        <!DOCTYPE html>
+        <html>
+          <head><meta charset="utf-8"><title>Unsubscribed</title></head>
+          <body style="font-family: Arial, sans-serif; padding: 24px;">
+            <h2>You are unsubscribed.</h2>
+            <p>If that email address exists in our CRM, it will no longer receive CRM sales emails.</p>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      console.error("CRM unsubscribe error:", error);
+      res.status(200).send("You are unsubscribed.");
+    }
+  });
+
   app.get("/api/marketing/unsubscribe", async (req, res) => {
     try {
       const token = typeof req.query?.token === "string" ? req.query.token : "";
@@ -6273,12 +6321,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (payload.action === "crm_sales_opt_out" && payload.leadId) {
-        const updatedLead = await storage.updateLead(String(payload.leadId), {
-          marketingEmailOptOutAt: new Date(),
-        });
-
-        if (!updatedLead) {
-          return res.status(404).send("Lead not found.");
+        const lead = await storage.getLead(String(payload.leadId));
+        if (lead?.email) {
+          await unsubscribeCrmLeadEmail(lead.email);
         }
 
         return res.status(200).send(`
@@ -9881,6 +9926,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/crm/leads/:id/resubscribe-email", isAuthenticated, isSuperAdmin, async (req, res) => {
+    try {
+      const lead = await storage.resubscribeLeadEmail(req.params.id);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+      res.json({ success: true, lead });
+    } catch (error) {
+      console.error("CRM resubscribe error:", error);
+      res.status(500).json({ error: "Failed to resubscribe lead email" });
+    }
+  });
+
   app.post("/api/crm/leads/:id/sales-email-preview", isAuthenticated, isSuperAdmin, async (req, res) => {
     try {
       const lead = await storage.getLead(req.params.id);
@@ -9937,7 +9995,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Lead is missing an email address" });
       }
 
-      if (lead.marketingEmailOptOutAt) {
+      const suppressedByEmail = await storage.isLeadEmailSuppressed(lead.email);
+      if (!canSendEmail(lead) || suppressedByEmail) {
         return res.status(409).json({ error: "Lead has unsubscribed from CRM sales emails" });
       }
 
@@ -9996,10 +10055,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/crm/leads/:id", isAuthenticated, requireCrmAdmin, async (req, res) => {
     try {
-      const success = await storage.deleteLead(req.params.id);
-      if (!success) {
+      const lead = await storage.getLead(req.params.id);
+      if (!lead) {
         return res.status(404).json({ error: "Lead not found" });
       }
+
+      if (lead.emailUnsubscribed || lead.marketingEmailOptOutAt) {
+        return res.status(409).json({ error: "Suppressed leads cannot be deleted" });
+      }
+
+      const success = await storage.deleteLead(req.params.id);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete lead" });

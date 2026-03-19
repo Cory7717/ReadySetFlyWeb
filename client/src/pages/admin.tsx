@@ -8927,7 +8927,9 @@ export default function AdminDashboard() {
                             </FormControl>
                             <SelectContent>
                               <SelectItem value="percentage">Percentage (%)</SelectItem>
-                              <SelectItem value="fixed">Fixed Amount ($)</SelectItem>
+                              <SelectItem value="fixed_amount">Fixed Amount ($)</SelectItem>
+                              <SelectItem value="waive_creation_fee">Waive Creation Fee</SelectItem>
+                              <SelectItem value="free_7_day">Free 7-Day Promo</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -8945,13 +8947,23 @@ export default function AdminDashboard() {
                             <Input 
                               type="number"
                               step="0.01"
-                              placeholder={promoCodeForm.watch('discountType') === 'percentage' ? '10' : '5.00'}
+                              placeholder={
+                                promoCodeForm.watch('discountType') === 'percentage'
+                                  ? '10'
+                                  : promoCodeForm.watch('discountType') === 'fixed_amount'
+                                    ? '5.00'
+                                    : 'Optional'
+                              }
                               {...field}
                               data-testid="input-promo-code-discount-value"
                             />
                           </FormControl>
                           <FormDescription>
-                            {promoCodeForm.watch('discountType') === 'percentage' ? 'Percentage (0-100)' : 'Dollar amount'}
+                            {promoCodeForm.watch('discountType') === 'percentage'
+                              ? 'Percentage (0-100)'
+                              : promoCodeForm.watch('discountType') === 'fixed_amount'
+                                ? 'Dollar amount'
+                                : 'Not required for waive creation fee or free 7-day promos'}
                           </FormDescription>
                           <FormMessage />
                         </FormItem>

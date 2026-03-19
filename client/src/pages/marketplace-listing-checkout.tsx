@@ -675,13 +675,26 @@ export default function MarketplaceListingCheckout() {
       setAppliedPromo(data);
       setCompletionToken(data.completionToken ?? null);
       
-      // Calculate discount based on type
-      let discount = 0;
-      if (data.discountType === 'percentage') {
-        discount = (totalAmount * parseFloat(data.discountValue)) / 100;
-      } else if (data.discountType === 'fixed') {
-        discount = parseFloat(data.discountValue);
+      // Prefer the server-calculated discount so checkout stays aligned with promo validation rules.
+      let discount = Number(data.discountAmount ?? 0);
+      if (!Number.isFinite(discount) || discount < 0) {
+        discount = 0;
       }
+
+      if (discount === 0) {
+        if (data.discountType === 'percentage') {
+          discount = (totalAmount * parseFloat(data.discountValue)) / 100;
+        } else if (data.discountType === 'fixed' || data.discountType === 'fixed_amount') {
+          discount = parseFloat(data.discountValue);
+        } else if (data.discountType === 'free_7_day' || data.discountType === 'waive_creation_fee') {
+          discount = totalAmount;
+        }
+      }
+
+      if (!Number.isFinite(discount) || discount < 0) {
+        discount = 0;
+      }
+      discount = Math.min(discount, totalAmount);
       
       setDiscountAmount(discount);
       const final = Math.max(0, totalAmount - discount);

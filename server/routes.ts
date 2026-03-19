@@ -7289,6 +7289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           description: resolvedPromo.description,
           discountType: resolvedPromo.discountType,
           discountValue: resolvedPromo.discountValue,
+          discountAmount: resolvedPromo.discountAmount,
           durationDays: resolvedPromo.durationDays,
           completionToken: resolvedPromo.completionToken,
         });

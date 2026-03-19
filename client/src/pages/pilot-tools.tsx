@@ -15,6 +15,7 @@ import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, C
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent } from "@/lib/analytics";
+import { canUseInternalPreview } from "@/lib/internal-preview";
 import { getCurrentReturnTo, withReturnTo, withSourceParam } from "@/lib/returnTo";
 import { cn } from "@/lib/utils";
 import { extractAtisIdentifier, extractRunwayInUse, parseFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
@@ -182,6 +183,7 @@ function RunwayDiagram({
 
 export default function PilotTools() {
   const { user } = useAuth();
+  const canPreviewInternal = canUseInternalPreview(user);
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.tier ? entitlements.tier !== "free" : user?.logbookProStatus === "active";
   const [icao, setIcao] = useState("KAUS");
@@ -587,10 +589,21 @@ export default function PilotTools() {
             <CardDescription>Global ADS-B traffic map powered by ADSBExchange.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
-            <Button disabled aria-disabled>
-              Coming Soon
-            </Button>
-            <Badge variant="secondary">Coming soon</Badge>
+            {canPreviewInternal ? (
+              <>
+                <Button asChild>
+                  <Link href="/live-traffic">Open Internal Preview</Link>
+                </Button>
+                <Badge variant="outline">Internal Preview</Badge>
+              </>
+            ) : (
+              <>
+                <Button disabled aria-disabled>
+                  Coming Soon
+                </Button>
+                <Badge variant="secondary">Coming soon</Badge>
+              </>
+            )}
             <Badge variant="outline">ADSBExchange</Badge>
           </CardContent>
         </Card>

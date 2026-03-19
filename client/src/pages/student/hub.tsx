@@ -7,6 +7,7 @@ import { trackEvent } from "@/lib/analytics";
 import { NextStepCTA } from "@/components/student/NextStepCTA";
 import { SponsoredRightRail } from "@/components/banners/SponsoredRightRail";
 import { useAuth } from "@/hooks/useAuth";
+import { canUseInternalPreview } from "@/lib/internal-preview";
 import { PageShell } from "@/components/layout/PageShell";
 import { BookOpenCheck, ClipboardList, GraduationCap, Plane, Radar, Route } from "lucide-react";
 
@@ -61,7 +62,8 @@ const studentSections: ToolSection[] = [
 ];
 
 export default function StudentHub() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const canPreviewInternal = canUseInternalPreview(user);
   useEffect(() => {
     trackEvent("student_page_view", { page: "hub" });
   }, []);
@@ -164,29 +166,37 @@ export default function StudentHub() {
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {section.cards.map((tool) => (
-                  <Card
-                    key={tool.href}
-                    className={tool.comingSoon ? "border-dashed bg-muted/40 text-muted-foreground opacity-70" : "hover-elevate"}
-                  >
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        {tool.title}
-                        {tool.comingSoon ? <Badge variant="secondary">Coming soon</Badge> : null}
-                      </CardTitle>
-                      <CardDescription>{tool.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      {tool.comingSoon ? (
-                        <Button variant="outline" className="w-full" disabled aria-disabled>
-                          Coming soon
-                        </Button>
-                      ) : (
-                        <Button asChild variant="outline" className="w-full">
-                          <Link href={tool.href}>{tool.cta}</Link>
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
+                  (() => {
+                    const isPreviewCard = Boolean(tool.comingSoon && canPreviewInternal);
+                    const isLockedCard = Boolean(tool.comingSoon && !canPreviewInternal);
+
+                    return (
+                      <Card
+                        key={tool.href}
+                        className={isLockedCard ? "border-dashed bg-muted/40 text-muted-foreground opacity-70" : "hover-elevate"}
+                      >
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            {tool.title}
+                            {isPreviewCard ? <Badge variant="outline">Internal Preview</Badge> : null}
+                            {isLockedCard ? <Badge variant="secondary">Coming soon</Badge> : null}
+                          </CardTitle>
+                          <CardDescription>{tool.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {isLockedCard ? (
+                            <Button variant="outline" className="w-full" disabled aria-disabled>
+                              Coming soon
+                            </Button>
+                          ) : (
+                            <Button asChild variant="outline" className="w-full">
+                              <Link href={tool.href}>{isPreviewCard ? "Open Internal Preview" : tool.cta}</Link>
+                            </Button>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })()
                 ))}
               </div>
             </div>

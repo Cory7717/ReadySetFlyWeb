@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { trackEvent } from "@/lib/analytics";
 import { apiUrl } from "@/lib/api";
 import { useAvionicsSimulator } from "@/lib/avionics-sim";
+import { canUseInternalPreview } from "@/lib/internal-preview";
 import { gpsTrainerDisclaimer, gpsTrainerUnits, type GpsTrainerTask } from "@shared/gps-sims";
 import { useAuth } from "@/hooks/useAuth";
 import { useStudentProfile } from "@/hooks/useStudentProfile";
@@ -428,7 +429,9 @@ export default function GpsSimsUnit() {
   const { profile, saveProfile, saving } = useStudentProfile();
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canUseGpsSims ?? (user?.logbookProStatus === "active");
-  const canPersist = Boolean(isPro);
+  const canPreviewInternal = canUseInternalPreview(user);
+  const hasFullAccess = Boolean(isPro || canPreviewInternal);
+  const canPersist = Boolean(hasFullAccess);
 
   const [mode, setMode] = useState<"learn" | "checkride">("learn");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
@@ -580,7 +583,7 @@ export default function GpsSimsUnit() {
     resolvedUnit?.panel.hotspots.find((hotspot) => hotspot.id === selectedHotspotId) ??
     resolvedUnit?.panel.hotspots[0];
 
-  const showGate = !isPro;
+  const showGate = !hasFullAccess;
   const gateTitle = isAuthenticated ? "Upgrade to RSF Pro" : "Create a free account";
   const gateMessage = isAuthenticated
     ? "GPS sims unlock with RSF Pro for full workflows, checkrides, and saved training progress."
@@ -1056,6 +1059,7 @@ export default function GpsSimsUnit() {
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline">RSF Branded</Badge>
             <Badge variant="secondary">{mode === "learn" ? "Learn Mode" : "Checkride Mode"}</Badge>
+            {canPreviewInternal && !isPro ? <Badge variant="outline">Internal Preview</Badge> : null}
           </div>
           <h1 className="font-display text-3xl sm:text-4xl font-bold">{resolvedUnit.title}</h1>
           <p className="text-muted-foreground max-w-3xl">{resolvedUnit.summary}</p>
@@ -1105,7 +1109,11 @@ export default function GpsSimsUnit() {
             >
               Checkride Mode
             </Button>
-            <Badge variant="outline">Progress + instructor reports save with RSF Pro</Badge>
+            <Badge variant="outline">
+              {canPreviewInternal && !isPro
+                ? "Internal preview includes progress + instructor reports"
+                : "Progress + instructor reports save with RSF Pro"}
+            </Badge>
           </CardContent>
         </Card>
 
@@ -1516,7 +1524,9 @@ export default function GpsSimsUnit() {
                 <span>
                   {isPro
                     ? "Saved progress and training history are enabled."
-                    : "Upgrade to RSF Pro or Pro+ to save progress and training history."}
+                    : canPreviewInternal
+                      ? "Internal preview access is enabled for this account."
+                      : "Upgrade to RSF Pro or Pro+ to save progress and training history."}
                 </span>
                 <Button
                   type="button"

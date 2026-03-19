@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AlertTriangle, BookOpen, Calculator, CloudSun, FileText, Navigation, Plane, Radio, Route, Search, Signal } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
+import { canUseInternalPreview } from "@/lib/internal-preview";
 import { getCurrentReturnTo, withReturnTo, withSourceParam } from "@/lib/returnTo";
 import { RSF_TOOLS, TOOL_GROUP_LABELS, type ToolGroupId, type ToolRegistryItem } from "@/lib/tool-registry";
 
@@ -61,7 +62,8 @@ function writeStringArray(key: string, values: string[]) {
 }
 
 export default function ToolHub() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const canPreviewInternal = canUseInternalPreview(user);
   const [query, setQuery] = useState("");
   const [recentIds, setRecentIds] = useState<string[]>([]);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -272,6 +274,7 @@ export default function ToolHub() {
               {tools.map((tool) => {
                 const Icon = iconMap[tool.id] ?? Route;
                 const isComingSoon = tool.status === "coming_soon";
+                const isPreviewCard = Boolean(isComingSoon && canPreviewInternal);
                 const href = tool.path;
                 const pinActive = pinnedIds.includes(tool.id);
                 return (
@@ -294,7 +297,7 @@ export default function ToolHub() {
                         <div className="flex flex-col items-end gap-2">
                           {tool.status ? (
                             <Badge variant={tool.status === "coming_soon" ? "outline" : "default"}>
-                              {statusLabelMap[tool.status]}
+                              {isPreviewCard ? "Internal Preview" : statusLabelMap[tool.status]}
                             </Badge>
                           ) : null}
                           <button
@@ -308,13 +311,13 @@ export default function ToolHub() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {isComingSoon ? (
+                      {isComingSoon && !canPreviewInternal ? (
                         <Button className="w-full" variant="outline" disabled>
                           Coming soon
                         </Button>
                       ) : (
                         <Button className="w-full" asChild onClick={() => recordToolOpen(tool)}>
-                          <Link href={href}>Open</Link>
+                          <Link href={href}>{isPreviewCard ? "Open Internal Preview" : "Open"}</Link>
                         </Button>
                       )}
                     </CardContent>

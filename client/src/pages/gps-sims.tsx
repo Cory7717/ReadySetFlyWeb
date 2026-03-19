@@ -6,10 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/hooks/useAuth";
+import { canUseInternalPreview } from "@/lib/internal-preview";
 import { gpsTrainerUnits } from "@shared/gps-sims";
 
 export default function GpsSimsHub() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const canPreviewInternal = canUseInternalPreview(user);
 
   useEffect(() => {
     trackEvent("gps_sims_hub_view", { page: "/gps-sims" });
@@ -21,7 +23,7 @@ export default function GpsSimsHub() {
         <div className="container mx-auto px-4 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">RSF Pro</Badge>
-            <Badge variant="outline">Active development</Badge>
+            <Badge variant="outline">{canPreviewInternal ? "Internal Preview" : "Active development"}</Badge>
           </div>
           <h1 className="font-display text-3xl sm:text-4xl font-bold">
             GPS Glass Panel Simulators
@@ -63,6 +65,7 @@ export default function GpsSimsHub() {
               key={unit.id}
               className="relative rounded-xl border bg-card overflow-hidden group transition-shadow hover:shadow-md"
             >
+              {!canPreviewInternal ? (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-[2px]">
                 <div className="rounded-full border-2 border-muted-foreground/30 bg-background p-3">
                   <svg className="h-6 w-6 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -80,6 +83,7 @@ export default function GpsSimsHub() {
                   </Link>
                 </Button>
               </div>
+              ) : null}
 
               <div className="p-5 space-y-3 select-none">
                 <div className="flex flex-wrap items-center gap-2">
@@ -96,6 +100,11 @@ export default function GpsSimsHub() {
                 <div className="text-xs text-muted-foreground">
                   {unit.tasks.length} tasks - {unit.scenarios.length} scenarios
                 </div>
+                {canPreviewInternal ? (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/gps-sims/${unit.id}`}>Open Internal Preview</Link>
+                  </Button>
+                ) : null}
               </div>
             </div>
           ))}

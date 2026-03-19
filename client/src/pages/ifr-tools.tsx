@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { trackEvent } from "@/lib/analytics";
+import { useAuth } from "@/hooks/useAuth";
+import { canUseInternalPreview } from "@/lib/internal-preview";
 import { PageShell } from "@/components/layout/PageShell";
 import { AlertTriangle, FileText, Plane, Radio } from "lucide-react";
 
@@ -86,6 +88,11 @@ const availableNow = tools.filter((tool) => !tool.comingSoon);
 const comingSoon = tools.filter((tool) => tool.comingSoon);
 
 export default function IfrTools() {
+  const { user } = useAuth();
+  const canPreviewInternal = canUseInternalPreview(user);
+  const previewAvailableNow = canPreviewInternal ? tools : availableNow;
+  const previewComingSoon = canPreviewInternal ? [] : comingSoon;
+
   useEffect(() => {
     trackEvent("ifr_tools_view", { page: "/ifr-tools" });
   }, []);
@@ -158,12 +165,21 @@ export default function IfrTools() {
           </AlertDescription>
         </Alert>
 
-        <Alert className="border-dashed">
-          <AlertTitle>Coming soon</AlertTitle>
-          <AlertDescription>
-            GPS trainers, Synthetic Vision, and Live Traffic stay visible here, but they are still being finished before wider release.
-          </AlertDescription>
-        </Alert>
+        {canPreviewInternal ? (
+          <Alert className="border-primary/25 bg-primary/5">
+            <AlertTitle>Internal preview enabled</AlertTitle>
+            <AlertDescription>
+              Hidden IFR surfaces are open for your Super Admin account so you can review trainer quality before wider release.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert className="border-dashed">
+            <AlertTitle>Coming soon</AlertTitle>
+            <AlertDescription>
+              GPS trainers, Synthetic Vision, and Live Traffic stay visible here, but they are still being finished before wider release.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="space-y-6">
           <div className="space-y-3">
@@ -174,24 +190,29 @@ export default function IfrTools() {
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {availableNow.map((tool) => (
+              {previewAvailableNow.map((tool) => {
+                const isPreviewCard = Boolean(tool.comingSoon && canPreviewInternal);
+                return (
                 <Card key={tool.href} className="hover-elevate">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       {tool.title}
+                      {isPreviewCard ? <Badge variant="outline">Internal Preview</Badge> : null}
                     </CardTitle>
                     <CardDescription>{tool.description}</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <Button asChild variant="outline" className="w-full">
-                      <Link href={tool.href}>{tool.cta}</Link>
+                      <Link href={tool.href}>{isPreviewCard ? "Open Internal Preview" : tool.cta}</Link>
                     </Button>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           </div>
 
+          {previewComingSoon.length > 0 ? (
           <div className="space-y-3">
             <div className="space-y-1">
               <h2 className="flex items-center gap-2 text-2xl font-semibold">
@@ -203,7 +224,7 @@ export default function IfrTools() {
               </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {comingSoon.map((tool) => (
+              {previewComingSoon.map((tool) => (
                 <Card
                   key={tool.href}
                   className="border-dashed bg-muted/40 text-muted-foreground opacity-70"
@@ -224,6 +245,7 @@ export default function IfrTools() {
               ))}
             </div>
           </div>
+          ) : null}
         </div>
       </section>
     </PageShell>

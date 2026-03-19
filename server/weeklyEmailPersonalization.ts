@@ -28,6 +28,7 @@ export type WeeklyDigestProfile = {
 type WeeklyDigestInput = {
   user: Pick<User, "createdAt" | "firstName" | "email">;
   events: Array<Pick<AnalyticsEvent, "event" | "page" | "createdAt">>;
+  segmentOverride?: WeeklyDigestSegment;
 };
 
 function normalize(value: string | null | undefined) {
@@ -291,6 +292,13 @@ function buildModules(segment: WeeklyDigestSegment): Omit<WeeklyDigestProfile, "
 }
 
 export function buildWeeklyDigestProfile(input: WeeklyDigestInput): WeeklyDigestProfile {
+  if (input.segmentOverride) {
+    return {
+      segment: input.segmentOverride,
+      ...buildModules(input.segmentOverride),
+    };
+  }
+
   const recentEvents = input.events || [];
   const accountAgeDays = input.user.createdAt
     ? Math.floor((Date.now() - new Date(input.user.createdAt).getTime()) / (24 * 60 * 60 * 1000))

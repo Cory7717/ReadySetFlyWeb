@@ -146,6 +146,47 @@ type CrmCampaignPreview = {
   }>;
 };
 
+const WEEKLY_EMAIL_SEGMENTS = [
+  "flight_planning",
+  "marketplace",
+  "training",
+  "logbook",
+  "new_user",
+  "platform_overview",
+] as const;
+
+type WeeklyEmailSegment = typeof WEEKLY_EMAIL_SEGMENTS[number];
+
+const WEEKLY_EMAIL_SEGMENT_LABELS: Record<WeeklyEmailSegment, string> = {
+  flight_planning: "Flight Planning",
+  marketplace: "Marketplace",
+  training: "Training",
+  logbook: "Logbook",
+  new_user: "New User",
+  platform_overview: "Platform Overview",
+};
+
+type WeeklyEmailAudiencePreview = {
+  success: boolean;
+  mode: "dry_run";
+  activeWindowDays: number;
+  cooldownDays: number;
+  totalCandidates: number;
+  excludedRecentlySent: number;
+  eligibleCount: number;
+  segmentBreakdown: Record<string, number>;
+  sampleRecipients: Array<{
+    id: string;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    weeklyEmailLastSentAt?: string | null;
+    segment: WeeklyEmailSegment;
+    subject: string;
+    reasonLine: string;
+  }>;
+};
+
 type CrmLeadImportSummary = {
   success: boolean;
   fileName: string;
@@ -480,6 +521,11 @@ export default function AdminDashboard() {
   const [promoCodeValid, setPromoCodeValid] = useState<boolean | null>(null);
   const [promoCodeMessage, setPromoCodeMessage] = useState("");
   const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
+  const [weeklyEmailActiveWindowDays, setWeeklyEmailActiveWindowDays] = useState("30");
+  const [weeklyEmailCooldownDays, setWeeklyEmailCooldownDays] = useState("7");
+  const [weeklyEmailTestEmail, setWeeklyEmailTestEmail] = useState("");
+  const [weeklyEmailTestSegment, setWeeklyEmailTestSegment] = useState<WeeklyEmailSegment>("platform_overview");
+  const [weeklyEmailPreview, setWeeklyEmailPreview] = useState<WeeklyEmailAudiencePreview | null>(null);
   
   // Withdrawal monitoring state
   const [withdrawalSearch, setWithdrawalSearch] = useState("");
@@ -632,10 +678,15 @@ export default function AdminDashboard() {
     return Math.max(1, Math.ceil(diff / dayMs));
   };
 
+  const trimmedUserSearch = userSearch.trim();
+  const deferredUserSearch = useDeferredValue(trimmedUserSearch);
+  const userSearchAllowsLookup =
+    deferredUserSearch.includes("@") || deferredUserSearch.toLowerCase().startsWith("id:");
+
   // User search query
   const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
-    queryKey: [`/api/admin/users?q=${userSearch}`],
-    enabled: userSearch.length > 0,
+    queryKey: [`/api/admin/users?q=${encodeURIComponent(deferredUserSearch)}`],
+    enabled: activeTab === "users" && (deferredUserSearch.length >= 2 || userSearchAllowsLookup),
   });
 
   // Aircraft listings query
@@ -1188,6 +1239,87 @@ export default function AdminDashboard() {
     onError: (error: Error) => {
       toast({
         title: "Failed to send CRM campaign",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const previewWeeklyEmailMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/marketing/weekly-engagement", {
+        mode: "dry_run",
+        activeWindowDays: Number(weeklyEmailActiveWindowDays) || 30,
+        cooldownDays: Number(weeklyEmailCooldownDays) || 7,
+      });
+      return response.json();
+    },
+    onSuccess: (data: WeeklyEmailAudiencePreview) => {
+      setWeeklyEmailPreview(data);
+      toast({ title: "Weekly email audience loaded" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to preview weekly emails",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const sendWeeklyEmailTestMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/marketing/weekly-engagement", {
+        mode: "test",
+        testEmail: weeklyEmailTestEmail.trim(),
+        testSegment: weeklyEmailTestSegment,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Weekly email test sent",
+        description: `Sent a ${WEEKLY_EMAIL_SEGMENT_LABELS[weeklyEmailTestSegment]} test to ${weeklyEmailTestEmail.trim()}.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to send weekly email test",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const sendWeeklyEmailBatchMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/marketing/weekly-engagement", {
+        mode: "send",
+        activeWindowDays: Number(weeklyEmailActiveWindowDays) || 30,
+        cooldownDays: Number(weeklyEmailCooldownDays) || 7,
+      });
+      return response.json();
+    },
+    onSuccess: (data: { emailsSent: number; segmentBreakdown?: Record<string, number> } & WeeklyEmailAudiencePreview) => {
+      setWeeklyEmailPreview({
+        success: true,
+        mode: "dry_run",
+        activeWindowDays: data.activeWindowDays,
+        cooldownDays: data.cooldownDays,
+        totalCandidates: data.totalCandidates,
+        excludedRecentlySent: data.excludedRecentlySent,
+        eligibleCount: data.emailsSent,
+        segmentBreakdown: data.segmentBreakdown || {},
+        sampleRecipients: data.sampleRecipients || [],
+      });
+      toast({
+        title: "Weekly email batch sent",
+        description: `Sent ${data.emailsSent} personalized weekly email(s).`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to send weekly email batch",
         description: error.message,
         variant: "destructive",
       });
@@ -5186,17 +5318,184 @@ export default function AdminDashboard() {
 
         {/* Users Tab */}
         <TabsContent value="users" className="space-y-4">
+          {isSuperAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Weekly Email Control</CardTitle>
+                <CardDescription>
+                  Preview the personalized weekly audience, send a segment test email, or run the weekly batch manually with the same audience rules used by automation.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="weekly-email-active-window">Active Window (Days)</Label>
+                    <Input
+                      id="weekly-email-active-window"
+                      type="number"
+                      min="7"
+                      max="90"
+                      value={weeklyEmailActiveWindowDays}
+                      onChange={(e) => setWeeklyEmailActiveWindowDays(e.target.value)}
+                      data-testid="input-weekly-email-active-window"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="weekly-email-cooldown">Recent Send Cooldown (Days)</Label>
+                    <Input
+                      id="weekly-email-cooldown"
+                      type="number"
+                      min="0"
+                      max="30"
+                      value={weeklyEmailCooldownDays}
+                      onChange={(e) => setWeeklyEmailCooldownDays(e.target.value)}
+                      data-testid="input-weekly-email-cooldown"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="weekly-email-test-segment">Test Segment</Label>
+                    <Select value={weeklyEmailTestSegment} onValueChange={(value) => setWeeklyEmailTestSegment(value as WeeklyEmailSegment)}>
+                      <SelectTrigger id="weekly-email-test-segment" data-testid="select-weekly-email-test-segment">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {WEEKLY_EMAIL_SEGMENTS.map((segment) => (
+                          <SelectItem key={segment} value={segment}>
+                            {WEEKLY_EMAIL_SEGMENT_LABELS[segment]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="weekly-email-test-email">Test Email</Label>
+                    <Input
+                      id="weekly-email-test-email"
+                      type="email"
+                      value={weeklyEmailTestEmail}
+                      onChange={(e) => setWeeklyEmailTestEmail(e.target.value)}
+                      placeholder="owner@readysetfly.us"
+                      data-testid="input-weekly-email-test-email"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => previewWeeklyEmailMutation.mutate()}
+                    disabled={previewWeeklyEmailMutation.isPending}
+                    data-testid="button-preview-weekly-email-audience"
+                  >
+                    {previewWeeklyEmailMutation.isPending ? "Loading..." : "Preview Audience"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => sendWeeklyEmailTestMutation.mutate()}
+                    disabled={sendWeeklyEmailTestMutation.isPending || !weeklyEmailTestEmail.trim()}
+                    data-testid="button-send-weekly-email-test"
+                  >
+                    {sendWeeklyEmailTestMutation.isPending ? "Sending Test..." : "Send Test Email"}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => sendWeeklyEmailBatchMutation.mutate()}
+                    disabled={sendWeeklyEmailBatchMutation.isPending}
+                    data-testid="button-send-weekly-email-batch"
+                  >
+                    {sendWeeklyEmailBatchMutation.isPending ? "Sending..." : "Send Weekly Batch"}
+                  </Button>
+                </div>
+
+                {weeklyEmailPreview ? (
+                  <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-md border bg-background p-3">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Candidates</div>
+                        <div className="text-lg font-semibold">{weeklyEmailPreview.totalCandidates}</div>
+                      </div>
+                      <div className="rounded-md border bg-background p-3">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Eligible</div>
+                        <div className="text-lg font-semibold">{weeklyEmailPreview.eligibleCount}</div>
+                      </div>
+                      <div className="rounded-md border bg-background p-3">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Recent Sends Excluded</div>
+                        <div className="text-lg font-semibold">{weeklyEmailPreview.excludedRecentlySent}</div>
+                      </div>
+                      <div className="rounded-md border bg-background p-3">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Rules</div>
+                        <div className="text-sm font-medium">
+                          {weeklyEmailPreview.activeWindowDays}d active / {weeklyEmailPreview.cooldownDays}d cooldown
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+                      <div className="space-y-2">
+                        <div className="text-sm font-semibold">Segment Breakdown</div>
+                        <div className="space-y-2">
+                          {Object.keys(weeklyEmailPreview.segmentBreakdown).length > 0 ? (
+                            Object.entries(weeklyEmailPreview.segmentBreakdown).map(([segment, count]) => (
+                              <div key={segment} className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm">
+                                <span>{WEEKLY_EMAIL_SEGMENT_LABELS[segment as WeeklyEmailSegment] || segment}</span>
+                                <Badge variant="secondary">{count}</Badge>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-sm text-muted-foreground">No audience loaded yet.</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-sm font-semibold">Sample Recipients</div>
+                        <div className="max-h-64 overflow-y-auto rounded-md border bg-background">
+                          {weeklyEmailPreview.sampleRecipients.length > 0 ? (
+                            weeklyEmailPreview.sampleRecipients.map((recipient) => (
+                              <div key={recipient.id} className="border-b px-3 py-3 last:border-b-0">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="font-medium">
+                                    {[recipient.firstName, recipient.lastName].filter(Boolean).join(" ") || recipient.email}
+                                  </div>
+                                  <Badge variant="outline">
+                                    {WEEKLY_EMAIL_SEGMENT_LABELS[recipient.segment] || recipient.segment}
+                                  </Badge>
+                                </div>
+                                <div className="mt-1 text-sm text-muted-foreground">{recipient.email}</div>
+                                <div className="mt-1 text-xs text-muted-foreground">{recipient.subject}</div>
+                                <div className="mt-1 text-xs text-muted-foreground">{recipient.reasonLine}</div>
+                                {recipient.weeklyEmailLastSentAt ? (
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    Last weekly send {format(parseISO(String(recipient.weeklyEmailLastSentAt)), "MMM d, yyyy h:mm a")}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="px-3 py-3 text-sm text-muted-foreground">No sample recipients available.</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle>Search Users</CardTitle>
-              <CardDescription>Search by first name, last name, or email</CardDescription>
+              <CardDescription>Search by name, email, or use `id:` for direct ID lookup. Single-character broad email matches are intentionally blocked.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex gap-2 mb-6">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search users..."
+                    placeholder="Search name, email, or id:uuid"
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
                     className="pl-10"
@@ -5211,14 +5510,23 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {!usersLoading && userSearch && users.length === 0 && (
+              {!usersLoading && trimmedUserSearch.length > 0 && trimmedUserSearch.length < 2 && !trimmedUserSearch.includes("@") && !trimmedUserSearch.toLowerCase().startsWith("id:") && (
                 <div className="text-center py-8 text-muted-foreground">
-                  No users found matching "{userSearch}"
+                  Enter at least 2 characters for name search, or search by full email / `id:`.
+                </div>
+              )}
+
+              {!usersLoading && deferredUserSearch && (deferredUserSearch.length >= 2 || userSearchAllowsLookup) && users.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  No users found matching "{deferredUserSearch}"
                 </div>
               )}
 
               {!usersLoading && users.length > 0 && (
                 <div className="space-y-3">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {users.length} ranked result{users.length === 1 ? "" : "s"}
+                  </div>
                   {users.map((user) => (
                     <Card 
                       key={user.id} 
@@ -5273,7 +5581,7 @@ export default function AdminDashboard() {
 
               {!userSearch && (
                 <div className="text-center py-8 text-muted-foreground">
-                  Enter a search term to find users
+                  Enter a name, full email, or `id:` lookup to find users
                 </div>
               )}
             </CardContent>

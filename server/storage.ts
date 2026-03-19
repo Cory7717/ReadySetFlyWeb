@@ -884,18 +884,89 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchUsers(query: string): Promise<User[]> {
-    const searchPattern = `%${query}%`;
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+
+    const normalized = trimmed.toLowerCase();
+    const idQuery = normalized.startsWith("id:") ? trimmed.slice(3).trim() : "";
+    if (idQuery) {
+      return await db
+        .select()
+        .from(users)
+        .where(ilike(users.id, `${idQuery}%`))
+        .orderBy(asc(users.firstName), asc(users.lastName))
+        .limit(25);
+    }
+
+    const emailQuery = normalized.includes("@") ? trimmed : "";
+    if (emailQuery) {
+      const emailPrefix = `${emailQuery}%`;
+      const emailContains = `%${emailQuery}%`;
+      return await db
+        .select()
+        .from(users)
+        .where(ilike(users.email, emailContains))
+        .orderBy(
+          sql`CASE
+            WHEN lower(${users.email}) = lower(${emailQuery}) THEN 0
+            WHEN lower(${users.email}) LIKE lower(${emailPrefix}) THEN 1
+            ELSE 2
+          END`,
+          asc(users.email),
+        )
+        .limit(25);
+    }
+
+    if (trimmed.length < 2) {
+      return [];
+    }
+
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    const firstToken = tokens[0] || "";
+    const secondToken = tokens[1] || "";
+    const firstPrefix = `${firstToken}%`;
+    const fullPrefix = `${trimmed}%`;
+    const containsPattern = trimmed.length >= 3 ? `%${trimmed}%` : "";
+    const searchConditions = [
+      ilike(users.firstName, firstPrefix),
+      ilike(users.lastName, firstPrefix),
+      sql`concat(coalesce(${users.firstName}, ''), ' ', coalesce(${users.lastName}, '')) ILIKE ${fullPrefix}`,
+    ];
+
+    if (secondToken) {
+      const secondTokenCondition = and(
+        ilike(users.firstName, `${firstToken}%`),
+        ilike(users.lastName, `${secondToken}%`),
+      );
+      if (secondTokenCondition) {
+        searchConditions.push(secondTokenCondition);
+      }
+    }
+
+    if (containsPattern) {
+      searchConditions.push(ilike(users.email, containsPattern));
+      searchConditions.push(ilike(users.firstName, containsPattern));
+      searchConditions.push(ilike(users.lastName, containsPattern));
+    }
+
     return await db
       .select()
       .from(users)
-      .where(
-        or(
-          ilike(users.firstName, searchPattern),
-          ilike(users.lastName, searchPattern),
-          ilike(users.email, searchPattern)
-        )
+      .where(or(...searchConditions))
+      .orderBy(
+        sql`CASE
+          WHEN lower(concat(coalesce(${users.firstName}, ''), ' ', coalesce(${users.lastName}, ''))) = lower(${trimmed}) THEN 0
+          WHEN lower(${users.firstName}) = lower(${trimmed}) THEN 1
+          WHEN lower(${users.lastName}) = lower(${trimmed}) THEN 2
+          WHEN lower(${users.firstName}) LIKE lower(${firstPrefix}) THEN 3
+          WHEN lower(${users.lastName}) LIKE lower(${firstPrefix}) THEN 4
+          WHEN lower(concat(coalesce(${users.firstName}, ''), ' ', coalesce(${users.lastName}, ''))) LIKE lower(${fullPrefix}) THEN 5
+          ELSE 6
+        END`,
+        asc(users.firstName),
+        asc(users.lastName),
       )
-      .limit(50);
+      .limit(25);
   }
 
   async updateUserPassword(id: string, hashedPassword: string): Promise<User | undefined> {

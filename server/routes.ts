@@ -49,7 +49,7 @@ import { fuelPricesRouter } from "./routes/fuelPrices";
 import { aiToolsRouter } from "./routes/aiTools";
 import { flightPlanFilingProvider, validateFlightPlanForAction } from "./services/flight-plan-filing/provider";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
-import { buildWeeklyDigestProfile } from "./weeklyEmailPersonalization";
+import { buildWeeklyDigestProfile, type WeeklyDigestSegment } from "./weeklyEmailPersonalization";
 import {
   fetchMetar,
   fetchTaf,
@@ -6500,6 +6500,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const buildWeeklyEngagementAudience = async (options?: {
+    activeWindowDays?: number;
+    cooldownDays?: number;
+  }) => {
+    const activeWindowDays = Math.max(7, Math.min(Number(options?.activeWindowDays) || 30, 90));
+    const cooldownDays = Math.max(0, Math.min(Number(options?.cooldownDays) || 7, 30));
+    const weeklyCutoff = cooldownDays > 0
+      ? new Date(Date.now() - cooldownDays * 24 * 60 * 60 * 1000)
+      : null;
+    const activeCutoff = new Date(Date.now() - activeWindowDays * 24 * 60 * 60 * 1000);
+
+    const activeAnalyticsRows = await db
+      .select({ userId: analyticsEvents.userId })
+      .from(analyticsEvents)
+      .where(and(isNotNull(analyticsEvents.userId), gte(analyticsEvents.createdAt, activeCutoff)))
+      .groupBy(analyticsEvents.userId);
+    const recentUsers = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(gte(users.createdAt, activeCutoff));
+    const activeUserIds = Array.from(new Set([
+      ...activeAnalyticsRows.map((row) => row.userId).filter((userId): userId is string => Boolean(userId)),
+      ...recentUsers.map((row) => row.id),
+    ]));
+
+    const candidates = activeUserIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(users)
+          .where(and(
+            eq(users.weeklyEmailOptIn, true),
+            eq(users.isSuspended, false),
+            inArray(users.id, activeUserIds),
+          ));
+
+    const recentEvents = activeUserIds.length === 0
+      ? []
+      : await db
+          .select({
+            userId: analyticsEvents.userId,
+            event: analyticsEvents.event,
+            page: analyticsEvents.page,
+            createdAt: analyticsEvents.createdAt,
+          })
+          .from(analyticsEvents)
+          .where(and(
+            isNotNull(analyticsEvents.userId),
+            gte(analyticsEvents.createdAt, activeCutoff),
+            inArray(analyticsEvents.userId, activeUserIds),
+          ));
+
+    const eventsByUserId = new Map<string, typeof recentEvents>();
+    for (const event of recentEvents) {
+      if (!event.userId) continue;
+      const userEvents = eventsByUserId.get(event.userId) || [];
+      userEvents.push(event);
+      eventsByUserId.set(event.userId, userEvents);
+    }
+
+    const eligibleRecipients: Array<{
+      user: typeof candidates[number];
+      firstName: string;
+      digestProfile: ReturnType<typeof buildWeeklyDigestProfile>;
+    }> = [];
+    const segmentBreakdown: Record<string, number> = {};
+    let excludedRecentlySent = 0;
+
+    for (const user of candidates) {
+      if (!user.email) continue;
+      if (weeklyCutoff && user.weeklyEmailLastSentAt && user.weeklyEmailLastSentAt > weeklyCutoff) {
+        excludedRecentlySent += 1;
+        continue;
+      }
+
+      const firstName = user.firstName || user.email.split("@")[0];
+      const digestProfile = buildWeeklyDigestProfile({
+        user,
+        events: eventsByUserId.get(user.id) || [],
+      });
+
+      eligibleRecipients.push({ user, firstName, digestProfile });
+      segmentBreakdown[digestProfile.segment] = (segmentBreakdown[digestProfile.segment] || 0) + 1;
+    }
+
+    return {
+      activeWindowDays,
+      cooldownDays,
+      totalCandidates: candidates.length,
+      excludedRecentlySent,
+      eligibleRecipients,
+      segmentBreakdown,
+      sampleRecipients: eligibleRecipients.slice(0, 12).map(({ user, digestProfile }) => ({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        weeklyEmailLastSentAt: user.weeklyEmailLastSentAt,
+        segment: digestProfile.segment,
+        subject: digestProfile.subject,
+        reasonLine: digestProfile.reasonLine,
+      })),
+    };
+  };
+
+  const sendWeeklyEngagementEmails = async (options?: {
+    activeWindowDays?: number;
+    cooldownDays?: number;
+  }) => {
+    const audience = await buildWeeklyEngagementAudience(options);
+    const { getWeeklyEngagementEmailHtml, getWeeklyEngagementEmailText } = await import("./email-templates");
+    const { client, fromEmail } = await getUncachableResendClient();
+    const errors: string[] = [];
+    let emailsSent = 0;
+
+    for (const { user, firstName, digestProfile } of audience.eligibleRecipients) {
+      if (!user.email) continue;
+
+      const token = signMarketingToken({ userId: user.id, action: "weekly_opt_out" });
+      const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+
+      try {
+        await client.emails.send({
+          from: fromEmail,
+          to: user.email,
+          subject: digestProfile.subject,
+          html: getWeeklyEngagementEmailHtml({
+            firstName,
+            unsubscribeUrl,
+            headline: digestProfile.headline,
+            intro: digestProfile.intro,
+            reasonLine: digestProfile.reasonLine,
+            modules: digestProfile.modules,
+          }),
+          text: getWeeklyEngagementEmailText({
+            firstName,
+            unsubscribeUrl,
+            headline: digestProfile.headline,
+            intro: digestProfile.intro,
+            reasonLine: digestProfile.reasonLine,
+            modules: digestProfile.modules,
+          }),
+        });
+
+        await storage.updateUser(user.id, {
+          weeklyEmailLastSentAt: new Date(),
+        });
+
+        emailsSent += 1;
+      } catch (error: any) {
+        console.error(`Failed to send weekly email to ${user.email}:`, error);
+        errors.push(`${user.email}: ${error.message || "send failed"}`);
+      }
+    }
+
+    return {
+      success: true,
+      activeWindowDays: audience.activeWindowDays,
+      cooldownDays: audience.cooldownDays,
+      totalCandidates: audience.totalCandidates,
+      excludedRecentlySent: audience.excludedRecentlySent,
+      emailsSent,
+      segmentBreakdown: audience.segmentBreakdown,
+      sampleRecipients: audience.sampleRecipients,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  };
+
   app.post("/api/cron/send-weekly-engagement", async (req, res) => {
     try {
       const cronSecret = req.headers['x-cron-secret'];
@@ -6508,121 +6676,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn('Unauthorized cron attempt from IP:', req.ip);
         return res.status(401).json({ error: 'Unauthorized' });
       }
-
-      const { getWeeklyEngagementEmailHtml, getWeeklyEngagementEmailText } = await import('./email-templates');
-      const { client, fromEmail } = await getUncachableResendClient();
-
-      const weeklyCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const activeWindowDays = 30;
-      const activeCutoff = new Date(Date.now() - activeWindowDays * 24 * 60 * 60 * 1000);
-      const activeAnalyticsRows = await db
-        .select({ userId: analyticsEvents.userId })
-        .from(analyticsEvents)
-        .where(and(isNotNull(analyticsEvents.userId), gte(analyticsEvents.createdAt, activeCutoff)))
-        .groupBy(analyticsEvents.userId);
-      const recentUsers = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(gte(users.createdAt, activeCutoff));
-      const activeUserIds = Array.from(new Set([
-        ...activeAnalyticsRows.map((row) => row.userId).filter((userId): userId is string => Boolean(userId)),
-        ...recentUsers.map((row) => row.id),
-      ]));
-      const candidates = activeUserIds.length === 0
-        ? []
-        : await db
-            .select()
-            .from(users)
-            .where(and(
-              eq(users.weeklyEmailOptIn, true),
-              eq(users.isSuspended, false),
-              inArray(users.id, activeUserIds),
-            ));
-      const recentEvents = activeUserIds.length === 0
-        ? []
-        : await db
-            .select({
-              userId: analyticsEvents.userId,
-              event: analyticsEvents.event,
-              page: analyticsEvents.page,
-              createdAt: analyticsEvents.createdAt,
-            })
-            .from(analyticsEvents)
-            .where(and(
-              isNotNull(analyticsEvents.userId),
-              gte(analyticsEvents.createdAt, activeCutoff),
-              inArray(analyticsEvents.userId, activeUserIds),
-            ));
-      const eventsByUserId = new Map<string, typeof recentEvents>();
-      for (const event of recentEvents) {
-        if (!event.userId) continue;
-        const userEvents = eventsByUserId.get(event.userId) || [];
-        userEvents.push(event);
-        eventsByUserId.set(event.userId, userEvents);
-      }
-
-      let emailsSent = 0;
-      const errors: string[] = [];
-      const segmentBreakdown: Record<string, number> = {};
-
-      for (const user of candidates) {
-        if (!user.email) continue;
-        if (user.weeklyEmailLastSentAt && user.weeklyEmailLastSentAt > weeklyCutoff) continue;
-
-        const firstName = user.firstName || user.email.split("@")[0];
-        const token = signMarketingToken({ userId: user.id, action: "weekly_opt_out" });
-        const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
-        const digestProfile = buildWeeklyDigestProfile({
-          user,
-          events: eventsByUserId.get(user.id) || [],
-        });
-        segmentBreakdown[digestProfile.segment] = (segmentBreakdown[digestProfile.segment] || 0) + 1;
-
-        try {
-          await client.emails.send({
-            from: fromEmail,
-            to: user.email,
-            subject: digestProfile.subject,
-            html: getWeeklyEngagementEmailHtml({
-              firstName,
-              unsubscribeUrl,
-              headline: digestProfile.headline,
-              intro: digestProfile.intro,
-              reasonLine: digestProfile.reasonLine,
-              modules: digestProfile.modules,
-            }),
-            text: getWeeklyEngagementEmailText({
-              firstName,
-              unsubscribeUrl,
-              headline: digestProfile.headline,
-              intro: digestProfile.intro,
-              reasonLine: digestProfile.reasonLine,
-              modules: digestProfile.modules,
-            }),
-          });
-
-          await storage.updateUser(user.id, {
-            weeklyEmailLastSentAt: new Date(),
-          });
-
-          emailsSent += 1;
-        } catch (error: any) {
-          console.error(`Failed to send weekly email to ${user.email}:`, error);
-          errors.push(`${user.email}: ${error.message || "send failed"}`);
-        }
-      }
-
-      res.json({
-        success: true,
-        activeWindowDays,
-        totalCandidates: candidates.length,
-        emailsSent,
-        segmentBreakdown,
-        errors: errors.length > 0 ? errors : undefined,
-      });
+      res.json(await sendWeeklyEngagementEmails());
     } catch (error: any) {
       console.error("Weekly engagement cron error:", error);
       res.status(500).json({ error: "Failed to send weekly engagement emails" });
+    }
+  });
+
+  app.post("/api/admin/marketing/weekly-engagement", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const mode = typeof req.body?.mode === "string" ? req.body.mode : "dry_run";
+      const activeWindowDays = Number(req.body?.activeWindowDays) || 30;
+      const cooldownDays = Number(req.body?.cooldownDays) || 7;
+      const testEmail = typeof req.body?.testEmail === "string" ? req.body.testEmail.trim() : "";
+      const testSegment = typeof req.body?.testSegment === "string" ? req.body.testSegment as WeeklyDigestSegment : "platform_overview";
+
+      if (mode === "test") {
+        if (!testEmail) {
+          return res.status(400).json({ error: "Test email is required" });
+        }
+
+        const { getWeeklyEngagementEmailHtml, getWeeklyEngagementEmailText } = await import("./email-templates");
+        const { client, fromEmail } = await getUncachableResendClient();
+        const token = signMarketingToken({ userId: req.user?.claims?.sub || "test-user", action: "weekly_opt_out" });
+        const unsubscribeUrl = `${getPublicBaseUrl()}/api/marketing/unsubscribe?token=${encodeURIComponent(token)}`;
+        const digestProfile = buildWeeklyDigestProfile({
+          user: {
+            createdAt: new Date(),
+            firstName: "Pilot",
+            email: testEmail,
+          },
+          events: [],
+          segmentOverride: testSegment,
+        });
+
+        await client.emails.send({
+          from: fromEmail,
+          to: testEmail,
+          subject: digestProfile.subject,
+          html: getWeeklyEngagementEmailHtml({
+            firstName: "Pilot",
+            unsubscribeUrl,
+            headline: digestProfile.headline,
+            intro: digestProfile.intro,
+            reasonLine: `Test send for segment: ${digestProfile.segment}`,
+            modules: digestProfile.modules,
+          }),
+          text: getWeeklyEngagementEmailText({
+            firstName: "Pilot",
+            unsubscribeUrl,
+            headline: digestProfile.headline,
+            intro: digestProfile.intro,
+            reasonLine: `Test send for segment: ${digestProfile.segment}`,
+            modules: digestProfile.modules,
+          }),
+        });
+
+        return res.json({
+          success: true,
+          mode: "test",
+          sentTo: testEmail,
+          segment: digestProfile.segment,
+        });
+      }
+
+      if (mode === "send") {
+        return res.json(await sendWeeklyEngagementEmails({ activeWindowDays, cooldownDays }));
+      }
+
+      const audience = await buildWeeklyEngagementAudience({ activeWindowDays, cooldownDays });
+      res.json({
+        success: true,
+        mode: "dry_run",
+        activeWindowDays: audience.activeWindowDays,
+        cooldownDays: audience.cooldownDays,
+        totalCandidates: audience.totalCandidates,
+        excludedRecentlySent: audience.excludedRecentlySent,
+        eligibleCount: audience.eligibleRecipients.length,
+        segmentBreakdown: audience.segmentBreakdown,
+        sampleRecipients: audience.sampleRecipients,
+      });
+    } catch (error: any) {
+      console.error("Weekly engagement admin control error:", error);
+      res.status(500).json({ error: error?.message || "Failed to manage weekly engagement emails" });
     }
   });
 
@@ -8935,7 +9071,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin routes
   app.get("/api/admin/users", isAuthenticated, requireUsersAdmin, async (req, res) => {
     try {
-      const query = (req.query.q as string) || "";
+      const query = ((req.query.q as string) || "").trim();
+      const normalized = query.toLowerCase();
+      if (!query || (!normalized.startsWith("id:") && !normalized.includes("@") && query.length < 2)) {
+        return res.json([]);
+      }
       // searchUsers already sanitizes sensitive fields at the storage layer
       const users = query ? await storage.searchUsers(query) : [];
       res.json(users);

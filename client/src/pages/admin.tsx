@@ -1,8 +1,8 @@
-import { useDeferredValue, useEffect, useState, useMemo, Fragment } from "react";
+import { useDeferredValue, useEffect, useState, useMemo, Fragment, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, X, Rocket, Tag, ChevronDown, ChevronRight, Wallet } from "lucide-react";
+import { Search, Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, Download, X, Rocket, Tag, ChevronDown, ChevronRight, Wallet } from "lucide-react";
 import { endOfMonth, format, parse, parseISO, startOfMonth, eachDayOfInterval, isSameMonth, startOfISOWeek, endOfISOWeek, getISOWeek, getISOWeekYear } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -100,6 +101,48 @@ type CrmSalesEmailPreview = {
   subject: string;
   html: string;
   text: string;
+};
+
+type CrmLeadImportSummary = {
+  success: boolean;
+  fileName: string;
+  totalRows: number;
+  createdCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  skipped: Array<{
+    rowNumber: number;
+    reason: string;
+  }>;
+};
+
+type CrmLeadImportDuplicate = {
+  rowNumber: number;
+  email: string;
+  company?: string;
+  duplicateByEmail: boolean;
+  duplicateByCompany: boolean;
+  duplicateInFileByEmail: boolean;
+  duplicateInFileByCompany: boolean;
+  existingLeadId?: string;
+  existingLeadName?: string;
+  existingLeadEmail?: string;
+  existingLeadCompany?: string;
+  matchingImportRowNumbers: number[];
+};
+
+type CrmLeadImportPreview = {
+  success: boolean;
+  fileName: string;
+  totalRows: number;
+  importableCount: number;
+  duplicateCount: number;
+  skippedCount: number;
+  skipped: Array<{
+    rowNumber: number;
+    reason: string;
+  }>;
+  duplicates: CrmLeadImportDuplicate[];
 };
 
 const FINANCE_EMAILS = ["coryarmer@gmail.com", "bentley.amy24@gmail.com"];
@@ -285,6 +328,16 @@ export default function AdminDashboard() {
   const [leadDialogOpen, setLeadDialogOpen] = useState(false);
   const [leadCategoryFilter, setLeadCategoryFilter] = useState<LeadCategory | "all">("all");
   const [editingLead, setEditingLead] = useState<CrmLead | null>(null);
+  const crmLeadImportInputRef = useRef<HTMLInputElement | null>(null);
+  const [crmLeadImporting, setCrmLeadImporting] = useState(false);
+  const [crmLeadImportSubmitting, setCrmLeadImportSubmitting] = useState(false);
+  const [crmLeadTemplateExporting, setCrmLeadTemplateExporting] = useState<"csv" | "xlsx" | null>(null);
+  const [crmLeadImportPreview, setCrmLeadImportPreview] = useState<CrmLeadImportPreview | null>(null);
+  const [crmLeadImportPendingFile, setCrmLeadImportPendingFile] = useState<File | null>(null);
+  const [crmLeadDuplicateDialogOpen, setCrmLeadDuplicateDialogOpen] = useState(false);
+  const [crmLeadDuplicateSkipRows, setCrmLeadDuplicateSkipRows] = useState<Record<number, boolean>>({});
+  const [crmLeadImportSummary, setCrmLeadImportSummary] = useState<CrmLeadImportSummary | null>(null);
+  const [crmLeadImportDialogOpen, setCrmLeadImportDialogOpen] = useState(false);
   const [salesEmailDialogOpen, setSalesEmailDialogOpen] = useState(false);
   const [selectedSalesLead, setSelectedSalesLead] = useState<CrmLead | null>(null);
   const [salesEmailTemplateType, setSalesEmailTemplateType] = useState<CrmSalesEmailTemplateType>("new_listing");
@@ -1842,6 +1895,142 @@ export default function AdminDashboard() {
     setSalesEmailPromoCode("");
     setSalesEmailPromoDetails("");
     setSalesEmailDialogOpen(true);
+  };
+
+  const handleCrmLeadImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setCrmLeadImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(apiUrl("/api/crm/leads/import-preview"), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "CRM lead import preview failed");
+      }
+
+      if (Array.isArray(data.duplicates) && data.duplicates.length > 0) {
+        const defaultSkipRows = Object.fromEntries(
+          data.duplicates.map((item: CrmLeadImportDuplicate) => [item.rowNumber, true]),
+        );
+        setCrmLeadImportPendingFile(file);
+        setCrmLeadImportPreview(data);
+        setCrmLeadDuplicateSkipRows(defaultSkipRows);
+        setCrmLeadDuplicateDialogOpen(true);
+        toast({
+          title: "Duplicate leads found",
+          description: `Review ${data.duplicates.length} duplicate row(s) before importing.`,
+        });
+        return;
+      }
+
+      await submitCrmLeadImport(file, []);
+    } catch (error: any) {
+      toast({
+        title: "CRM import failed",
+        description: error.message || "Unable to import CRM leads.",
+        variant: "destructive",
+      });
+    } finally {
+      setCrmLeadImporting(false);
+      event.target.value = "";
+    }
+  };
+
+  const closeCrmDuplicateDialog = () => {
+    setCrmLeadDuplicateDialogOpen(false);
+    setCrmLeadImportPreview(null);
+    setCrmLeadImportPendingFile(null);
+    setCrmLeadDuplicateSkipRows({});
+  };
+
+  const submitCrmLeadImport = async (file: File, excludedRowNumbers: number[]) => {
+    setCrmLeadImportSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (excludedRowNumbers.length > 0) {
+        formData.append("excludedRowNumbers", JSON.stringify(excludedRowNumbers));
+      }
+
+      const response = await fetch(apiUrl("/api/crm/leads/import"), {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "CRM lead import failed");
+      }
+
+      closeCrmDuplicateDialog();
+      setCrmLeadImportSummary(data);
+      setCrmLeadImportDialogOpen(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/crm/leads"] });
+      toast({
+        title: "CRM import complete",
+        description: `Created ${data.createdCount} and updated ${data.updatedCount} lead(s).`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "CRM import failed",
+        description: error.message || "Unable to import CRM leads.",
+        variant: "destructive",
+      });
+    } finally {
+      setCrmLeadImportSubmitting(false);
+    }
+  };
+
+  const handleConfirmCrmLeadImport = async () => {
+    if (!crmLeadImportPendingFile) return;
+    const excludedRowNumbers = Object.entries(crmLeadDuplicateSkipRows)
+      .filter(([, shouldSkip]) => shouldSkip)
+      .map(([rowNumber]) => Number(rowNumber))
+      .filter((rowNumber) => Number.isInteger(rowNumber) && rowNumber > 0);
+    await submitCrmLeadImport(crmLeadImportPendingFile, excludedRowNumbers);
+  };
+
+  const handleExportCrmLeadTemplate = async (format: "csv" | "xlsx") => {
+    setCrmLeadTemplateExporting(format);
+    try {
+      const response = await fetch(apiUrl(`/api/crm/leads/import-template?format=${format}`), {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Unable to export CRM template");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = format === "xlsx" ? "rsf-crm-leads-template.xlsx" : "rsf-crm-leads-template.csv";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "Template downloaded",
+        description: `Saved CRM lead template as ${anchor.download}.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Template export failed",
+        description: error.message || "Unable to download CRM lead template.",
+        variant: "destructive",
+      });
+    } finally {
+      setCrmLeadTemplateExporting(null);
+    }
   };
 
   const handleCloseSalesEmailDialog = () => {
@@ -4291,15 +4480,56 @@ export default function AdminDashboard() {
                 <CardTitle>Sales & Marketing CRM</CardTitle>
                 <CardDescription>Manage leads, contacts, and deal pipeline</CardDescription>
               </div>
-              <Button onClick={() => { leadForm.reset(); setEditingLead(null); setLeadDialogOpen(true); }} data-testid="button-add-lead">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Lead
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  ref={crmLeadImportInputRef}
+                  type="file"
+                  accept=".csv,.xlsx"
+                  className="hidden"
+                  onChange={handleCrmLeadImport}
+                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={Boolean(crmLeadTemplateExporting)}
+                      data-testid="button-export-crm-template"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      {crmLeadTemplateExporting ? `Exporting ${crmLeadTemplateExporting.toUpperCase()}...` : "Export Template"}
+                      <ChevronDown className="h-4 w-4 ml-2" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleExportCrmLeadTemplate("csv")}>
+                      Download CSV Template
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExportCrmLeadTemplate("xlsx")}>
+                      Download XLSX Template
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => crmLeadImportInputRef.current?.click()}
+                  disabled={crmLeadImporting}
+                  data-testid="button-upload-crm-template"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {crmLeadImporting ? "Uploading..." : "Upload Template"}
+                </Button>
+                <Button onClick={() => { leadForm.reset(); setEditingLead(null); setLeadDialogOpen(true); }} data-testid="button-add-lead">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Lead
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="text-sm text-muted-foreground">
-                  Organize leads by category to keep outreach segmented and easier to review.
+                  Export a blank CSV or XLSX template to hand to AI or your team, then upload the completed file back here. CRM imports accept headers like name, email, phone, company, title, source, category, status, and notes.
                 </div>
                 <div className="w-full md:w-64">
                   <Select
@@ -6864,6 +7094,171 @@ export default function AdminDashboard() {
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={crmLeadImportDialogOpen} onOpenChange={setCrmLeadImportDialogOpen}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-crm-import-summary">
+          <DialogHeader>
+            <DialogTitle>CRM Lead Import Summary</DialogTitle>
+            <DialogDescription>
+              Review what was created, updated, or skipped from your CRM import file.
+            </DialogDescription>
+          </DialogHeader>
+          {crmLeadImportSummary ? (
+            <div className="space-y-4 text-sm">
+              <div className="text-muted-foreground">
+                File: <span className="font-medium text-foreground">{crmLeadImportSummary.fileName}</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border p-3">
+                  <div className="text-muted-foreground">Rows scanned</div>
+                  <div className="text-lg font-semibold">{crmLeadImportSummary.totalRows}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-muted-foreground">Created</div>
+                  <div className="text-lg font-semibold">{crmLeadImportSummary.createdCount}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-muted-foreground">Updated</div>
+                  <div className="text-lg font-semibold">{crmLeadImportSummary.updatedCount}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-muted-foreground">Skipped</div>
+                  <div className="text-lg font-semibold">{crmLeadImportSummary.skippedCount}</div>
+                </div>
+              </div>
+
+              {crmLeadImportSummary.skipped.length > 0 && (
+                <div className="space-y-2">
+                  <div className="font-medium">Skipped rows</div>
+                  <div className="max-h-64 overflow-auto rounded-md border p-2 text-xs">
+                    {crmLeadImportSummary.skipped.map((item, index) => (
+                      <div key={`${item.rowNumber}-${index}`} className="border-b last:border-b-0 py-1">
+                        Row {item.rowNumber}: {item.reason}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">No import summary available.</div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setCrmLeadImportDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={crmLeadDuplicateDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setCrmLeadDuplicateDialogOpen(true);
+          } else {
+            closeCrmDuplicateDialog();
+          }
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden" data-testid="dialog-crm-import-duplicates">
+          <DialogHeader>
+            <DialogTitle>Duplicate Leads Detected</DialogTitle>
+            <DialogDescription>
+              This upload contains companies or emails that already exist in CRM, or appear more than once in the file. Rows checked below will be skipped so they do not override or duplicate existing leads.
+            </DialogDescription>
+          </DialogHeader>
+          {crmLeadImportPreview ? (
+            <div className="space-y-4 text-sm overflow-y-auto pr-1">
+              <div className="rounded-md border bg-amber-50 p-3 text-amber-900">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <div className="space-y-1">
+                    <div className="font-medium">
+                      {crmLeadImportPreview.duplicateCount} duplicate row(s) found in {crmLeadImportPreview.fileName}
+                    </div>
+                    <div>
+                      {crmLeadImportPreview.importableCount - Object.values(crmLeadDuplicateSkipRows).filter(Boolean).length} row(s) will import if you continue.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {crmLeadImportPreview.skipped.length > 0 && (
+                <div className="space-y-2">
+                  <div className="font-medium">Rows already invalid and skipped</div>
+                  <div className="max-h-28 overflow-auto rounded-md border p-2 text-xs">
+                    {crmLeadImportPreview.skipped.map((item, index) => (
+                      <div key={`${item.rowNumber}-${index}`} className="border-b last:border-b-0 py-1">
+                        Row {item.rowNumber}: {item.reason}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="max-h-[45vh] space-y-3 overflow-y-auto pr-1">
+                {crmLeadImportPreview.duplicates.map((item) => (
+                  <div key={item.rowNumber} className="rounded-md border p-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          Row {item.rowNumber}: {item.company || item.email}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {item.email}
+                          {item.company ? ` • ${item.company}` : ""}
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                          {item.duplicateByEmail && <Badge variant="secondary">Matches existing email</Badge>}
+                          {item.duplicateByCompany && <Badge variant="secondary">Matches existing company</Badge>}
+                          {item.duplicateInFileByEmail && <Badge variant="outline">Duplicate email in file</Badge>}
+                          {item.duplicateInFileByCompany && <Badge variant="outline">Duplicate company in file</Badge>}
+                        </div>
+                        {item.existingLeadEmail || item.existingLeadCompany ? (
+                          <div className="text-xs text-muted-foreground">
+                            Existing lead: {item.existingLeadName || "Current CRM record"}
+                            {item.existingLeadEmail ? ` • ${item.existingLeadEmail}` : ""}
+                            {item.existingLeadCompany ? ` • ${item.existingLeadCompany}` : ""}
+                          </div>
+                        ) : null}
+                        {item.matchingImportRowNumbers.length > 0 ? (
+                          <div className="text-xs text-muted-foreground">
+                            Also appears in uploaded row(s): {item.matchingImportRowNumbers.join(", ")}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                        <Checkbox
+                          checked={Boolean(crmLeadDuplicateSkipRows[item.rowNumber])}
+                          onCheckedChange={(checked) =>
+                            setCrmLeadDuplicateSkipRows((prev) => ({
+                              ...prev,
+                              [item.rowNumber]: checked === true,
+                            }))
+                          }
+                          id={`skip-crm-duplicate-${item.rowNumber}`}
+                        />
+                        <Label htmlFor={`skip-crm-duplicate-${item.rowNumber}`} className="text-sm font-medium">
+                          Skip this row
+                        </Label>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">No duplicate rows to review.</div>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeCrmDuplicateDialog} disabled={crmLeadImportSubmitting}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleConfirmCrmLeadImport} disabled={crmLeadImportSubmitting || !crmLeadImportPendingFile}>
+              {crmLeadImportSubmitting ? "Importing..." : "Import Remaining Rows"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -27,6 +27,7 @@ import { getUncachableResendClient } from "./resendClient";
 import { getCrmLeadSalesEmailHtml, getCrmLeadSalesEmailSubject, getCrmLeadSalesEmailText, sendBannerAdvertiserContactEmail, sendContactFormEmail, sendMarketplaceListingContactEmail } from "./email-templates";
 import { ADMIN_PERMISSIONS, ADMIN_ROLE_PERMISSIONS, normalizeAdminPermissions, type AdminPermission, type AdminRole } from "@shared/config/adminAccess";
 import { canSendEmail, logger as crmLogger } from "./crmEmailSuppression";
+import { buildCrmLeadTemplateCsv, buildCrmLeadTemplateXlsx, findCrmLeadImportDuplicates, mapImportedCrmLeadRows, mergeImportedLeadData, parseCrmLeadImportFile } from "./crmLeadImport";
 import registerMobileAuthRoutes from "./mobile-auth-routes";
 import { registerUnifiedAuthRoutes } from "./unified-auth-routes";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -437,6 +438,21 @@ function parseCrmSalesTemplateInput(body: any): {
     introOverride: introOverride || undefined,
     customNote: customNote || undefined,
   };
+}
+
+function parseCrmImportExcludedRows(value: unknown): Set<number> {
+  if (typeof value !== "string" || !value.trim()) return new Set<number>();
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return new Set<number>();
+    return new Set(
+      parsed
+        .map((entry) => Number(entry))
+        .filter((entry) => Number.isInteger(entry) && entry > 0),
+    );
+  } catch {
+    return new Set<number>();
+  }
 }
 
 function parsePayPalCustomId(customId: string) {
@@ -3211,6 +3227,24 @@ const roomsSoldUpload = multer({
       cb(null, true);
     } else {
       cb(new Error("Only .txt files are allowed for rooms sold imports"));
+    }
+  },
+});
+
+const crmLeadImportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const lower = file.originalname.toLowerCase();
+    const isCsv = file.mimetype === "text/csv" || lower.endsWith(".csv");
+    const isXlsx =
+      file.mimetype === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      lower.endsWith(".xlsx");
+
+    if (isCsv || isXlsx) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only CSV and XLSX files are allowed for CRM lead imports"));
     }
   },
 });
@@ -9911,6 +9945,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(lead);
     } catch (error) {
       res.status(500).json({ error: "Failed to create lead" });
+    }
+  });
+
+  app.get("/api/crm/leads/import-template", isAuthenticated, requireCrmAdmin, async (req, res) => {
+    try {
+      const format = String(req.query.format || "csv").toLowerCase();
+      if (format === "xlsx") {
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+        res.setHeader("Content-Disposition", 'attachment; filename="rsf-crm-leads-template.xlsx"');
+        return res.send(buildCrmLeadTemplateXlsx());
+      }
+
+      if (format !== "csv") {
+        return res.status(400).json({ error: "Unsupported template format" });
+      }
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="rsf-crm-leads-template.csv"');
+      res.send(buildCrmLeadTemplateCsv());
+    } catch (error) {
+      console.error("CRM lead template export failed:", error);
+      res.status(500).json({ error: "Failed to export CRM lead template" });
+    }
+  });
+
+  app.post("/api/crm/leads/import-preview", isAuthenticated, requireCrmAdmin, crmLeadImportUpload.single("file"), async (req: any, res) => {
+    try {
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file) {
+        return res.status(400).json({ error: "No CRM lead file uploaded" });
+      }
+
+      const rows = parseCrmLeadImportFile(file.originalname, file.buffer);
+      const { imported, skipped } = mapImportedCrmLeadRows(rows);
+      const existingLeads = await storage.getAllLeads();
+      const duplicates = findCrmLeadImportDuplicates(imported, existingLeads);
+
+      res.json({
+        success: true,
+        fileName: file.originalname,
+        totalRows: rows.length,
+        importableCount: imported.length,
+        duplicateCount: duplicates.length,
+        skippedCount: skipped.length,
+        skipped,
+        duplicates,
+      });
+    } catch (error: any) {
+      console.error("CRM lead import preview failed:", error);
+      res.status(400).json({ error: error?.message || "Failed to preview CRM leads" });
+    }
+  });
+
+  app.post("/api/crm/leads/import", isAuthenticated, requireCrmAdmin, crmLeadImportUpload.single("file"), async (req: any, res) => {
+    try {
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file) {
+        return res.status(400).json({ error: "No CRM lead file uploaded" });
+      }
+
+      const rows = parseCrmLeadImportFile(file.originalname, file.buffer);
+      const { imported, skipped } = mapImportedCrmLeadRows(rows);
+      const excludedRowNumbers = parseCrmImportExcludedRows(req.body?.excludedRowNumbers);
+      const seenEmails = new Set<string>();
+      const skippedRows = [...skipped];
+      let createdCount = 0;
+      let updatedCount = 0;
+
+      for (const row of imported) {
+        if (excludedRowNumbers.has(row.rowNumber)) {
+          skippedRows.push({ rowNumber: row.rowNumber, reason: "Skipped by user during duplicate review" });
+          continue;
+        }
+        const email = row.lead.email.toLowerCase();
+        if (seenEmails.has(email)) {
+          skippedRows.push({ rowNumber: row.rowNumber, reason: "Duplicate email in import file" });
+          continue;
+        }
+        seenEmails.add(email);
+
+        const existingLead = await storage.getLeadByEmail(email);
+        if (existingLead) {
+          await storage.updateLead(
+            existingLead.id,
+            mergeImportedLeadData(existingLead, row),
+          );
+          updatedCount += 1;
+        } else {
+          await storage.createLead(row.lead);
+          createdCount += 1;
+        }
+      }
+
+      res.json({
+        success: true,
+        fileName: file.originalname,
+        totalRows: rows.length,
+        createdCount,
+        updatedCount,
+        skippedCount: skippedRows.length,
+        skipped: skippedRows,
+      });
+    } catch (error: any) {
+      console.error("CRM lead import failed:", error);
+      res.status(400).json({ error: error?.message || "Failed to import CRM leads" });
     }
   });
 

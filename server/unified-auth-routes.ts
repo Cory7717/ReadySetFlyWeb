@@ -11,6 +11,31 @@ import { getEntitlementsForUser } from './membership';
 
 const router = Router();
 
+async function establishWebSession(
+  req: any,
+  userId: string,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    req.session.regenerate((regenerateError: any) => {
+      if (regenerateError) {
+        reject(regenerateError);
+        return;
+      }
+
+      req.session.userId = userId;
+
+      req.session.save((saveError: any) => {
+        if (saveError) {
+          reject(saveError);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  });
+}
+
 // Helper function to hash refresh tokens for secure storage
 function hashRefreshToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
@@ -143,32 +168,19 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         // Don't fail registration if email sending fails
       }
 
-      // Create web session (compatible with the shared auth middleware)
-      req.session.userId = user.id;
-      req.session.passport = {
-        user: {
-          claims: {
-            sub: user.id,
-            email: user.email,
-            name: `${user.firstName} ${user.lastName}`,
-          }
-        }
-      };
+      try {
+        await establishWebSession(req, user.id);
+      } catch (sessionError) {
+        console.error('Session save error:', sessionError);
+        res.status(500).json({ error: 'Failed to create session' });
+        return;
+      }
 
-      // Save session before sending response
-      req.session.save((err: any) => {
-        if (err) {
-          console.error('Session save error:', err);
-          res.status(500).json({ error: 'Failed to create session' });
-          return;
-        }
-
-        // Return user data (excluding password)
-        const { hashedPassword: _, passwordCreatedAt: __, emailVerificationToken: ___, ...userResponse } = user;
-        res.status(201).json({ 
-          user: userResponse,
-          message: 'Account created! Please check your email to verify your account.'
-        });
+      // Return user data (excluding password)
+      const { hashedPassword: _, passwordCreatedAt: __, emailVerificationToken: ___, ...userResponse } = user;
+      res.status(201).json({ 
+        user: userResponse,
+        message: 'Account created! Please check your email to verify your account.'
       });
     } catch (error) {
       console.error('Registration error:', error);
@@ -216,30 +228,17 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
         return;
       }
 
-      // Create web session (compatible with the shared auth middleware)
-      req.session.userId = user.id;
-      req.session.passport = {
-        user: {
-          claims: {
-            sub: user.id,
-            email: user.email,
-            name: `${user.firstName} ${user.lastName}`,
-          }
-        }
-      };
+      try {
+        await establishWebSession(req, user.id);
+      } catch (sessionError) {
+        console.error('Session save error:', sessionError);
+        res.status(500).json({ error: 'Failed to create session' });
+        return;
+      }
 
-      // Save session before sending response
-      req.session.save((err: any) => {
-        if (err) {
-          console.error('Session save error:', err);
-          res.status(500).json({ error: 'Failed to create session' });
-          return;
-        }
-
-        // Return user data (excluding password and verification token)
-        const { hashedPassword: _, passwordCreatedAt: __, emailVerificationToken: ___, ...userResponse } = user;
-        res.status(200).json({ user: userResponse });
-      });
+      // Return user data (excluding password and verification token)
+      const { hashedPassword: _, passwordCreatedAt: __, emailVerificationToken: ___, ...userResponse } = user;
+      res.status(200).json({ user: userResponse });
     } catch (error) {
       console.error('Login error:', error);
       res.status(500).json({ error: 'Failed to login' });

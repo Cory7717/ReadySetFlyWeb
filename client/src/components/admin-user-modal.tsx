@@ -16,6 +16,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { User, AircraftListing, MarketplaceListing, VerificationSubmission, CfiProfile, CfiCredential } from "@shared/schema";
 import { formatPhoneNumber } from "@/lib/formatters";
+import { getVerificationSubmissionDocumentUrl } from "@/lib/verificationDocuments";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
 import { MarketplaceListingModal } from "@/components/marketplace-listing-modal";
 import { useAuth } from "@/hooks/useAuth";
@@ -701,7 +702,7 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                                 <div className="space-y-2">
                                   <div className="text-sm font-medium">Documents:</div>
                                   <div className="flex flex-wrap gap-2">
-                                    {verification.documentUrls.map((url, idx) => (
+                                    {verification.documentUrls.map((_, idx) => (
                                       <Button
                                         key={idx}
                                         size="sm"
@@ -709,7 +710,12 @@ export function AdminUserModal({ userId, open, onOpenChange }: AdminUserModalPro
                                         asChild
                                         data-testid={`button-view-document-${idx}`}
                                       >
-                                        <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+                                        <a
+                                          href={getVerificationSubmissionDocumentUrl(verification.id, idx)}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-2"
+                                        >
                                           <Eye className="h-3 w-3" />
                                           <span>View Document {idx + 1}</span>
                                           <Download className="h-3 w-3" />

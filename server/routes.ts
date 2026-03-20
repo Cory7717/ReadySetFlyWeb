@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -116,6 +116,28 @@ const getRequestUserId = (req: any): string | null => {
   const userId = req.user?.claims?.sub || req.session?.userId;
   return userId ? String(userId) : null;
 };
+
+const AIRCRAFT_VERIFICATION_DOC_FIELDS = new Set([
+  "insuranceDoc",
+  "annualInspectionDoc",
+]);
+
+function buildAircraftVerificationDocPrefix(userId: string, fieldName: string) {
+  return `verification-docs/${userId}/${fieldName}`;
+}
+
+function isOwnedAircraftVerificationDocPath(pathValue: unknown, userId: string): pathValue is string {
+  if (typeof pathValue !== "string") return false;
+  const trimmed = pathValue.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("/objects/")) return true;
+  return trimmed.startsWith(`verification-docs/${userId}/`);
+}
+
+function normalizeAircraftRegistration(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
 
 const TAILWINDS_PROMO_CODE = "TAILWINDS";
 const TAILWINDS_CATEGORY_LIMIT = 5;
@@ -3790,6 +3812,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/aircraft/verification-docs/upload', isAuthenticated, async (req: any, res) => {
+    try {
+      const requesterId = getRequestUserId(req);
+      if (!requesterId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const fieldName = typeof req.body?.fieldName === "string" ? req.body.fieldName.trim() : "";
+      if (!AIRCRAFT_VERIFICATION_DOC_FIELDS.has(fieldName)) {
+        return res.status(400).json({ error: "Invalid verification document field" });
+      }
+
+      const contentType =
+        typeof req.body?.contentType === "string" && req.body.contentType.trim()
+          ? req.body.contentType.trim()
+          : "application/octet-stream";
+
+      if (process.env.AWS_S3_BUCKET) {
+        const { S3StorageService } = await import('./s3Storage.js');
+        const s3Service = new S3StorageService();
+        const { uploadURL, key } = await s3Service.getPresignedUploadUrlForKey({
+          prefix: buildAircraftVerificationDocPrefix(requesterId, fieldName),
+          contentType,
+        });
+        return res.json({ uploadURL, storagePath: key });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const storagePath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      return res.json({ uploadURL, storagePath });
+    } catch (error) {
+      console.error("Failed to prepare aircraft verification document upload:", error);
+      return res.status(500).json({ error: "Failed to prepare upload" });
+    }
+  });
+
   // Serve objects with ACL check
   app.get('/objects/:objectPath(*)', async (req: any, res) => {
     try {
@@ -7292,6 +7351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       { name: 'annualInspectionDoc', maxCount: 1 },
     ]),
     async (req: any, res) => {
+      const startedAt = Date.now();
       try {
         const userId = req.user.claims.sub;
         const files = req.files as { [fieldname: string]: Express.Multer.File[] };
@@ -7299,17 +7359,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Parse listing data - handle both multipart and JSON
         const hasFiles = files && Object.keys(files).length > 0;
         const listingData = hasFiles ? JSON.parse(req.body.listingData || '{}') : req.body;
-        
-        // Create individual placeholder URLs for each verification document type (only if files present)
-        const timestamp = Date.now();
-        const insuranceDocUrl = hasFiles && files.insuranceDoc ? `/uploads/insurance-${userId}-${timestamp}.pdf` : null;
-        const annualInspectionDocUrl = hasFiles && files.annualInspectionDoc ? `/uploads/annual-${userId}-${timestamp}.pdf` : null;
-        
-        // Collect all non-null document URLs for verification submission
-        const docUrls = [
-          insuranceDocUrl,
-          annualInspectionDocUrl,
-        ].filter((url): url is string => url !== null);
+        const submissionKey =
+          typeof listingData.submissionKey === "string" && listingData.submissionKey.trim()
+            ? listingData.submissionKey.trim().slice(0, 120)
+            : null;
+
+        const requestedInsuranceDocUrl =
+          typeof listingData.insuranceDocUrl === "string" && listingData.insuranceDocUrl.trim()
+            ? listingData.insuranceDocUrl.trim()
+            : null;
+        const requestedAnnualInspectionDocUrl =
+          typeof listingData.annualInspectionDocUrl === "string" && listingData.annualInspectionDocUrl.trim()
+            ? listingData.annualInspectionDocUrl.trim()
+            : null;
+
+        if (requestedInsuranceDocUrl && !isOwnedAircraftVerificationDocPath(requestedInsuranceDocUrl, userId)) {
+          return res.status(400).json({ error: "Invalid insurance document path" });
+        }
+        if (requestedAnnualInspectionDocUrl && !isOwnedAircraftVerificationDocPath(requestedAnnualInspectionDocUrl, userId)) {
+          return res.status(400).json({ error: "Invalid annual inspection document path" });
+        }
+
+        const getMultipartUploadPath = (fileList?: Express.Multer.File[]) => {
+          const file = fileList?.[0];
+          if (!file?.filename) return null;
+          const baseDir =
+            file.fieldname.includes('image') || file.mimetype.startsWith('image/')
+              ? 'marketplace'
+              : 'documents';
+          return `/uploads/${baseDir}/${file.filename}`;
+        };
+
+        // Backward-compatible fallback for multipart uploads while the client moves to direct uploads.
+        const uploadedInsuranceDocUrl = getMultipartUploadPath(files?.insuranceDoc);
+        const uploadedAnnualInspectionDocUrl = getMultipartUploadPath(files?.annualInspectionDoc);
+
+        const insuranceDocUrl = uploadedInsuranceDocUrl || requestedInsuranceDocUrl;
+        const annualInspectionDocUrl = uploadedAnnualInspectionDocUrl || requestedAnnualInspectionDocUrl;
+        const docUrls = [insuranceDocUrl, annualInspectionDocUrl].filter((url): url is string => Boolean(url));
+
+        console.info(JSON.stringify({
+          event: "rental_listing_create_started",
+          userId,
+          submissionKey,
+          hasVerificationDocs: docUrls.length > 0,
+          multipartDocs: hasFiles,
+        }));
         
         // Calculate annual due date (12 months from inspection date)
         let annualDueDate = null;
@@ -7335,7 +7430,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const validatedData = insertAircraftListingSchema.parse({
           ...listingData,
           ownerId: userId,
-          isListed: !hasFiles || docUrls.length === 0, // Publish immediately if no verification docs
+          submissionKey,
+          isListed: docUrls.length === 0, // Publish immediately if no verification docs
           ownershipVerified: false,
           maintenanceVerified: false,
           hasMaintenanceTracking: !!listingData.maintenanceTrackingProvider,
@@ -7346,43 +7442,129 @@ export async function registerRoutes(app: Express): Promise<Server> {
           insuranceDocUrl,
           annualInspectionDocUrl,
         });
-        
-        const listing = await storage.createAircraftListing(validatedData);
-        
-        // Create verification submission for admin review (only if verification docs provided)
-        if (hasFiles && docUrls.length > 0) {
-          await storage.createVerificationSubmission({
-            userId,
-            type: 'owner_aircraft',
-            status: 'pending',
-            aircraftId: listing.id,
-            submissionData: {
-              ...listingData,
-              registration: listing.registration,
-              make: listing.make,
-              model: listing.model,
-            },
-            documentUrls: docUrls,
-            reviewedBy: null,
-            reviewedAt: null,
-            reviewNotes: null,
-            rejectionReason: null,
-            faaRegistryChecked: false,
-            faaRegistryMatch: null,
-            faaRegistryData: null,
-            sources: [],
-            fileHashes: [],
-            pilotLicenseExpiresAt: null,
-            medicalCertExpiresAt: null,
-            insuranceExpiresAt: null,
-            governmentIdExpiresAt: null,
-            expirationNotificationSent: false,
-            lastNotificationSentAt: null,
-          });
-        }
-        
-        res.status(201).json(listing);
+
+        const normalizedRegistration = normalizeAircraftRegistration(validatedData.registration);
+
+        const result = await db.transaction(async (tx) => {
+          if (submissionKey) {
+            const [existing] = await tx
+              .select()
+              .from(aircraftListings)
+              .where(and(
+                eq(aircraftListings.ownerId, userId),
+                eq(aircraftListings.submissionKey, submissionKey),
+              ))
+              .limit(1);
+
+            if (existing) {
+              return { listing: existing, replay: true };
+            }
+          }
+
+          if (normalizedRegistration) {
+            const [duplicateListing] = await tx
+              .select({
+                id: aircraftListings.id,
+                isListed: aircraftListings.isListed,
+                createdAt: aircraftListings.createdAt,
+              })
+              .from(aircraftListings)
+              .where(and(
+                eq(aircraftListings.ownerId, userId),
+                sql`regexp_replace(upper(${aircraftListings.registration}), '[^A-Z0-9]', '', 'g') = ${normalizedRegistration}`,
+              ))
+              .limit(1);
+
+            if (duplicateListing) {
+              throw new Error("You already have a rental listing for this registration.");
+            }
+          }
+
+          const insertQuery = tx
+            .insert(aircraftListings)
+            .values(validatedData)
+            .returning();
+
+          const [listing] = submissionKey
+            ? await insertQuery.onConflictDoNothing({
+                target: [aircraftListings.ownerId, aircraftListings.submissionKey],
+              })
+            : await insertQuery;
+
+          if (!listing) {
+            const [existing] = await tx
+              .select()
+              .from(aircraftListings)
+              .where(and(
+                eq(aircraftListings.ownerId, userId),
+                eq(aircraftListings.submissionKey, submissionKey!),
+              ))
+              .limit(1);
+
+            if (existing) {
+              return { listing: existing, replay: true };
+            }
+
+            throw new Error("Aircraft listing create conflict");
+          }
+
+          if (docUrls.length > 0) {
+            await tx
+              .insert(verificationSubmissions)
+              .values({
+                userId,
+                type: 'owner_aircraft',
+                status: 'pending',
+                aircraftId: listing.id,
+                submissionData: {
+                  ...listingData,
+                  registration: listing.registration,
+                  make: listing.make,
+                  model: listing.model,
+                  submissionKey,
+                },
+                documentUrls: docUrls,
+                reviewedBy: null,
+                reviewedAt: null,
+                reviewNotes: null,
+                rejectionReason: null,
+                faaRegistryChecked: false,
+                faaRegistryMatch: null,
+                faaRegistryData: null,
+                sources: [],
+                fileHashes: [],
+                pilotLicenseExpiresAt: null,
+                medicalCertExpiresAt: null,
+                insuranceExpiresAt: null,
+                governmentIdExpiresAt: null,
+                expirationNotificationSent: false,
+                lastNotificationSentAt: null,
+              });
+          }
+
+          return { listing, replay: false };
+        });
+
+        console.info(JSON.stringify({
+          event: result.replay ? "rental_listing_create_replayed" : "rental_listing_create_committed",
+          userId,
+          submissionKey,
+          listingId: result.listing.id,
+          hasVerificationDocs: docUrls.length > 0,
+          durationMs: Date.now() - startedAt,
+        }));
+
+        res.status(result.replay ? 200 : 201).json({
+          ...result.listing,
+          idempotentReplay: result.replay,
+        });
       } catch (error: any) {
+        console.error(JSON.stringify({
+          event: "rental_listing_create_failed",
+          userId: req.user?.claims?.sub || null,
+          message: error?.message || "Unknown create failure",
+          durationMs: Date.now() - startedAt,
+        }));
         console.error("Create aircraft listing error:", error);
         res.status(400).json({ error: error.message || "Invalid aircraft data" });
       }
@@ -8895,6 +9077,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(submissions);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch pending verifications" });
+    }
+  });
+
+  app.get("/api/verification-submissions/:id/documents/:index", isAuthenticated, async (req: any, res) => {
+    try {
+      const requesterId = getRequestUserId(req);
+      if (!requesterId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const submission = await storage.getVerificationSubmissionById(req.params.id);
+      if (!submission) {
+        return res.status(404).json({ error: "Verification submission not found" });
+      }
+
+      const requester = await storage.getUser(requesterId);
+      const canAccessSubmission =
+        submission.userId === requesterId || Boolean(requester?.isAdmin || requester?.isSuperAdmin);
+      if (!canAccessSubmission) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const documentIndex = Number.parseInt(String(req.params.index), 10);
+      if (!Number.isInteger(documentIndex) || documentIndex < 0) {
+        return res.status(400).json({ error: "Invalid document index" });
+      }
+
+      const rawDocumentPath = submission.documentUrls?.[documentIndex];
+      if (!rawDocumentPath || typeof rawDocumentPath !== "string") {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const documentPath = rawDocumentPath.trim();
+      if (!documentPath) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      const safeFileName = path.basename(documentPath.split("?")[0] || `verification-document-${documentIndex + 1}`);
+      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Content-Disposition", `inline; filename="${safeFileName.replace(/"/g, "")}"`);
+
+      if (documentPath.startsWith("/uploads/")) {
+        const uploadsRoot = path.resolve(process.cwd(), "uploads");
+        const absolutePath = path.resolve(process.cwd(), `.${documentPath}`);
+        if (!absolutePath.startsWith(`${uploadsRoot}${path.sep}`) && absolutePath !== uploadsRoot) {
+          return res.status(400).json({ error: "Invalid document path" });
+        }
+        if (!fs.existsSync(absolutePath)) {
+          return res.status(404).json({ error: "Document not found" });
+        }
+        return res.sendFile(absolutePath);
+      }
+
+      if (documentPath.startsWith("/objects/")) {
+        const objectStorageService = new ObjectStorageService();
+        const objectFile = await objectStorageService.getObjectEntityFile(documentPath);
+        await objectStorageService.downloadObject(objectFile, res, 0);
+        return;
+      }
+
+      if (!process.env.AWS_S3_BUCKET) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+
+      let s3Key = documentPath;
+      if (/^https?:\/\//i.test(documentPath)) {
+        try {
+          const parsed = new URL(documentPath);
+          s3Key = parsed.pathname.replace(/^\/+/, "");
+          const bucketName = process.env.AWS_S3_BUCKET || "";
+          if (bucketName && s3Key.startsWith(`${bucketName}/`)) {
+            s3Key = s3Key.slice(bucketName.length + 1);
+          }
+        } catch {
+          s3Key = documentPath;
+        }
+      }
+
+      const { S3StorageService } = await import("./s3Storage.js");
+      const s3Service = new S3StorageService();
+      const { stream, contentType, contentLength } = await s3Service.getObjectStream({ key: s3Key });
+      res.setHeader("Content-Type", contentType || "application/octet-stream");
+      if (contentLength) {
+        res.setHeader("Content-Length", String(contentLength));
+      }
+      await pipeline(stream, res);
+    } catch (error: any) {
+      if (error instanceof ObjectNotFoundError || error?.code === "ENOENT") {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      const statusCode = error?.$metadata?.httpStatusCode;
+      if (error?.name === "NoSuchKey" || statusCode === 404) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      console.error("Failed to stream verification document:", error);
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
+      return res.status(500).json({ error: "Failed to load document" });
     }
   });
 

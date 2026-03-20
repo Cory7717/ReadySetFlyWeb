@@ -81,7 +81,9 @@ export default function ListAircraft() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
+  const [submissionKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `submission-${Date.now()}`);
   const [showVerificationNotice, setShowVerificationNotice] = useState(false);
+  const [uploadingVerificationDocs, setUploadingVerificationDocs] = useState(false);
   const verificationNoticeKey = "rsf-verification-owner-v1";
 
   // Check if we're in edit mode
@@ -285,28 +287,11 @@ export default function ListAircraft() {
   }, [existingAircraft, isEditMode, form]);
 
   const createListingMutation = useMutation({
-    mutationFn: async ({ formData, hasFiles }: { formData: any; hasFiles: boolean }) => {
+    mutationFn: async ({ listingPayload, hasVerificationDocs }: { listingPayload: any; hasVerificationDocs: boolean }) => {
       const method = isEditMode ? "PATCH" : "POST";
       const endpoint = isEditMode ? `/api/aircraft/${aircraftId}` : "/api/aircraft";
-
-      // In edit mode, always use JSON (no file uploads for now)
-      // In create mode, use FormData if there are files, otherwise JSON
-      if (isEditMode || !hasFiles) {
-        // Use apiRequest for JSON
-        return { data: await apiRequest(method, endpoint, formData), hasVerificationDocs: false };
-      } else {
-        // Use fetch for FormData (multipart/form-data) - create mode only
-        const response = await fetch(endpoint, {
-          method,
-          body: formData,
-          credentials: "include",
-        });
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Submission failed");
-        }
-        return { data: await response.json(), hasVerificationDocs: hasFiles };
-      }
+      const response = await apiRequest(method, endpoint, listingPayload);
+      return { data: response, hasVerificationDocs };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/aircraft"] });
@@ -430,7 +415,46 @@ export default function ListAircraft() {
     });
   };
 
-  const onSubmit = (data: ListingFormData) => {
+  const uploadVerificationDocument = async (
+    file: File,
+    fieldName: "insuranceDoc" | "annualInspectionDoc",
+  ): Promise<string> => {
+    const initResponse = await fetch(apiUrl("/api/aircraft/verification-docs/upload"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        fieldName,
+        contentType: file.type || "application/octet-stream",
+      }),
+    });
+
+    if (!initResponse.ok) {
+      const errorText = await initResponse.text();
+      throw new Error(errorText || "Failed to prepare document upload");
+    }
+
+    const { uploadURL, storagePath } = await initResponse.json() as {
+      uploadURL: string;
+      storagePath: string;
+    };
+
+    const uploadResponse = await fetch(uploadURL, {
+      method: "PUT",
+      body: file,
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+      },
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`Failed to upload ${fieldName}`);
+    }
+
+    return storagePath;
+  };
+
+  const onSubmit = async (data: ListingFormData) => {
     if (import.meta.env.DEV) {
       console.log("Form submitted with data:", data);
       console.log("Form errors:", form.formState.errors);
@@ -449,25 +473,38 @@ export default function ListAircraft() {
       avionicsSuite: avionics || null,
       requiredCertifications: selectedCertifications,
       images: imageFiles.length > 0 ? imageFiles : [],
+      submissionKey: isEditMode ? undefined : submissionKey,
     };
-    
-    if (hasVerificationDocs) {
-      // Create FormData for multipart upload
-      const formData = new FormData();
-      formData.append('listingData', JSON.stringify(listingPayload));
-      
-      // Append verification document files
-      if (verificationDocs.insuranceDoc) {
-        formData.append('insuranceDoc', verificationDocs.insuranceDoc);
+
+    try {
+      if (hasVerificationDocs) {
+        setUploadingVerificationDocs(true);
+        const [insuranceDocUrl, annualInspectionDocUrl] = await Promise.all([
+          verificationDocs.insuranceDoc
+            ? uploadVerificationDocument(verificationDocs.insuranceDoc, "insuranceDoc")
+            : Promise.resolve<string | null>(null),
+          verificationDocs.annualInspectionDoc
+            ? uploadVerificationDocument(verificationDocs.annualInspectionDoc, "annualInspectionDoc")
+            : Promise.resolve<string | null>(null),
+        ]);
+
+        if (insuranceDocUrl) {
+          (listingPayload as any).insuranceDocUrl = insuranceDocUrl;
+        }
+        if (annualInspectionDocUrl) {
+          (listingPayload as any).annualInspectionDocUrl = annualInspectionDocUrl;
+        }
       }
-      if (verificationDocs.annualInspectionDoc) {
-        formData.append('annualInspectionDoc', verificationDocs.annualInspectionDoc);
-      }
-      
-      createListingMutation.mutate({ formData, hasFiles: true });
-    } else {
-      // No files, use regular JSON submission
-      createListingMutation.mutate({ formData: listingPayload, hasFiles: false });
+
+      createListingMutation.mutate({ listingPayload, hasVerificationDocs });
+    } catch (error: any) {
+      toast({
+        title: "Document upload failed",
+        description: error?.message || "Failed to upload verification documents.",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingVerificationDocs(false);
     }
   };
 
@@ -991,10 +1028,12 @@ export default function ListAircraft() {
                 type="submit" 
                 size="lg" 
                 className="flex-1 bg-accent text-accent-foreground hover:bg-accent" 
-                disabled={createListingMutation.isPending || (isEditMode && loadingAircraft)}
+                disabled={createListingMutation.isPending || uploadingVerificationDocs || (isEditMode && loadingAircraft)}
                 data-testid="button-submit-listing"
               >
-                {createListingMutation.isPending 
+                {uploadingVerificationDocs
+                  ? "Uploading documents..."
+                  : createListingMutation.isPending 
                   ? (isEditMode ? "Updating..." : "Listing...") 
                   : (isEditMode ? "Update Aircraft" : "List Aircraft")}
               </Button>

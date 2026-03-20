@@ -270,6 +270,7 @@ export const adminInvites = pgTable("admin_invites", {
 export const aircraftListings = pgTable("aircraft_listings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   ownerId: varchar("owner_id").notNull().references(() => users.id),
+  submissionKey: text("submission_key"),
   
   // Aircraft details
   make: text("make").notNull(),
@@ -365,6 +366,7 @@ export const aircraftListings = pgTable("aircraft_listings", {
   index("idx_aircraft_city").on(table.city),
   index("idx_aircraft_is_listed").on(table.isListed),
   index("idx_aircraft_category").on(table.category),
+  uniqueIndex("uidx_aircraft_owner_submission_key").on(table.ownerId, table.submissionKey),
   index("idx_aircraft_engine_type").on(table.engineType),
   index("idx_aircraft_city_engine_type").on(table.city, table.engineType),
   index("idx_aircraft_category_city").on(table.category, table.city),

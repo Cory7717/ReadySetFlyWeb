@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
+import { getVerificationSubmissionDocumentUrl } from "@/lib/verificationDocuments";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { crmSalesEmailTemplateTypes, crmWeeklyReportStatuses, insertCrmLeadSchema, insertCrmWeeklyReportSchema, insertExpenseSchema, insertPromoAlertSchema, insertPromoCodeSchema, insertBannerAdSchema, insertBannerAdOrderSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, leadCategories, leadStatuses, type User, type AdminInvite, type AircraftListing, type MarketplaceListing, type VerificationSubmission, type CrmLead, type CrmWeeklyReport, type InsertCrmLead, type InsertCrmWeeklyReport, type Expense, type InsertExpense, type PromoAlert, type InsertPromoAlert, type PromoCode, type InsertPromoCode, type AdminNotification, type BannerAd, type InsertBannerAd, type BannerAdOrder, type InsertBannerAdOrder, type InsertHkDailyMetric, type InsertHkAttendantMetric, type PartnerToolMetric, type LeadCategory, type LeadStatus, type CrmWeeklyReportStatus, type BannerVideoOrientation, type CrmSalesEmailTemplateType } from "@shared/schema";
@@ -7566,18 +7567,34 @@ export default function AdminDashboard() {
               {/* Documents */}
               <div className="space-y-2">
                 <h3 className="font-semibold">Documents ({selectedSubmission.documentUrls?.length || 0})</h3>
-                <div className="space-y-1 text-sm">
+                <div className="space-y-2 text-sm">
                   {(selectedSubmission.documentUrls || []).map((url, index) => (
-                    <div key={index} className="flex items-center gap-2">
+                    <div key={index} className="flex items-center justify-between gap-3 rounded-md border p-2">
+                      <div className="flex min-w-0 items-center gap-2">
                       <Badge variant="secondary" className="text-xs">
                         Document {index + 1}
                       </Badge>
-                      <span className="text-muted-foreground truncate">{url}</span>
+                        <span className="truncate text-muted-foreground">{url}</span>
+                      </div>
+                      <Button
+                        asChild
+                        size="sm"
+                        variant="outline"
+                        data-testid={`button-open-verification-document-${index}`}
+                      >
+                        <a
+                          href={getVerificationSubmissionDocumentUrl(selectedSubmission.id, index)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Open
+                        </a>
+                      </Button>
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Note: Document URLs are placeholders. In production, these will link to cloud storage.
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Documents open through a secure verification route for admins and the submission owner.
                 </p>
               </div>
 

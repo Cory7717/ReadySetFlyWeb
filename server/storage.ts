@@ -390,6 +390,7 @@ export interface IStorage {
 
   // Verification Submissions
   createVerificationSubmission(submission: InsertVerificationSubmission): Promise<VerificationSubmission>;
+  getVerificationSubmissionById(id: string): Promise<VerificationSubmission | undefined>;
   getVerificationSubmissionsByUser(userId: string): Promise<VerificationSubmission[]>;
   getPendingVerificationSubmissions(): Promise<VerificationSubmission[]>;
   updateVerificationSubmission(id: string, updates: Partial<VerificationSubmission>): Promise<VerificationSubmission | undefined>;
@@ -2214,6 +2215,14 @@ export class DatabaseStorage implements IStorage {
       .insert(verificationSubmissions)
       .values(insertSubmission)
       .returning();
+    return submission;
+  }
+
+  async getVerificationSubmissionById(id: string): Promise<VerificationSubmission | undefined> {
+    const [submission] = await db
+      .select()
+      .from(verificationSubmissions)
+      .where(eq(verificationSubmissions.id, id));
     return submission;
   }
 

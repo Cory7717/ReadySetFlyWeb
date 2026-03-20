@@ -13,6 +13,7 @@
     "start:nms-worker": "NODE_ENV=production node run-migration.js && node dist/nms-worker-entry.js",
     "check": "tsc",
     "test:smoke": "node scripts/smoke-test.mjs",
+    "test:load:aircraft": "tsx scripts/load-test-aircraft-listings.ts",
     "test:unit": "tsx --test scripts/tests/marketplace-fees.test.ts",
     "seed:aircraft-types": "tsx seed_aircraft_types.ts",
     "import:aircraft-types": "tsx scripts/import-aircraft-types.ts",

@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -17930,11 +17930,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(404).json({ error: "Flying club not found" });
       }
 
-      const [members, aircraft, reservations, announcements] = await Promise.all([
+      const [members, aircraft, reservations, announcements, squawks, maintenanceItems, blackouts] = await Promise.all([
         storage.getFlyingClubMembers(club.id),
         storage.getFlyingClubAircraft(club.id),
         canViewPrivate ? storage.getFlyingClubReservations(club.id) : Promise.resolve([]),
         storage.getFlyingClubAnnouncements(club.id),
+        canViewPrivate ? storage.getFlyingClubSquawks(club.id) : Promise.resolve([]),
+        canViewPrivate ? storage.getFlyingClubMaintenanceItems(club.id) : Promise.resolve([]),
+        canViewPrivate ? storage.getFlyingClubBlackouts(club.id) : Promise.resolve([]),
       ]);
       const { documents, pendingDocuments, acceptances } = await getPendingRequiredClubDocuments(club.id, access.userId);
       const joinRequests = access.canManage ? await storage.getFlyingClubJoinRequests(club.id) : [];
@@ -17948,6 +17951,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         aircraft,
         reservations,
         announcements,
+        squawks,
+        maintenanceItems,
+        blackouts,
         documents,
         viewerAcceptances: acceptances,
         pendingRequiredDocuments: pendingDocuments,
@@ -18257,6 +18263,209 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.patch("/api/flying-clubs/:clubId/aircraft/:aircraftId", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (!access.canManage) {
+        return res.status(403).json({ error: "Club manager access required" });
+      }
+      const aircraft = await storage.getFlyingClubAircraftById(req.params.aircraftId);
+      if (!aircraft || aircraft.clubId !== access.club.id) {
+        return res.status(404).json({ error: "Club aircraft not found" });
+      }
+      const result = insertFlyingClubAircraftSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updated = await storage.updateFlyingClubAircraft(aircraft.id, result.data as any);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update club aircraft:", error);
+      res.status(500).json({ error: "Failed to update club aircraft" });
+    }
+  });
+
+  app.post("/api/flying-clubs/:clubId/squawks", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club || !access.userId) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (!access.canReserve) {
+        return res.status(403).json({ error: "Active club membership required" });
+      }
+      const result = insertFlyingClubSquawkSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const aircraft = await storage.getFlyingClubAircraftById(result.data.aircraftId);
+      if (!aircraft || aircraft.clubId !== access.club.id) {
+        return res.status(404).json({ error: "Club aircraft not found" });
+      }
+      const created = await storage.createFlyingClubSquawk({
+        ...result.data,
+        clubId: access.club.id,
+        reportedByUserId: access.userId,
+      } as any);
+      if (created.groundsAircraft && aircraft.status !== "grounded") {
+        await storage.updateFlyingClubAircraft(aircraft.id, { status: "grounded" } as any);
+      }
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create club squawk:", error);
+      res.status(500).json({ error: "Failed to create club squawk" });
+    }
+  });
+
+  app.patch("/api/flying-clubs/:clubId/squawks/:squawkId", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club || !access.userId) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (!access.canManage) {
+        return res.status(403).json({ error: "Club manager access required" });
+      }
+      const squawk = await storage.getFlyingClubSquawk(req.params.squawkId);
+      if (!squawk || squawk.clubId !== access.club.id) {
+        return res.status(404).json({ error: "Squawk not found" });
+      }
+      const result = insertFlyingClubSquawkSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updates: any = { ...result.data };
+      if (updates.status === "resolved") {
+        updates.resolvedAt = new Date();
+        updates.resolvedByUserId = access.userId;
+      }
+      const updated = await storage.updateFlyingClubSquawk(squawk.id, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update club squawk:", error);
+      res.status(500).json({ error: "Failed to update club squawk" });
+    }
+  });
+
+  app.post("/api/flying-clubs/:clubId/maintenance-items", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club || !access.userId) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (!access.canManage) {
+        return res.status(403).json({ error: "Club manager access required" });
+      }
+      const result = insertFlyingClubMaintenanceItemSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const aircraft = await storage.getFlyingClubAircraftById(result.data.aircraftId);
+      if (!aircraft || aircraft.clubId !== access.club.id) {
+        return res.status(404).json({ error: "Club aircraft not found" });
+      }
+      const created = await storage.createFlyingClubMaintenanceItem({
+        ...result.data,
+        clubId: access.club.id,
+        createdByUserId: access.userId,
+      } as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create maintenance item:", error);
+      res.status(500).json({ error: "Failed to create maintenance item" });
+    }
+  });
+
+  app.patch("/api/flying-clubs/:clubId/maintenance-items/:itemId", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club || !access.userId) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (!access.canManage) {
+        return res.status(403).json({ error: "Club manager access required" });
+      }
+      const item = await storage.getFlyingClubMaintenanceItem(req.params.itemId);
+      if (!item || item.clubId !== access.club.id) {
+        return res.status(404).json({ error: "Maintenance item not found" });
+      }
+      const result = insertFlyingClubMaintenanceItemSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updates: any = { ...result.data };
+      if (updates.status === "completed") {
+        updates.completedAt = new Date();
+        updates.completedByUserId = access.userId;
+      }
+      const updated = await storage.updateFlyingClubMaintenanceItem(item.id, updates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update maintenance item:", error);
+      res.status(500).json({ error: "Failed to update maintenance item" });
+    }
+  });
+
+  app.post("/api/flying-clubs/:clubId/blackouts", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club || !access.userId) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (!access.canManage) {
+        return res.status(403).json({ error: "Club manager access required" });
+      }
+      const result = insertFlyingClubBlackoutSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const aircraft = await storage.getFlyingClubAircraftById(result.data.aircraftId);
+      if (!aircraft || aircraft.clubId !== access.club.id) {
+        return res.status(404).json({ error: "Club aircraft not found" });
+      }
+      if (!(new Date(result.data.endAt) > new Date(result.data.startAt))) {
+        return res.status(400).json({ error: "Blackout end time must be after start time" });
+      }
+      const created = await storage.createFlyingClubBlackout({
+        ...result.data,
+        clubId: access.club.id,
+        createdByUserId: access.userId,
+      } as any);
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create aircraft blackout:", error);
+      res.status(500).json({ error: "Failed to create aircraft blackout" });
+    }
+  });
+
+  app.patch("/api/flying-clubs/:clubId/blackouts/:blackoutId", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club || !access.userId) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (!access.canManage) {
+        return res.status(403).json({ error: "Club manager access required" });
+      }
+      const blackout = await storage.getFlyingClubBlackout(req.params.blackoutId);
+      if (!blackout || blackout.clubId !== access.club.id) {
+        return res.status(404).json({ error: "Blackout not found" });
+      }
+      const result = insertFlyingClubBlackoutSchema.partial().safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const updated = await storage.updateFlyingClubBlackout(blackout.id, result.data as any);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update aircraft blackout:", error);
+      res.status(500).json({ error: "Failed to update aircraft blackout" });
+    }
+  });
+
   app.post("/api/flying-clubs/:clubId/reservations", isAuthenticated, async (req: any, res) => {
     try {
       const access = await getFlyingClubAccessContext(req, req.params.clubId);
@@ -18288,10 +18497,54 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(400).json({ error: result.error.format() });
       }
 
+      const aircraft = await storage.getFlyingClubAircraftById(result.data.aircraftId);
+      if (!aircraft || aircraft.clubId !== access.club.id) {
+        return res.status(404).json({ error: "Club aircraft not found" });
+      }
+
       const startAt = new Date(result.data.startAt);
       const endAt = new Date(result.data.endAt);
       if (!(endAt > startAt)) {
         return res.status(400).json({ error: "Reservation end time must be after start time" });
+      }
+
+      if (["maintenance", "grounded", "inactive"].includes(String(aircraft.status))) {
+        return res.status(409).json({ error: "This aircraft is not currently available for booking" });
+      }
+
+      const [blackouts, squawks, maintenanceItems] = await Promise.all([
+        storage.getFlyingClubBlackouts(access.club.id),
+        storage.getFlyingClubSquawks(access.club.id),
+        storage.getFlyingClubMaintenanceItems(access.club.id),
+      ]);
+
+      const conflictingBlackout = blackouts.find((blackout) => {
+        if (blackout.aircraftId !== aircraft.id) return false;
+        if (blackout.status !== "active") return false;
+        const blackoutStart = new Date(blackout.startAt as any);
+        const blackoutEnd = new Date(blackout.endAt as any);
+        return startAt < blackoutEnd && endAt > blackoutStart;
+      });
+      if (conflictingBlackout) {
+        return res.status(409).json({ error: "This aircraft is blocked by a maintenance or operational blackout" });
+      }
+
+      const groundingSquawk = squawks.find((squawk) => {
+        if (squawk.aircraftId !== aircraft.id) return false;
+        if (!squawk.groundsAircraft) return false;
+        return squawk.status !== "resolved";
+      });
+      if (groundingSquawk) {
+        return res.status(409).json({ error: "This aircraft is currently grounded by an open squawk" });
+      }
+
+      const blockingMaintenance = maintenanceItems.find((item) => {
+        if (item.aircraftId !== aircraft.id) return false;
+        if (!item.blocksScheduling) return false;
+        return item.status !== "completed";
+      });
+      if (blockingMaintenance) {
+        return res.status(409).json({ error: "This aircraft has an active maintenance restriction" });
       }
 
       const reservations = await storage.getFlyingClubReservations(access.club.id);

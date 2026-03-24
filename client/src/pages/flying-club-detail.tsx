@@ -16,11 +16,14 @@ import type {
   FlyingClub,
   FlyingClubAircraft,
   FlyingClubAnnouncement,
+  FlyingClubBlackout,
   FlyingClubDocument,
   FlyingClubJoinRequest,
   FlyingClubLegalAcceptance,
+  FlyingClubMaintenanceItem,
   FlyingClubMember,
   FlyingClubReservation,
+  FlyingClubSquawk,
 } from "@shared/schema";
 
 type FlyingClubDetailResponse = {
@@ -29,6 +32,9 @@ type FlyingClubDetailResponse = {
   aircraft: FlyingClubAircraft[];
   reservations: FlyingClubReservation[];
   announcements: FlyingClubAnnouncement[];
+  squawks: FlyingClubSquawk[];
+  maintenanceItems: FlyingClubMaintenanceItem[];
+  blackouts: FlyingClubBlackout[];
   documents: FlyingClubDocument[];
   viewerAcceptances: FlyingClubLegalAcceptance[];
   pendingRequiredDocuments: FlyingClubDocument[];
@@ -72,6 +78,34 @@ const EMPTY_DOCUMENT = {
   requiresAcceptance: true,
 };
 
+const EMPTY_SQUAWK = {
+  aircraftId: "",
+  title: "",
+  description: "",
+  severity: "minor",
+  groundsAircraft: false,
+};
+
+const EMPTY_MAINTENANCE = {
+  aircraftId: "",
+  itemType: "maintenance",
+  title: "",
+  description: "",
+  status: "open",
+  dueDate: "",
+  blocksScheduling: false,
+  complianceReference: "",
+  notes: "",
+};
+
+const EMPTY_BLACKOUT = {
+  aircraftId: "",
+  title: "",
+  reason: "",
+  startAt: "",
+  endAt: "",
+};
+
 function formatDateTime(value?: string | Date | null) {
   if (!value) return "Not scheduled";
   const date = new Date(value);
@@ -101,14 +135,21 @@ export default function FlyingClubDetailPage() {
   const [joinRequestForm, setJoinRequestForm] = useState(EMPTY_JOIN_REQUEST);
   const [documentForm, setDocumentForm] = useState(EMPTY_DOCUMENT);
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [squawkForm, setSquawkForm] = useState(EMPTY_SQUAWK);
+  const [maintenanceForm, setMaintenanceForm] = useState(EMPTY_MAINTENANCE);
+  const [blackoutForm, setBlackoutForm] = useState(EMPTY_BLACKOUT);
   const [isSavingAircraft, setIsSavingAircraft] = useState(false);
   const [isImportingFleet, setIsImportingFleet] = useState(false);
   const [isSavingReservation, setIsSavingReservation] = useState(false);
   const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
   const [isSubmittingJoinRequest, setIsSubmittingJoinRequest] = useState(false);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [isSavingSquawk, setIsSavingSquawk] = useState(false);
+  const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
+  const [isSavingBlackout, setIsSavingBlackout] = useState(false);
   const [acceptingDocumentId, setAcceptingDocumentId] = useState<string | null>(null);
   const [reviewingJoinRequestId, setReviewingJoinRequestId] = useState<string | null>(null);
+  const [updatingOpsId, setUpdatingOpsId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<FlyingClubDetailResponse>({
     queryKey: slug ? [`/api/flying-clubs/${slug}`] : ["flying-club-detail", "missing"],
@@ -349,6 +390,122 @@ export default function FlyingClubDetailPage() {
     }
   };
 
+  const createSquawk = async () => {
+    if (!data) return;
+    if (!squawkForm.aircraftId || !squawkForm.title.trim()) {
+      toast({ title: "Aircraft and squawk title are required", variant: "destructive" });
+      return;
+    }
+    setIsSavingSquawk(true);
+    try {
+      await apiRequest("POST", `/api/flying-clubs/${data.club.id}/squawks`, squawkForm);
+      setSquawkForm(EMPTY_SQUAWK);
+      await refreshClub();
+      toast({ title: "Squawk reported" });
+    } catch (error: any) {
+      toast({ title: "Could not report squawk", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingSquawk(false);
+    }
+  };
+
+  const updateSquawkStatus = async (squawkId: string, status: string) => {
+    if (!data) return;
+    setUpdatingOpsId(squawkId);
+    try {
+      await apiRequest("PATCH", `/api/flying-clubs/${data.club.id}/squawks/${squawkId}`, { status });
+      await refreshClub();
+      toast({ title: "Squawk updated" });
+    } catch (error: any) {
+      toast({ title: "Could not update squawk", description: error.message, variant: "destructive" });
+    } finally {
+      setUpdatingOpsId(null);
+    }
+  };
+
+  const updateAircraftStatus = async (aircraftId: string, status: string) => {
+    if (!data) return;
+    setUpdatingOpsId(aircraftId);
+    try {
+      await apiRequest("PATCH", `/api/flying-clubs/${data.club.id}/aircraft/${aircraftId}`, { status });
+      await refreshClub();
+      toast({ title: "Aircraft status updated" });
+    } catch (error: any) {
+      toast({ title: "Could not update aircraft", description: error.message, variant: "destructive" });
+    } finally {
+      setUpdatingOpsId(null);
+    }
+  };
+
+  const createMaintenanceItem = async () => {
+    if (!data) return;
+    if (!maintenanceForm.aircraftId || !maintenanceForm.title.trim()) {
+      toast({ title: "Aircraft and maintenance title are required", variant: "destructive" });
+      return;
+    }
+    setIsSavingMaintenance(true);
+    try {
+      await apiRequest("POST", `/api/flying-clubs/${data.club.id}/maintenance-items`, {
+        ...maintenanceForm,
+        dueDate: maintenanceForm.dueDate ? maintenanceForm.dueDate : null,
+      });
+      setMaintenanceForm(EMPTY_MAINTENANCE);
+      await refreshClub();
+      toast({ title: "Maintenance item added" });
+    } catch (error: any) {
+      toast({ title: "Could not add maintenance item", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingMaintenance(false);
+    }
+  };
+
+  const updateMaintenanceStatus = async (itemId: string, status: string) => {
+    if (!data) return;
+    setUpdatingOpsId(itemId);
+    try {
+      await apiRequest("PATCH", `/api/flying-clubs/${data.club.id}/maintenance-items/${itemId}`, { status });
+      await refreshClub();
+      toast({ title: "Maintenance item updated" });
+    } catch (error: any) {
+      toast({ title: "Could not update maintenance item", description: error.message, variant: "destructive" });
+    } finally {
+      setUpdatingOpsId(null);
+    }
+  };
+
+  const createBlackout = async () => {
+    if (!data) return;
+    if (!blackoutForm.aircraftId || !blackoutForm.title.trim() || !blackoutForm.startAt || !blackoutForm.endAt) {
+      toast({ title: "Aircraft, title, start, and end are required", variant: "destructive" });
+      return;
+    }
+    setIsSavingBlackout(true);
+    try {
+      await apiRequest("POST", `/api/flying-clubs/${data.club.id}/blackouts`, blackoutForm);
+      setBlackoutForm(EMPTY_BLACKOUT);
+      await refreshClub();
+      toast({ title: "Aircraft blackout added" });
+    } catch (error: any) {
+      toast({ title: "Could not add blackout", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingBlackout(false);
+    }
+  };
+
+  const updateBlackoutStatus = async (blackoutId: string, status: string) => {
+    if (!data) return;
+    setUpdatingOpsId(blackoutId);
+    try {
+      await apiRequest("PATCH", `/api/flying-clubs/${data.club.id}/blackouts/${blackoutId}`, { status });
+      await refreshClub();
+      toast({ title: "Blackout updated" });
+    } catch (error: any) {
+      toast({ title: "Could not update blackout", description: error.message, variant: "destructive" });
+    } finally {
+      setUpdatingOpsId(null);
+    }
+  };
+
   if (isLoading || !data) {
     return (
       <PageShell
@@ -426,10 +583,11 @@ export default function FlyingClubDetailPage() {
       ) : null}
 
       <Tabs defaultValue="overview" className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="fleet">Fleet</TabsTrigger>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
+          <TabsTrigger value="ops">Ops</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
         </TabsList>
@@ -807,6 +965,268 @@ export default function FlyingClubDetailPage() {
                 )}
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="ops" className="space-y-6">
+          <div className="grid gap-6">
+            <div className="grid gap-6 xl:grid-cols-3">
+              <Card className="border-white/12 bg-white/86">
+                <CardHeader>
+                  <CardTitle>Aircraft Status</CardTitle>
+                  <CardDescription>Set aircraft availability before members book time.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {data.aircraft.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No aircraft available yet.</div>
+                  ) : (
+                    data.aircraft.map((aircraft) => (
+                      <div key={aircraft.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="font-medium text-slate-900">{aircraft.displayName}</div>
+                            <div className="text-xs uppercase tracking-[0.14em] text-slate-500">{aircraft.status}</div>
+                          </div>
+                          {data.canManage ? (
+                            <select
+                              className="flex h-9 rounded-md border border-input bg-background px-2 py-1 text-sm"
+                              value={aircraft.status}
+                              onChange={(event) => updateAircraftStatus(aircraft.id, event.target.value)}
+                              disabled={updatingOpsId === aircraft.id}
+                            >
+                              <option value="active">Active</option>
+                              <option value="limited">Limited</option>
+                              <option value="maintenance">Maintenance</option>
+                              <option value="grounded">Grounded</option>
+                              <option value="inactive">Inactive</option>
+                            </select>
+                          ) : (
+                            <Badge variant="outline">{aircraft.status}</Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-white/12 bg-white/86">
+                <CardHeader>
+                  <CardTitle>Open Squawks</CardTitle>
+                  <CardDescription>Members can report discrepancies; managers can review and clear them.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {data.squawks.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No squawks reported.</div>
+                  ) : (
+                    data.squawks.map((squawk) => {
+                      const aircraft = aircraftOptions.find((entry) => entry.id === squawk.aircraftId);
+                      return (
+                        <div key={squawk.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-medium text-slate-900">{squawk.title}</div>
+                              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">
+                                {[aircraft?.displayName, squawk.severity, squawk.status].filter(Boolean).join(" / ")}
+                              </div>
+                            </div>
+                            {squawk.groundsAircraft ? <Badge>Grounds aircraft</Badge> : null}
+                          </div>
+                          {squawk.description ? <div className="mt-2 text-sm text-slate-700">{squawk.description}</div> : null}
+                          {data.canManage && squawk.status !== "resolved" ? (
+                            <div className="mt-3 flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => updateSquawkStatus(squawk.id, "in_review")} disabled={updatingOpsId === squawk.id}>
+                                Review
+                              </Button>
+                              <Button size="sm" onClick={() => updateSquawkStatus(squawk.id, "resolved")} disabled={updatingOpsId === squawk.id}>
+                                Resolve
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-white/12 bg-white/86">
+                <CardHeader>
+                  <CardTitle>Blackout Windows</CardTitle>
+                  <CardDescription>Reserve downtime for maintenance, inspections, and club events.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {data.blackouts.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">No blackout windows created yet.</div>
+                  ) : (
+                    data.blackouts.map((blackout) => {
+                      const aircraft = aircraftOptions.find((entry) => entry.id === blackout.aircraftId);
+                      return (
+                        <div key={blackout.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <div className="font-medium text-slate-900">{blackout.title}</div>
+                              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">
+                                {[aircraft?.displayName, blackout.status].filter(Boolean).join(" / ")}
+                              </div>
+                            </div>
+                            {data.canManage && blackout.status === "active" ? (
+                              <Button size="sm" variant="outline" onClick={() => updateBlackoutStatus(blackout.id, "completed")} disabled={updatingOpsId === blackout.id}>
+                                Clear
+                              </Button>
+                            ) : null}
+                          </div>
+                          <div className="mt-2 text-sm text-slate-700">
+                            {formatDateTime(blackout.startAt)} to {formatDateTime(blackout.endAt)}
+                          </div>
+                          {blackout.reason ? <div className="mt-2 text-sm text-muted-foreground">{blackout.reason}</div> : null}
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-3">
+              <Card className="border-white/12 bg-white/86">
+                <CardHeader>
+                  <CardTitle>Report Squawk</CardTitle>
+                  <CardDescription>Log an issue the club needs to review before the next flight.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {!data.canReserve ? (
+                    <div className="text-sm text-muted-foreground">Active club membership is required to report squawks.</div>
+                  ) : (
+                    <>
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={squawkForm.aircraftId} onChange={(event) => setSquawkForm((current) => ({ ...current, aircraftId: event.target.value }))}>
+                        <option value="">Select club aircraft</option>
+                        {aircraftOptions.map((aircraft) => (
+                          <option key={aircraft.id} value={aircraft.id}>{aircraft.displayName}</option>
+                        ))}
+                      </select>
+                      <Input value={squawkForm.title} onChange={(event) => setSquawkForm((current) => ({ ...current, title: event.target.value }))} placeholder="Squawk title" />
+                      <Textarea value={squawkForm.description} onChange={(event) => setSquawkForm((current) => ({ ...current, description: event.target.value }))} placeholder="Describe the discrepancy" rows={4} />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={squawkForm.severity} onChange={(event) => setSquawkForm((current) => ({ ...current, severity: event.target.value }))}>
+                          <option value="info">Info</option>
+                          <option value="minor">Minor</option>
+                          <option value="major">Major</option>
+                          <option value="critical">Critical</option>
+                        </select>
+                        <label className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm">
+                          <input type="checkbox" checked={squawkForm.groundsAircraft} onChange={(event) => setSquawkForm((current) => ({ ...current, groundsAircraft: event.target.checked }))} />
+                          Grounds aircraft
+                        </label>
+                      </div>
+                      <Button onClick={createSquawk} disabled={isSavingSquawk} className="w-full">
+                        {isSavingSquawk ? "Saving squawk..." : "Report squawk"}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-white/12 bg-white/86">
+                <CardHeader>
+                  <CardTitle>Maintenance & AD Tracking</CardTitle>
+                  <CardDescription>Track inspections, ADs, oil, and maintenance tasks with scheduling impact.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-3">
+                    {data.maintenanceItems.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">No maintenance items logged yet.</div>
+                    ) : (
+                      data.maintenanceItems.map((item) => {
+                        const aircraft = aircraftOptions.find((entry) => entry.id === item.aircraftId);
+                        return (
+                          <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-medium text-slate-900">{item.title}</div>
+                                <div className="text-xs uppercase tracking-[0.14em] text-slate-500">
+                                  {[aircraft?.displayName, item.itemType, item.status].filter(Boolean).join(" / ")}
+                                </div>
+                              </div>
+                              {item.blocksScheduling ? <Badge variant="secondary">Blocks scheduling</Badge> : null}
+                            </div>
+                            {item.dueDate ? <div className="mt-2 text-sm text-slate-700">Due: {formatDateTime(item.dueDate)}</div> : null}
+                            {data.canManage && item.status !== "completed" ? (
+                              <div className="mt-3 flex gap-2">
+                                <Button size="sm" variant="outline" onClick={() => updateMaintenanceStatus(item.id, "scheduled")} disabled={updatingOpsId === item.id}>
+                                  Schedule
+                                </Button>
+                                <Button size="sm" onClick={() => updateMaintenanceStatus(item.id, "completed")} disabled={updatingOpsId === item.id}>
+                                  Complete
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  {data.canManage ? (
+                    <>
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={maintenanceForm.aircraftId} onChange={(event) => setMaintenanceForm((current) => ({ ...current, aircraftId: event.target.value }))}>
+                        <option value="">Select club aircraft</option>
+                        {aircraftOptions.map((aircraft) => (
+                          <option key={aircraft.id} value={aircraft.id}>{aircraft.displayName}</option>
+                        ))}
+                      </select>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={maintenanceForm.itemType} onChange={(event) => setMaintenanceForm((current) => ({ ...current, itemType: event.target.value }))}>
+                          <option value="maintenance">Maintenance</option>
+                          <option value="inspection">Inspection</option>
+                          <option value="ad">AD</option>
+                          <option value="oil_change">Oil Change</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <Input type="datetime-local" value={maintenanceForm.dueDate} onChange={(event) => setMaintenanceForm((current) => ({ ...current, dueDate: event.target.value }))} />
+                      </div>
+                      <Input value={maintenanceForm.title} onChange={(event) => setMaintenanceForm((current) => ({ ...current, title: event.target.value }))} placeholder="Maintenance item title" />
+                      <Input value={maintenanceForm.complianceReference} onChange={(event) => setMaintenanceForm((current) => ({ ...current, complianceReference: event.target.value }))} placeholder="Compliance reference / AD number" />
+                      <Textarea value={maintenanceForm.description} onChange={(event) => setMaintenanceForm((current) => ({ ...current, description: event.target.value }))} placeholder="Maintenance notes" rows={3} />
+                      <label className="flex items-center gap-2 text-sm text-slate-700">
+                        <input type="checkbox" checked={maintenanceForm.blocksScheduling} onChange={(event) => setMaintenanceForm((current) => ({ ...current, blocksScheduling: event.target.checked }))} />
+                        Block scheduling until completed
+                      </label>
+                      <Button onClick={createMaintenanceItem} disabled={isSavingMaintenance} className="w-full">
+                        {isSavingMaintenance ? "Saving item..." : "Add maintenance item"}
+                      </Button>
+                    </>
+                  ) : null}
+                </CardContent>
+              </Card>
+
+              <Card className="border-white/12 bg-white/86">
+                <CardHeader>
+                  <CardTitle>Create Blackout Window</CardTitle>
+                  <CardDescription>Protect time for inspections, repairs, ferry flights, or club events.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {!data.canManage ? (
+                    <div className="text-sm text-muted-foreground">Only club managers can create blackout windows.</div>
+                  ) : (
+                    <>
+                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={blackoutForm.aircraftId} onChange={(event) => setBlackoutForm((current) => ({ ...current, aircraftId: event.target.value }))}>
+                        <option value="">Select club aircraft</option>
+                        {aircraftOptions.map((aircraft) => (
+                          <option key={aircraft.id} value={aircraft.id}>{aircraft.displayName}</option>
+                        ))}
+                      </select>
+                      <Input value={blackoutForm.title} onChange={(event) => setBlackoutForm((current) => ({ ...current, title: event.target.value }))} placeholder="Blackout title" />
+                      <Input type="datetime-local" value={blackoutForm.startAt} onChange={(event) => setBlackoutForm((current) => ({ ...current, startAt: event.target.value }))} />
+                      <Input type="datetime-local" value={blackoutForm.endAt} onChange={(event) => setBlackoutForm((current) => ({ ...current, endAt: event.target.value }))} />
+                      <Textarea value={blackoutForm.reason} onChange={(event) => setBlackoutForm((current) => ({ ...current, reason: event.target.value }))} placeholder="Reason for blackout" rows={3} />
+                      <Button onClick={createBlackout} disabled={isSavingBlackout} className="w-full">
+                        {isSavingBlackout ? "Saving blackout..." : "Create blackout"}
+                      </Button>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
 

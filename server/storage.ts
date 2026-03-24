@@ -120,6 +120,12 @@ import {
   type InsertFlyingClubDocument,
   type FlyingClubLegalAcceptance,
   type InsertFlyingClubLegalAcceptance,
+  type FlyingClubSquawk,
+  type InsertFlyingClubSquawk,
+  type FlyingClubMaintenanceItem,
+  type InsertFlyingClubMaintenanceItem,
+  type FlyingClubBlackout,
+  type InsertFlyingClubBlackout,
   type UserSettings,
   type InsertUserSettings,
   type PushToken,
@@ -201,6 +207,9 @@ import {
   flyingClubAnnouncements,
   flyingClubDocuments,
   flyingClubLegalAcceptances,
+  flyingClubSquawks,
+  flyingClubMaintenanceItems,
+  flyingClubBlackouts,
   userSettings,
   pushTokens,
   userNotifications,
@@ -347,6 +356,20 @@ export interface IStorage {
   getFlyingClubLegalAcceptancesForUser(clubId: string, userId: string): Promise<FlyingClubLegalAcceptance[]>;
   getFlyingClubLegalAcceptance(documentId: string, userId: string, version: string): Promise<FlyingClubLegalAcceptance | undefined>;
   createFlyingClubLegalAcceptance(acceptance: InsertFlyingClubLegalAcceptance & { clubId: string; userId: string; version: string; ip?: string | null; userAgent?: string | null }): Promise<FlyingClubLegalAcceptance>;
+  getFlyingClubAircraftById(id: string): Promise<FlyingClubAircraft | undefined>;
+  updateFlyingClubAircraft(id: string, updates: Partial<FlyingClubAircraft>): Promise<FlyingClubAircraft | undefined>;
+  getFlyingClubSquawks(clubId: string): Promise<FlyingClubSquawk[]>;
+  getFlyingClubSquawk(id: string): Promise<FlyingClubSquawk | undefined>;
+  createFlyingClubSquawk(squawk: InsertFlyingClubSquawk & { clubId: string; reportedByUserId: string }): Promise<FlyingClubSquawk>;
+  updateFlyingClubSquawk(id: string, updates: Partial<FlyingClubSquawk>): Promise<FlyingClubSquawk | undefined>;
+  getFlyingClubMaintenanceItems(clubId: string): Promise<FlyingClubMaintenanceItem[]>;
+  getFlyingClubMaintenanceItem(id: string): Promise<FlyingClubMaintenanceItem | undefined>;
+  createFlyingClubMaintenanceItem(item: InsertFlyingClubMaintenanceItem & { clubId: string; createdByUserId: string }): Promise<FlyingClubMaintenanceItem>;
+  updateFlyingClubMaintenanceItem(id: string, updates: Partial<FlyingClubMaintenanceItem>): Promise<FlyingClubMaintenanceItem | undefined>;
+  getFlyingClubBlackouts(clubId: string): Promise<FlyingClubBlackout[]>;
+  getFlyingClubBlackout(id: string): Promise<FlyingClubBlackout | undefined>;
+  createFlyingClubBlackout(blackout: InsertFlyingClubBlackout & { clubId: string; createdByUserId: string }): Promise<FlyingClubBlackout>;
+  updateFlyingClubBlackout(id: string, updates: Partial<FlyingClubBlackout>): Promise<FlyingClubBlackout | undefined>;
 
   // Marketplace Listings
   getMarketplaceListing(id: string): Promise<MarketplaceListing | undefined>;
@@ -1583,6 +1606,24 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async getFlyingClubAircraftById(id: string): Promise<FlyingClubAircraft | undefined> {
+    const [aircraft] = await db
+      .select()
+      .from(flyingClubAircraft)
+      .where(eq(flyingClubAircraft.id, id))
+      .limit(1);
+    return aircraft;
+  }
+
+  async updateFlyingClubAircraft(id: string, updates: Partial<FlyingClubAircraft>): Promise<FlyingClubAircraft | undefined> {
+    const [updated] = await db
+      .update(flyingClubAircraft)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(flyingClubAircraft.id, id))
+      .returning();
+    return updated;
+  }
+
   async getFlyingClubReservations(clubId: string): Promise<FlyingClubReservation[]> {
     return await db
       .select()
@@ -1671,6 +1712,108 @@ export class DatabaseStorage implements IStorage {
       .values(acceptance)
       .returning();
     return created;
+  }
+
+  async getFlyingClubSquawks(clubId: string): Promise<FlyingClubSquawk[]> {
+    return await db
+      .select()
+      .from(flyingClubSquawks)
+      .where(eq(flyingClubSquawks.clubId, clubId))
+      .orderBy(desc(flyingClubSquawks.reportedAt), desc(flyingClubSquawks.createdAt));
+  }
+
+  async getFlyingClubSquawk(id: string): Promise<FlyingClubSquawk | undefined> {
+    const [squawk] = await db
+      .select()
+      .from(flyingClubSquawks)
+      .where(eq(flyingClubSquawks.id, id))
+      .limit(1);
+    return squawk;
+  }
+
+  async createFlyingClubSquawk(squawk: InsertFlyingClubSquawk & { clubId: string; reportedByUserId: string }): Promise<FlyingClubSquawk> {
+    const [created] = await db
+      .insert(flyingClubSquawks)
+      .values(squawk)
+      .returning();
+    return created;
+  }
+
+  async updateFlyingClubSquawk(id: string, updates: Partial<FlyingClubSquawk>): Promise<FlyingClubSquawk | undefined> {
+    const [updated] = await db
+      .update(flyingClubSquawks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(flyingClubSquawks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getFlyingClubMaintenanceItems(clubId: string): Promise<FlyingClubMaintenanceItem[]> {
+    return await db
+      .select()
+      .from(flyingClubMaintenanceItems)
+      .where(eq(flyingClubMaintenanceItems.clubId, clubId))
+      .orderBy(asc(flyingClubMaintenanceItems.status), asc(flyingClubMaintenanceItems.dueDate), desc(flyingClubMaintenanceItems.createdAt));
+  }
+
+  async getFlyingClubMaintenanceItem(id: string): Promise<FlyingClubMaintenanceItem | undefined> {
+    const [item] = await db
+      .select()
+      .from(flyingClubMaintenanceItems)
+      .where(eq(flyingClubMaintenanceItems.id, id))
+      .limit(1);
+    return item;
+  }
+
+  async createFlyingClubMaintenanceItem(item: InsertFlyingClubMaintenanceItem & { clubId: string; createdByUserId: string }): Promise<FlyingClubMaintenanceItem> {
+    const [created] = await db
+      .insert(flyingClubMaintenanceItems)
+      .values(item)
+      .returning();
+    return created;
+  }
+
+  async updateFlyingClubMaintenanceItem(id: string, updates: Partial<FlyingClubMaintenanceItem>): Promise<FlyingClubMaintenanceItem | undefined> {
+    const [updated] = await db
+      .update(flyingClubMaintenanceItems)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(flyingClubMaintenanceItems.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getFlyingClubBlackouts(clubId: string): Promise<FlyingClubBlackout[]> {
+    return await db
+      .select()
+      .from(flyingClubBlackouts)
+      .where(eq(flyingClubBlackouts.clubId, clubId))
+      .orderBy(desc(flyingClubBlackouts.startAt));
+  }
+
+  async getFlyingClubBlackout(id: string): Promise<FlyingClubBlackout | undefined> {
+    const [blackout] = await db
+      .select()
+      .from(flyingClubBlackouts)
+      .where(eq(flyingClubBlackouts.id, id))
+      .limit(1);
+    return blackout;
+  }
+
+  async createFlyingClubBlackout(blackout: InsertFlyingClubBlackout & { clubId: string; createdByUserId: string }): Promise<FlyingClubBlackout> {
+    const [created] = await db
+      .insert(flyingClubBlackouts)
+      .values(blackout)
+      .returning();
+    return created;
+  }
+
+  async updateFlyingClubBlackout(id: string, updates: Partial<FlyingClubBlackout>): Promise<FlyingClubBlackout | undefined> {
+    const [updated] = await db
+      .update(flyingClubBlackouts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(flyingClubBlackouts.id, id))
+      .returning();
+    return updated;
   }
 
   // Marketplace Listings

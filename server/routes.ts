@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -17921,6 +17921,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         storage.getFlyingClubAnnouncements(club.id),
         canViewPrivate ? storage.getFlyingClubDocuments(club.id) : Promise.resolve([]),
       ]);
+      const joinRequests = access.canManage ? await storage.getFlyingClubJoinRequests(club.id) : [];
+      const viewerJoinRequest = access.userId
+        ? await storage.getFlyingClubJoinRequestForApplicant(club.id, access.userId)
+        : null;
 
       res.json({
         club,
@@ -17929,6 +17933,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         reservations,
         announcements,
         documents,
+        joinRequests,
+        viewerJoinRequest,
         viewerMembership: access.membership ?? null,
         canManage: access.canManage,
         canReserve: access.canReserve,
@@ -17936,6 +17942,87 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to fetch flying club detail:", error);
       res.status(500).json({ error: "Failed to fetch flying club detail" });
+    }
+  });
+
+  app.post("/api/flying-clubs/:clubId/join-requests", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club || !access.userId) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (access.membership?.status === "active") {
+        return res.status(409).json({ error: "You are already an active member of this club" });
+      }
+
+      const existing = await storage.getFlyingClubJoinRequestForApplicant(access.club.id, access.userId);
+      if (existing) {
+        return res.status(409).json({ error: "A join request is already pending for this club" });
+      }
+
+      const result = insertFlyingClubJoinRequestSchema.safeParse(req.body || {});
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+
+      const created = await storage.createFlyingClubJoinRequest({
+        clubId: access.club.id,
+        applicantUserId: access.userId,
+        message: result.data.message || null,
+        status: "pending",
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create flying club join request:", error);
+      res.status(500).json({ error: "Failed to create flying club join request" });
+    }
+  });
+
+  app.patch("/api/flying-clubs/:clubId/join-requests/:requestId", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club || !access.userId) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (!access.canManage) {
+        return res.status(403).json({ error: "Club manager access required" });
+      }
+
+      const joinRequest = await storage.getFlyingClubJoinRequest(req.params.requestId);
+      if (!joinRequest || joinRequest.clubId !== access.club.id) {
+        return res.status(404).json({ error: "Join request not found" });
+      }
+      if (joinRequest.status !== "pending") {
+        return res.status(409).json({ error: "Join request has already been reviewed" });
+      }
+
+      const action = String(req.body?.action || "").toLowerCase();
+      if (!["approve", "decline"].includes(action)) {
+        return res.status(400).json({ error: "Invalid join request action" });
+      }
+
+      if (action === "approve") {
+        const existingMembership = await storage.getFlyingClubMembership(access.club.id, joinRequest.applicantUserId);
+        if (!existingMembership) {
+          await storage.addFlyingClubMember({
+            clubId: access.club.id,
+            userId: joinRequest.applicantUserId,
+            role: "member",
+            status: "active",
+          });
+        }
+      }
+
+      const updated = await storage.updateFlyingClubJoinRequest(joinRequest.id, {
+        status: action === "approve" ? "approved" : "declined",
+        reviewedByUserId: access.userId,
+        reviewedAt: new Date(),
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to review flying club join request:", error);
+      res.status(500).json({ error: "Failed to review flying club join request" });
     }
   });
 

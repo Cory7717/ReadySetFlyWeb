@@ -15,6 +15,7 @@ import type {
   FlyingClub,
   FlyingClubAircraft,
   FlyingClubAnnouncement,
+  FlyingClubJoinRequest,
   FlyingClubMember,
   FlyingClubReservation,
 } from "@shared/schema";
@@ -26,6 +27,8 @@ type FlyingClubDetailResponse = {
   reservations: FlyingClubReservation[];
   announcements: FlyingClubAnnouncement[];
   documents: Array<{ id: string; title: string; category: string; storagePath: string }>;
+  joinRequests: FlyingClubJoinRequest[];
+  viewerJoinRequest: FlyingClubJoinRequest | null;
   viewerMembership: FlyingClubMember | null;
   canManage: boolean;
   canReserve: boolean;
@@ -53,6 +56,10 @@ const EMPTY_ANNOUNCEMENT = {
   body: "",
 };
 
+const EMPTY_JOIN_REQUEST = {
+  message: "",
+};
+
 function formatDateTime(value?: string | Date | null) {
   if (!value) return "Not scheduled";
   const date = new Date(value);
@@ -70,10 +77,13 @@ export default function FlyingClubDetailPage() {
   const [reservationForm, setReservationForm] = useState(EMPTY_RESERVATION);
   const [announcementForm, setAnnouncementForm] = useState(EMPTY_ANNOUNCEMENT);
   const [fleetCsvText, setFleetCsvText] = useState("");
+  const [joinRequestForm, setJoinRequestForm] = useState(EMPTY_JOIN_REQUEST);
   const [isSavingAircraft, setIsSavingAircraft] = useState(false);
   const [isImportingFleet, setIsImportingFleet] = useState(false);
   const [isSavingReservation, setIsSavingReservation] = useState(false);
   const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
+  const [isSubmittingJoinRequest, setIsSubmittingJoinRequest] = useState(false);
+  const [reviewingJoinRequestId, setReviewingJoinRequestId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<FlyingClubDetailResponse>({
     queryKey: slug ? [`/api/flying-clubs/${slug}`] : ["flying-club-detail", "missing"],
@@ -184,6 +194,35 @@ export default function FlyingClubDetailPage() {
     }
   };
 
+  const submitJoinRequest = async () => {
+    if (!data) return;
+    setIsSubmittingJoinRequest(true);
+    try {
+      await apiRequest("POST", `/api/flying-clubs/${data.club.id}/join-requests`, joinRequestForm);
+      setJoinRequestForm(EMPTY_JOIN_REQUEST);
+      await refreshClub();
+      toast({ title: "Join request submitted" });
+    } catch (error: any) {
+      toast({ title: "Join request failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSubmittingJoinRequest(false);
+    }
+  };
+
+  const reviewJoinRequest = async (requestId: string, action: "approve" | "decline") => {
+    if (!data) return;
+    setReviewingJoinRequestId(requestId);
+    try {
+      await apiRequest("PATCH", `/api/flying-clubs/${data.club.id}/join-requests/${requestId}`, { action });
+      await refreshClub();
+      toast({ title: action === "approve" ? "Member approved" : "Request declined" });
+    } catch (error: any) {
+      toast({ title: "Join request update failed", description: error.message, variant: "destructive" });
+    } finally {
+      setReviewingJoinRequestId(null);
+    }
+  };
+
   if (isLoading || !data) {
     return (
       <PageShell kicker="Flying Clubs" title="Loading club..." description="Preparing the club workspace." contentClassName="space-y-6">
@@ -261,6 +300,46 @@ export default function FlyingClubDetailPage() {
             </CardContent>
           </Card>
 
+          {!data.viewerMembership && !data.canManage ? (
+            <Card className="border-white/12 bg-white/86">
+              <CardHeader>
+                <CardTitle>Join This Club</CardTitle>
+                <CardDescription>Send a membership request to the club manager.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!isAuthenticated ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-muted-foreground">
+                    Sign in to apply for club membership.
+                    <div className="mt-3 flex gap-3">
+                      <Button asChild size="sm">
+                        <Link href="/login">Sign in</Link>
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href="/register">Create account</Link>
+                      </Button>
+                    </div>
+                  </div>
+                ) : data.viewerJoinRequest?.status === "pending" ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-sm text-amber-900">
+                    Your join request is pending review.
+                  </div>
+                ) : (
+                  <>
+                    <Textarea
+                      value={joinRequestForm.message}
+                      onChange={(event) => setJoinRequestForm({ message: event.target.value })}
+                      placeholder="Short note to the club manager (optional)"
+                      rows={4}
+                    />
+                    <Button onClick={submitJoinRequest} disabled={isSubmittingJoinRequest}>
+                      {isSubmittingJoinRequest ? "Submitting..." : "Apply to join club"}
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card className="border-white/12 bg-white/86">
             <CardHeader>
               <CardTitle>Member Roster</CardTitle>
@@ -278,6 +357,54 @@ export default function FlyingClubDetailPage() {
               ))}
             </CardContent>
           </Card>
+
+          {data.canManage ? (
+            <Card className="border-white/12 bg-white/86">
+              <CardHeader>
+                <CardTitle>Join Requests</CardTitle>
+                <CardDescription>Review new membership requests from pilots who want to join this club.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {data.joinRequests.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-muted-foreground">
+                    No join requests yet.
+                  </div>
+                ) : (
+                  data.joinRequests.map((request) => (
+                    <div key={request.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="font-medium text-slate-900">{request.applicantUserId}</div>
+                          <div className="text-xs uppercase tracking-[0.14em] text-slate-500">{request.status}</div>
+                        </div>
+                        {request.status === "pending" ? (
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => reviewJoinRequest(request.id, "approve")}
+                              disabled={reviewingJoinRequestId === request.id}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => reviewJoinRequest(request.id, "decline")}
+                              disabled={reviewingJoinRequestId === request.id}
+                            >
+                              Decline
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                      {request.message ? <div className="mt-3 text-sm text-slate-700">{request.message}</div> : null}
+                      <div className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-500">{formatDateTime(request.createdAt)}</div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="fleet" className="space-y-6">

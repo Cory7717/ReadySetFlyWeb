@@ -37,6 +37,7 @@ export const flyingClubMemberRoles = ["owner", "manager", "member", "instructor"
 export const flyingClubMemberStatuses = ["invited", "active", "inactive"] as const;
 export const flyingClubAircraftStatuses = ["active", "maintenance", "inactive"] as const;
 export const flyingClubReservationStatuses = ["pending", "confirmed", "cancelled", "completed"] as const;
+export const flyingClubJoinRequestStatuses = ["pending", "approved", "declined", "withdrawn"] as const;
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
 export const personalFinanceOwners = ["cory", "amy", "joint"] as const;
 export const personalFinanceEntryTypes = ["expense", "income"] as const;
@@ -1881,6 +1882,22 @@ export const flyingClubMembers = pgTable("flying_club_members", {
   index("idx_flying_club_members_user").on(table.userId),
 ]);
 
+export const flyingClubJoinRequests = pgTable("flying_club_join_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id").notNull().references(() => flyingClubs.id, { onDelete: "cascade" }),
+  applicantUserId: varchar("applicant_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  message: text("message"),
+  reviewedByUserId: varchar("reviewed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_flying_club_join_requests_club").on(table.clubId),
+  index("idx_flying_club_join_requests_applicant").on(table.applicantUserId),
+  uniqueIndex("uniq_flying_club_join_request_pending").on(table.clubId, table.applicantUserId, table.status),
+]);
+
 export const flyingClubAircraft = pgTable("flying_club_aircraft", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   clubId: varchar("club_id").notNull().references(() => flyingClubs.id, { onDelete: "cascade" }),
@@ -2334,6 +2351,18 @@ export const insertFlyingClubMemberSchema = createInsertSchema(flyingClubMembers
 }).extend({
   role: z.enum(flyingClubMemberRoles).optional(),
   status: z.enum(flyingClubMemberStatuses).optional(),
+});
+
+export const insertFlyingClubJoinRequestSchema = createInsertSchema(flyingClubJoinRequests).omit({
+  id: true,
+  clubId: true,
+  applicantUserId: true,
+  reviewedByUserId: true,
+  reviewedAt: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  status: z.enum(flyingClubJoinRequestStatuses).optional(),
 });
 
 export const insertFlyingClubAircraftSchema = createInsertSchema(flyingClubAircraft).omit({
@@ -3025,6 +3054,8 @@ export type FlyingClub = typeof flyingClubs.$inferSelect;
 export type InsertFlyingClub = z.infer<typeof insertFlyingClubSchema>;
 export type FlyingClubMember = typeof flyingClubMembers.$inferSelect;
 export type InsertFlyingClubMember = z.infer<typeof insertFlyingClubMemberSchema>;
+export type FlyingClubJoinRequest = typeof flyingClubJoinRequests.$inferSelect;
+export type InsertFlyingClubJoinRequest = z.infer<typeof insertFlyingClubJoinRequestSchema>;
 export type FlyingClubAircraft = typeof flyingClubAircraft.$inferSelect;
 export type InsertFlyingClubAircraft = z.infer<typeof insertFlyingClubAircraftSchema>;
 export type FlyingClubReservation = typeof flyingClubReservations.$inferSelect;
@@ -3079,6 +3110,7 @@ export type FlyingClubMemberRole = typeof flyingClubMemberRoles[number];
 export type FlyingClubMemberStatus = typeof flyingClubMemberStatuses[number];
 export type FlyingClubAircraftStatus = typeof flyingClubAircraftStatuses[number];
 export type FlyingClubReservationStatus = typeof flyingClubReservationStatuses[number];
+export type FlyingClubJoinRequestStatus = typeof flyingClubJoinRequestStatuses[number];
 export type ExpenseCategory = typeof expenseCategories[number];
 export type PersonalFinanceOwner = typeof personalFinanceOwners[number];
 export type PersonalFinanceEntryType = typeof personalFinanceEntryTypes[number];

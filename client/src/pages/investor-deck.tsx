@@ -41,6 +41,21 @@ const stats = [
 
 const platformBadges = ["React", "TypeScript", "Express", "PostgreSQL"];
 
+const valuationDrivers = [
+  {
+    title: "Indicative Current Range",
+    body: "$12M-$16M pre-money based on current product maturity, early traction, and strategic positioning.",
+  },
+  {
+    title: "Marketplace Comp Set",
+    body: "Directionally informed by peer-to-peer rental marketplaces like Turo, Boatsetter, and RVshare, adjusted down for RSF's earlier stage and adjusted up for platform depth.",
+  },
+  {
+    title: "Near-Term Re-Rate Triggers",
+    body: "Live Leidos integration, CPA member distribution, listing growth, and first monetization proof can support a higher valuation band.",
+  },
+];
+
 const investorContactSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
@@ -186,6 +201,36 @@ export default function InvestorDeck() {
               pre-flight workflow - flight planning, weather briefing, NOTAM translation, E6B calculations, and more -
               in a single destination. We&apos;re building the aviation marketplace that ForeFlight forgot to build.
             </p>
+          </div>
+        </section>
+
+        <section className="container mx-auto px-4 py-4 sm:px-6 sm:py-6">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#F0B429]">Valuation Perspective</div>
+            <div className="mt-4 flex flex-col gap-3">
+              <h2 className="text-3xl font-bold tracking-tight text-[#0B1F3A]">Indicative Pre-Seed Valuation: $12M-$16M Pre-Money</h2>
+              <p className="max-w-4xl text-base leading-relaxed text-slate-700">
+                This range reflects RSF as a live, multi-sided aviation platform with early traction, strong engagement,
+                a differentiated tools-plus-marketplace product, and strategic Leidos approval that places the company in
+                a small approved-provider set alongside leading aviation software platforms.
+              </p>
+            </div>
+            <div className="mt-6 grid gap-4 lg:grid-cols-3">
+              {valuationDrivers.map((driver) => (
+                <div key={driver.title} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
+                  <div className="text-sm font-semibold uppercase tracking-[0.18em] text-[#F0B429]">{driver.title}</div>
+                  <p className="mt-3 text-sm leading-6 text-slate-700">{driver.body}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 rounded-2xl border border-[#0B1F3A]/10 bg-[#0B1F3A]/[0.03] p-5">
+              <div className="text-sm font-semibold text-[#0B1F3A]">Professional framing</div>
+              <p className="mt-2 text-sm leading-6 text-slate-700">
+                The range is intended as a founder management estimate for investor discussions. It is informed by 2025
+                Carta early-stage fundraising benchmarks, marketplace comparables, and RSF-specific strategic milestones.
+                It is not presented as a third-party fairness opinion or formal 409A valuation.
+              </p>
+            </div>
           </div>
         </section>
 

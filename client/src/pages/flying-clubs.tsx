@@ -148,6 +148,63 @@ export default function FlyingClubsPage() {
         </Card>
       </section>
 
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <Card className="border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.78))]">
+          <CardHeader>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-primary text-primary-foreground">Launch Pricing</Badge>
+              <Badge variant="outline">Founding club offer</Badge>
+            </div>
+            <CardTitle className="text-3xl">$99/month</CardTitle>
+            <CardDescription>
+              Start with a free first month, then move into a clean club-operations plan built for early flying club adoption inside RSF.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-4">
+              <div className="text-sm font-semibold text-slate-900">Included in the current version</div>
+              <div className="mt-3 grid gap-3 text-sm text-slate-700">
+                <div>Club profile and public discovery inside RSF</div>
+                <div>Member roster foundation with owner and manager roles</div>
+                <div>Fleet assignment linked to RSF aircraft listings or club records</div>
+                <div>Reservation and scheduling base for aircraft time slots</div>
+                <div>Announcements and club-document support</div>
+              </div>
+            </div>
+            <div className="text-sm leading-6 text-muted-foreground">
+              The goal of the launch plan is simple: make clubs operational inside RSF first, then layer on deeper back-office tools once the workflow is proven with real clubs.
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-white/12 bg-white/86">
+          <CardHeader>
+            <CardTitle>Planned Additions</CardTitle>
+            <CardDescription>
+              Clubs signing on early help shape what comes next. These are the next major capabilities planned after the launch version.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-sm font-semibold text-slate-900">Billing Management</div>
+              <div className="mt-2 text-sm leading-6 text-slate-700">Club dues, member charges, and recurring billing workflows.</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-sm font-semibold text-slate-900">Maintenance Controls</div>
+              <div className="mt-2 text-sm leading-6 text-slate-700">Aircraft downtime, blackout periods, squawks, and service coordination.</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-sm font-semibold text-slate-900">Policy Enforcement</div>
+              <div className="mt-2 text-sm leading-6 text-slate-700">Checkout requirements, booking windows, and club-specific operating rules.</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-sm font-semibold text-slate-900">Advanced Scheduling</div>
+              <div className="mt-2 text-sm leading-6 text-slate-700">Waitlists, approval flows, conflict handling, and richer calendar operations.</div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <Card className="border-white/12 bg-white/85">
           <CardHeader>

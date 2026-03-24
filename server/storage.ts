@@ -104,6 +104,18 @@ import {
   type InsertCfiMessage,
   type CfiLegalAcceptance,
   type InsertCfiLegalAcceptance,
+  type FlyingClub,
+  type InsertFlyingClub,
+  type FlyingClubMember,
+  type InsertFlyingClubMember,
+  type FlyingClubAircraft,
+  type InsertFlyingClubAircraft,
+  type FlyingClubReservation,
+  type InsertFlyingClubReservation,
+  type FlyingClubAnnouncement,
+  type InsertFlyingClubAnnouncement,
+  type FlyingClubDocument,
+  type InsertFlyingClubDocument,
   type UserSettings,
   type InsertUserSettings,
   type PushToken,
@@ -177,6 +189,12 @@ import {
   cfiConversations,
   cfiMessages,
   cfiLegalAcceptances,
+  flyingClubs,
+  flyingClubMembers,
+  flyingClubAircraft,
+  flyingClubReservations,
+  flyingClubAnnouncements,
+  flyingClubDocuments,
   userSettings,
   pushTokens,
   userNotifications,
@@ -295,6 +313,24 @@ export interface IStorage {
   updateAircraftListing(id: string, updates: Partial<AircraftListing>): Promise<AircraftListing | undefined>;
   deleteAircraftListing(id: string): Promise<boolean>;
   toggleAircraftListingStatus(id: string): Promise<AircraftListing | undefined>;
+
+  // Flying Clubs
+  getFlyingClubs(): Promise<FlyingClub[]>;
+  getFlyingClub(id: string): Promise<FlyingClub | undefined>;
+  getFlyingClubBySlug(slug: string): Promise<FlyingClub | undefined>;
+  getFlyingClubsByMember(userId: string): Promise<FlyingClub[]>;
+  createFlyingClub(club: InsertFlyingClub & { ownerUserId: string }): Promise<FlyingClub>;
+  updateFlyingClub(id: string, updates: Partial<FlyingClub>): Promise<FlyingClub | undefined>;
+  getFlyingClubMembers(clubId: string): Promise<FlyingClubMember[]>;
+  addFlyingClubMember(member: InsertFlyingClubMember & { clubId: string; userId: string }): Promise<FlyingClubMember>;
+  getFlyingClubAircraft(clubId: string): Promise<FlyingClubAircraft[]>;
+  addFlyingClubAircraft(aircraft: InsertFlyingClubAircraft & { clubId: string }): Promise<FlyingClubAircraft>;
+  getFlyingClubReservations(clubId: string): Promise<FlyingClubReservation[]>;
+  createFlyingClubReservation(reservation: InsertFlyingClubReservation & { clubId: string; memberUserId: string }): Promise<FlyingClubReservation>;
+  getFlyingClubAnnouncements(clubId: string): Promise<FlyingClubAnnouncement[]>;
+  createFlyingClubAnnouncement(announcement: InsertFlyingClubAnnouncement & { clubId: string; authorUserId: string }): Promise<FlyingClubAnnouncement>;
+  getFlyingClubDocuments(clubId: string): Promise<FlyingClubDocument[]>;
+  createFlyingClubDocument(document: InsertFlyingClubDocument & { clubId: string; uploadedByUserId: string }): Promise<FlyingClubDocument>;
 
   // Marketplace Listings
   getMarketplaceListing(id: string): Promise<MarketplaceListing | undefined>;
@@ -1380,6 +1416,145 @@ export class DatabaseStorage implements IStorage {
       .where(eq(aircraftListings.id, id))
       .returning();
     return updated;
+  }
+
+  // Flying Clubs
+  async getFlyingClubs(): Promise<FlyingClub[]> {
+    return await db
+      .select()
+      .from(flyingClubs)
+      .where(
+        and(
+          eq(flyingClubs.status, "active"),
+          eq(flyingClubs.visibility, "listed"),
+        )
+      )
+      .orderBy(asc(flyingClubs.name));
+  }
+
+  async getFlyingClub(id: string): Promise<FlyingClub | undefined> {
+    const [club] = await db
+      .select()
+      .from(flyingClubs)
+      .where(eq(flyingClubs.id, id))
+      .limit(1);
+    return club;
+  }
+
+  async getFlyingClubBySlug(slug: string): Promise<FlyingClub | undefined> {
+    const [club] = await db
+      .select()
+      .from(flyingClubs)
+      .where(eq(flyingClubs.slug, slug))
+      .limit(1);
+    return club;
+  }
+
+  async getFlyingClubsByMember(userId: string): Promise<FlyingClub[]> {
+    return await db
+      .select({ club: flyingClubs })
+      .from(flyingClubMembers)
+      .innerJoin(flyingClubs, eq(flyingClubMembers.clubId, flyingClubs.id))
+      .where(eq(flyingClubMembers.userId, userId))
+      .orderBy(asc(flyingClubs.name))
+      .then((rows) => rows.map((row) => row.club));
+  }
+
+  async createFlyingClub(club: InsertFlyingClub & { ownerUserId: string }): Promise<FlyingClub> {
+    const [created] = await db
+      .insert(flyingClubs)
+      .values(club)
+      .returning();
+    return created;
+  }
+
+  async updateFlyingClub(id: string, updates: Partial<FlyingClub>): Promise<FlyingClub | undefined> {
+    const [updated] = await db
+      .update(flyingClubs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(flyingClubs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getFlyingClubMembers(clubId: string): Promise<FlyingClubMember[]> {
+    return await db
+      .select()
+      .from(flyingClubMembers)
+      .where(eq(flyingClubMembers.clubId, clubId))
+      .orderBy(asc(flyingClubMembers.role), asc(flyingClubMembers.createdAt));
+  }
+
+  async addFlyingClubMember(member: InsertFlyingClubMember & { clubId: string; userId: string }): Promise<FlyingClubMember> {
+    const [created] = await db
+      .insert(flyingClubMembers)
+      .values(member)
+      .returning();
+    return created;
+  }
+
+  async getFlyingClubAircraft(clubId: string): Promise<FlyingClubAircraft[]> {
+    return await db
+      .select()
+      .from(flyingClubAircraft)
+      .where(eq(flyingClubAircraft.clubId, clubId))
+      .orderBy(asc(flyingClubAircraft.displayName));
+  }
+
+  async addFlyingClubAircraft(aircraft: InsertFlyingClubAircraft & { clubId: string }): Promise<FlyingClubAircraft> {
+    const [created] = await db
+      .insert(flyingClubAircraft)
+      .values(aircraft)
+      .returning();
+    return created;
+  }
+
+  async getFlyingClubReservations(clubId: string): Promise<FlyingClubReservation[]> {
+    return await db
+      .select()
+      .from(flyingClubReservations)
+      .where(eq(flyingClubReservations.clubId, clubId))
+      .orderBy(desc(flyingClubReservations.startAt));
+  }
+
+  async createFlyingClubReservation(reservation: InsertFlyingClubReservation & { clubId: string; memberUserId: string }): Promise<FlyingClubReservation> {
+    const [created] = await db
+      .insert(flyingClubReservations)
+      .values(reservation)
+      .returning();
+    return created;
+  }
+
+  async getFlyingClubAnnouncements(clubId: string): Promise<FlyingClubAnnouncement[]> {
+    return await db
+      .select()
+      .from(flyingClubAnnouncements)
+      .where(eq(flyingClubAnnouncements.clubId, clubId))
+      .orderBy(desc(flyingClubAnnouncements.isPinned), desc(flyingClubAnnouncements.createdAt));
+  }
+
+  async createFlyingClubAnnouncement(announcement: InsertFlyingClubAnnouncement & { clubId: string; authorUserId: string }): Promise<FlyingClubAnnouncement> {
+    const [created] = await db
+      .insert(flyingClubAnnouncements)
+      .values(announcement)
+      .returning();
+    return created;
+  }
+
+  async getFlyingClubDocuments(clubId: string): Promise<FlyingClubDocument[]> {
+    return await db
+      .select()
+      .from(flyingClubDocuments)
+      .where(eq(flyingClubDocuments.clubId, clubId))
+      .orderBy(desc(flyingClubDocuments.createdAt));
+  }
+
+  async createFlyingClubDocument(document: InsertFlyingClubDocument & { clubId: string; uploadedByUserId: string }): Promise<FlyingClubDocument> {
+    const [created] = await db
+      .insert(flyingClubDocuments)
+      .values(document)
+      .returning();
+    return created;
   }
 
   // Marketplace Listings

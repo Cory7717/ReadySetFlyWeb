@@ -31,6 +31,12 @@ export const leadCategories = [
 export const crmSalesEmailTemplateTypes = ["initial_outreach", "direct_pitch", "partnership_pitch", "relist", "promo_offer"] as const;
 export const flightPlanFilingStatuses = ["draft", "staged", "filed", "activated", "cancelled", "closed"] as const;
 export const flightPlanFilingActions = ["file", "amend", "activate", "cancel", "close"] as const;
+export const flyingClubStatuses = ["draft", "active", "paused", "archived"] as const;
+export const flyingClubVisibility = ["private", "listed"] as const;
+export const flyingClubMemberRoles = ["owner", "manager", "member", "instructor"] as const;
+export const flyingClubMemberStatuses = ["invited", "active", "inactive"] as const;
+export const flyingClubAircraftStatuses = ["active", "maintenance", "inactive"] as const;
+export const flyingClubReservationStatuses = ["pending", "confirmed", "cancelled", "completed"] as const;
 export const expenseCategories = ["server", "database", "storage", "api", "other"] as const;
 export const personalFinanceOwners = ["cory", "amy", "joint"] as const;
 export const personalFinanceEntryTypes = ["expense", "income"] as const;
@@ -1832,6 +1838,111 @@ export const cfiLegalAcceptances = pgTable("cfi_legal_acceptances", {
   index("idx_cfi_legal_user").on(table.userId),
 ]);
 
+export const flyingClubs = pgTable("flying_clubs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerUserId: varchar("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  homeAirport: text("home_airport"),
+  city: text("city"),
+  state: text("state"),
+  websiteUrl: text("website_url"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  visibility: text("visibility").notNull().default("listed"),
+  status: text("status").notNull().default("draft"),
+  requiresApproval: boolean("requires_approval").notNull().default(true),
+  bookingNotes: text("booking_notes"),
+  policiesSummary: text("policies_summary"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_flying_clubs_slug").on(table.slug),
+  index("idx_flying_clubs_owner").on(table.ownerUserId),
+  index("idx_flying_clubs_status").on(table.status),
+  index("idx_flying_clubs_visibility").on(table.visibility),
+]);
+
+export const flyingClubMembers = pgTable("flying_club_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id").notNull().references(() => flyingClubs.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("member"),
+  status: text("status").notNull().default("active"),
+  joinedAt: timestamp("joined_at").defaultNow(),
+  invitedByUserId: varchar("invited_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_flying_club_membership").on(table.clubId, table.userId),
+  index("idx_flying_club_members_club").on(table.clubId),
+  index("idx_flying_club_members_user").on(table.userId),
+]);
+
+export const flyingClubAircraft = pgTable("flying_club_aircraft", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id").notNull().references(() => flyingClubs.id, { onDelete: "cascade" }),
+  aircraftListingId: varchar("aircraft_listing_id").references(() => aircraftListings.id, { onDelete: "set null" }),
+  displayName: text("display_name").notNull(),
+  tailNumber: text("tail_number"),
+  makeModel: text("make_model"),
+  hourlyRateWet: decimal("hourly_rate_wet", { precision: 10, scale: 2 }),
+  hourlyRateDry: decimal("hourly_rate_dry", { precision: 10, scale: 2 }),
+  status: text("status").notNull().default("active"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_flying_club_aircraft_club").on(table.clubId),
+  index("idx_flying_club_aircraft_listing").on(table.aircraftListingId),
+]);
+
+export const flyingClubReservations = pgTable("flying_club_reservations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id").notNull().references(() => flyingClubs.id, { onDelete: "cascade" }),
+  aircraftId: varchar("aircraft_id").notNull().references(() => flyingClubAircraft.id, { onDelete: "cascade" }),
+  memberUserId: varchar("member_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  startAt: timestamp("start_at").notNull(),
+  endAt: timestamp("end_at").notNull(),
+  status: text("status").notNull().default("confirmed"),
+  purpose: text("purpose"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_flying_club_reservations_club").on(table.clubId),
+  index("idx_flying_club_reservations_aircraft").on(table.aircraftId),
+  index("idx_flying_club_reservations_member").on(table.memberUserId),
+  index("idx_flying_club_reservations_start").on(table.startAt),
+]);
+
+export const flyingClubAnnouncements = pgTable("flying_club_announcements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id").notNull().references(() => flyingClubs.id, { onDelete: "cascade" }),
+  authorUserId: varchar("author_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  isPinned: boolean("is_pinned").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_flying_club_announcements_club").on(table.clubId),
+]);
+
+export const flyingClubDocuments = pgTable("flying_club_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id").notNull().references(() => flyingClubs.id, { onDelete: "cascade" }),
+  uploadedByUserId: varchar("uploaded_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  category: text("category").notNull().default("general"),
+  storagePath: text("storage_path").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_flying_club_documents_club").on(table.clubId),
+]);
+
 // User Settings (lightweight per-user preferences)
 export const userSettings = pgTable("user_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2202,6 +2313,62 @@ export const insertCfiLegalAcceptanceSchema = createInsertSchema(cfiLegalAccepta
   id: true,
   userId: true,
   acceptedAt: true,
+});
+
+export const insertFlyingClubSchema = createInsertSchema(flyingClubs).omit({
+  id: true,
+  ownerUserId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  visibility: z.enum(flyingClubVisibility).optional(),
+  status: z.enum(flyingClubStatuses).optional(),
+});
+
+export const insertFlyingClubMemberSchema = createInsertSchema(flyingClubMembers).omit({
+  id: true,
+  clubId: true,
+  createdAt: true,
+  updatedAt: true,
+  joinedAt: true,
+}).extend({
+  role: z.enum(flyingClubMemberRoles).optional(),
+  status: z.enum(flyingClubMemberStatuses).optional(),
+});
+
+export const insertFlyingClubAircraftSchema = createInsertSchema(flyingClubAircraft).omit({
+  id: true,
+  clubId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  status: z.enum(flyingClubAircraftStatuses).optional(),
+});
+
+export const insertFlyingClubReservationSchema = createInsertSchema(flyingClubReservations).omit({
+  id: true,
+  clubId: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  status: z.enum(flyingClubReservationStatuses).optional(),
+  startAt: z.coerce.date(),
+  endAt: z.coerce.date(),
+});
+
+export const insertFlyingClubAnnouncementSchema = createInsertSchema(flyingClubAnnouncements).omit({
+  id: true,
+  clubId: true,
+  authorUserId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertFlyingClubDocumentSchema = createInsertSchema(flyingClubDocuments).omit({
+  id: true,
+  clubId: true,
+  uploadedByUserId: true,
+  createdAt: true,
 });
 
 export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
@@ -2854,6 +3021,18 @@ export type CfiMessage = typeof cfiMessages.$inferSelect;
 export type InsertCfiMessage = z.infer<typeof insertCfiMessageSchema>;
 export type CfiLegalAcceptance = typeof cfiLegalAcceptances.$inferSelect;
 export type InsertCfiLegalAcceptance = z.infer<typeof insertCfiLegalAcceptanceSchema>;
+export type FlyingClub = typeof flyingClubs.$inferSelect;
+export type InsertFlyingClub = z.infer<typeof insertFlyingClubSchema>;
+export type FlyingClubMember = typeof flyingClubMembers.$inferSelect;
+export type InsertFlyingClubMember = z.infer<typeof insertFlyingClubMemberSchema>;
+export type FlyingClubAircraft = typeof flyingClubAircraft.$inferSelect;
+export type InsertFlyingClubAircraft = z.infer<typeof insertFlyingClubAircraftSchema>;
+export type FlyingClubReservation = typeof flyingClubReservations.$inferSelect;
+export type InsertFlyingClubReservation = z.infer<typeof insertFlyingClubReservationSchema>;
+export type FlyingClubAnnouncement = typeof flyingClubAnnouncements.$inferSelect;
+export type InsertFlyingClubAnnouncement = z.infer<typeof insertFlyingClubAnnouncementSchema>;
+export type FlyingClubDocument = typeof flyingClubDocuments.$inferSelect;
+export type InsertFlyingClubDocument = z.infer<typeof insertFlyingClubDocumentSchema>;
 export type FuelPriceReport =
   typeof fuelPriceReports.$inferSelect;
 export type NewFuelPriceReport =
@@ -2894,6 +3073,12 @@ export type CrmSalesEmailTemplateType = typeof crmSalesEmailTemplateTypes[number
 export type CrmWeeklyReportStatus = typeof crmWeeklyReportStatuses[number];
 export type FlightPlanFilingStatus = typeof flightPlanFilingStatuses[number];
 export type FlightPlanFilingAction = typeof flightPlanFilingActions[number];
+export type FlyingClubStatus = typeof flyingClubStatuses[number];
+export type FlyingClubVisibility = typeof flyingClubVisibility[number];
+export type FlyingClubMemberRole = typeof flyingClubMemberRoles[number];
+export type FlyingClubMemberStatus = typeof flyingClubMemberStatuses[number];
+export type FlyingClubAircraftStatus = typeof flyingClubAircraftStatuses[number];
+export type FlyingClubReservationStatus = typeof flyingClubReservationStatuses[number];
 export type ExpenseCategory = typeof expenseCategories[number];
 export type PersonalFinanceOwner = typeof personalFinanceOwners[number];
 export type PersonalFinanceEntryType = typeof personalFinanceEntryTypes[number];

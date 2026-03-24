@@ -43,6 +43,11 @@ const CORE_SEARCH_ITEMS: ToolSearchItem[] = [
     keywords: ["faq", "help", "questions"],
   },
   {
+    label: "Flying Clubs",
+    path: "/flying-clubs",
+    keywords: ["clubs", "flying clubs", "club scheduling", "club members"],
+  },
+  {
     label: "CFI Directory",
     path: "/cfi",
     keywords: ["cfi", "instructor", "flight instructor"],
@@ -76,6 +81,7 @@ export function Header() {
   const isTraining = location.startsWith("/student") || location.startsWith("/start-flying");
   const isTools = location.startsWith("/tool-hub") || location.startsWith("/pilot-tools") || location.startsWith("/ifr-tools");
   const isFaq = location === "/faq";
+  const isFlyingClubs = location.startsWith("/flying-clubs");
   const isCfi = location.startsWith("/cfi") || location.startsWith("/dashboard/cfi");
   const isMarketplace = location.startsWith("/marketplace");
   const isRentals = location.startsWith("/rentals");
@@ -199,6 +205,16 @@ export function Header() {
                   className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isFaq ? "bg-background shadow-sm" : ""}`}
                 >
                   FAQ
+                </Button>
+              </Link>
+              <Link href="/flying-clubs" data-testid="link-flying-clubs">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`rounded-full px-2 sm:px-2.5 lg:px-3 text-[11px] sm:text-[13px] lg:text-sm ${isFlyingClubs ? "bg-background shadow-sm" : ""}`}
+                  onClick={() => trackEvent("nav_click", { label: "flying_clubs", target: "/flying-clubs" })}
+                >
+                  Clubs
                 </Button>
               </Link>
               <Link href="/cfi" data-testid="link-cfi">

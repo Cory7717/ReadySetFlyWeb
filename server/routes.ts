@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -137,6 +137,26 @@ function isOwnedAircraftVerificationDocPath(pathValue: unknown, userId: string):
 function normalizeAircraftRegistration(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function slugifyFlyingClubName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+async function buildUniqueFlyingClubSlug(name: string): Promise<string> {
+  const base = slugifyFlyingClubName(name) || "flying-club";
+  let slug = base;
+  let suffix = 2;
+  while (await storage.getFlyingClubBySlug(slug)) {
+    slug = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return slug;
 }
 
 const TAILWINDS_PROMO_CODE = "TAILWINDS";
@@ -17695,6 +17715,117 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to create radio comms session:", error);
       res.status(500).json({ error: "Failed to create radio comms session" });
+    }
+  });
+
+  // Flying Clubs
+  app.get("/api/flying-clubs", async (_req, res) => {
+    try {
+      const clubs = await storage.getFlyingClubs();
+      const enriched = await Promise.all(
+        clubs.map(async (club) => {
+          const [members, aircraft] = await Promise.all([
+            storage.getFlyingClubMembers(club.id),
+            storage.getFlyingClubAircraft(club.id),
+          ]);
+          return {
+            ...club,
+            memberCount: members.filter((member) => member.status === "active").length,
+            aircraftCount: aircraft.filter((entry) => entry.status === "active").length,
+          };
+        }),
+      );
+      res.json(enriched);
+    } catch (error) {
+      console.error("Failed to fetch flying clubs:", error);
+      res.status(500).json({ error: "Failed to fetch flying clubs" });
+    }
+  });
+
+  app.get("/api/flying-clubs/mine", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const clubs = await storage.getFlyingClubsByMember(userId);
+      res.json(clubs);
+    } catch (error) {
+      console.error("Failed to fetch member flying clubs:", error);
+      res.status(500).json({ error: "Failed to fetch member flying clubs" });
+    }
+  });
+
+  app.post("/api/flying-clubs", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const result = insertFlyingClubSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+
+      const slug = await buildUniqueFlyingClubSlug(result.data.name);
+      const club = await storage.createFlyingClub({
+        ...result.data,
+        ownerUserId: userId,
+        slug,
+        status: result.data.status ?? "draft",
+        visibility: result.data.visibility ?? "listed",
+      });
+
+      await storage.addFlyingClubMember({
+        clubId: club.id,
+        userId,
+        role: "owner",
+        status: "active",
+      });
+
+      res.status(201).json(club);
+    } catch (error) {
+      console.error("Failed to create flying club:", error);
+      res.status(500).json({ error: "Failed to create flying club" });
+    }
+  });
+
+  app.get("/api/flying-clubs/:slug", async (req: any, res) => {
+    try {
+      const club = await storage.getFlyingClubBySlug(req.params.slug);
+      if (!club) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+
+      const userId = getRequestUserId(req);
+      const viewer = userId ? await storage.getUser(userId) : undefined;
+      const canViewPrivate =
+        userId === club.ownerUserId || !!viewer?.isAdmin || !!viewer?.isSuperAdmin;
+
+      if (!canViewPrivate && (club.status !== "active" || club.visibility !== "listed")) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+
+      const [members, aircraft, reservations, announcements, documents] = await Promise.all([
+        storage.getFlyingClubMembers(club.id),
+        storage.getFlyingClubAircraft(club.id),
+        canViewPrivate ? storage.getFlyingClubReservations(club.id) : Promise.resolve([]),
+        storage.getFlyingClubAnnouncements(club.id),
+        canViewPrivate ? storage.getFlyingClubDocuments(club.id) : Promise.resolve([]),
+      ]);
+
+      res.json({
+        club,
+        members,
+        aircraft,
+        reservations,
+        announcements,
+        documents,
+      });
+    } catch (error) {
+      console.error("Failed to fetch flying club detail:", error);
+      res.status(500).json({ error: "Failed to fetch flying club detail" });
     }
   });
 

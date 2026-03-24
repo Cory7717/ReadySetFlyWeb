@@ -57,6 +57,8 @@ import {
   type InsertOAuthExchangeToken,
   type ContactSubmission,
   type InsertContactSubmission,
+  type InvestorDeckAccessLog,
+  type InsertInvestorDeckAccessLog,
   type PromoCode,
   type InsertPromoCode,
   type PromoCodeUsage,
@@ -155,6 +157,7 @@ import {
   refreshTokens,
   oauthExchangeTokens,
   contactSubmissions,
+  investorDeckAccessLogs,
   logbookEntries,
   logbookProSettings,
   logbookArchives,
@@ -534,6 +537,7 @@ export interface IStorage {
   // Contact Form Submissions
   createContactSubmission(submission: InsertContactSubmission): Promise<ContactSubmission>;
   updateContactSubmissionEmailStatus(id: string, sent: boolean): Promise<ContactSubmission | undefined>;
+  createInvestorDeckAccessLog(log: InsertInvestorDeckAccessLog): Promise<InvestorDeckAccessLog>;
   
   // Banner Ad Orders
   getAllBannerAdOrders(): Promise<BannerAdOrder[]>;
@@ -3085,6 +3089,11 @@ export class DatabaseStorage implements IStorage {
   async createContactSubmission(submission: InsertContactSubmission): Promise<ContactSubmission> {
     const [contactSubmission] = await db.insert(contactSubmissions).values(submission).returning();
     return contactSubmission;
+  }
+
+  async createInvestorDeckAccessLog(log: InsertInvestorDeckAccessLog): Promise<InvestorDeckAccessLog> {
+    const [entry] = await db.insert(investorDeckAccessLogs).values(log).returning();
+    return entry;
   }
 
   async updateContactSubmissionEmailStatus(id: string, sent: boolean): Promise<ContactSubmission | undefined> {

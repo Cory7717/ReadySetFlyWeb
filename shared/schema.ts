@@ -1070,6 +1070,27 @@ export const insertContactSubmissionSchema = createInsertSchema(contactSubmissio
 });
 export type InsertContactSubmission = z.infer<typeof insertContactSubmissionSchema>;
 
+export const investorDeckAccessLogs = pgTable("investor_deck_access_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  pagePath: text("page_path").notNull(),
+  termsVersion: text("terms_version").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("idx_investor_deck_access_created").on(table.createdAt),
+  index("idx_investor_deck_access_ip").on(table.ipAddress),
+  index("idx_investor_deck_access_user").on(table.userId),
+]);
+
+export type InvestorDeckAccessLog = typeof investorDeckAccessLogs.$inferSelect;
+export const insertInvestorDeckAccessLogSchema = createInsertSchema(investorDeckAccessLogs).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertInvestorDeckAccessLog = z.infer<typeof insertInvestorDeckAccessLogSchema>;
+
 // Banner Ad Order Status Enums
 export const BANNER_APPROVAL_STATUSES = ['draft', 'sent', 'pending_review', 'approved', 'rejected'] as const;
 export type BannerApprovalStatus = typeof BANNER_APPROVAL_STATUSES[number];

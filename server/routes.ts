@@ -6317,6 +6317,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/investor/confidentiality-accept", contactFormRateLimiter, async (req: any, res) => {
+    try {
+      const acceptanceSchema = z.object({
+        pagePath: z.string().min(1).max(200),
+        termsVersion: z.string().min(1).max(50),
+      });
+
+      const validationResult = acceptanceSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({
+          error: "Invalid confidentiality acceptance payload",
+          details: validationResult.error.errors,
+        });
+      }
+
+      const requesterId = getRequestUserId(req);
+      const forwardedFor = req.headers["x-forwarded-for"];
+      const ip = Array.isArray(forwardedFor)
+        ? forwardedFor[0]
+        : typeof forwardedFor === "string" && forwardedFor.trim()
+          ? forwardedFor.split(",")[0]?.trim()
+          : req.ip || req.connection?.remoteAddress || "unknown";
+      const userAgent = typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : null;
+
+      const entry = await storage.createInvestorDeckAccessLog({
+        userId: requesterId,
+        ipAddress: ip,
+        userAgent,
+        pagePath: validationResult.data.pagePath,
+        termsVersion: validationResult.data.termsVersion,
+      });
+
+      return res.json({ success: true, loggedAt: entry.createdAt });
+    } catch (error) {
+      console.error("Investor confidentiality acceptance error:", error);
+      return res.status(500).json({ error: "Failed to record confidentiality acceptance" });
+    }
+  });
+
   // Cron endpoint: Send expiration reminders for banner ads and marketplace listings
   // SECURITY: Requires CRON_SECRET header to prevent unauthorized access
   app.post("/api/cron/send-expiration-reminders", async (req, res) => {

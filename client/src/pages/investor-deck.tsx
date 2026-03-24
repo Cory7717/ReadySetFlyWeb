@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,8 @@ import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
 const PDF_PATH = "/downloads/RSF_Investor_Pitch_Deck.pdf";
 const PPTX_PATH = "/downloads/RSF_Investor_Pitch_Deck.pptx";
 export const INVESTOR_DECK_SHARE_PATH = "/investor-deck/share/rsf-2026-deck";
+const INVESTOR_DECK_CONFIDENTIALITY_KEY = "rsf_investor_deck_confidentiality_accepted_v1";
+const INVESTOR_DECK_CONFIDENTIALITY_TERMS_VERSION = "2026-03-24-v1";
 
 const deckTopics = [
   "The Problem",
@@ -72,6 +75,17 @@ function downloadDeck(label: string, path: string) {
 
 export default function InvestorDeck() {
   const { toast } = useToast();
+  const [hasAcceptedConfidentiality, setHasAcceptedConfidentiality] = useState(false);
+  const [acknowledgedTerms, setAcknowledgedTerms] = useState(false);
+  const [isRecordingConfidentiality, setIsRecordingConfidentiality] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const accepted = window.localStorage.getItem(INVESTOR_DECK_CONFIDENTIALITY_KEY) === "true";
+    setHasAcceptedConfidentiality(accepted);
+    setAcknowledgedTerms(accepted);
+  }, []);
+
   const form = useForm<InvestorContactValues>({
     resolver: zodResolver(investorContactSchema),
     defaultValues: {
@@ -82,6 +96,30 @@ export default function InvestorDeck() {
       message: "",
     },
   });
+
+  const acceptConfidentialityTerms = async () => {
+    try {
+      setIsRecordingConfidentiality(true);
+      await apiRequest("POST", "/api/investor/confidentiality-accept", {
+        pagePath: INVESTOR_DECK_SHARE_PATH,
+        termsVersion: INVESTOR_DECK_CONFIDENTIALITY_TERMS_VERSION,
+      });
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(INVESTOR_DECK_CONFIDENTIALITY_KEY, "true");
+      }
+      trackEvent("cta_click", { label: "investor_deck_confidentiality_accept", target: INVESTOR_DECK_SHARE_PATH });
+      setHasAcceptedConfidentiality(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to record confidentiality acceptance";
+      toast({
+        title: "Acceptance failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsRecordingConfidentiality(false);
+    }
+  };
 
   const sendInvestorContactMutation = useMutation({
     mutationFn: async (values: InvestorContactValues) => {
@@ -109,6 +147,73 @@ export default function InvestorDeck() {
       });
     },
   });
+
+  if (!hasAcceptedConfidentiality) {
+    return (
+      <div className="min-h-screen bg-[#0B1F3A] text-[#EEF3F9]">
+        <div className="container mx-auto flex min-h-screen items-center px-4 py-10 sm:px-6">
+          <div className="mx-auto w-full max-w-3xl">
+            <Card className="border border-white/10 bg-white/6 text-[#EEF3F9] shadow-[0_30px_80px_rgba(2,8,20,0.4)]">
+              <CardHeader className="space-y-4 pb-4">
+                <Badge className="w-fit border border-[#F0B429]/35 bg-[#F0B429]/12 px-3 py-1 text-[#F0B429]">
+                  Confidential Investor Materials
+                </Badge>
+                <CardTitle className="text-3xl font-bold tracking-tight text-white">
+                  Ready Set Fly Investor Deck Access
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6 text-sm leading-7 text-[#D7E2F2]">
+                <p>
+                  These materials are confidential and are being provided solely for the purpose of evaluating a
+                  potential investment, strategic relationship, or business discussion with Ready Set Fly.
+                </p>
+                <div className="rounded-2xl border border-white/10 bg-[#08172d] p-5">
+                  <div className="text-sm font-semibold uppercase tracking-[0.18em] text-[#F0B429]">
+                    By proceeding, you agree that you will not:
+                  </div>
+                  <ul className="mt-4 space-y-2 text-sm text-[#E7EEF8]">
+                    <li>Share, forward, publish, or distribute these materials without written permission.</li>
+                    <li>Use the information for any purpose other than evaluating Ready Set Fly.</li>
+                    <li>Represent these materials as public marketing collateral.</li>
+                  </ul>
+                </div>
+                <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 accent-[#F0B429]"
+                    checked={acknowledgedTerms}
+                    onChange={(event) => setAcknowledgedTerms(event.target.checked)}
+                    data-testid="checkbox-investor-confidentiality-accept"
+                  />
+                  <span className="text-sm text-[#EEF3F9]">
+                    I understand that these materials are confidential and I agree not to copy, distribute, or share
+                    them without written permission from Ready Set Fly.
+                  </span>
+                </label>
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="border-white/20 bg-transparent text-white hover:bg-white/10"
+                  >
+                    <a href="https://readysetfly.us">Return to readysetfly.us</a>
+                  </Button>
+                  <Button
+                    onClick={() => void acceptConfidentialityTerms()}
+                    disabled={!acknowledgedTerms || isRecordingConfidentiality}
+                    className="bg-[#F0B429] text-slate-950 hover:bg-[#e4aa22] disabled:cursor-not-allowed disabled:opacity-50"
+                    data-testid="button-investor-confidentiality-continue"
+                  >
+                    {isRecordingConfidentiality ? "Recording acceptance..." : "Accept And Continue"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#EEF3F9] text-slate-900">
@@ -287,20 +392,20 @@ export default function InvestorDeck() {
       <section className="bg-[#0B1F3A] text-[#EEF3F9]">
         <div className="container mx-auto px-4 py-10 sm:px-6">
           <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-            <Card className="border-white/10 bg-white/5 text-[#EEF3F9]">
-              <CardHeader>
+            <Card className="border border-[#F0B429]/20 bg-gradient-to-br from-[#10284a] via-[#0f2441] to-[#0B1F3A] text-white shadow-[0_20px_50px_rgba(3,10,24,0.35)]">
+              <CardHeader className="pb-4">
                 <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#F0B429]">Get In Touch</div>
                 <CardTitle className="text-2xl text-white">Investor Contact</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm text-[#EEF3F9]/82">
+              <CardContent className="space-y-4 text-sm text-[#E7EEF8]">
                 <div className="font-semibold text-white">Cory Armer</div>
-                <div>cory@readysetfly.us</div>
+                <div className="text-[#D7E2F2]">cory@readysetfly.us</div>
                 <div>
                   <a
                     href="https://www.linkedin.com/in/cory-armer"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-medium text-[#F0B429] underline decoration-[#F0B429]/50 underline-offset-4"
+                    className="font-medium text-[#F0B429] underline decoration-[#F0B429]/60 underline-offset-4"
                     onClick={() =>
                       trackEvent("cta_click", {
                         label: "investor_deck_linkedin",
@@ -319,7 +424,7 @@ export default function InvestorDeck() {
                   <Button
                     asChild
                     size="lg"
-                    className="w-full bg-[#F0B429] text-slate-950 hover:bg-[#e4aa22]"
+                    className="w-full !bg-[#F0B429] !text-slate-950 shadow-md hover:!bg-[#e4aa22]"
                   >
                     <a
                       href={PDF_PATH}
@@ -336,7 +441,7 @@ export default function InvestorDeck() {
                     asChild
                     size="lg"
                     variant="outline"
-                    className="w-full border-[#EEF3F9]/35 bg-transparent text-[#EEF3F9] hover:bg-white/10"
+                    className="w-full border-white/20 bg-white/8 text-white hover:bg-white/14"
                   >
                     <a
                       href="https://readysetfly.us"

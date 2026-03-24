@@ -1854,6 +1854,7 @@ export const flyingClubs = pgTable("flying_clubs", {
   visibility: text("visibility").notNull().default("listed"),
   status: text("status").notNull().default("draft"),
   requiresApproval: boolean("requires_approval").notNull().default(true),
+  requirePolicyAcceptanceBeforeBooking: boolean("require_policy_acceptance_before_booking").notNull().default(true),
   bookingNotes: text("booking_notes"),
   policiesSummary: text("policies_summary"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1954,10 +1955,31 @@ export const flyingClubDocuments = pgTable("flying_club_documents", {
   uploadedByUserId: varchar("uploaded_by_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
   category: text("category").notNull().default("general"),
+  fileName: text("file_name"),
+  storageProvider: text("storage_provider").notNull().default("object"),
   storagePath: text("storage_path").notNull(),
+  mimeType: text("mime_type"),
+  version: text("version").notNull().default("1.0"),
+  requiresAcceptance: boolean("requires_acceptance").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("idx_flying_club_documents_club").on(table.clubId),
+]);
+
+export const flyingClubLegalAcceptances = pgTable("flying_club_legal_acceptances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clubId: varchar("club_id").notNull().references(() => flyingClubs.id, { onDelete: "cascade" }),
+  documentId: varchar("document_id").notNull().references(() => flyingClubDocuments.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  version: text("version").notNull(),
+  acceptedAt: timestamp("accepted_at").defaultNow(),
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+}, (table) => [
+  index("idx_flying_club_legal_acceptances_club").on(table.clubId),
+  index("idx_flying_club_legal_acceptances_user").on(table.userId),
+  uniqueIndex("uniq_flying_club_legal_acceptance").on(table.documentId, table.userId, table.version),
 ]);
 
 // User Settings (lightweight per-user preferences)
@@ -2398,6 +2420,16 @@ export const insertFlyingClubDocumentSchema = createInsertSchema(flyingClubDocum
   clubId: true,
   uploadedByUserId: true,
   createdAt: true,
+});
+
+export const insertFlyingClubLegalAcceptanceSchema = createInsertSchema(flyingClubLegalAcceptances).omit({
+  id: true,
+  clubId: true,
+  userId: true,
+  version: true,
+  acceptedAt: true,
+  ip: true,
+  userAgent: true,
 });
 
 export const insertUserSettingsSchema = createInsertSchema(userSettings).omit({
@@ -3064,6 +3096,8 @@ export type FlyingClubAnnouncement = typeof flyingClubAnnouncements.$inferSelect
 export type InsertFlyingClubAnnouncement = z.infer<typeof insertFlyingClubAnnouncementSchema>;
 export type FlyingClubDocument = typeof flyingClubDocuments.$inferSelect;
 export type InsertFlyingClubDocument = z.infer<typeof insertFlyingClubDocumentSchema>;
+export type FlyingClubLegalAcceptance = typeof flyingClubLegalAcceptances.$inferSelect;
+export type InsertFlyingClubLegalAcceptance = z.infer<typeof insertFlyingClubLegalAcceptanceSchema>;
 export type FuelPriceReport =
   typeof fuelPriceReports.$inferSelect;
 export type NewFuelPriceReport =

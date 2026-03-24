@@ -178,9 +178,9 @@ export default function FlyingClubsPage() {
               <Badge className="bg-primary text-primary-foreground">Launch Pricing</Badge>
               <Badge variant="outline">Founding club offer</Badge>
             </div>
-            <CardTitle className="text-3xl">$99/month</CardTitle>
+            <CardTitle className="text-3xl">$19.99/month + tax</CardTitle>
             <CardDescription>
-              Start with a free first month, then move into a clean club-operations plan built for early flying club adoption inside RSF.
+              Start with a free first month, then move into a low-friction club-operations plan built for early flying club adoption inside RSF.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

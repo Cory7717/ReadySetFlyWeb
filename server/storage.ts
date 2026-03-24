@@ -118,6 +118,8 @@ import {
   type InsertFlyingClubAnnouncement,
   type FlyingClubDocument,
   type InsertFlyingClubDocument,
+  type FlyingClubLegalAcceptance,
+  type InsertFlyingClubLegalAcceptance,
   type UserSettings,
   type InsertUserSettings,
   type PushToken,
@@ -198,6 +200,7 @@ import {
   flyingClubReservations,
   flyingClubAnnouncements,
   flyingClubDocuments,
+  flyingClubLegalAcceptances,
   userSettings,
   pushTokens,
   userNotifications,
@@ -339,7 +342,11 @@ export interface IStorage {
   getFlyingClubAnnouncements(clubId: string): Promise<FlyingClubAnnouncement[]>;
   createFlyingClubAnnouncement(announcement: InsertFlyingClubAnnouncement & { clubId: string; authorUserId: string }): Promise<FlyingClubAnnouncement>;
   getFlyingClubDocuments(clubId: string): Promise<FlyingClubDocument[]>;
+  getFlyingClubDocument(id: string): Promise<FlyingClubDocument | undefined>;
   createFlyingClubDocument(document: InsertFlyingClubDocument & { clubId: string; uploadedByUserId: string }): Promise<FlyingClubDocument>;
+  getFlyingClubLegalAcceptancesForUser(clubId: string, userId: string): Promise<FlyingClubLegalAcceptance[]>;
+  getFlyingClubLegalAcceptance(documentId: string, userId: string, version: string): Promise<FlyingClubLegalAcceptance | undefined>;
+  createFlyingClubLegalAcceptance(acceptance: InsertFlyingClubLegalAcceptance & { clubId: string; userId: string; version: string; ip?: string | null; userAgent?: string | null }): Promise<FlyingClubLegalAcceptance>;
 
   // Marketplace Listings
   getMarketplaceListing(id: string): Promise<MarketplaceListing | undefined>;
@@ -1616,10 +1623,52 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(flyingClubDocuments.createdAt));
   }
 
+  async getFlyingClubDocument(id: string): Promise<FlyingClubDocument | undefined> {
+    const [document] = await db
+      .select()
+      .from(flyingClubDocuments)
+      .where(eq(flyingClubDocuments.id, id))
+      .limit(1);
+    return document;
+  }
+
   async createFlyingClubDocument(document: InsertFlyingClubDocument & { clubId: string; uploadedByUserId: string }): Promise<FlyingClubDocument> {
     const [created] = await db
       .insert(flyingClubDocuments)
       .values(document)
+      .returning();
+    return created;
+  }
+
+  async getFlyingClubLegalAcceptancesForUser(clubId: string, userId: string): Promise<FlyingClubLegalAcceptance[]> {
+    return await db
+      .select()
+      .from(flyingClubLegalAcceptances)
+      .where(and(eq(flyingClubLegalAcceptances.clubId, clubId), eq(flyingClubLegalAcceptances.userId, userId)))
+      .orderBy(desc(flyingClubLegalAcceptances.acceptedAt));
+  }
+
+  async getFlyingClubLegalAcceptance(documentId: string, userId: string, version: string): Promise<FlyingClubLegalAcceptance | undefined> {
+    const [acceptance] = await db
+      .select()
+      .from(flyingClubLegalAcceptances)
+      .where(
+        and(
+          eq(flyingClubLegalAcceptances.documentId, documentId),
+          eq(flyingClubLegalAcceptances.userId, userId),
+          eq(flyingClubLegalAcceptances.version, version),
+        )
+      )
+      .limit(1);
+    return acceptance;
+  }
+
+  async createFlyingClubLegalAcceptance(
+    acceptance: InsertFlyingClubLegalAcceptance & { clubId: string; userId: string; version: string; ip?: string | null; userAgent?: string | null }
+  ): Promise<FlyingClubLegalAcceptance> {
+    const [created] = await db
+      .insert(flyingClubLegalAcceptances)
+      .values(acceptance)
       .returning();
     return created;
   }

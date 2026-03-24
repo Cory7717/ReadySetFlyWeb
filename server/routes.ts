@@ -18,7 +18,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -266,6 +266,22 @@ async function getFlyingClubAccessContext(req: any, clubId: string): Promise<Fly
     canManage: !!club && (isOwner || isManager || isAdmin),
     canReserve: !!club && (isOwner || isActiveMember || isAdmin),
   };
+}
+
+async function getPendingRequiredClubDocuments(clubId: string, userId: string | null) {
+  const documents = await storage.getFlyingClubDocuments(clubId);
+  const requiredDocuments = documents.filter((document) => document.isActive && document.requiresAcceptance);
+  if (!userId || requiredDocuments.length === 0) {
+    return { documents, pendingDocuments: requiredDocuments, acceptances: [] as Awaited<ReturnType<typeof storage.getFlyingClubLegalAcceptancesForUser>> };
+  }
+  const acceptances = await storage.getFlyingClubLegalAcceptancesForUser(clubId, userId);
+  const pendingDocuments = requiredDocuments.filter((document) => {
+    const accepted = acceptances.some(
+      (acceptance) => acceptance.documentId === document.id && acceptance.version === document.version,
+    );
+    return !accepted;
+  });
+  return { documents, pendingDocuments, acceptances };
 }
 
 const TAILWINDS_PROMO_CODE = "TAILWINDS";
@@ -17914,13 +17930,13 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(404).json({ error: "Flying club not found" });
       }
 
-      const [members, aircraft, reservations, announcements, documents] = await Promise.all([
+      const [members, aircraft, reservations, announcements] = await Promise.all([
         storage.getFlyingClubMembers(club.id),
         storage.getFlyingClubAircraft(club.id),
         canViewPrivate ? storage.getFlyingClubReservations(club.id) : Promise.resolve([]),
         storage.getFlyingClubAnnouncements(club.id),
-        canViewPrivate ? storage.getFlyingClubDocuments(club.id) : Promise.resolve([]),
       ]);
+      const { documents, pendingDocuments, acceptances } = await getPendingRequiredClubDocuments(club.id, access.userId);
       const joinRequests = access.canManage ? await storage.getFlyingClubJoinRequests(club.id) : [];
       const viewerJoinRequest = access.userId
         ? await storage.getFlyingClubJoinRequestForApplicant(club.id, access.userId)
@@ -17933,11 +17949,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         reservations,
         announcements,
         documents,
+        viewerAcceptances: acceptances,
+        pendingRequiredDocuments: pendingDocuments,
         joinRequests,
         viewerJoinRequest,
         viewerMembership: access.membership ?? null,
         canManage: access.canManage,
-        canReserve: access.canReserve,
+        canReserve:
+          access.canReserve &&
+          (!club.requirePolicyAcceptanceBeforeBooking || pendingDocuments.length === 0),
       });
     } catch (error) {
       console.error("Failed to fetch flying club detail:", error);
@@ -18026,6 +18046,145 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
+  app.post("/api/flying-clubs/:clubId/documents/upload", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (!access.canManage) {
+        return res.status(403).json({ error: "Club manager access required" });
+      }
+      const contentType = String(req.body?.contentType || "application/pdf");
+      if (process.env.AWS_S3_BUCKET) {
+        const { S3StorageService } = await import("./s3Storage");
+        const s3Service = new S3StorageService();
+        const { uploadURL, key } = await s3Service.getPresignedUploadUrlForKey({
+          prefix: `flying-club-documents/${access.club.id}`,
+          contentType,
+        });
+        return res.json({
+          uploadURL,
+          storageProvider: "s3",
+          storagePath: key,
+        });
+      }
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const storagePath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      return res.json({
+        uploadURL,
+        storageProvider: "object",
+        storagePath,
+      });
+    } catch (error) {
+      console.error("Failed to create club document upload URL:", error);
+      res.status(500).json({ error: "Failed to create upload URL" });
+    }
+  });
+
+  app.post("/api/flying-clubs/:clubId/documents", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club || !access.userId) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      if (!access.canManage) {
+        return res.status(403).json({ error: "Club manager access required" });
+      }
+      const result = insertFlyingClubDocumentSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const created = await storage.createFlyingClubDocument({
+        ...result.data,
+        clubId: access.club.id,
+        uploadedByUserId: access.userId,
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to create club document:", error);
+      res.status(500).json({ error: "Failed to create club document" });
+    }
+  });
+
+  app.get("/api/flying-clubs/:clubId/documents/:documentId/download", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      const document = await storage.getFlyingClubDocument(req.params.documentId);
+      if (!document || document.clubId !== access.club.id) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      const canViewDocument =
+        access.canManage ||
+        access.canReserve ||
+        (access.club.status === "active" && access.club.visibility === "listed");
+      if (!canViewDocument) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${String(document.fileName || document.title || "club-document").replace(/\"/g, "")}"`,
+      );
+
+      if (document.storageProvider === "s3") {
+        const { S3StorageService } = await import("./s3Storage");
+        const s3Service = new S3StorageService();
+        const { stream, contentType, contentLength } = await s3Service.getObjectStream({
+          key: document.storagePath,
+        });
+        res.setHeader("Content-Type", contentType || document.mimeType || "application/octet-stream");
+        if (contentLength) res.setHeader("Content-Length", String(contentLength));
+        stream.pipe(res);
+        return;
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const objectFile = await objectStorageService.getObjectEntityFile(document.storagePath);
+      await objectStorageService.downloadObject(objectFile, res, 0);
+    } catch (error) {
+      console.error("Failed to download club document:", error);
+      res.status(500).json({ error: "Failed to download club document" });
+    }
+  });
+
+  app.post("/api/flying-clubs/:clubId/legal-acceptances", isAuthenticated, async (req: any, res) => {
+    try {
+      const access = await getFlyingClubAccessContext(req, req.params.clubId);
+      if (!access.club || !access.userId) {
+        return res.status(404).json({ error: "Flying club not found" });
+      }
+      const result = insertFlyingClubLegalAcceptanceSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+      const document = await storage.getFlyingClubDocument(result.data.documentId);
+      if (!document || document.clubId !== access.club.id || !document.isActive || !document.requiresAcceptance) {
+        return res.status(404).json({ error: "Required club document not found" });
+      }
+      const existing = await storage.getFlyingClubLegalAcceptance(document.id, access.userId, document.version);
+      if (existing) {
+        return res.json(existing);
+      }
+      const created = await storage.createFlyingClubLegalAcceptance({
+        clubId: access.club.id,
+        documentId: document.id,
+        userId: access.userId,
+        version: document.version,
+        ip: req.ip || null,
+        userAgent: req.get("user-agent") || null,
+      });
+      res.status(201).json(created);
+    } catch (error) {
+      console.error("Failed to record club legal acceptance:", error);
+      res.status(500).json({ error: "Failed to record club legal acceptance" });
+    }
+  });
+
   app.post("/api/flying-clubs/:clubId/aircraft", isAuthenticated, async (req: any, res) => {
     try {
       const access = await getFlyingClubAccessContext(req, req.params.clubId);
@@ -18106,6 +18265,22 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
       if (!access.canReserve || !access.userId) {
         return res.status(403).json({ error: "Active club membership required" });
+      }
+
+      if (access.club.requirePolicyAcceptanceBeforeBooking) {
+        const { pendingDocuments } = await getPendingRequiredClubDocuments(access.club.id, access.userId);
+        if (pendingDocuments.length > 0) {
+          return res.status(403).json({
+            error: "Club policy acceptance required before booking",
+            pendingDocumentIds: pendingDocuments.map((document) => document.id),
+            pendingDocuments: pendingDocuments.map((document) => ({
+              id: document.id,
+              title: document.title,
+              category: document.category,
+              version: document.version,
+            })),
+          });
+        }
       }
 
       const result = insertFlyingClubReservationSchema.safeParse(req.body);

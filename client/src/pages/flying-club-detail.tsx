@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageShell } from "@/components/layout/PageShell";
+import { apiUrl } from "@/lib/api";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,7 +16,9 @@ import type {
   FlyingClub,
   FlyingClubAircraft,
   FlyingClubAnnouncement,
+  FlyingClubDocument,
   FlyingClubJoinRequest,
+  FlyingClubLegalAcceptance,
   FlyingClubMember,
   FlyingClubReservation,
 } from "@shared/schema";
@@ -26,7 +29,9 @@ type FlyingClubDetailResponse = {
   aircraft: FlyingClubAircraft[];
   reservations: FlyingClubReservation[];
   announcements: FlyingClubAnnouncement[];
-  documents: Array<{ id: string; title: string; category: string; storagePath: string }>;
+  documents: FlyingClubDocument[];
+  viewerAcceptances: FlyingClubLegalAcceptance[];
+  pendingRequiredDocuments: FlyingClubDocument[];
   joinRequests: FlyingClubJoinRequest[];
   viewerJoinRequest: FlyingClubJoinRequest | null;
   viewerMembership: FlyingClubMember | null;
@@ -60,11 +65,27 @@ const EMPTY_JOIN_REQUEST = {
   message: "",
 };
 
+const EMPTY_DOCUMENT = {
+  title: "",
+  category: "club_rules",
+  version: "1.0",
+  requiresAcceptance: true,
+};
+
 function formatDateTime(value?: string | Date | null) {
   if (!value) return "Not scheduled";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Invalid date";
   return date.toLocaleString();
+}
+
+function formatDocumentCategory(value?: string | null) {
+  if (!value) return "General";
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export default function FlyingClubDetailPage() {
@@ -78,11 +99,15 @@ export default function FlyingClubDetailPage() {
   const [announcementForm, setAnnouncementForm] = useState(EMPTY_ANNOUNCEMENT);
   const [fleetCsvText, setFleetCsvText] = useState("");
   const [joinRequestForm, setJoinRequestForm] = useState(EMPTY_JOIN_REQUEST);
+  const [documentForm, setDocumentForm] = useState(EMPTY_DOCUMENT);
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [isSavingAircraft, setIsSavingAircraft] = useState(false);
   const [isImportingFleet, setIsImportingFleet] = useState(false);
   const [isSavingReservation, setIsSavingReservation] = useState(false);
   const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
   const [isSubmittingJoinRequest, setIsSubmittingJoinRequest] = useState(false);
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [acceptingDocumentId, setAcceptingDocumentId] = useState<string | null>(null);
   const [reviewingJoinRequestId, setReviewingJoinRequestId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<FlyingClubDetailResponse>({
@@ -98,6 +123,19 @@ export default function FlyingClubDetailPage() {
   }, [data?.reservations]);
 
   const aircraftOptions = data?.aircraft ?? [];
+  const requiredDocuments = useMemo(
+    () => (data?.documents ?? []).filter((document) => document.isActive && document.requiresAcceptance),
+    [data?.documents],
+  );
+  const acceptedDocumentKeys = useMemo(
+    () =>
+      new Set(
+        (data?.viewerAcceptances ?? []).map(
+          (acceptance) => `${acceptance.documentId}:${acceptance.version}`,
+        ),
+      ),
+    [data?.viewerAcceptances],
+  );
 
   const refreshClub = async () => {
     if (!slug) return;
@@ -137,7 +175,11 @@ export default function FlyingClubDetailPage() {
   const importFleetCsv = async () => {
     if (!data) return;
     if (!fleetCsvText.trim()) {
-      toast({ title: "Fleet CSV required", description: "Paste CSV text or upload a .csv file first.", variant: "destructive" });
+      toast({
+        title: "Fleet CSV required",
+        description: "Paste CSV text or upload a .csv file first.",
+        variant: "destructive",
+      });
       return;
     }
     setIsImportingFleet(true);
@@ -159,7 +201,11 @@ export default function FlyingClubDetailPage() {
   const createReservation = async () => {
     if (!data) return;
     if (!reservationForm.aircraftId || !reservationForm.startAt || !reservationForm.endAt) {
-      toast({ title: "Reservation fields missing", description: "Aircraft, start, and end time are required.", variant: "destructive" });
+      toast({
+        title: "Reservation fields missing",
+        description: "Aircraft, start, and end time are required.",
+        variant: "destructive",
+      });
       return;
     }
     setIsSavingReservation(true);
@@ -223,9 +269,94 @@ export default function FlyingClubDetailPage() {
     }
   };
 
+  const uploadClubDocument = async () => {
+    if (!data) return;
+    if (!documentForm.title.trim()) {
+      toast({ title: "Document title required", variant: "destructive" });
+      return;
+    }
+    if (!documentFile) {
+      toast({ title: "Document file required", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingDocument(true);
+    try {
+      const initResponse = await fetch(apiUrl(`/api/flying-clubs/${data.club.id}/documents/upload`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          contentType: documentFile.type || "application/octet-stream",
+        }),
+      });
+      if (!initResponse.ok) {
+        const errorText = await initResponse.text();
+        throw new Error(errorText || "Failed to prepare document upload");
+      }
+
+      const { uploadURL, storageProvider, storagePath } = (await initResponse.json()) as {
+        uploadURL: string;
+        storageProvider: string;
+        storagePath: string;
+      };
+
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: documentFile,
+        headers: {
+          "Content-Type": documentFile.type || "application/octet-stream",
+        },
+      });
+      if (!uploadResponse.ok) {
+        throw new Error("Failed to upload document file");
+      }
+
+      await apiRequest("POST", `/api/flying-clubs/${data.club.id}/documents`, {
+        title: documentForm.title.trim(),
+        category: documentForm.category.trim() || "general",
+        fileName: documentFile.name,
+        storageProvider,
+        storagePath,
+        mimeType: documentFile.type || null,
+        version: documentForm.version.trim() || "1.0",
+        requiresAcceptance: documentForm.requiresAcceptance,
+        isActive: true,
+      });
+
+      setDocumentForm(EMPTY_DOCUMENT);
+      setDocumentFile(null);
+      await refreshClub();
+      toast({ title: "Club document uploaded" });
+    } catch (error: any) {
+      toast({ title: "Document upload failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  };
+
+  const acceptDocument = async (documentId: string) => {
+    if (!data) return;
+    setAcceptingDocumentId(documentId);
+    try {
+      await apiRequest("POST", `/api/flying-clubs/${data.club.id}/legal-acceptances`, { documentId });
+      await refreshClub();
+      toast({ title: "Club document accepted" });
+    } catch (error: any) {
+      toast({ title: "Acceptance failed", description: error.message, variant: "destructive" });
+    } finally {
+      setAcceptingDocumentId(null);
+    }
+  };
+
   if (isLoading || !data) {
     return (
-      <PageShell kicker="Flying Clubs" title="Loading club..." description="Preparing the club workspace." contentClassName="space-y-6">
+      <PageShell
+        kicker="Flying Clubs"
+        title="Loading club..."
+        description="Preparing the club workspace."
+        contentClassName="space-y-6"
+      >
         <div className="text-sm text-muted-foreground">Loading flying club...</div>
       </PageShell>
     );
@@ -235,11 +366,15 @@ export default function FlyingClubDetailPage() {
     <PageShell
       kicker="Flying Club"
       title={data.club.name}
-      description={data.club.description || "Club profile, fleet, member roster, and scheduling workspace."}
+      description={data.club.description || "Club profile, fleet, member roster, governance, and scheduling workspace."}
       actions={
         <>
-          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">{data.club.homeAirport || "Club profile"}</Badge>
-          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">{data.club.status}</Badge>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">
+            {data.club.homeAirport || "Club profile"}
+          </Badge>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">
+            {data.club.status}
+          </Badge>
         </>
       }
       contentClassName="space-y-8"
@@ -271,11 +406,31 @@ export default function FlyingClubDetailPage() {
         </Card>
       </section>
 
+      {data.pendingRequiredDocuments.length > 0 ? (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="text-amber-950">Review required club documents before booking</CardTitle>
+            <CardDescription className="text-amber-900">
+              {data.pendingRequiredDocuments.length} required document
+              {data.pendingRequiredDocuments.length === 1 ? "" : "s"} still need acceptance for this club.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-amber-950">
+            {data.pendingRequiredDocuments.map((document) => (
+              <div key={document.id}>
+                {document.title} (v{document.version})
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Tabs defaultValue="overview" className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-4">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="fleet">Fleet</TabsTrigger>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="announcements">Announcements</TabsTrigger>
         </TabsList>
 
@@ -289,12 +444,24 @@ export default function FlyingClubDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-slate-700">
               <div>{data.club.policiesSummary || data.club.bookingNotes || "This club is building its operating workflow inside RSF."}</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="font-medium text-slate-900">Club booking governance</div>
+                <div className="mt-2 text-sm text-slate-600">
+                  {data.club.requirePolicyAcceptanceBeforeBooking
+                    ? "Members must accept required club rules and agreement documents before booking aircraft."
+                    : "This club currently allows booking without a required policy acceptance gate."}
+                </div>
+              </div>
               <div className="flex flex-wrap gap-3">
                 {data.club.websiteUrl ? (
-                  <a href={data.club.websiteUrl} target="_blank" rel="noreferrer" className="text-primary underline">Visit website</a>
+                  <a href={data.club.websiteUrl} target="_blank" rel="noreferrer" className="text-primary underline">
+                    Visit website
+                  </a>
                 ) : null}
                 {data.club.contactEmail ? (
-                  <a href={`mailto:${data.club.contactEmail}`} className="text-primary underline">Email club</a>
+                  <a href={`mailto:${data.club.contactEmail}`} className="text-primary underline">
+                    Email club
+                  </a>
                 ) : null}
               </div>
             </CardContent>
@@ -347,7 +514,10 @@ export default function FlyingClubDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               {data.members.map((member) => (
-                <div key={member.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div
+                  key={member.id}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                >
                   <div>
                     <div className="text-sm font-medium text-slate-900">{member.userId}</div>
                     <div className="text-xs uppercase tracking-[0.14em] text-slate-500">{member.status}</div>
@@ -398,7 +568,9 @@ export default function FlyingClubDetailPage() {
                         ) : null}
                       </div>
                       {request.message ? <div className="mt-3 text-sm text-slate-700">{request.message}</div> : null}
-                      <div className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-500">{formatDateTime(request.createdAt)}</div>
+                      <div className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-500">
+                        {formatDateTime(request.createdAt)}
+                      </div>
                     </div>
                   ))
                 )}
@@ -426,7 +598,7 @@ export default function FlyingClubDetailPage() {
                         <div>
                           <div className="font-semibold text-slate-900">{aircraft.displayName}</div>
                           <div className="text-sm text-muted-foreground">
-                            {[aircraft.tailNumber, aircraft.makeModel].filter(Boolean).join(" • ") || "Club aircraft"}
+                            {[aircraft.tailNumber, aircraft.makeModel].filter(Boolean).join(" / ") || "Club aircraft"}
                           </div>
                         </div>
                         <Badge variant="outline">{aircraft.status}</Badge>
@@ -451,16 +623,41 @@ export default function FlyingClubDetailPage() {
                       <CardDescription>Add one fleet record manually for scheduling and member visibility.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <Input value={aircraftForm.displayName} onChange={(event) => setAircraftForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="Display name" />
+                      <Input
+                        value={aircraftForm.displayName}
+                        onChange={(event) => setAircraftForm((current) => ({ ...current, displayName: event.target.value }))}
+                        placeholder="Display name"
+                      />
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <Input value={aircraftForm.tailNumber} onChange={(event) => setAircraftForm((current) => ({ ...current, tailNumber: event.target.value }))} placeholder="Tail number" />
-                        <Input value={aircraftForm.makeModel} onChange={(event) => setAircraftForm((current) => ({ ...current, makeModel: event.target.value }))} placeholder="Make / model" />
+                        <Input
+                          value={aircraftForm.tailNumber}
+                          onChange={(event) => setAircraftForm((current) => ({ ...current, tailNumber: event.target.value }))}
+                          placeholder="Tail number"
+                        />
+                        <Input
+                          value={aircraftForm.makeModel}
+                          onChange={(event) => setAircraftForm((current) => ({ ...current, makeModel: event.target.value }))}
+                          placeholder="Make / model"
+                        />
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <Input value={aircraftForm.hourlyRateWet} onChange={(event) => setAircraftForm((current) => ({ ...current, hourlyRateWet: event.target.value }))} placeholder="Wet rate" />
-                        <Input value={aircraftForm.hourlyRateDry} onChange={(event) => setAircraftForm((current) => ({ ...current, hourlyRateDry: event.target.value }))} placeholder="Dry rate" />
+                        <Input
+                          value={aircraftForm.hourlyRateWet}
+                          onChange={(event) => setAircraftForm((current) => ({ ...current, hourlyRateWet: event.target.value }))}
+                          placeholder="Wet rate"
+                        />
+                        <Input
+                          value={aircraftForm.hourlyRateDry}
+                          onChange={(event) => setAircraftForm((current) => ({ ...current, hourlyRateDry: event.target.value }))}
+                          placeholder="Dry rate"
+                        />
                       </div>
-                      <Textarea value={aircraftForm.notes} onChange={(event) => setAircraftForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Notes" rows={3} />
+                      <Textarea
+                        value={aircraftForm.notes}
+                        onChange={(event) => setAircraftForm((current) => ({ ...current, notes: event.target.value }))}
+                        placeholder="Notes"
+                        rows={3}
+                      />
                       <Button onClick={createAircraft} disabled={isSavingAircraft} className="w-full">
                         {isSavingAircraft ? "Saving aircraft..." : "Add club aircraft"}
                       </Button>
@@ -482,7 +679,12 @@ export default function FlyingClubDetailPage() {
                         aria-label="Upload fleet CSV"
                         title="Upload fleet CSV"
                       />
-                      <Textarea value={fleetCsvText} onChange={(event) => setFleetCsvText(event.target.value)} placeholder="Paste fleet CSV here or upload a file" rows={8} />
+                      <Textarea
+                        value={fleetCsvText}
+                        onChange={(event) => setFleetCsvText(event.target.value)}
+                        placeholder="Paste fleet CSV here or upload a file"
+                        rows={8}
+                      />
                       <Button onClick={importFleetCsv} disabled={isImportingFleet} className="w-full">
                         {isImportingFleet ? "Importing fleet..." : "Import fleet CSV"}
                       </Button>
@@ -555,6 +757,10 @@ export default function FlyingClubDetailPage() {
                       </Button>
                     </div>
                   </div>
+                ) : data.pendingRequiredDocuments.length > 0 ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5 text-sm text-amber-950">
+                    Accept the required club documents in the Documents tab before creating a reservation.
+                  </div>
                 ) : !data.canReserve ? (
                   <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-muted-foreground">
                     Active club membership is required to make reservations.
@@ -568,13 +774,32 @@ export default function FlyingClubDetailPage() {
                     >
                       <option value="">Select club aircraft</option>
                       {aircraftOptions.map((aircraft) => (
-                        <option key={aircraft.id} value={aircraft.id}>{aircraft.displayName}</option>
+                        <option key={aircraft.id} value={aircraft.id}>
+                          {aircraft.displayName}
+                        </option>
                       ))}
                     </select>
-                    <Input type="datetime-local" value={reservationForm.startAt} onChange={(event) => setReservationForm((current) => ({ ...current, startAt: event.target.value }))} />
-                    <Input type="datetime-local" value={reservationForm.endAt} onChange={(event) => setReservationForm((current) => ({ ...current, endAt: event.target.value }))} />
-                    <Input value={reservationForm.purpose} onChange={(event) => setReservationForm((current) => ({ ...current, purpose: event.target.value }))} placeholder="Purpose of flight" />
-                    <Textarea value={reservationForm.notes} onChange={(event) => setReservationForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Notes" rows={3} />
+                    <Input
+                      type="datetime-local"
+                      value={reservationForm.startAt}
+                      onChange={(event) => setReservationForm((current) => ({ ...current, startAt: event.target.value }))}
+                    />
+                    <Input
+                      type="datetime-local"
+                      value={reservationForm.endAt}
+                      onChange={(event) => setReservationForm((current) => ({ ...current, endAt: event.target.value }))}
+                    />
+                    <Input
+                      value={reservationForm.purpose}
+                      onChange={(event) => setReservationForm((current) => ({ ...current, purpose: event.target.value }))}
+                      placeholder="Purpose of flight"
+                    />
+                    <Textarea
+                      value={reservationForm.notes}
+                      onChange={(event) => setReservationForm((current) => ({ ...current, notes: event.target.value }))}
+                      placeholder="Notes"
+                      rows={3}
+                    />
                     <Button onClick={createReservation} disabled={isSavingReservation} className="w-full">
                       {isSavingReservation ? "Saving reservation..." : "Create reservation"}
                     </Button>
@@ -582,6 +807,147 @@ export default function FlyingClubDetailPage() {
                 )}
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="documents" className="space-y-6">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <Card className="border-white/12 bg-white/86">
+              <CardHeader>
+                <CardTitle>Club Documents</CardTitle>
+                <CardDescription>Rules, agreements, bylaws, and documents that govern club operations.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {data.documents.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-muted-foreground">
+                    No club documents uploaded yet.
+                  </div>
+                ) : (
+                  data.documents.map((document) => {
+                    const acceptanceKey = `${document.id}:${document.version}`;
+                    const isAccepted = acceptedDocumentKeys.has(acceptanceKey);
+                    const isPending = data.pendingRequiredDocuments.some((entry) => entry.id === document.id);
+                    return (
+                      <div key={document.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-slate-900">{document.title}</div>
+                            <div className="mt-1 flex flex-wrap gap-2 text-xs uppercase tracking-[0.14em] text-slate-500">
+                              <span>{formatDocumentCategory(document.category)}</span>
+                              <span>v{document.version}</span>
+                              {document.requiresAcceptance ? <span>Requires acceptance</span> : null}
+                              {!document.isActive ? <span>Inactive</span> : null}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Badge variant={document.requiresAcceptance ? "default" : "outline"}>
+                              {document.requiresAcceptance ? "Required" : "Reference"}
+                            </Badge>
+                            {isAccepted ? <Badge variant="outline">Accepted</Badge> : null}
+                            {isPending ? <Badge variant="secondary">Pending</Badge> : null}
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {isAuthenticated ? (
+                            <Button asChild size="sm" variant="outline">
+                              <a
+                                href={apiUrl(`/api/flying-clubs/${data.club.id}/documents/${document.id}/download`)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Download
+                              </a>
+                            </Button>
+                          ) : (
+                            <Button asChild size="sm" variant="outline">
+                              <Link href="/login">Sign in to view</Link>
+                            </Button>
+                          )}
+                          {document.requiresAcceptance && isAuthenticated && !isAccepted ? (
+                            <Button
+                              size="sm"
+                              onClick={() => acceptDocument(document.id)}
+                              disabled={acceptingDocumentId === document.id}
+                            >
+                              {acceptingDocumentId === document.id ? "Saving..." : "Accept document"}
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+
+                {requiredDocuments.length > 0 ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
+                    {data.club.requirePolicyAcceptanceBeforeBooking
+                      ? "This club blocks reservations until all active required documents are accepted."
+                      : "This club has required documents, but booking is not currently gated on acceptance."}
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            <div className="space-y-6">
+              {data.canManage ? (
+                <Card className="border-white/12 bg-white/86">
+                  <CardHeader>
+                    <CardTitle>Upload Club Document</CardTitle>
+                    <CardDescription>Post agreements, bylaws, SOPs, waivers, and club rules for members.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Input
+                      value={documentForm.title}
+                      onChange={(event) => setDocumentForm((current) => ({ ...current, title: event.target.value }))}
+                      placeholder="Document title"
+                    />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Input
+                        value={documentForm.category}
+                        onChange={(event) => setDocumentForm((current) => ({ ...current, category: event.target.value }))}
+                        placeholder="Category"
+                      />
+                      <Input
+                        value={documentForm.version}
+                        onChange={(event) => setDocumentForm((current) => ({ ...current, version: event.target.value }))}
+                        placeholder="Version"
+                      />
+                    </div>
+                    <Input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg"
+                      onChange={(event) => setDocumentFile(event.target.files?.[0] ?? null)}
+                      aria-label="Upload club document"
+                      title="Upload club document"
+                    />
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={documentForm.requiresAcceptance}
+                        onChange={(event) =>
+                          setDocumentForm((current) => ({
+                            ...current,
+                            requiresAcceptance: event.target.checked,
+                          }))
+                        }
+                      />
+                      Require member acceptance
+                    </label>
+                    <Button onClick={uploadClubDocument} disabled={isUploadingDocument} className="w-full">
+                      {isUploadingDocument ? "Uploading..." : "Upload club document"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="border-white/12 bg-white/86">
+                  <CardHeader>
+                    <CardTitle>Club Governance</CardTitle>
+                    <CardDescription>Managers control which documents govern booking and club operations.</CardDescription>
+                  </CardHeader>
+                </Card>
+              )}
+            </div>
           </div>
         </TabsContent>
 
@@ -605,7 +971,9 @@ export default function FlyingClubDetailPage() {
                         {announcement.isPinned ? <Badge>Pinned</Badge> : null}
                       </div>
                       <div className="mt-2 text-sm leading-6 text-slate-700">{announcement.body}</div>
-                      <div className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-500">{formatDateTime(announcement.createdAt)}</div>
+                      <div className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-500">
+                        {formatDateTime(announcement.createdAt)}
+                      </div>
                     </div>
                   ))
                 )}
@@ -624,8 +992,17 @@ export default function FlyingClubDetailPage() {
                   </div>
                 ) : (
                   <>
-                    <Input value={announcementForm.title} onChange={(event) => setAnnouncementForm((current) => ({ ...current, title: event.target.value }))} placeholder="Announcement title" />
-                    <Textarea value={announcementForm.body} onChange={(event) => setAnnouncementForm((current) => ({ ...current, body: event.target.value }))} placeholder="Announcement details" rows={6} />
+                    <Input
+                      value={announcementForm.title}
+                      onChange={(event) => setAnnouncementForm((current) => ({ ...current, title: event.target.value }))}
+                      placeholder="Announcement title"
+                    />
+                    <Textarea
+                      value={announcementForm.body}
+                      onChange={(event) => setAnnouncementForm((current) => ({ ...current, body: event.target.value }))}
+                      placeholder="Announcement details"
+                      rows={6}
+                    />
                     <Button onClick={createAnnouncement} disabled={isSavingAnnouncement} className="w-full">
                       {isSavingAnnouncement ? "Posting..." : "Post announcement"}
                     </Button>

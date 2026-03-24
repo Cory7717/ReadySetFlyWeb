@@ -78,6 +78,7 @@ import CfiTrainingCenter from "@/pages/cfi/training";
 import CfiTerms from "@/pages/cfi/terms";
 import CfiStudentTerms from "@/pages/cfi/student-terms";
 import FlyingClubsPage from "@/pages/flying-clubs";
+import FlyingClubDetailPage from "@/pages/flying-club-detail";
 import InvestorDeck, { INVESTOR_DECK_SHARE_PATH } from "@/pages/investor-deck";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
@@ -187,6 +188,7 @@ function Router() {
       <Route path="/cabin-brief" component={CabinBrief} />
       <Route path="/cfi" component={CfiDirectory} />
       <Route path="/flying-clubs" component={FlyingClubsPage} />
+      <Route path="/flying-clubs/:slug" component={FlyingClubDetailPage} />
       <Route path="/cfi/terms" component={CfiTerms} />
       <Route path="/cfi/student-terms" component={CfiStudentTerms} />
       <Route path="/cfi/:slug" component={CfiProfile} />

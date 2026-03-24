@@ -1,0 +1,514 @@
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useRoute } from "wouter";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageShell } from "@/components/layout/PageShell";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import type {
+  FlyingClub,
+  FlyingClubAircraft,
+  FlyingClubAnnouncement,
+  FlyingClubMember,
+  FlyingClubReservation,
+} from "@shared/schema";
+
+type FlyingClubDetailResponse = {
+  club: FlyingClub;
+  members: FlyingClubMember[];
+  aircraft: FlyingClubAircraft[];
+  reservations: FlyingClubReservation[];
+  announcements: FlyingClubAnnouncement[];
+  documents: Array<{ id: string; title: string; category: string; storagePath: string }>;
+  viewerMembership: FlyingClubMember | null;
+  canManage: boolean;
+  canReserve: boolean;
+};
+
+const EMPTY_AIRCRAFT = {
+  displayName: "",
+  tailNumber: "",
+  makeModel: "",
+  hourlyRateWet: "",
+  hourlyRateDry: "",
+  notes: "",
+};
+
+const EMPTY_RESERVATION = {
+  aircraftId: "",
+  startAt: "",
+  endAt: "",
+  purpose: "",
+  notes: "",
+};
+
+const EMPTY_ANNOUNCEMENT = {
+  title: "",
+  body: "",
+};
+
+function formatDateTime(value?: string | Date | null) {
+  if (!value) return "Not scheduled";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Invalid date";
+  return date.toLocaleString();
+}
+
+export default function FlyingClubDetailPage() {
+  const [, params] = useRoute("/flying-clubs/:slug");
+  const slug = params?.slug;
+  const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
+
+  const [aircraftForm, setAircraftForm] = useState(EMPTY_AIRCRAFT);
+  const [reservationForm, setReservationForm] = useState(EMPTY_RESERVATION);
+  const [announcementForm, setAnnouncementForm] = useState(EMPTY_ANNOUNCEMENT);
+  const [fleetCsvText, setFleetCsvText] = useState("");
+  const [isSavingAircraft, setIsSavingAircraft] = useState(false);
+  const [isImportingFleet, setIsImportingFleet] = useState(false);
+  const [isSavingReservation, setIsSavingReservation] = useState(false);
+  const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
+
+  const { data, isLoading } = useQuery<FlyingClubDetailResponse>({
+    queryKey: slug ? [`/api/flying-clubs/${slug}`] : ["flying-club-detail", "missing"],
+    enabled: !!slug,
+  });
+
+  const upcomingReservations = useMemo(() => {
+    const reservations = data?.reservations ?? [];
+    return [...reservations].sort(
+      (a, b) => new Date(a.startAt as any).getTime() - new Date(b.startAt as any).getTime(),
+    );
+  }, [data?.reservations]);
+
+  const aircraftOptions = data?.aircraft ?? [];
+
+  const refreshClub = async () => {
+    if (!slug) return;
+    await queryClient.invalidateQueries({ queryKey: [`/api/flying-clubs/${slug}`] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/flying-clubs"] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/flying-clubs/mine"] });
+  };
+
+  const handleFleetFile = async (file?: File | null) => {
+    if (!file) return;
+    const text = await file.text();
+    setFleetCsvText(text);
+  };
+
+  const createAircraft = async () => {
+    if (!data) return;
+    if (!aircraftForm.displayName.trim()) {
+      toast({ title: "Aircraft name required", variant: "destructive" });
+      return;
+    }
+    setIsSavingAircraft(true);
+    try {
+      await apiRequest("POST", `/api/flying-clubs/${data.club.id}/aircraft`, {
+        ...aircraftForm,
+        status: "active",
+      });
+      setAircraftForm(EMPTY_AIRCRAFT);
+      await refreshClub();
+      toast({ title: "Club aircraft added" });
+    } catch (error: any) {
+      toast({ title: "Could not add aircraft", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingAircraft(false);
+    }
+  };
+
+  const importFleetCsv = async () => {
+    if (!data) return;
+    if (!fleetCsvText.trim()) {
+      toast({ title: "Fleet CSV required", description: "Paste CSV text or upload a .csv file first.", variant: "destructive" });
+      return;
+    }
+    setIsImportingFleet(true);
+    try {
+      const response = await apiRequest("POST", `/api/flying-clubs/${data.club.id}/aircraft/import`, {
+        csvText: fleetCsvText,
+      });
+      const payload = await response.json();
+      setFleetCsvText("");
+      await refreshClub();
+      toast({ title: "Fleet imported", description: `${payload.importedCount} aircraft added.` });
+    } catch (error: any) {
+      toast({ title: "Fleet import failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsImportingFleet(false);
+    }
+  };
+
+  const createReservation = async () => {
+    if (!data) return;
+    if (!reservationForm.aircraftId || !reservationForm.startAt || !reservationForm.endAt) {
+      toast({ title: "Reservation fields missing", description: "Aircraft, start, and end time are required.", variant: "destructive" });
+      return;
+    }
+    setIsSavingReservation(true);
+    try {
+      await apiRequest("POST", `/api/flying-clubs/${data.club.id}/reservations`, reservationForm);
+      setReservationForm(EMPTY_RESERVATION);
+      await refreshClub();
+      toast({ title: "Reservation created" });
+    } catch (error: any) {
+      toast({ title: "Reservation failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingReservation(false);
+    }
+  };
+
+  const createAnnouncement = async () => {
+    if (!data) return;
+    if (!announcementForm.title.trim() || !announcementForm.body.trim()) {
+      toast({ title: "Announcement fields missing", variant: "destructive" });
+      return;
+    }
+    setIsSavingAnnouncement(true);
+    try {
+      await apiRequest("POST", `/api/flying-clubs/${data.club.id}/announcements`, announcementForm);
+      setAnnouncementForm(EMPTY_ANNOUNCEMENT);
+      await refreshClub();
+      toast({ title: "Announcement posted" });
+    } catch (error: any) {
+      toast({ title: "Announcement failed", description: error.message, variant: "destructive" });
+    } finally {
+      setIsSavingAnnouncement(false);
+    }
+  };
+
+  if (isLoading || !data) {
+    return (
+      <PageShell kicker="Flying Clubs" title="Loading club..." description="Preparing the club workspace." contentClassName="space-y-6">
+        <div className="text-sm text-muted-foreground">Loading flying club...</div>
+      </PageShell>
+    );
+  }
+
+  return (
+    <PageShell
+      kicker="Flying Club"
+      title={data.club.name}
+      description={data.club.description || "Club profile, fleet, member roster, and scheduling workspace."}
+      actions={
+        <>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">{data.club.homeAirport || "Club profile"}</Badge>
+          <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">{data.club.status}</Badge>
+        </>
+      }
+      contentClassName="space-y-8"
+    >
+      <section className="grid gap-4 md:grid-cols-4">
+        <Card className="border-white/12 bg-white/82">
+          <CardHeader>
+            <CardTitle>{data.members.filter((member) => member.status === "active").length}</CardTitle>
+            <CardDescription>Active members</CardDescription>
+          </CardHeader>
+        </Card>
+        <Card className="border-white/12 bg-white/82">
+          <CardHeader>
+            <CardTitle>{data.aircraft.length}</CardTitle>
+            <CardDescription>Fleet records</CardDescription>
+          </CardHeader>
+        </Card>
+        <Card className="border-white/12 bg-white/82">
+          <CardHeader>
+            <CardTitle>{upcomingReservations.length}</CardTitle>
+            <CardDescription>Scheduled reservations</CardDescription>
+          </CardHeader>
+        </Card>
+        <Card className="border-white/12 bg-white/82">
+          <CardHeader>
+            <CardTitle>{data.viewerMembership?.role || (data.canManage ? "manager" : "visitor")}</CardTitle>
+            <CardDescription>Your access level</CardDescription>
+          </CardHeader>
+        </Card>
+      </section>
+
+      <Tabs defaultValue="overview" className="space-y-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="fleet">Fleet</TabsTrigger>
+          <TabsTrigger value="schedule">Schedule</TabsTrigger>
+          <TabsTrigger value="announcements">Announcements</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6">
+          <Card className="border-white/12 bg-white/86">
+            <CardHeader>
+              <CardTitle>Club Details</CardTitle>
+              <CardDescription>
+                {[data.club.city, data.club.state].filter(Boolean).join(", ") || "Location coming soon"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-slate-700">
+              <div>{data.club.policiesSummary || data.club.bookingNotes || "This club is building its operating workflow inside RSF."}</div>
+              <div className="flex flex-wrap gap-3">
+                {data.club.websiteUrl ? (
+                  <a href={data.club.websiteUrl} target="_blank" rel="noreferrer" className="text-primary underline">Visit website</a>
+                ) : null}
+                {data.club.contactEmail ? (
+                  <a href={`mailto:${data.club.contactEmail}`} className="text-primary underline">Email club</a>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-white/12 bg-white/86">
+            <CardHeader>
+              <CardTitle>Member Roster</CardTitle>
+              <CardDescription>Current members and club roles.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {data.members.map((member) => (
+                <div key={member.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">{member.userId}</div>
+                    <div className="text-xs uppercase tracking-[0.14em] text-slate-500">{member.status}</div>
+                  </div>
+                  <Badge variant="outline">{member.role}</Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="fleet" className="space-y-6">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <Card className="border-white/12 bg-white/86">
+              <CardHeader>
+                <CardTitle>Fleet Directory</CardTitle>
+                <CardDescription>Aircraft assigned to this club for member visibility and scheduling.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {data.aircraft.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-muted-foreground">
+                    No club aircraft added yet.
+                  </div>
+                ) : (
+                  data.aircraft.map((aircraft) => (
+                    <div key={aircraft.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-semibold text-slate-900">{aircraft.displayName}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {[aircraft.tailNumber, aircraft.makeModel].filter(Boolean).join(" • ") || "Club aircraft"}
+                          </div>
+                        </div>
+                        <Badge variant="outline">{aircraft.status}</Badge>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-700">
+                        {aircraft.hourlyRateWet ? <div>Wet: ${aircraft.hourlyRateWet}/hr</div> : null}
+                        {aircraft.hourlyRateDry ? <div>Dry: ${aircraft.hourlyRateDry}/hr</div> : null}
+                      </div>
+                      {aircraft.notes ? <div className="mt-3 text-sm text-muted-foreground">{aircraft.notes}</div> : null}
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="space-y-6">
+              {data.canManage ? (
+                <>
+                  <Card className="border-white/12 bg-white/86">
+                    <CardHeader>
+                      <CardTitle>Add Aircraft</CardTitle>
+                      <CardDescription>Add one fleet record manually for scheduling and member visibility.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <Input value={aircraftForm.displayName} onChange={(event) => setAircraftForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="Display name" />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Input value={aircraftForm.tailNumber} onChange={(event) => setAircraftForm((current) => ({ ...current, tailNumber: event.target.value }))} placeholder="Tail number" />
+                        <Input value={aircraftForm.makeModel} onChange={(event) => setAircraftForm((current) => ({ ...current, makeModel: event.target.value }))} placeholder="Make / model" />
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Input value={aircraftForm.hourlyRateWet} onChange={(event) => setAircraftForm((current) => ({ ...current, hourlyRateWet: event.target.value }))} placeholder="Wet rate" />
+                        <Input value={aircraftForm.hourlyRateDry} onChange={(event) => setAircraftForm((current) => ({ ...current, hourlyRateDry: event.target.value }))} placeholder="Dry rate" />
+                      </div>
+                      <Textarea value={aircraftForm.notes} onChange={(event) => setAircraftForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Notes" rows={3} />
+                      <Button onClick={createAircraft} disabled={isSavingAircraft} className="w-full">
+                        {isSavingAircraft ? "Saving aircraft..." : "Add club aircraft"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-white/12 bg-white/86">
+                    <CardHeader>
+                      <CardTitle>Upload Fleet CSV</CardTitle>
+                      <CardDescription>
+                        Accepted headers: <code>display_name, tail_number, make_model, hourly_rate_wet, hourly_rate_dry, status, notes</code>
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <Input
+                        type="file"
+                        accept=".csv"
+                        onChange={(event) => handleFleetFile(event.target.files?.[0] ?? null)}
+                        aria-label="Upload fleet CSV"
+                        title="Upload fleet CSV"
+                      />
+                      <Textarea value={fleetCsvText} onChange={(event) => setFleetCsvText(event.target.value)} placeholder="Paste fleet CSV here or upload a file" rows={8} />
+                      <Button onClick={importFleetCsv} disabled={isImportingFleet} className="w-full">
+                        {isImportingFleet ? "Importing fleet..." : "Import fleet CSV"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </>
+              ) : (
+                <Card className="border-white/12 bg-white/86">
+                  <CardHeader>
+                    <CardTitle>Club Fleet Access</CardTitle>
+                    <CardDescription>Only club managers can add or import aircraft records.</CardDescription>
+                  </CardHeader>
+                </Card>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="schedule" className="space-y-6">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <Card className="border-white/12 bg-white/86">
+              <CardHeader>
+                <CardTitle>Reservation Schedule</CardTitle>
+                <CardDescription>Upcoming club aircraft bookings.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {upcomingReservations.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-muted-foreground">
+                    No reservations have been created yet.
+                  </div>
+                ) : (
+                  upcomingReservations.map((reservation) => {
+                    const aircraft = aircraftOptions.find((entry) => entry.id === reservation.aircraftId);
+                    return (
+                      <div key={reservation.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-slate-900">{aircraft?.displayName || "Club aircraft"}</div>
+                            <div className="text-sm text-muted-foreground">{reservation.purpose || "Club reservation"}</div>
+                          </div>
+                          <Badge variant="outline">{reservation.status}</Badge>
+                        </div>
+                        <div className="mt-3 grid gap-1 text-sm text-slate-700">
+                          <div>Start: {formatDateTime(reservation.startAt)}</div>
+                          <div>End: {formatDateTime(reservation.endAt)}</div>
+                        </div>
+                        {reservation.notes ? <div className="mt-3 text-sm text-muted-foreground">{reservation.notes}</div> : null}
+                      </div>
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/12 bg-white/86">
+              <CardHeader>
+                <CardTitle>Create Reservation</CardTitle>
+                <CardDescription>Reserve a club aircraft time slot. Conflicts are blocked automatically.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!isAuthenticated ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-muted-foreground">
+                    Sign in to reserve aircraft time.
+                    <div className="mt-3 flex gap-3">
+                      <Button asChild size="sm">
+                        <Link href="/login">Sign in</Link>
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href="/register">Create account</Link>
+                      </Button>
+                    </div>
+                  </div>
+                ) : !data.canReserve ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-muted-foreground">
+                    Active club membership is required to make reservations.
+                  </div>
+                ) : (
+                  <>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={reservationForm.aircraftId}
+                      onChange={(event) => setReservationForm((current) => ({ ...current, aircraftId: event.target.value }))}
+                    >
+                      <option value="">Select club aircraft</option>
+                      {aircraftOptions.map((aircraft) => (
+                        <option key={aircraft.id} value={aircraft.id}>{aircraft.displayName}</option>
+                      ))}
+                    </select>
+                    <Input type="datetime-local" value={reservationForm.startAt} onChange={(event) => setReservationForm((current) => ({ ...current, startAt: event.target.value }))} />
+                    <Input type="datetime-local" value={reservationForm.endAt} onChange={(event) => setReservationForm((current) => ({ ...current, endAt: event.target.value }))} />
+                    <Input value={reservationForm.purpose} onChange={(event) => setReservationForm((current) => ({ ...current, purpose: event.target.value }))} placeholder="Purpose of flight" />
+                    <Textarea value={reservationForm.notes} onChange={(event) => setReservationForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Notes" rows={3} />
+                    <Button onClick={createReservation} disabled={isSavingReservation} className="w-full">
+                      {isSavingReservation ? "Saving reservation..." : "Create reservation"}
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="announcements" className="space-y-6">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+            <Card className="border-white/12 bg-white/86">
+              <CardHeader>
+                <CardTitle>Club Announcements</CardTitle>
+                <CardDescription>Updates for members, scheduling notes, and club notices.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {data.announcements.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-muted-foreground">
+                    No announcements yet.
+                  </div>
+                ) : (
+                  data.announcements.map((announcement) => (
+                    <div key={announcement.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-semibold text-slate-900">{announcement.title}</div>
+                        {announcement.isPinned ? <Badge>Pinned</Badge> : null}
+                      </div>
+                      <div className="mt-2 text-sm leading-6 text-slate-700">{announcement.body}</div>
+                      <div className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-500">{formatDateTime(announcement.createdAt)}</div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-white/12 bg-white/86">
+              <CardHeader>
+                <CardTitle>Post Announcement</CardTitle>
+                <CardDescription>Club managers can post scheduling notes and club-wide updates.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!data.canManage ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-muted-foreground">
+                    Only club managers can post announcements.
+                  </div>
+                ) : (
+                  <>
+                    <Input value={announcementForm.title} onChange={(event) => setAnnouncementForm((current) => ({ ...current, title: event.target.value }))} placeholder="Announcement title" />
+                    <Textarea value={announcementForm.body} onChange={(event) => setAnnouncementForm((current) => ({ ...current, body: event.target.value }))} placeholder="Announcement details" rows={6} />
+                    <Button onClick={createAnnouncement} disabled={isSavingAnnouncement} className="w-full">
+                      {isSavingAnnouncement ? "Posting..." : "Post announcement"}
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </PageShell>
+  );
+}

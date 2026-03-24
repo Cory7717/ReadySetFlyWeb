@@ -319,6 +319,7 @@ export interface IStorage {
   getFlyingClub(id: string): Promise<FlyingClub | undefined>;
   getFlyingClubBySlug(slug: string): Promise<FlyingClub | undefined>;
   getFlyingClubsByMember(userId: string): Promise<FlyingClub[]>;
+  getFlyingClubMembership(clubId: string, userId: string): Promise<FlyingClubMember | undefined>;
   createFlyingClub(club: InsertFlyingClub & { ownerUserId: string }): Promise<FlyingClub>;
   updateFlyingClub(id: string, updates: Partial<FlyingClub>): Promise<FlyingClub | undefined>;
   getFlyingClubMembers(clubId: string): Promise<FlyingClubMember[]>;
@@ -1458,6 +1459,15 @@ export class DatabaseStorage implements IStorage {
       .where(eq(flyingClubMembers.userId, userId))
       .orderBy(asc(flyingClubs.name))
       .then((rows) => rows.map((row) => row.club));
+  }
+
+  async getFlyingClubMembership(clubId: string, userId: string): Promise<FlyingClubMember | undefined> {
+    const [membership] = await db
+      .select()
+      .from(flyingClubMembers)
+      .where(and(eq(flyingClubMembers.clubId, clubId), eq(flyingClubMembers.userId, userId)))
+      .limit(1);
+    return membership;
   }
 
   async createFlyingClub(club: InsertFlyingClub & { ownerUserId: string }): Promise<FlyingClub> {

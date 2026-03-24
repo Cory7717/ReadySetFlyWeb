@@ -81,6 +81,7 @@ const FUEL_MAP_ROW_CLASSES = [
 const AV8MAPS_EMBED_ENABLED =
   String(import.meta.env.VITE_AV8MAPS_EMBED_ENABLED ?? "false").toLowerCase() === "true";
 const AV8MAPS_EMBED_URL = (import.meta.env.VITE_AV8MAPS_EMBED_URL || "").trim();
+const SHOW_LANDING_FUEL_TOOL = false;
 
 function formatTimeAgo(timestamp: number): string {
   const now = Date.now();
@@ -215,7 +216,7 @@ export default function Landing() {
       if (!res.ok) throw new Error("Failed to fetch fuel prices");
       return res.json();
     },
-    enabled: Boolean(searchIcao),
+    enabled: SHOW_LANDING_FUEL_TOOL && Boolean(searchIcao),
     staleTime: 1000 * 60 * 15,
   });
 
@@ -875,7 +876,7 @@ export default function Landing() {
               </div>
             )}
 
-            <div className="rounded-lg border border-white/10 bg-muted/20 p-4">
+            <div className={`${SHOW_LANDING_FUEL_TOOL ? "" : "hidden"} rounded-lg border border-white/10 bg-muted/20 p-4`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold">Fuel prices near {searchIcao}</div>
@@ -1162,7 +1163,7 @@ export default function Landing() {
       )}
       <div id="landing-find-section" className={activeMobileTab === "find" ? "" : "hidden md:block"}>
       {/* Hero Section */}
-      <div className="relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]">
+      <div className={`${SHOW_LANDING_FUEL_TOOL ? "" : "hidden"} relative overflow-hidden border-b border-white/8 bg-[linear-gradient(180deg,hsl(var(--primary)/0.16),transparent_72%)]`}>
         <div className="container mx-auto px-4 py-12 sm:py-20">
           <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_390px] xl:items-start">
             <div className="rsf-card-shell overflow-hidden">
@@ -1733,6 +1734,27 @@ export default function Landing() {
                           onClick={() => trackEvent("cta_click", { label: "quick_index_cfi_directory", target: "/cfi" })}
                         >
                           Find a CFI
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  <Card className={`border-primary/28 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),rgba(23,78,167,0.1))] ${activeMobileTab === "find" ? "" : "hidden md:block"}`}>
+                    <CardContent className="flex min-h-[164px] flex-col justify-between p-5">
+                      <div className="space-y-3">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/80">Manage</div>
+                        <div className="flex items-center gap-2 text-base font-semibold">
+                          <Users className="h-5 w-5 text-primary" />
+                          Flying Clubs
+                        </div>
+                        <p className="text-sm text-muted-foreground">Run member operations, fleet visibility, and club scheduling inside RSF.</p>
+                      </div>
+                      <Button asChild size="sm" variant="outline" className="w-full">
+                        <Link
+                          href="/flying-clubs"
+                          onClick={() => trackEvent("cta_click", { label: "quick_index_flying_clubs", target: "/flying-clubs" })}
+                        >
+                          Explore clubs
                         </Link>
                       </Button>
                     </CardContent>
@@ -2585,6 +2607,66 @@ export default function Landing() {
             </CardContent>
           </Card>
           ) : null}
+          <Card className="mt-6 border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),rgba(16,64,145,0.12))]">
+            <CardContent className="p-5 sm:p-6 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-4 max-w-3xl">
+                <div className="space-y-2">
+                  <span className="rsf-kicker">Flying Clubs</span>
+                  <div className="flex items-center gap-2 text-base sm:text-lg font-semibold">
+                    <Users className="h-5 w-5 text-primary" />
+                    Run your flying club inside RSF
+                  </div>
+                  <p className="text-sm text-muted-foreground max-w-2xl">
+                    Clubs can create a profile, organize members, assign aircraft, and build a shared scheduling workflow. Pilots can also browse listed clubs through the RSF club directory.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {[
+                    "Create a club profile and publish it in the RSF directory",
+                    "Organize member access, fleet records, and club communications",
+                    "Grow into deeper scheduling, billing, and maintenance workflows over time",
+                  ].map((item) => (
+                    <div key={item} className="rounded-[0.9rem] border border-primary/15 bg-background/70 p-3 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex w-full flex-col gap-3 sm:w-auto sm:min-w-[260px]">
+                <Button variant="outline" asChild>
+                  <Link
+                    href="/flying-clubs"
+                    onClick={() => trackEvent("cta_click", { label: "landing_flying_clubs_directory", target: "/flying-clubs" })}
+                  >
+                    View Flying Clubs
+                  </Link>
+                </Button>
+                <Button asChild>
+                  <Link
+                    href={isAuthenticated ? "/flying-clubs" : "/register"}
+                    onClick={() =>
+                      trackEvent("cta_click", {
+                        label: isAuthenticated ? "landing_flying_clubs_start" : "landing_flying_clubs_register",
+                        target: isAuthenticated ? "/flying-clubs" : "/register",
+                      })
+                    }
+                  >
+                    {isAuthenticated ? "Start your club" : "Create free account"}
+                  </Link>
+                </Button>
+                {!isAuthenticated ? (
+                  <Button variant="ghost" asChild>
+                    <Link
+                      href="/login"
+                      onClick={() => trackEvent("cta_click", { label: "landing_flying_clubs_sign_in", target: "/login" })}
+                    >
+                      Already have an account? Sign in
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
       )}

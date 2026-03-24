@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { FlyingClub } from "@shared/schema";
 import { Link } from "wouter";
@@ -32,6 +32,9 @@ export default function FlyingClubsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [airportFilter, setAirportFilter] = useState("");
+  const [stateFilter, setStateFilter] = useState("");
 
   useEffect(() => {
     trackEvent("flying_clubs_page_view");
@@ -45,6 +48,26 @@ export default function FlyingClubsPage() {
     queryKey: ["/api/flying-clubs/mine"],
     enabled: isAuthenticated,
   });
+
+  const filteredClubs = useMemo(() => {
+    const searchValue = search.trim().toLowerCase();
+    const airportValue = airportFilter.trim().toLowerCase();
+    const stateValue = stateFilter.trim().toLowerCase();
+
+    return clubs.filter((club) => {
+      const matchesSearch =
+        !searchValue ||
+        club.name.toLowerCase().includes(searchValue) ||
+        String(club.description || "").toLowerCase().includes(searchValue) ||
+        String(club.city || "").toLowerCase().includes(searchValue) ||
+        String(club.state || "").toLowerCase().includes(searchValue);
+      const matchesAirport =
+        !airportValue || String(club.homeAirport || "").toLowerCase().includes(airportValue);
+      const matchesState =
+        !stateValue || String(club.state || "").toLowerCase().includes(stateValue);
+      return matchesSearch && matchesAirport && matchesState;
+    });
+  }, [airportFilter, clubs, search, stateFilter]);
 
   const handleChange = (field: keyof typeof EMPTY_FORM, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -212,14 +235,36 @@ export default function FlyingClubsPage() {
             <CardDescription>Public clubs can use RSF as a discovery page today, then expand into member operations as the workflow rolls out.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(0,1.2fr)_180px_140px]">
+              <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search club name, city, or description" />
+              <Input value={airportFilter} onChange={(event) => setAirportFilter(event.target.value)} placeholder="Airport (e.g. KAUS)" />
+              <Input value={stateFilter} onChange={(event) => setStateFilter(event.target.value)} placeholder="State" />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+              <div>{filteredClubs.length} clubs shown</div>
+              {(search || airportFilter || stateFilter) ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSearch("");
+                    setAirportFilter("");
+                    setStateFilter("");
+                  }}
+                >
+                  Clear filters
+                </Button>
+              ) : null}
+            </div>
             {isLoading ? (
               <div className="text-sm text-muted-foreground">Loading clubs...</div>
-            ) : clubs.length === 0 ? (
+            ) : filteredClubs.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-muted-foreground">
-                No clubs are listed yet. The first clubs added here will shape the rollout of booking, roster, and fleet tools.
+                No clubs match those filters yet. Try a different airport, state, or search phrase.
               </div>
             ) : (
-              clubs.map((club) => (
+              filteredClubs.map((club) => (
                 <div key={club.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -240,6 +285,9 @@ export default function FlyingClubsPage() {
                     {club.description || "This club profile is live inside RSF and ready for member, fleet, and scheduling setup."}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-3 text-sm">
+                    <Link href={`/flying-clubs/${club.slug}`} className="text-primary underline">
+                      View club
+                    </Link>
                     {club.websiteUrl ? (
                       <a href={club.websiteUrl} target="_blank" rel="noreferrer" className="text-primary underline">
                         Visit website
@@ -310,6 +358,11 @@ export default function FlyingClubsPage() {
                         <div className="text-xs uppercase tracking-[0.14em] text-slate-500">{club.status}</div>
                       </div>
                       <Badge variant="outline">{club.visibility}</Badge>
+                    </div>
+                    <div className="mt-3">
+                      <Link href={`/flying-clubs/${club.slug}`} className="text-sm text-primary underline">
+                        Open club workspace
+                      </Link>
                     </div>
                   </div>
                 ))}

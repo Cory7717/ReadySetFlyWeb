@@ -150,34 +150,34 @@ export default function InvestorDeck() {
 
   if (!hasAcceptedConfidentiality) {
     return (
-      <div className="min-h-screen bg-[#0B1F3A] text-[#EEF3F9]">
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#17345d_0%,_#0f2747_35%,_#0B1F3A_72%)] text-[#EEF3F9]">
         <div className="container mx-auto flex min-h-screen items-center px-4 py-10 sm:px-6">
           <div className="mx-auto w-full max-w-3xl">
-            <Card className="border border-white/10 bg-white/6 text-[#EEF3F9] shadow-[0_30px_80px_rgba(2,8,20,0.4)]">
+            <Card className="border border-[#F0B429]/18 bg-[#08172d]/95 text-[#EEF3F9] shadow-[0_30px_80px_rgba(2,8,20,0.5)]">
               <CardHeader className="space-y-4 pb-4">
-                <Badge className="w-fit border border-[#F0B429]/35 bg-[#F0B429]/12 px-3 py-1 text-[#F0B429]">
+                <Badge className="w-fit border border-[#F0B429]/35 bg-[#F0B429]/14 px-3 py-1 text-[#F0B429]">
                   Confidential Investor Materials
                 </Badge>
                 <CardTitle className="text-3xl font-bold tracking-tight text-white">
                   Ready Set Fly Investor Deck Access
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6 text-sm leading-7 text-[#D7E2F2]">
-                <p>
+              <CardContent className="space-y-6 text-sm leading-7 text-[#E2EBF7]">
+                <p className="text-[#E2EBF7]">
                   These materials are confidential and are being provided solely for the purpose of evaluating a
                   potential investment, strategic relationship, or business discussion with Ready Set Fly.
                 </p>
-                <div className="rounded-2xl border border-white/10 bg-[#08172d] p-5">
+                <div className="rounded-2xl border border-white/10 bg-[#0d223f] p-5">
                   <div className="text-sm font-semibold uppercase tracking-[0.18em] text-[#F0B429]">
                     By proceeding, you agree that you will not:
                   </div>
-                  <ul className="mt-4 space-y-2 text-sm text-[#E7EEF8]">
+                  <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-[#F3F7FC]">
                     <li>Share, forward, publish, or distribute these materials without written permission.</li>
                     <li>Use the information for any purpose other than evaluating Ready Set Fly.</li>
                     <li>Represent these materials as public marketing collateral.</li>
                   </ul>
                 </div>
-                <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                <label className="flex items-start gap-3 rounded-2xl border border-white/12 bg-[#122a4b] p-4">
                   <input
                     type="checkbox"
                     className="mt-1 h-4 w-4 accent-[#F0B429]"
@@ -185,7 +185,7 @@ export default function InvestorDeck() {
                     onChange={(event) => setAcknowledgedTerms(event.target.checked)}
                     data-testid="checkbox-investor-confidentiality-accept"
                   />
-                  <span className="text-sm text-[#EEF3F9]">
+                  <span className="text-sm text-white">
                     I understand that these materials are confidential and I agree not to copy, distribute, or share
                     them without written permission from Ready Set Fly.
                   </span>
@@ -194,7 +194,7 @@ export default function InvestorDeck() {
                   <Button
                     asChild
                     variant="outline"
-                    className="border-white/20 bg-transparent text-white hover:bg-white/10"
+                    className="border-white/20 bg-transparent text-white hover:bg-white/12"
                   >
                     <a href="https://readysetfly.us">Return to readysetfly.us</a>
                   </Button>

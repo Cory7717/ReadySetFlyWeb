@@ -305,6 +305,7 @@ export default function PlannerMap({
   const [radarFrames, setRadarFrames] = useState<string[]>([]);
   const [radarFrameIndex, setRadarFrameIndex] = useState(0);
   const [radarError, setRadarError] = useState(false);
+  const [radarFallbackActive, setRadarFallbackActive] = useState(false);
   const radarTimerRef = useRef<number | null>(null);
   const gibsDate = useMemo(
     () => new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString().slice(0, 10),
@@ -350,6 +351,7 @@ export default function PlannerMap({
       setRadarFrames([]);
       setRadarFrameIndex(0);
       setRadarError(false);
+      setRadarFallbackActive(false);
       return;
     }
 
@@ -372,12 +374,14 @@ export default function PlannerMap({
         setRadarFrames(frames);
         setRadarFrameIndex(frames.length > 0 ? frames.length - 1 : 0);
         setRadarError(frames.length === 0);
+        setRadarFallbackActive(frames.length === 0);
       } catch (error) {
         console.error("Radar frame fetch failed:", error);
         if (isActive) {
           setRadarFrames([]);
           setRadarFrameIndex(0);
           setRadarError(true);
+          setRadarFallbackActive(true);
         }
       }
     };
@@ -404,7 +408,7 @@ export default function PlannerMap({
 
     radarTimerRef.current = window.setInterval(() => {
       setRadarFrameIndex((prev) => (prev + 1) % radarFrames.length);
-    }, 800);
+    }, 1600);
 
     return () => {
       if (radarTimerRef.current) {
@@ -493,13 +497,21 @@ export default function PlannerMap({
             opacity={0.85}
           />
         )}
-        {showRadar && radarTileUrl && (
+        {showRadar && radarTileUrl && !radarFallbackActive && (
           <TileLayer
             attribution="RainViewer"
             url={radarTileUrl}
             opacity={0.8}
             zIndex={600}
             crossOrigin="anonymous"
+            eventHandlers={{
+              tileerror: () => {
+                setRadarError(true);
+                setRadarFallbackActive(true);
+                setRadarFrames([]);
+                setRadarFrameIndex(0);
+              },
+            }}
           />
         )}
         {showCloudsConus && cloudTileUrl && (
@@ -513,7 +525,7 @@ export default function PlannerMap({
             crossOrigin="anonymous"
           />
         )}
-        {showRadar && !radarTileUrl && radarError && (
+        {showRadar && (radarFallbackActive || (!radarTileUrl && radarError)) && (
           <WMSTileLayer
             attribution="IEM NEXRAD Base Reflectivity"
             url="https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi"

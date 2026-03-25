@@ -2629,7 +2629,11 @@ export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
 }).extend({
   plannedDepartureAt: z.coerce.date().optional().nullable(),
   plannedArrivalAt: z.coerce.date().optional().nullable(),
-  fuelOnBoard: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
+  fuelOnBoard: z.union([
+    z.string().regex(/^\d+(\.\d{1,2})?$/),
+    z.literal(""),
+    z.null(),
+  ]).optional(),
   fuelRequired: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   filingFlightRules: z.enum(["VFR", "IFR", "DVFR"]).optional(),
   filingWakeTurbulence: z.string().trim().max(20).optional().nullable(),

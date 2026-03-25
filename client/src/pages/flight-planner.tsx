@@ -3025,6 +3025,7 @@ export default function FlightPlanner() {
     mutationFn: async () => {
         const payload = {
           ...form,
+          fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
           route: activeFiledRoute || null,
           aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
           fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
@@ -3077,6 +3078,7 @@ export default function FlightPlanner() {
     mutationFn: async (planId: string) => {
       const payload = {
         ...form,
+        fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
         route: activeFiledRoute || null,
         aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
         fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,

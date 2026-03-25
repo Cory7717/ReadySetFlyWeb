@@ -206,6 +206,61 @@ const formatDepartureInstant = (value?: Date | string | null) => {
   return parsed.toISOString();
 };
 
+const looksLikeHtml = (value?: string | null) =>
+  /<!doctype html|<html[\s>]|<body[\s>]|<head[\s>]/i.test(String(value || ""));
+
+const decodeHtmlEntities = (value: string) =>
+  value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+
+const extractHtmlText = (value: string) => decodeHtmlEntities(
+  value
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " "),
+)
+  .replace(/\s+/g, " ")
+  .trim();
+
+const truncateText = (value: string, maxLength = 280) =>
+  value.length > maxLength ? `${value.slice(0, maxLength - 1).trimEnd()}…` : value;
+
+const summarizeProviderError = (parsedResponse: Record<string, unknown>, response: Response) => {
+  const rawText = typeof parsedResponse.text === "string" ? parsedResponse.text : "";
+  if (rawText) {
+    if (looksLikeHtml(rawText)) {
+      const titleMatch = rawText.match(/<title[^>]*>(.*?)<\/title>/i);
+      const title = titleMatch?.[1] ? extractHtmlText(titleMatch[1]) : "";
+      const titlePrefix = title ? `${title}. ` : "";
+      return `${titlePrefix}Leidos returned HTML instead of the expected REST response. This usually means the REST endpoint path, credentials, or lab environment configuration is incorrect.`;
+    }
+
+    return truncateText(rawText.replace(/\s+/g, " ").trim());
+  }
+
+  const codedMessages = Array.isArray(parsedResponse.returnCodedMessage)
+    ? parsedResponse.returnCodedMessage.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (codedMessages.length > 0) {
+    return truncateText(codedMessages.join(" | "));
+  }
+
+  const plainMessages = Array.isArray(parsedResponse.returnMessage)
+    ? parsedResponse.returnMessage.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (plainMessages.length > 0) {
+    return truncateText(plainMessages.join(" | "));
+  }
+
+  const responseStatus = response.statusText.trim();
+  return responseStatus || null;
+};
+
 const resolveActionPath = (baseUrl: string, actionPath: string, plan: FlightPlan) => {
   const flightIdentifier = (plan.filingProviderPlanId || "").trim();
   const resolvedPath = actionPath
@@ -305,6 +360,7 @@ export const searchLeidosRoute = async ({
     method: "GET",
     headers: {
       Authorization: `Basic ${basic}`,
+      Accept: "application/json, text/plain, */*",
       "User-Agent": config.userAgent,
     },
   });
@@ -499,6 +555,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       method: "POST",
       headers: {
         Authorization: `Basic ${basic}`,
+        Accept: "application/json, text/plain, */*",
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": config.userAgent,
       },
@@ -506,11 +563,12 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     });
 
     const parsedResponse = await parseProviderResponse(response);
+    if (typeof parsedResponse.text === "string" && looksLikeHtml(parsedResponse.text)) {
+      const responseDetail = summarizeProviderError(parsedResponse, response);
+      throw new Error(`Leidos ${action.toUpperCase()} request returned HTML instead of a REST response${responseDetail ? `: ${responseDetail}` : ""}`);
+    }
     if (!response.ok) {
-      const responseDetail =
-        typeof parsedResponse === "string"
-          ? parsedResponse
-          : JSON.stringify(parsedResponse);
+      const responseDetail = summarizeProviderError(parsedResponse, response);
       throw new Error(`Leidos ${action.toUpperCase()} request failed with status ${response.status}${responseDetail ? `: ${responseDetail}` : ""}`);
     }
 

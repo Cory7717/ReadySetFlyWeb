@@ -64,6 +64,24 @@ const buildPlannerIcaoCandidates = (value: string) => {
   return Array.from(new Set(candidates.filter(Boolean)));
 };
 
+const summarizePlannerError = (value: unknown) => {
+  const message = String(value || "").trim();
+  if (!message) return "Unable to stage the filing action.";
+
+  if (/<!doctype html|<html[\s>]|<body[\s>]|<head[\s>]/i.test(message)) {
+    return "Leidos returned HTML instead of a REST response. Check the configured endpoint paths, credentials, and lab environment settings.";
+  }
+
+  if (/<[^>]+>/.test(message)) {
+    const stripped = message.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (stripped) {
+      return stripped.length > 280 ? `${stripped.slice(0, 279).trimEnd()}…` : stripped;
+    }
+  }
+
+  return message.length > 280 ? `${message.slice(0, 279).trimEnd()}…` : message;
+};
+
 const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
 const toRadians = (value: number) => (value * Math.PI) / 180;
 const toDegrees = (value: number) => (value * 180) / Math.PI;
@@ -3141,7 +3159,7 @@ export default function FlightPlanner() {
     onError: (error: any) => {
       toast({
         title: "Staging failed",
-        description: error.message || "Unable to stage the filing action.",
+        description: summarizePlannerError(error?.message),
         variant: "destructive",
       });
     },

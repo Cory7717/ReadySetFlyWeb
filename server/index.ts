@@ -98,7 +98,8 @@ app.use((req, res, next) => {
   }, async () => {
     log(`serving on port ${port}`);
     startFinanceAlertsJob();
-    const shouldStartSwim = process.env.SWIM_RUN_MODE !== "worker";
+    const swimRunMode = String(process.env.SWIM_RUN_MODE ?? "").toLowerCase();
+    const shouldStartSwim = swimRunMode !== "worker" && swimRunMode !== "disabled" && swimRunMode !== "off";
     const swimRunInApi = String(process.env.SWIM_RUN_IN_API ?? "").toLowerCase();
     const nmsEnabled = String(process.env.NMS_ENABLED ?? "").toLowerCase() === "true";
     const nmsRunMode = String(process.env.NMS_RUN_MODE ?? "").toLowerCase();

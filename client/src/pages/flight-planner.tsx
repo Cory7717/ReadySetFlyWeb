@@ -942,6 +942,7 @@ export default function FlightPlanner() {
   );
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [activeTab, setActiveTab] = useState<FlightPlannerTab>("route");
+  const [returnToFileAfterSave, setReturnToFileAfterSave] = useState(false);
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
   const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string } | null>(null);
@@ -1050,6 +1051,7 @@ export default function FlightPlanner() {
   }, [scratchPadOpen]);
 
   const [editingPlan, setEditingPlan] = useState<FlightPlan | null>(null);
+  const editingPlanRef = useRef<FlightPlan | null>(null);
   const [form, setForm] = useState({
     title: "",
     departure: "",
@@ -1148,6 +1150,10 @@ export default function FlightPlanner() {
   const windsAltitudeFt = windsAltitudeChoice === "planned"
     ? plannedAltitudeValue
     : Number(windsAltitudeChoice);
+
+  useEffect(() => {
+    editingPlanRef.current = editingPlan;
+  }, [editingPlan]);
 
   useEffect(() => {
     if (tfmsTier !== "pro_plus" && tfmsOverlayEnabled) {
@@ -2850,6 +2856,7 @@ export default function FlightPlanner() {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(FLIGHT_PLANNER_DRAFT_KEY);
     }
+    setReturnToFileAfterSave(false);
     setEditingPlan(null);
       setForm({
         title: "",
@@ -2966,6 +2973,27 @@ export default function FlightPlanner() {
     filingPreviewMutation.mutate();
   };
 
+  const beginAmendWorkflow = (plan: FlightPlan) => {
+    const hasProviderPlanId = Boolean(plan.filingProviderPlanId);
+    setEditingPlan(plan);
+    setReturnToFileAfterSave(false);
+
+    if (!hasProviderPlanId) {
+      setActiveTab("route");
+      toast({
+        title: "Plan loaded for amendment",
+        description: "Make your changes, then use Save changes and return to filing to come back to the filing tab.",
+      });
+      return;
+    }
+
+    setActiveTab("file");
+    toast({
+      title: "Plan ready to amend",
+      description: "Review the filing packet here, then submit Amend for the saved plan after making any needed changes.",
+    });
+  };
+
   const createPlanMutation = useMutation({
     mutationFn: async () => {
         const payload = {
@@ -2997,19 +3025,29 @@ export default function FlightPlanner() {
       const res = await apiRequest("POST", "/api/flight-plans", payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (savedPlan: FlightPlan) => {
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      if (returnToFileAfterSave) {
+        setEditingPlan(savedPlan);
+        setActiveTab("file");
+        setReturnToFileAfterSave(false);
+        toast({
+          title: "Flight plan saved",
+          description: "The saved plan is ready in File & Save for filing actions.",
+        });
+        return;
+      }
       toast({ title: "Flight plan saved" });
       resetForm();
     },
     onError: (error: any) => {
+      setReturnToFileAfterSave(false);
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
     },
   });
 
   const updatePlanMutation = useMutation({
-    mutationFn: async () => {
-      if (!editingPlan) return null;
+    mutationFn: async (planId: string) => {
       const payload = {
         ...form,
         route: activeFiledRoute || null,
@@ -3036,15 +3074,26 @@ export default function FlightPlanner() {
           ? toUtcIso(form.plannedArrivalAt, destinationTimeZone)
           : null,
       };
-      const res = await apiRequest("PATCH", `/api/flight-plans/${editingPlan.id}`, payload);
+      const res = await apiRequest("PATCH", `/api/flight-plans/${planId}`, payload);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (updatedPlan: FlightPlan | null) => {
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      if (returnToFileAfterSave && updatedPlan) {
+        setEditingPlan(updatedPlan);
+        setActiveTab("file");
+        setReturnToFileAfterSave(false);
+        toast({
+          title: "Flight plan updated",
+          description: "Review the updated plan and submit File or Amend from the filing tab.",
+        });
+        return;
+      }
       toast({ title: "Flight plan updated" });
       resetForm();
     },
     onError: (error: any) => {
+      setReturnToFileAfterSave(false);
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
     },
   });
@@ -3176,9 +3225,10 @@ export default function FlightPlanner() {
       window.location.href = "/logbook/pro";
       return;
     }
-    if (editingPlan) {
+    const currentEditingPlan = editingPlanRef.current;
+    if (currentEditingPlan?.id) {
       trackEvent("planner_save_plan", { action: "update" });
-      updatePlanMutation.mutate();
+      updatePlanMutation.mutate(currentEditingPlan.id);
       return;
     }
     trackEvent("planner_save_plan", { action: "create" });
@@ -5019,7 +5069,7 @@ export default function FlightPlanner() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "amend" })}
+                  onClick={() => beginAmendWorkflow(currentSavedPlan!)}
                   disabled={filingActionMutation.isPending}
                 >
                   Amend
@@ -5167,6 +5217,23 @@ export default function FlightPlanner() {
             >
               {editingPlan ? "Save Changes" : "Save Flight Plan"}
             </Button>
+            {editingPlan && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setReturnToFileAfterSave(true);
+                  if (isGuest) {
+                    trackEvent("cta_click", { label: "planner_save_return_requires_auth", target: "/register" });
+                  }
+                  runWithAuth("save_flight_plan", async () => {
+                    await savePlanActionRef.current();
+                  });
+                }}
+                disabled={createPlanMutation.isPending || updatePlanMutation.isPending}
+              >
+                Save changes and return to filing
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => {
@@ -5297,7 +5364,7 @@ export default function FlightPlanner() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "amend" })}
+                    onClick={() => beginAmendWorkflow(plan)}
                     disabled={filingActionMutation.isPending}
                   >
                     Amend

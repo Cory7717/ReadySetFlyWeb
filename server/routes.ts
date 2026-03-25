@@ -19246,14 +19246,32 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (providerResult.nextStatus === "cancelled") statusTimestamps.cancelledAt = now;
       if (providerResult.nextStatus === "closed") statusTimestamps.closedAt = now;
 
+      const preserveExistingLifecycleState =
+        !providerResult.live &&
+        providerResult.nextStatus === "staged" &&
+        ["filed", "activated", "cancelled", "closed"].includes(String(plan.filingStatus || "").toLowerCase());
+
+      const nextFilingStatus = preserveExistingLifecycleState
+        ? plan.filingStatus
+        : providerResult.nextStatus;
+      const nextFilingIsLive = preserveExistingLifecycleState
+        ? plan.filingIsLive
+        : providerResult.live;
+      const nextFilingRaw = preserveExistingLifecycleState
+        ? plan.filingRaw
+        : providerResult.raw;
+      const nextProviderPlanId = preserveExistingLifecycleState
+        ? plan.filingProviderPlanId || providerResult.providerPlanId
+        : providerResult.providerPlanId;
+
       const updated = await storage.updateFlightPlan(plan.id, {
         filingProvider: "leidos_flight_service",
-        filingProviderPlanId: providerResult.providerPlanId,
-        filingStatus: providerResult.nextStatus,
+        filingProviderPlanId: nextProviderPlanId,
+        filingStatus: nextFilingStatus,
         filingPendingAction: providerResult.live ? null : action,
-        filingIsLive: providerResult.live,
+        filingIsLive: nextFilingIsLive,
         filingLastProviderSyncAt: now,
-        filingRaw: providerResult.raw,
+        filingRaw: nextFilingRaw,
         filingActionHistory: [...currentHistory, historyEntry],
         ...statusTimestamps,
       } as any);

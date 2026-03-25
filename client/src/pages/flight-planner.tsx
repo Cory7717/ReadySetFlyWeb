@@ -219,11 +219,12 @@ const formatMinutesLabel = (minutes: number) => {
 };
 
 type FilingPreviewResponse = {
-  live: false;
+  live: boolean;
   provider: string;
   routeType: string;
   readyToFile: boolean;
   providerUrl: string;
+  liveAvailable?: boolean;
   errors: string[];
   warnings: string[];
   nextSteps: string[];
@@ -2473,6 +2474,13 @@ export default function FlightPlanner() {
           aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
           fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
           filingFlightRules: filingDraft.flightRules,
+          filingEquipment: filingDraft.equipment.trim() || null,
+          filingSoulsOnBoard: filingDraft.soulsOnBoard.trim() || null,
+          filingAircraftColor: filingDraft.aircraftColor.trim() || null,
+          filingPilotName: filingDraft.pilotName.trim() || null,
+          filingRemarks: filingDraft.remarks.trim() || null,
+          filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
+          filingEnduranceMinutes: Math.round(enduranceMinutes) || null,
           plannedDepartureAt: form.plannedDepartureAt
             ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
             : null,
@@ -2506,6 +2514,13 @@ export default function FlightPlanner() {
         aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
         fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
         filingFlightRules: filingDraft.flightRules,
+        filingEquipment: filingDraft.equipment.trim() || null,
+        filingSoulsOnBoard: filingDraft.soulsOnBoard.trim() || null,
+        filingAircraftColor: filingDraft.aircraftColor.trim() || null,
+        filingPilotName: filingDraft.pilotName.trim() || null,
+        filingRemarks: filingDraft.remarks.trim() || null,
+        filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
+        filingEnduranceMinutes: Math.round(enduranceMinutes) || null,
         plannedDepartureAt: form.plannedDepartureAt
           ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
           : null,
@@ -2603,7 +2618,9 @@ export default function FlightPlanner() {
       toast({
         title: result.readyToFile ? "Filing preview ready" : "Filing preview generated",
         description: result.readyToFile
-          ? "RSF validated the packet and staged the non-live auto-file handoff."
+          ? (result.liveAvailable
+            ? "RSF validated the packet and the Leidos live filing path is available."
+            : "RSF validated the packet and kept the handoff staged until live Leidos paths are fully configured.")
           : "Review the filing errors and warnings before continuing to Flight Service.",
       });
     },
@@ -2626,8 +2643,8 @@ export default function FlightPlanner() {
     onSuccess: (result: any, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       toast({
-        title: `${variables.action[0].toUpperCase()}${variables.action.slice(1)} staged`,
-        description: result?.message || "The provider handoff was staged for later live activation.",
+        title: `${variables.action[0].toUpperCase()}${variables.action.slice(1)} ${result?.live ? "submitted" : "staged"}`,
+        description: result?.message || "The provider handoff was recorded.",
       });
     },
     onError: (error: any) => {
@@ -2706,7 +2723,11 @@ export default function FlightPlanner() {
       ...current,
       flightRules: editingPlan.filingFlightRules || current.flightRules,
       aircraftId: editingPlan.tailNumber || current.aircraftId,
-      remarks: editingPlan.notes || current.remarks,
+      equipment: editingPlan.filingEquipment || current.equipment,
+      soulsOnBoard: editingPlan.filingSoulsOnBoard || current.soulsOnBoard,
+      aircraftColor: editingPlan.filingAircraftColor || current.aircraftColor,
+      pilotName: editingPlan.filingPilotName || current.pilotName,
+      remarks: editingPlan.filingRemarks || editingPlan.notes || current.remarks,
     }));
     setWaypointsInput(editingPlan.route || "");
     setPlannedStopsInput("");
@@ -4119,7 +4140,7 @@ export default function FlightPlanner() {
                     onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "file" })}
                     disabled={filingActionMutation.isPending}
                   >
-                    Stage file
+                    File
                   </Button>
                   <Button
                     size="sm"
@@ -4127,7 +4148,7 @@ export default function FlightPlanner() {
                     onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "amend" })}
                     disabled={filingActionMutation.isPending}
                   >
-                    Stage amend
+                    Amend
                   </Button>
                   {(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>
@@ -4137,7 +4158,7 @@ export default function FlightPlanner() {
                         onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "activate" })}
                         disabled={filingActionMutation.isPending}
                       >
-                        Stage activate
+                        Activate
                       </Button>
                       <Button
                         size="sm"
@@ -4145,7 +4166,7 @@ export default function FlightPlanner() {
                         onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "close" })}
                         disabled={filingActionMutation.isPending}
                       >
-                        Stage close
+                        Close
                       </Button>
                     </>
                   )}
@@ -4155,11 +4176,11 @@ export default function FlightPlanner() {
                     onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "cancel" })}
                     disabled={filingActionMutation.isPending}
                   >
-                    Stage cancel
+                    Cancel
                   </Button>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Filing lifecycle is staged only. Live provider submission remains disabled until Leidos vendor authorization and beta validation are complete.
+                  Filing requests submit live when the Leidos environment is fully configured. If a required live path is still missing, RSF keeps the request staged instead of dropping it.
                 </div>
                 {Array.isArray(plan.filingActionHistory) && plan.filingActionHistory.length > 0 && (
                   <div className="rounded-lg border bg-muted/20 p-3">

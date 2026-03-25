@@ -2174,6 +2174,13 @@ export const flightPlans = pgTable("flight_plans", {
   filingProvider: text("filing_provider").default("leidos_flight_service"),
   filingProviderPlanId: text("filing_provider_plan_id"),
   filingFlightRules: text("filing_flight_rules").default("VFR"),
+  filingEquipment: text("filing_equipment"),
+  filingSoulsOnBoard: text("filing_souls_on_board"),
+  filingAircraftColor: text("filing_aircraft_color"),
+  filingPilotName: text("filing_pilot_name"),
+  filingRemarks: text("filing_remarks"),
+  filingEstimatedEnrouteMinutes: integer("filing_estimated_enroute_minutes"),
+  filingEnduranceMinutes: integer("filing_endurance_minutes"),
   filingStatus: text("filing_status").notNull().default("draft"),
   filingPendingAction: text("filing_pending_action"),
   filingIsLive: boolean("filing_is_live").notNull().default(false),
@@ -2604,6 +2611,8 @@ export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   fuelOnBoard: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   fuelRequired: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   filingFlightRules: z.enum(["VFR", "IFR", "DVFR"]).optional(),
+  filingEstimatedEnrouteMinutes: z.coerce.number().int().min(0).optional().nullable(),
+  filingEnduranceMinutes: z.coerce.number().int().min(0).optional().nullable(),
   filingStatus: z.enum(flightPlanFilingStatuses).optional(),
 });
 

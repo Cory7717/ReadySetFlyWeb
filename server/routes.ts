@@ -47,7 +47,12 @@ import { partners } from "./config/partners";
 import { registerAdminFinanceRoutes } from "./routes/adminFinance";
 import { fuelPricesRouter } from "./routes/fuelPrices";
 import { aiToolsRouter } from "./routes/aiTools";
-import { flightPlanFilingProvider, validateFlightPlanForAction } from "./services/flight-plan-filing/provider";
+import {
+  flightPlanFilingProvider,
+  getLeidosFlightServiceDiagnostics,
+  validateFlightPlanForAction,
+  verifyLeidosWebhookAuthorization,
+} from "./services/flight-plan-filing/provider";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
 import { buildWeeklyDigestProfile, type WeeklyDigestSegment } from "./weeklyEmailPersonalization";
 import {
@@ -18728,6 +18733,35 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     action: z.enum(flightPlanFilingActions),
   });
 
+  app.get("/api/admin/leidos-flight-service/status", isAuthenticated, isSuperAdmin, async (_req, res) => {
+    try {
+      res.json(getLeidosFlightServiceDiagnostics());
+    } catch (error) {
+      console.error("Failed to build Leidos Flight Service diagnostics:", error);
+      res.status(500).json({ error: "Failed to build Leidos Flight Service diagnostics" });
+    }
+  });
+
+  app.post("/api/leidos/webhooks/flight-service", async (req: any, res) => {
+    try {
+      if (!verifyLeidosWebhookAuthorization(req.headers.authorization)) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      console.info(JSON.stringify({
+        event: "leidos_flight_service_webhook",
+        timestamp: new Date().toISOString(),
+        userAgent: req.headers["user-agent"] || null,
+        body: req.body ?? null,
+      }));
+
+      res.status(202).json({ ok: true });
+    } catch (error) {
+      console.error("Failed to process Leidos Flight Service webhook:", error);
+      res.status(500).json({ error: "Failed to process Leidos Flight Service webhook" });
+    }
+  });
+
   app.post("/api/flight-plans/filing-preview", async (req: any, res) => {
     try {
       const result = filingPreviewSchema.safeParse(req.body ?? {});
@@ -18769,6 +18803,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         flightRules,
         provider: "flight-service-handoff-staged",
       };
+      const providerDiagnostics = getLeidosFlightServiceDiagnostics();
 
       const nextSteps = [
         "Review aircraft ID, route, and departure time for filing accuracy.",
@@ -18778,12 +18813,25 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           : "Activate and close the flight plan through Flight Service when appropriate.",
       ];
 
+      const liveAvailable =
+        providerDiagnostics.enabled &&
+        providerDiagnostics.usernameConfigured &&
+        providerDiagnostics.passwordConfigured;
+
       res.json({
-        live: false,
-        provider: "Flight Service",
+        live: liveAvailable,
+        provider: "Leidos Flight Service",
         routeType: normalizedPacket.flightRules,
         readyToFile: errors.length === 0,
-        providerUrl: "https://www.1800wxbrief.com/",
+        providerUrl: providerDiagnostics.baseUrl,
+        liveAvailable,
+        diagnostics: {
+          environment: providerDiagnostics.environment,
+          actionPathsConfigured: Object.entries(providerDiagnostics.actionPaths).reduce((acc, [key, value]) => ({
+            ...acc,
+            [key]: Boolean(value),
+          }), {} as Record<string, boolean>),
+        },
         errors,
         warnings,
         nextSteps,
@@ -18831,24 +18879,32 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const providerResult = await flightPlanFilingProvider.stageAction(plan, action);
       const currentHistory = Array.isArray(plan.filingActionHistory) ? plan.filingActionHistory : [];
+      const now = new Date();
       const historyEntry = {
         action,
-        stagedAt: new Date().toISOString(),
-        live: false,
+        stagedAt: now.toISOString(),
+        live: providerResult.live,
         message: providerResult.message,
         warnings: providerResult.warnings,
         validation,
       };
 
+      const statusTimestamps: Record<string, Date> = {};
+      if (providerResult.nextStatus === "filed") statusTimestamps.filedAt = now;
+      if (providerResult.nextStatus === "activated") statusTimestamps.activatedAt = now;
+      if (providerResult.nextStatus === "cancelled") statusTimestamps.cancelledAt = now;
+      if (providerResult.nextStatus === "closed") statusTimestamps.closedAt = now;
+
       const updated = await storage.updateFlightPlan(plan.id, {
         filingProvider: "leidos_flight_service",
         filingProviderPlanId: providerResult.providerPlanId,
-        filingStatus: "staged",
-        filingPendingAction: action,
-        filingIsLive: false,
-        filingLastProviderSyncAt: new Date(),
+        filingStatus: providerResult.nextStatus,
+        filingPendingAction: providerResult.live ? null : action,
+        filingIsLive: providerResult.live,
+        filingLastProviderSyncAt: now,
         filingRaw: providerResult.raw,
         filingActionHistory: [...currentHistory, historyEntry],
+        ...statusTimestamps,
       } as any);
 
       res.json({

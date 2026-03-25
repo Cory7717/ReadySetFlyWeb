@@ -1879,6 +1879,13 @@ type RunwayMeta = {
   surface: string | null;
 };
 
+type AirportFrequencyMeta = {
+  airportIdent: string;
+  type: string | null;
+  description: string | null;
+  frequencyMhz: number | null;
+};
+
 function toNumber(value: any): number | null {
   if (value === null || value === undefined) return null;
   const num = Number(value);
@@ -1918,6 +1925,9 @@ let airportReferenceCache: { data: Map<string, AirportReference>; expiresAt: num
 const RUNWAY_CACHE_URL = "https://ourairports.com/data/runways.csv";
 const RUNWAY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let runwayCache: { data: Map<string, RunwayMeta[]>; expiresAt: number } | null = null;
+const AIRPORT_FREQUENCIES_CACHE_URL = "https://ourairports.com/data/airport-frequencies.csv";
+const AIRPORT_FREQUENCIES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+let airportFrequencyCache: { data: Map<string, AirportFrequencyMeta[]>; expiresAt: number } | null = null;
 const NOTAM_CACHE_TTL_MS = 2 * 60 * 1000;
 const notamCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -3140,6 +3150,54 @@ async function loadRunwayCache(): Promise<Map<string, RunwayMeta[]>> {
 
   runwayCache = { data: dataMap, expiresAt: now + RUNWAY_CACHE_TTL_MS };
   return dataMap;
+}
+
+async function loadAirportFrequencyCache(): Promise<Map<string, AirportFrequencyMeta[]>> {
+  const now = Date.now();
+  if (airportFrequencyCache && airportFrequencyCache.expiresAt > now) return airportFrequencyCache.data;
+
+  const response = await fetch(AIRPORT_FREQUENCIES_CACHE_URL, {
+    headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load airport frequencies data: ${response.status}`);
+  }
+
+  const csvText = await response.text();
+  const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  const map = new Map<string, AirportFrequencyMeta[]>();
+  if (lines.length === 0) {
+    airportFrequencyCache = { data: map, expiresAt: now + AIRPORT_FREQUENCIES_CACHE_TTL_MS };
+    return map;
+  }
+
+  const header = parseCsvLine(lines[0]);
+  const idx = (name: string) => header.indexOf(name);
+  const airportIdentIdx = idx("airport_ident");
+  const typeIdx = idx("type");
+  const descriptionIdx = idx("description");
+  const frequencyIdx = idx("frequency_mhz");
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const row = parseCsvLine(lines[i]);
+    const airportIdent = row[airportIdentIdx]?.trim().toUpperCase();
+    if (!airportIdent) continue;
+
+    const item: AirportFrequencyMeta = {
+      airportIdent,
+      type: row[typeIdx]?.trim() || null,
+      description: row[descriptionIdx]?.trim() || null,
+      frequencyMhz: row[frequencyIdx] ? Number(row[frequencyIdx]) : null,
+    };
+
+    if (!map.has(airportIdent)) {
+      map.set(airportIdent, []);
+    }
+    map.get(airportIdent)!.push(item);
+  }
+
+  airportFrequencyCache = { data: map, expiresAt: now + AIRPORT_FREQUENCIES_CACHE_TTL_MS };
+  return map;
 }
 
 function buildNotamUrl(template: string, icao: string) {
@@ -14276,6 +14334,42 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Runway lookup failed:", error);
       res.status(500).json({ error: "Failed to fetch runway data" });
+    }
+  });
+
+  app.get("/api/airports/:icao/frequencies", async (req, res) => {
+    try {
+      const requestedIcao = normalizeIcao(req.params.icao || "");
+      if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
+        return res.status(400).json({ error: "Invalid ICAO code format" });
+      }
+
+      const frequencyMap = await loadAirportFrequencyCache();
+      const candidates = buildIcaoCandidates(requestedIcao);
+      const frequencies = candidates.flatMap((candidate) => frequencyMap.get(candidate) || []);
+
+      const deduped = Array.from(
+        new Map(
+          frequencies.map((item) => [
+            `${item.type || ""}|${item.description || ""}|${item.frequencyMhz || ""}`,
+            item,
+          ])
+        ).values()
+      );
+
+      return res.json({
+        icao: requestedIcao,
+        frequencies: deduped
+          .filter((item) => item.frequencyMhz !== null || item.description || item.type)
+          .sort((a, b) => {
+            const byType = String(a.type || "").localeCompare(String(b.type || ""));
+            if (byType !== 0) return byType;
+            return String(a.description || "").localeCompare(String(b.description || ""));
+          }),
+      });
+    } catch (error) {
+      console.error("Airport frequency lookup failed:", error);
+      res.status(500).json({ error: "Failed to fetch airport frequency data" });
     }
   });
 

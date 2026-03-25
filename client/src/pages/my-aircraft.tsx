@@ -30,6 +30,11 @@ type AircraftProfile = {
   fuelBurnOverrideGph?: number | null;
   usableFuelOverrideGal?: number | null;
   maxGrossWeightOverrideLb?: number | null;
+  filingEquipmentDefault?: string | null;
+  filingSoulsOnBoardDefault?: string | null;
+  filingAircraftColorDefault?: string | null;
+  filingPilotNameDefault?: string | null;
+  filingRemarksDefault?: string | null;
   cruise_ktas_effective?: number | null;
   fuel_burn_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
@@ -44,6 +49,11 @@ const emptyForm = {
   fuelBurnOverrideGph: "",
   usableFuelOverrideGal: "",
   maxGrossWeightOverrideLb: "",
+  filingEquipmentDefault: "",
+  filingSoulsOnBoardDefault: "1",
+  filingAircraftColorDefault: "",
+  filingPilotNameDefault: "",
+  filingRemarksDefault: "",
 };
 
 export default function MyAircraft() {
@@ -77,6 +87,11 @@ export default function MyAircraft() {
         fuelBurnOverrideGph: form.fuelBurnOverrideGph ? Number(form.fuelBurnOverrideGph) : null,
         usableFuelOverrideGal: form.usableFuelOverrideGal ? Number(form.usableFuelOverrideGal) : null,
         maxGrossWeightOverrideLb: form.maxGrossWeightOverrideLb ? Number(form.maxGrossWeightOverrideLb) : null,
+        filingEquipmentDefault: form.filingEquipmentDefault.trim() || null,
+        filingSoulsOnBoardDefault: form.filingSoulsOnBoardDefault.trim() || null,
+        filingAircraftColorDefault: form.filingAircraftColorDefault.trim() || null,
+        filingPilotNameDefault: form.filingPilotNameDefault.trim() || null,
+        filingRemarksDefault: form.filingRemarksDefault.trim() || null,
       };
       if (editingId) {
         const res = await apiRequest("PUT", `/api/aircraft/profiles/${editingId}`, payload);
@@ -174,6 +189,37 @@ export default function MyAircraft() {
             </div>
           </div>
 
+          <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+            <div>
+              <div className="font-semibold">ICAO Filing Defaults</div>
+              <div className="text-sm text-muted-foreground">
+                Save the filing details that usually travel with this aircraft so the flight planner can prefill them automatically.
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Equipment Code</Label>
+                <Input value={form.filingEquipmentDefault} onChange={(e) => setForm({ ...form, filingEquipmentDefault: e.target.value.toUpperCase() })} placeholder="S/C" />
+              </div>
+              <div className="space-y-2">
+                <Label>Default Souls On Board</Label>
+                <Input value={form.filingSoulsOnBoardDefault} onChange={(e) => setForm({ ...form, filingSoulsOnBoardDefault: e.target.value })} placeholder="1" />
+              </div>
+              <div className="space-y-2">
+                <Label>Aircraft Color</Label>
+                <Input value={form.filingAircraftColorDefault} onChange={(e) => setForm({ ...form, filingAircraftColorDefault: e.target.value })} placeholder="White / Blue" />
+              </div>
+              <div className="space-y-2">
+                <Label>Pilot Name Default</Label>
+                <Input value={form.filingPilotNameDefault} onChange={(e) => setForm({ ...form, filingPilotNameDefault: e.target.value })} placeholder="Pilot in command" />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Default Filing Remarks</Label>
+                <Input value={form.filingRemarksDefault} onChange={(e) => setForm({ ...form, filingRemarksDefault: e.target.value })} placeholder="Standard remarks for this aircraft" />
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-2">
             <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !form.name.trim()}>
               {editingId ? "Save Changes" : "Save Profile"}
@@ -199,11 +245,11 @@ export default function MyAircraft() {
             profiles.map((profile) => (
               <div key={profile.id} className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div>
-                    <div className="font-semibold">{profile.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Tail: {profile.tailNumber || "-"} | Cruise: {profile.cruise_ktas_effective || "-"} KTAS | Burn: {profile.fuel_burn_gph_effective || "-"} gph
-                    </div>
+                    <div>
+                      <div className="font-semibold">{profile.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Tail: {profile.tailNumber || "-"} | Cruise: {profile.cruise_ktas_effective || "-"} KTAS | Burn: {profile.fuel_burn_gph_effective || "-"} gph
+                      </div>
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -219,6 +265,11 @@ export default function MyAircraft() {
                           fuelBurnOverrideGph: profile.fuelBurnOverrideGph ? String(profile.fuelBurnOverrideGph) : "",
                           usableFuelOverrideGal: profile.usableFuelOverrideGal ? String(profile.usableFuelOverrideGal) : "",
                           maxGrossWeightOverrideLb: profile.maxGrossWeightOverrideLb ? String(profile.maxGrossWeightOverrideLb) : "",
+                          filingEquipmentDefault: profile.filingEquipmentDefault || "",
+                          filingSoulsOnBoardDefault: profile.filingSoulsOnBoardDefault || "1",
+                          filingAircraftColorDefault: profile.filingAircraftColorDefault || "",
+                          filingPilotNameDefault: profile.filingPilotNameDefault || "",
+                          filingRemarksDefault: profile.filingRemarksDefault || "",
                         });
                       }}
                     >
@@ -231,6 +282,9 @@ export default function MyAircraft() {
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Usable fuel: {profile.usable_fuel_gal_effective || "-"} gal | Max gross: {profile.max_gross_weight_lb_effective || "-"} lb
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Filing defaults: Equip {profile.filingEquipmentDefault || "-"} | Souls {profile.filingSoulsOnBoardDefault || "-"} | PIC {profile.filingPilotNameDefault || "-"}
                 </div>
               </div>
             ))

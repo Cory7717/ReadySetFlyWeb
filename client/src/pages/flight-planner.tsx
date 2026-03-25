@@ -171,6 +171,11 @@ type AircraftProfile = {
   fuel_burn_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
   max_gross_weight_lb_effective?: number | null;
+  filingEquipmentDefault?: string | null;
+  filingSoulsOnBoardDefault?: string | null;
+  filingAircraftColorDefault?: string | null;
+  filingPilotNameDefault?: string | null;
+  filingRemarksDefault?: string | null;
 };
 
 type AircraftType = {
@@ -216,6 +221,54 @@ const formatMinutesLabel = (minutes: number) => {
   if (hours === 0) return `${mins} min`;
   if (mins === 0) return `${hours}h`;
   return `${hours}h ${mins}m`;
+};
+
+const formatFrequencyTypeLabel = (value?: string | null) => {
+  const key = String(value || "").trim().toLowerCase();
+  const labels: Record<string, string> = {
+    "clr": "Clearance",
+    "clearance": "Clearance",
+    "clearance delivery": "Clearance",
+    "gnd": "Ground",
+    "ground": "Ground",
+    "twr": "Tower",
+    "tower": "Tower",
+    "app": "Approach",
+    "approach": "Approach",
+    "dep": "Departure",
+    "departure": "Departure",
+    "atis": "ATIS",
+    "awos": "AWOS",
+    "asos": "ASOS",
+    "unicom": "UNICOM",
+    "ctaf": "CTAF",
+    "fss": "Flight Service",
+  };
+  return labels[key] || (value ? String(value).replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase()) : "Other");
+};
+
+const frequencyTypePriority = (value?: string | null) => {
+  const key = String(value || "").trim().toLowerCase();
+  const priorities: Record<string, number> = {
+    "clearance delivery": 1,
+    "clearance": 1,
+    "clr": 1,
+    "ground": 2,
+    "gnd": 2,
+    "tower": 3,
+    "twr": 3,
+    "departure": 4,
+    "dep": 4,
+    "approach": 5,
+    "app": 5,
+    "ctaf": 6,
+    "unicom": 7,
+    "atis": 8,
+    "awos": 9,
+    "asos": 10,
+    "fss": 11,
+  };
+  return priorities[key] || 99;
 };
 
 type FilingPreviewResponse = {
@@ -324,6 +377,18 @@ type RouteSuggestionResponse = {
   meta: RouteSuggestionMeta;
 };
 
+type AirportFrequency = {
+  airportIdent: string;
+  type?: string | null;
+  description?: string | null;
+  frequencyMhz?: number | null;
+};
+
+type AirportFrequencyResponse = {
+  icao: string;
+  frequencies: AirportFrequency[];
+};
+
 type ContextualTool = {
   id: string;
   title: string;
@@ -427,6 +492,20 @@ function parseWaypoints(input: string) {
     .map((item) => item.trim().toUpperCase())
     .filter(Boolean)
     .filter((item) => ICAO_REGEX.test(item));
+}
+
+function normalizeRouteText(input: string) {
+  return input
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, " ");
+}
+
+function buildRoutePreview(departure: string, route: string, destination: string) {
+  return [departure, route, destination]
+    .map((value) => value.trim().toUpperCase())
+    .filter(Boolean)
+    .join(" ");
 }
 
 function parseDateTimeLocal(value: string) {
@@ -946,7 +1025,7 @@ export default function FlightPlanner() {
       ...prev,
       clearanceLimit: prev.clearanceLimit || form.destination || "",
       departure: prev.departure || form.departure || "",
-      route: prev.route || routeStringFull || "",
+      route: prev.route || routePreviewFull || "",
       altitude: prev.altitude ||
         (plannedAltitudeFt ? String(plannedAltitudeFt) : ""),
     }));
@@ -1341,10 +1420,31 @@ export default function FlightPlanner() {
     ? null
     : savedProfiles.find((p) => p.id === selectedProfileId) || null;
   const selectedType = aircraftTypes.find((t) => t.id === selectedTypeId) || FALLBACK_TYPE;
+  const selectedProfileHasFilingDefaults = Boolean(
+    selectedProfile?.tailNumber ||
+    selectedProfile?.filingEquipmentDefault ||
+    selectedProfile?.filingSoulsOnBoardDefault ||
+    selectedProfile?.filingAircraftColorDefault ||
+    selectedProfile?.filingPilotNameDefault ||
+    selectedProfile?.filingRemarksDefault
+  );
   const planLimitReached = isFree && !editingPlan && savedPlans.length >= 1;
   const savePlanActionRef = useRef<() => Promise<void>>(async () => {});
   const saveProfileActionRef = useRef<() => Promise<void>>(async () => {});
   const sendToLogbookActionRef = useRef<() => Promise<void>>(async () => {});
+
+  const applyAircraftFilingDefaults = () => {
+    if (!selectedProfile) return;
+    setFilingDraft((current) => ({
+      ...current,
+      aircraftId: selectedProfile.tailNumber?.trim() || current.aircraftId,
+      equipment: selectedProfile.filingEquipmentDefault?.trim() || current.equipment,
+      soulsOnBoard: selectedProfile.filingSoulsOnBoardDefault?.trim() || current.soulsOnBoard,
+      aircraftColor: selectedProfile.filingAircraftColorDefault?.trim() || current.aircraftColor,
+      pilotName: selectedProfile.filingPilotNameDefault?.trim() || current.pilotName,
+      remarks: selectedProfile.filingRemarksDefault?.trim() || current.remarks,
+    }));
+  };
 
   const manualCruise = customProfile.cruiseKtasOverride ? Number(customProfile.cruiseKtasOverride) : null;
   const manualBurn = customProfile.fuelBurnOverrideGph ? Number(customProfile.fuelBurnOverrideGph) : null;
@@ -1423,6 +1523,8 @@ export default function FlightPlanner() {
 
   const waypoints = useMemo(() => parseWaypoints(waypointsInput), [waypointsInput]);
   const plannedStops = useMemo(() => parseWaypoints(plannedStopsInput), [plannedStopsInput]);
+  const filedRouteInputNormalized = useMemo(() => normalizeRouteText(form.route), [form.route]);
+  const filedRouteAirportTokens = useMemo(() => parseWaypoints(filedRouteInputNormalized), [filedRouteInputNormalized]);
   const isUsingSuggestedWaypoints = useMemo(() => {
     if (suggestedWaypoints.length === 0) return false;
     const normalized = waypointsInput.trim().toUpperCase();
@@ -1436,15 +1538,17 @@ export default function FlightPlanner() {
   const shouldOrderSuggestions = isUsingSuggestedWaypoints || isUsingSuggestedStops;
 
   const routeSequenceRaw = useMemo(() => {
+    const intermediateAirports = plannedStops.length > 0 || waypoints.length > 0
+      ? [...plannedStops, ...waypoints]
+      : filedRouteAirportTokens;
     return [
       departureResolved.trim().toUpperCase(),
-      ...plannedStops,
-      ...waypoints,
+      ...intermediateAirports,
       destinationResolved.trim().toUpperCase(),
     ]
       .filter(Boolean)
       .filter((icao) => ICAO_REGEX.test(icao));
-  }, [departureResolved, destinationResolved, plannedStops, waypoints]);
+  }, [departureResolved, destinationResolved, plannedStops, waypoints, filedRouteAirportTokens]);
 
   const routeIcaos = useMemo(() => {
     return Array.from(new Set(routeSequenceRaw));
@@ -1463,6 +1567,19 @@ export default function FlightPlanner() {
     })),
   });
 
+  const airportFrequencyQueries = useQueries({
+    queries: routeIcaos.map((icao) => ({
+      queryKey: ["/api/airports", icao, "frequencies"],
+      queryFn: async () => {
+        const res = await fetch(apiUrl(`/api/airports/${icao}/frequencies`), { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to fetch airport frequencies");
+        return res.json() as Promise<AirportFrequencyResponse>;
+      },
+      enabled: routeIcaos.length > 0,
+      staleTime: 1000 * 60 * 60,
+    })),
+  });
+
   const airportMap = useMemo(() => {
     const map = new Map<string, any>();
     airportQueries.forEach((query, index) => {
@@ -1474,8 +1591,21 @@ export default function FlightPlanner() {
     return map;
   }, [airportQueries, routeIcaos]);
 
+  const airportFrequencyMap = useMemo(() => {
+    const map = new Map<string, AirportFrequency[]>();
+    airportFrequencyQueries.forEach((query, index) => {
+      const icao = routeIcaos[index];
+      if (icao && query.data?.frequencies) {
+        map.set(icao, query.data.frequencies);
+      }
+    });
+    return map;
+  }, [airportFrequencyQueries, routeIcaos]);
+
   const orderedIntermediates = useMemo(() => {
-    const combined = [...plannedStops, ...waypoints].filter((icao) => ICAO_REGEX.test(icao));
+    const combined = (plannedStops.length > 0 || waypoints.length > 0
+      ? [...plannedStops, ...waypoints]
+      : filedRouteAirportTokens).filter((icao) => ICAO_REGEX.test(icao));
     if (!shouldOrderSuggestions) return combined;
     const departureKey = departureResolved.trim().toUpperCase();
     const departurePoint = airportMap.get(departureKey);
@@ -1523,7 +1653,7 @@ export default function FlightPlanner() {
         return a.order - b.order;
       })
       .map((item) => item.icao);
-  }, [plannedStops, waypoints, shouldOrderSuggestions, airportMap, departureResolved, destinationResolved]);
+  }, [plannedStops, waypoints, filedRouteAirportTokens, shouldOrderSuggestions, airportMap, departureResolved, destinationResolved]);
 
   const routeSequenceOrdered = useMemo(() => {
     return [
@@ -1581,6 +1711,26 @@ export default function FlightPlanner() {
   const missingIcaos = useMemo(() => {
     return routeIcaos.filter((icao) => !airportMap.has(icao));
   }, [routeIcaos, airportMap]);
+
+  const routeAirportFrequencyCards = useMemo(() => {
+    return routeSequenceOrdered
+      .filter((icao, index, arr) => arr.indexOf(icao) === index)
+      .map((icao) => {
+        const airport = airportMap.get(icao);
+        const frequencies = (airportFrequencyMap.get(icao) || [])
+          .slice()
+          .sort((a, b) => {
+            const byPriority = frequencyTypePriority(a.type) - frequencyTypePriority(b.type);
+            if (byPriority !== 0) return byPriority;
+            return formatFrequencyTypeLabel(a.type).localeCompare(formatFrequencyTypeLabel(b.type));
+          });
+        return {
+          icao,
+          airport,
+          frequencies,
+        };
+      });
+  }, [routeSequenceOrdered, airportMap, airportFrequencyMap]);
 
   const airportPoints: AirportPoint[] = useMemo(() => {
     return routeSequenceOrdered
@@ -1655,13 +1805,21 @@ export default function FlightPlanner() {
   const totalFuel = tripFuel + reserveFuel;
   const eteMinutes = eteHours ? Math.round(eteHours * 60) : 0;
   const canAutoArrival = Boolean(form.plannedDepartureAt && eteMinutes);
-  const routeStringFull = useMemo(
+  const generatedRouteCore = useMemo(
     () =>
-      [form.departure || "-", plannedStopsInput, waypointsInput, form.destination || ""]
-        .map((value) => value.trim())
+      [plannedStopsInput, waypointsInput]
+        .map((value) => normalizeRouteText(value))
         .filter(Boolean)
         .join(" "),
-    [form.departure, plannedStopsInput, waypointsInput, form.destination]
+    [plannedStopsInput, waypointsInput]
+  );
+  const activeFiledRoute = useMemo(
+    () => filedRouteInputNormalized || generatedRouteCore,
+    [filedRouteInputNormalized, generatedRouteCore]
+  );
+  const routePreviewFull = useMemo(
+    () => buildRoutePreview(form.departure, activeFiledRoute, form.destination),
+    [form.departure, activeFiledRoute, form.destination]
   );
   const fuelAvailableGallons = useMemo(() => {
     const onboard = Number(form.fuelOnBoard);
@@ -1707,7 +1865,7 @@ export default function FlightPlanner() {
     flightRules: filingDraft.flightRules,
     departure: form.departure.trim().toUpperCase() || null,
     destination: form.destination.trim().toUpperCase() || null,
-    route: routeStringFull || null,
+    route: activeFiledRoute || null,
     alternate: form.alternate.trim().toUpperCase() || null,
     plannedDepartureLocal: form.plannedDepartureAt || null,
     plannedDepartureUtc: form.plannedDepartureAt ? toUtcIso(form.plannedDepartureAt, departureTimeZone) : null,
@@ -1736,7 +1894,7 @@ export default function FlightPlanner() {
     form.tailNumber,
     form.aircraftType,
     form.notes,
-    routeStringFull,
+    activeFiledRoute,
     departureTimeZone,
     destinationTimeZone,
     planningCruise,
@@ -2464,13 +2622,9 @@ export default function FlightPlanner() {
 
   const createPlanMutation = useMutation({
     mutationFn: async () => {
-        const routeString = [plannedStopsInput, waypointsInput]
-          .map((value) => value.trim())
-          .filter(Boolean)
-          .join(" ");
         const payload = {
           ...form,
-          route: routeString,
+          route: activeFiledRoute || null,
           aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
           fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
           filingFlightRules: filingDraft.flightRules,
@@ -2506,13 +2660,9 @@ export default function FlightPlanner() {
   const updatePlanMutation = useMutation({
     mutationFn: async () => {
       if (!editingPlan) return null;
-        const routeString = [plannedStopsInput, waypointsInput]
-          .map((value) => value.trim())
-          .filter(Boolean)
-          .join(" ");
       const payload = {
         ...form,
-        route: routeString,
+        route: activeFiledRoute || null,
         aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
         fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
         filingFlightRules: filingDraft.flightRules,
@@ -2594,10 +2744,7 @@ export default function FlightPlanner() {
       const payload = {
         flightDate: new Date().toISOString().slice(0, 10),
         aircraftType: selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
-        route: [form.departure, plannedStopsInput, waypointsInput, form.destination]
-          .map((value) => value.trim())
-          .filter(Boolean)
-          .join(" "),
+        route: routePreviewFull,
         remarks: "Planned from Flight Planner",
       };
       const res = await apiRequest("POST", "/api/logbook", payload);
@@ -2638,6 +2785,10 @@ export default function FlightPlanner() {
   });
   const filingStateText = filingPreviewMutation.isPending ? "Preview building" : "Packet ready";
   const filingStateTone = filingPreviewMutation.isPending ? "text-amber-300" : "text-emerald-300";
+  const currentSavedPlan = editingPlan;
+  const currentSavedPlanFlightRules = (currentSavedPlan?.filingFlightRules || filingDraft.flightRules || "VFR").toUpperCase();
+  const currentSavedPlanStatus = filingStatusLabel(currentSavedPlan?.filingStatus);
+  const hasCurrentSavedPlan = Boolean(currentSavedPlan?.id);
 
   const filingActionMutation = useMutation({
     mutationFn: async ({ planId, action }: { planId: string; action: "file" | "amend" | "activate" | "cancel" | "close" }) => {
@@ -2733,7 +2884,10 @@ export default function FlightPlanner() {
       pilotName: editingPlan.filingPilotName || current.pilotName,
       remarks: editingPlan.filingRemarks || editingPlan.notes || current.remarks,
     }));
-    setWaypointsInput(editingPlan.route || "");
+    const normalizedSavedRoute = normalizeRouteText(editingPlan.route || "");
+    const savedRouteTokens = normalizedSavedRoute ? normalizedSavedRoute.split(/\s+/) : [];
+    const savedRouteIsAirportOnly = savedRouteTokens.length > 0 && savedRouteTokens.every((token) => ICAO_REGEX.test(token));
+    setWaypointsInput(savedRouteIsAirportOnly ? normalizedSavedRoute : "");
     setPlannedStopsInput("");
     setPlannedAltitude(editingPlan.filingPlannedAltitudeFt ? String(editingPlan.filingPlannedAltitudeFt) : "");
     setArrivalAuto(false);
@@ -2761,6 +2915,19 @@ export default function FlightPlanner() {
       maxGrossWeightOverrideLb: selectedType.max_gross_weight_lb_effective ? String(selectedType.max_gross_weight_lb_effective) : prev.maxGrossWeightOverrideLb,
     }));
   }, [selectedProfile, selectedType, selectedTypeId]);
+
+  useEffect(() => {
+    if (!selectedProfile || editingPlan) return;
+    setFilingDraft((current) => ({
+      ...current,
+      aircraftId: current.aircraftId.trim() || selectedProfile.tailNumber?.trim() || current.aircraftId,
+      equipment: current.equipment.trim() || selectedProfile.filingEquipmentDefault?.trim() || current.equipment,
+      soulsOnBoard: current.soulsOnBoard.trim() || selectedProfile.filingSoulsOnBoardDefault?.trim() || current.soulsOnBoard,
+      aircraftColor: current.aircraftColor.trim() || selectedProfile.filingAircraftColorDefault?.trim() || current.aircraftColor,
+      pilotName: current.pilotName.trim() || selectedProfile.filingPilotNameDefault?.trim() || current.pilotName,
+      remarks: current.remarks.trim() || selectedProfile.filingRemarksDefault?.trim() || current.remarks,
+    }));
+  }, [selectedProfile, editingPlan]);
 
   return (
     <PageShell
@@ -3170,6 +3337,47 @@ export default function FlightPlanner() {
                 </div>
               )}
             </div>
+            <div className="space-y-2 md:col-span-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <Label>Filed route (ATC / Leidos)</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Enter the actual enroute string you want to file, including fixes, VORs, airways, SIDs, STARs, or `DCT`.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {generatedRouteCore && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setForm((current) => ({ ...current, route: generatedRouteCore }))}
+                    >
+                      Use route builder
+                    </Button>
+                  )}
+                  {filedRouteInputNormalized && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setForm((current) => ({ ...current, route: "" }))}
+                    >
+                      Clear override
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <Textarea
+                value={form.route}
+                onChange={(e) => setForm({ ...form, route: e.target.value.toUpperCase() })}
+                placeholder="DCT TXK V18 MEM J42 ATL"
+                className="min-h-[88px]"
+              />
+              <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 text-xs text-muted-foreground">
+                Full route preview: <span className="font-medium text-foreground">{routePreviewFull || "-"}</span>
+              </div>
+            </div>
           <div className="space-y-2">
             <Label>Alternate (optional)</Label>
             <Input
@@ -3264,7 +3472,7 @@ export default function FlightPlanner() {
           <CardDescription>Review trip distance, time, and fuel after your aircraft selection fills in the planning assumptions above.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label>Reserve Fuel (minutes)</Label>
               <Select value={reserveMinutes} onValueChange={setReserveMinutes}>
@@ -3298,6 +3506,18 @@ export default function FlightPlanner() {
               />
               <p className="text-xs text-muted-foreground">
                 Used for enroute awareness and winds aloft checks.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Fuel On Board (gal)</Label>
+              <Input
+                value={form.fuelOnBoard}
+                onChange={(e) => setForm({ ...form, fuelOnBoard: e.target.value })}
+                placeholder={String(planningFuel)}
+                type="number"
+              />
+              <p className="text-xs text-muted-foreground">
+                Drives trip fuel, endurance, reserve margin, and suggested fuel stops.
               </p>
             </div>
           </div>
@@ -3350,62 +3570,73 @@ export default function FlightPlanner() {
           <div className="text-xs text-muted-foreground">
             Usable fuel: {planningFuel ? `${planningFuel} gal` : "-"} | Max gross weight: {planningMaxWeight ? `${planningMaxWeight} lb` : "-"}
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild type="button" variant="outline" size="sm">
+              <Link
+                href={withSourceParam("/weight-balance", "/flight-planner")}
+                onClick={() => trackEvent("planner_open_weight_balance", { source_page: "/flight-planner" })}
+              >
+                Open Weight &amp; Balance
+              </Link>
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Use the same fuel-on-board value in Weight &amp; Balance to keep takeoff and landing numbers aligned.
+            </p>
+          </div>
 
           <Separator />
 
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
-              <Label>Custom Aircraft Name</Label>
+              <Label>Planning Aircraft Name</Label>
               <Input
                 value={customProfile.name}
                 onChange={(e) => setCustomProfile({ ...customProfile, name: e.target.value })}
                 placeholder="My C172"
-                disabled={selectedTypeId !== CUSTOM_TYPE_ID && !selectedProfile}
               />
             </div>
             <div className="space-y-2">
-              <Label>Cruise KTAS (override)</Label>
+              <Label>Cruise KTAS</Label>
               <Input
                 value={customProfile.cruiseKtasOverride}
                 onChange={(e) => setCustomProfile({ ...customProfile, cruiseKtasOverride: e.target.value })}
                 placeholder="110"
                 type="number"
-                disabled={selectedTypeId !== CUSTOM_TYPE_ID && !selectedProfile}
               />
             </div>
             <div className="space-y-2">
-              <Label>Fuel Burn (gph override)</Label>
+              <Label>Fuel Burn (gph)</Label>
               <Input
                 value={customProfile.fuelBurnOverrideGph}
                 onChange={(e) => setCustomProfile({ ...customProfile, fuelBurnOverrideGph: e.target.value })}
                 placeholder="8.5"
                 type="number"
-                disabled={selectedTypeId !== CUSTOM_TYPE_ID && !selectedProfile}
               />
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Usable Fuel (gal override)</Label>
+              <Label>Usable Fuel (gal)</Label>
               <Input
                 value={customProfile.usableFuelOverrideGal}
                 onChange={(e) => setCustomProfile({ ...customProfile, usableFuelOverrideGal: e.target.value })}
                 placeholder="40"
                 type="number"
-                disabled={selectedTypeId !== CUSTOM_TYPE_ID && !selectedProfile}
               />
             </div>
             <div className="space-y-2">
-              <Label>Max Gross Weight (lb override)</Label>
+              <Label>Max Gross Weight (lb)</Label>
               <Input
                 value={customProfile.maxGrossWeightOverrideLb}
                 onChange={(e) => setCustomProfile({ ...customProfile, maxGrossWeightOverrideLb: e.target.value })}
                 placeholder="2400"
                 type="number"
-                disabled={selectedTypeId !== CUSTOM_TYPE_ID && !selectedProfile}
               />
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Start from the RSF library or a saved profile, then adjust these planning assumptions if your actual aircraft performs differently.
+          </p>
           <Button
             variant="outline"
             disabled={!customProfile.name || saveProfileMutation.isPending}
@@ -3422,6 +3653,56 @@ export default function FlightPlanner() {
           ) : !isPro ? (
             <p className="text-xs text-muted-foreground">Upgrade to RSF Pro to save aircraft profiles.</p>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>ATC &amp; Airport Frequencies</CardTitle>
+          <CardDescription>
+            Route airport frequencies from the airport reference feed. Verify against current charts, ATIS, and official airport publications before use.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {routeAirportFrequencyCards.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              Enter a valid route to load airport frequencies for departure, stops, and destination.
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {routeAirportFrequencyCards.map(({ icao, airport, frequencies }) => (
+                <div key={`freq-${icao}`} className="rounded-lg border p-4 space-y-3">
+                  <div>
+                    <div className="font-semibold">{icao}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {airport?.name || "Airport"}{airport?.timezone ? ` • ${airport.timezone}` : ""}
+                    </div>
+                  </div>
+                  {frequencies.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">
+                      No frequencies returned for this airport from the current reference source.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {frequencies.slice(0, 8).map((item, index) => (
+                        <div key={`${icao}-${item.type || "other"}-${item.frequencyMhz || "na"}-${index}`} className="flex items-start justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
+                          <div>
+                            <div className="text-sm font-medium">{formatFrequencyTypeLabel(item.type)}</div>
+                            {item.description ? (
+                              <div className="text-xs text-muted-foreground">{item.description}</div>
+                            ) : null}
+                          </div>
+                          <div className="text-sm font-semibold tabular-nums">
+                            {item.frequencyMhz ? `${item.frequencyMhz.toFixed(3)}` : "-"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
       </TabsContent>
@@ -3553,7 +3834,7 @@ export default function FlightPlanner() {
       <OperationalIntelligencePanel
         dep={departureResolved.trim().toUpperCase()}
         dest={destinationResolved.trim().toUpperCase()}
-        route={[plannedStopsInput, waypointsInput].map((value) => value.trim()).filter(Boolean).join(" ")}
+        route={activeFiledRoute}
         tier={tfmsTier}
         mapStyle={mapStyle}
         overlayEnabled={tfmsOverlayEnabled}
@@ -3788,88 +4069,145 @@ export default function FlightPlanner() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Flight Plan Summary (Preparation)</CardTitle>
-          <CardDescription>Preparation summary and filing-ready packet preview. Auto-filing is wired but not live yet.</CardDescription>
+          <CardTitle>Flight Plan Summary &amp; Filing</CardTitle>
+          <CardDescription>
+            Review the current packet, validate it against Leidos, and run filing actions for the plan you are actively editing.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div className="grid gap-2 md:grid-cols-2">
             <div>
-              <div className="text-muted-foreground">Route</div>
-              <div>{routeStringFull || "-"}</div>
+              <div className="text-muted-foreground">Full Route Preview</div>
+              <div>{routePreviewFull || "-"}</div>
             </div>
             <div>
-              <div className="text-muted-foreground">Alternate</div>
-              <div>{form.alternate || "-"}</div>
+              <div className="text-muted-foreground">Filed Enroute String</div>
+              <div>{activeFiledRoute || "-"}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Estimated Time</div>
               <div>{eteHours ? `${Math.round(eteHours * 60)} min` : "-"}</div>
             </div>
             <div>
+              <div className="text-muted-foreground">Alternate</div>
+              <div>{form.alternate || "-"}</div>
+            </div>
+            <div>
               <div className="text-muted-foreground">Fuel Required</div>
               <div>{totalFuel ? `${totalFuel.toFixed(1)} gal` : "-"}</div>
             </div>
           </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Flight Rules</Label>
-              <Select
-                value={filingDraft.flightRules}
-                onValueChange={(value) => setFilingDraft((current) => ({ ...current, flightRules: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="VFR">VFR</SelectItem>
-                  <SelectItem value="IFR">IFR</SelectItem>
-                  <SelectItem value="DVFR">DVFR</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-semibold">Filing Identity</div>
+                  <div className="text-xs text-muted-foreground">
+                    These are the core ICAO-style details Leidos expects for the aircraft and pilot.
+                  </div>
+                </div>
+                {selectedProfileHasFilingDefaults && (
+                  <Button type="button" size="sm" variant="outline" onClick={applyAircraftFilingDefaults}>
+                    Apply aircraft defaults
+                  </Button>
+                )}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Flight Rules</Label>
+                  <Select
+                    value={filingDraft.flightRules}
+                    onValueChange={(value) => setFilingDraft((current) => ({ ...current, flightRules: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="VFR">VFR</SelectItem>
+                      <SelectItem value="IFR">IFR</SelectItem>
+                      <SelectItem value="DVFR">DVFR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Aircraft ID / Tail</Label>
+                  <Input
+                    value={filingDraft.aircraftId}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftId: e.target.value.toUpperCase() }))}
+                    placeholder="N123RS"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Equipment</Label>
+                  <Input
+                    value={filingDraft.equipment}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, equipment: e.target.value.toUpperCase() }))}
+                    placeholder="S/C"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Souls On Board</Label>
+                  <Input
+                    value={filingDraft.soulsOnBoard}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, soulsOnBoard: e.target.value }))}
+                    placeholder="1"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Aircraft Color</Label>
+                  <Input
+                    value={filingDraft.aircraftColor}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftColor: e.target.value }))}
+                    placeholder="White / Blue"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>PIC Name</Label>
+                  <Input
+                    value={filingDraft.pilotName}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, pilotName: e.target.value }))}
+                    placeholder="Pilot name"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Aircraft ID / Tail</Label>
-              <Input
-                value={filingDraft.aircraftId}
-                onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftId: e.target.value }))}
-                placeholder="N123RS"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Equipment</Label>
-              <Input
-                value={filingDraft.equipment}
-                onChange={(e) => setFilingDraft((current) => ({ ...current, equipment: e.target.value }))}
-                placeholder="S/C"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Souls on board</Label>
-              <Input
-                value={filingDraft.soulsOnBoard}
-                onChange={(e) => setFilingDraft((current) => ({ ...current, soulsOnBoard: e.target.value }))}
-                placeholder="1"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Aircraft color</Label>
-              <Input
-                value={filingDraft.aircraftColor}
-                onChange={(e) => setFilingDraft((current) => ({ ...current, aircraftColor: e.target.value }))}
-                placeholder="White / Blue"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>PIC name</Label>
-              <Input
-                value={filingDraft.pilotName}
-                onChange={(e) => setFilingDraft((current) => ({ ...current, pilotName: e.target.value }))}
-                placeholder="Pilot name"
-              />
+            <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+              <div>
+                <div className="font-semibold">Operational Packet</div>
+                <div className="text-xs text-muted-foreground">
+                  Review the values that are already being generated from your route, fuel, and performance setup.
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Cruise / Altitude</div>
+                  <div className="font-semibold">{Math.round(planningCruise)} KTAS at {plannedAltitude || "-"} ft</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Fuel on board / endurance</div>
+                  <div className="font-semibold">{fuelAvailableGallons.toFixed(1)} gal / {formatMinutesLabel(enduranceMinutes)}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Estimated Enroute</div>
+                  <div className="font-semibold">{eteHours ? `${Math.round(eteHours * 60)} min` : "-"}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Filing status</div>
+                  <div className="font-semibold">
+                    {hasCurrentSavedPlan ? currentSavedPlanStatus : (filingPreviewMutation.isPending ? "Validating handoff..." : "Save plan to enable lifecycle actions")}
+                  </div>
+                </div>
+              </div>
+              {selectedProfile && (
+                <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+                  Using saved profile <span className="font-medium text-foreground">{selectedProfile.name}</span>
+                  {selectedProfileHasFilingDefaults ? " with filing defaults ready to apply." : "."}
+                </div>
+              )}
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Filing remarks</Label>
+            <Label>Filing Remarks</Label>
             <Textarea
               value={filingDraft.remarks}
               onChange={(e) => setFilingDraft((current) => ({ ...current, remarks: e.target.value }))}
@@ -3877,25 +4215,9 @@ export default function FlightPlanner() {
               placeholder="Route notes or filing remarks"
             />
           </div>
-          <div className="grid gap-2 md:grid-cols-3">
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Cruise / Altitude</div>
-              <div className="font-semibold">{Math.round(planningCruise)} KTAS at {plannedAltitude || "-"} ft</div>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Fuel on board / endurance</div>
-              <div className="font-semibold">{fuelAvailableGallons.toFixed(1)} gal / {formatMinutesLabel(enduranceMinutes)}</div>
-            </div>
-            <div className="rounded-lg border p-3">
-              <div className="text-xs text-muted-foreground">Filing status</div>
-              <div className="font-semibold">
-                {filingPreviewMutation.isPending ? "Validating handoff..." : "Preview wired, send disabled"}
-              </div>
-            </div>
-          </div>
           <Alert>
             <AlertDescription>
-              Filing guidance: RSF now builds a filing-ready packet and preview payload, but official filing remains through approved providers until the handoff is activated.
+              Filing guidance: validate the packet first, then use the filing actions below on the saved plan you are editing. RSF now sends Leidos actions live when the lab/production environment is enabled and fully configured.
             </AlertDescription>
           </Alert>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -3903,10 +4225,7 @@ export default function FlightPlanner() {
               Copy filing packet
             </Button>
             <Button type="button" variant="outline" onClick={openFlightServiceHandoff} disabled={filingPreviewMutation.isPending}>
-              {filingPreviewMutation.isPending ? "Building preview..." : "Preview auto-file payload"}
-            </Button>
-            <Button type="button" disabled>
-              Auto-file with Flight Service (Coming soon)
+              {filingPreviewMutation.isPending ? "Building preview..." : "Validate filing packet"}
             </Button>
             <Button type="button" variant="ghost" asChild>
               <a href="https://www.1800wxbrief.com/" target="_blank" rel="noopener noreferrer">
@@ -3914,6 +4233,69 @@ export default function FlightPlanner() {
               </a>
             </Button>
           </div>
+          {hasCurrentSavedPlan ? (
+            <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="font-semibold">Current Saved Plan Actions</div>
+                  <div className="text-xs text-muted-foreground">
+                    Editing <span className="font-medium text-foreground">{currentSavedPlan?.title || `${currentSavedPlan?.departure} to ${currentSavedPlan?.destination}`}</span>. Use these actions for the active plan instead of hunting through the saved list below.
+                  </div>
+                </div>
+                <Badge variant="outline">{currentSavedPlanStatus}</Badge>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "file" })}
+                  disabled={filingActionMutation.isPending}
+                >
+                  File
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "amend" })}
+                  disabled={filingActionMutation.isPending}
+                >
+                  Amend
+                </Button>
+                {currentSavedPlanFlightRules === "VFR" && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "activate" })}
+                      disabled={filingActionMutation.isPending}
+                    >
+                      Activate
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "close" })}
+                      disabled={filingActionMutation.isPending}
+                    >
+                      Close
+                    </Button>
+                  </>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "cancel" })}
+                  disabled={filingActionMutation.isPending}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              Save this plan once to enable Leidos filing lifecycle actions from this tab. The packet preview works before save, but file/amend/activate/cancel/close actions require a saved plan record.
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -3999,15 +4381,7 @@ export default function FlightPlanner() {
                 placeholder={selectedProfile?.name || ""}
               />
             </div>
-            <div className="space-y-2">
-              <Label>Fuel On Board (gal)</Label>
-              <Input
-                value={form.fuelOnBoard}
-                onChange={(e) => setForm({ ...form, fuelOnBoard: e.target.value })}
-                placeholder="35"
-              />
-            </div>
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2">
               <Label>Notes</Label>
               <Textarea
                 value={form.notes}
@@ -4671,7 +5045,7 @@ export default function FlightPlanner() {
                       <NotamTranslator
                         notams={notamsSummaryQuery.data?.notams?.map((notam: any) => notam.text ?? notam.notamTxt ?? notam.raw ?? "").filter(Boolean).join("\n\n") ?? ""}
                         airport={primaryIcao}
-                        route={routeStringFull}
+                        route={routePreviewFull}
                       />
                     </div>
                   )}
@@ -4835,7 +5209,7 @@ export default function FlightPlanner() {
                   </div>
                   <div className="rounded-lg border p-3">
                     <div className="text-xs text-muted-foreground">Live filing</div>
-                    <div className="font-semibold">Disabled</div>
+                    <div className="font-semibold">{filingPreview.live ? "Available" : "Staged only"}</div>
                   </div>
                 </div>
                 {filingPreview.errors.length > 0 && (
@@ -4879,7 +5253,7 @@ export default function FlightPlanner() {
                     Copy filing packet
                   </Button>
                   <Button type="button" disabled>
-                    Send to Flight Service (Not live yet)
+                    {filingPreview.live ? "Use saved-plan actions to file live" : "Live filing not currently available"}
                   </Button>
                   <Button type="button" variant="ghost" asChild>
                     <a href={filingPreview.providerUrl} target="_blank" rel="noopener noreferrer">

@@ -2237,6 +2237,11 @@ export const aircraftProfiles = pgTable("aircraft_profiles", {
   fuelBurnOverrideGph: decimal("fuel_burn_override_gph", { precision: 6, scale: 2 }),
   usableFuelOverrideGal: decimal("usable_fuel_override_gal", { precision: 8, scale: 2 }),
   maxGrossWeightOverrideLb: decimal("max_gross_weight_override_lb", { precision: 10, scale: 2 }),
+  filingEquipmentDefault: text("filing_equipment_default"),
+  filingSoulsOnBoardDefault: text("filing_souls_on_board_default"),
+  filingAircraftColorDefault: text("filing_aircraft_color_default"),
+  filingPilotNameDefault: text("filing_pilot_name_default"),
+  filingRemarksDefault: text("filing_remarks_default"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -2649,6 +2654,11 @@ export const insertAircraftProfileSchema = createInsertSchema(aircraftProfiles).
   fuelBurnOverrideGph: z.coerce.number().min(1).max(100).optional().nullable(),
   usableFuelOverrideGal: z.coerce.number().min(5).max(4000).optional().nullable(),
   maxGrossWeightOverrideLb: z.coerce.number().min(500).max(2000000).optional().nullable(),
+  filingEquipmentDefault: z.string().trim().max(50).optional().nullable(),
+  filingSoulsOnBoardDefault: z.string().trim().max(10).optional().nullable(),
+  filingAircraftColorDefault: z.string().trim().max(50).optional().nullable(),
+  filingPilotNameDefault: z.string().trim().max(120).optional().nullable(),
+  filingRemarksDefault: z.string().trim().max(500).optional().nullable(),
 });
 
 export const insertApproachPlateSchema = createInsertSchema(approachPlates).omit({

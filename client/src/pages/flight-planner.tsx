@@ -2973,6 +2973,33 @@ export default function FlightPlanner() {
     filingPreviewMutation.mutate();
   };
 
+  const saveCurrentPlan = async (options?: { returnToFile?: boolean }) => {
+    if (!isAuthenticated) return;
+    if (planLimitReached) {
+      toast({
+        title: "Upgrade to RSF Pro",
+        description: "Free accounts can save one plan. Upgrade to unlock unlimited plans.",
+      });
+      trackEvent("planner_upgrade_prompt", { action: "save_plan_limit" });
+      window.location.href = "/logbook/pro";
+      return;
+    }
+
+    if (options?.returnToFile) {
+      setReturnToFileAfterSave(true);
+    }
+
+    const currentEditingPlan = editingPlanRef.current;
+    if (currentEditingPlan?.id) {
+      trackEvent("planner_save_plan", { action: "update" });
+      updatePlanMutation.mutate(currentEditingPlan.id);
+      return;
+    }
+
+    trackEvent("planner_save_plan", { action: "create" });
+    createPlanMutation.mutate();
+  };
+
   const beginAmendWorkflow = (plan: FlightPlan) => {
     const hasProviderPlanId = Boolean(plan.filingProviderPlanId);
     setEditingPlan(plan);
@@ -3215,24 +3242,7 @@ export default function FlightPlanner() {
   });
 
   savePlanActionRef.current = async () => {
-    if (!isAuthenticated) return;
-    if (planLimitReached) {
-      toast({
-        title: "Upgrade to RSF Pro",
-        description: "Free accounts can save one plan. Upgrade to unlock unlimited plans.",
-      });
-      trackEvent("planner_upgrade_prompt", { action: "save_plan_limit" });
-      window.location.href = "/logbook/pro";
-      return;
-    }
-    const currentEditingPlan = editingPlanRef.current;
-    if (currentEditingPlan?.id) {
-      trackEvent("planner_save_plan", { action: "update" });
-      updatePlanMutation.mutate(currentEditingPlan.id);
-      return;
-    }
-    trackEvent("planner_save_plan", { action: "create" });
-    createPlanMutation.mutate();
+    await saveCurrentPlan();
   };
 
   saveProfileActionRef.current = async () => {
@@ -5210,7 +5220,7 @@ export default function FlightPlanner() {
                   trackEvent("cta_click", { label: "planner_save_requires_auth", target: "/register" });
                 }
                 runWithAuth("save_flight_plan", async () => {
-                  await savePlanActionRef.current();
+                  await saveCurrentPlan();
                 });
               }}
               disabled={createPlanMutation.isPending || updatePlanMutation.isPending}
@@ -5221,12 +5231,11 @@ export default function FlightPlanner() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setReturnToFileAfterSave(true);
                   if (isGuest) {
                     trackEvent("cta_click", { label: "planner_save_return_requires_auth", target: "/register" });
                   }
                   runWithAuth("save_flight_plan", async () => {
-                    await savePlanActionRef.current();
+                    await saveCurrentPlan({ returnToFile: true });
                   });
                 }}
                 disabled={createPlanMutation.isPending || updatePlanMutation.isPending}

@@ -1059,6 +1059,7 @@ export default function FlightPlanner() {
   const [routeSuggestion, setRouteSuggestion] = useState<"direct" | "midpoint">("direct");
   const [mapStyle, setMapStyle] = useState<"standard" | "sectional" | "radar" | "winds" | "clouds" | "globe">("sectional");
   const [mapRenderVersion, setMapRenderVersion] = useState(0);
+  const [airportLabelMode, setAirportLabelMode] = useState<"icao" | "full" | "markers">("icao");
   const [showAtcStrip, setShowAtcStrip] = useState(true);
   const [showApproachOffer, setShowApproachOffer] = useState(false);
   const [windsAltitudeChoice, setWindsAltitudeChoice] = useState("planned");
@@ -5433,6 +5434,25 @@ export default function FlightPlanner() {
                   <a href="/tfr-map" target="_blank" rel="noopener noreferrer">Full TFR map</a>
                 </Button>
               </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-slate-600">Airport labels</span>
+                {[
+                  { value: "icao", label: "ICAO only" },
+                  { value: "full", label: "ICAO + name" },
+                  { value: "markers", label: "Markers only" },
+                ].map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    size="sm"
+                    variant={airportLabelMode === option.value ? "default" : "outline"}
+                    className="h-8"
+                    onClick={() => setAirportLabelMode(option.value as "icao" | "full" | "markers")}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
             </div>
             {routePoints.length > 1 && (
               <div className="mb-3 rounded-lg border border-slate-700 bg-slate-900/80 p-2">
@@ -5536,10 +5556,16 @@ export default function FlightPlanner() {
               ) : (
                 <PlannerMap
                   key={`map-${mapStyle}-${mapRenderVersion}`}
-                  points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon, label: p.label ?? null }))}
+                  points={routePoints.map((p) => ({
+                    icao: p.icao,
+                    lat: p.lat,
+                    lon: p.lon,
+                    label: airportLabelMode === "icao" ? null : p.label ?? null,
+                  }))}
                   mapStyle={mapStyle}
                   plannedAltitudeFt={plannedAltitudeValue}
                   windsAltitudeFt={windsAltitudeFt}
+                  airportLabelMode={airportLabelMode}
                 />
               )
             )}
@@ -5943,7 +5969,7 @@ export default function FlightPlanner() {
           if (!open) setFilingPreview(null);
         }}
       >
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Auto-file Handoff Preview</DialogTitle>
             <DialogDescription>

@@ -17,6 +17,7 @@ type PlannerMapProps = {
   mapStyle?: "standard" | "sectional" | "radar" | "winds" | "clouds";
   plannedAltitudeFt?: number;
   windsAltitudeFt?: number;
+  airportLabelMode?: "icao" | "full" | "markers";
 };
 
 type WindsAloftPoint = {
@@ -289,6 +290,7 @@ export default function PlannerMap({
   mapStyle = "standard",
   plannedAltitudeFt,
   windsAltitudeFt,
+  airportLabelMode = "icao",
 }: PlannerMapProps) {
   const center: [number, number] = points.length
     ? [points[0].lat, points[0].lon]
@@ -567,7 +569,7 @@ export default function PlannerMap({
             icon={defaultIcon}
           >
             <Tooltip
-              permanent
+              permanent={airportLabelMode !== "markers"}
               direction="top"
               offset={[0, -18]}
               className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow"

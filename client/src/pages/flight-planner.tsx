@@ -1,5 +1,5 @@
 ﻿
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { Link } from "wouter";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
@@ -42,6 +43,18 @@ const CONTROLLED_AIRPORTS = new Set([
   "KCLT", "KIAH", "KMIA", "KBOS", "KMSP", "KDCA", "KIAD", "KEWR", "KLGA", "KPDX",
   "KPHL", "KDTW", "KSTL", "KMDW", "KSAN", "KTPA", "KAUS", "KDAL", "KHOU",
 ]);
+
+const buildPlannerIcaoCandidates = (value: string) => {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) return [] as string[];
+  const candidates = [normalized];
+  if (normalized.length === 3) {
+    candidates.push(`K${normalized}`);
+  } else if (normalized.length === 4 && normalized.startsWith("K")) {
+    candidates.push(normalized.slice(1));
+  }
+  return Array.from(new Set(candidates.filter(Boolean)));
+};
 
 const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
 const toRadians = (value: number) => (value * Math.PI) / 180;
@@ -402,6 +415,21 @@ type AirportFrequencyResponse = {
   frequencies: AirportFrequency[];
 };
 
+type FiledRouteTokenKind =
+  | "airport"
+  | "fix"
+  | "navaid"
+  | "airway"
+  | "procedure"
+  | "direct"
+  | "coordinate"
+  | "unknown";
+
+type FiledRouteToken = {
+  token: string;
+  kind: FiledRouteTokenKind;
+};
+
 type LeidosRouteSearchResponse = {
   provider: string;
   environment: "lab" | "production";
@@ -519,6 +547,61 @@ function parseWaypoints(input: string) {
     .map((item) => item.trim().toUpperCase())
     .filter(Boolean)
     .filter((item) => ICAO_REGEX.test(item));
+}
+
+function classifyFiledRouteToken(token: string): FiledRouteTokenKind {
+  const normalized = token.trim().toUpperCase();
+  if (!normalized) return "unknown";
+  if (normalized === "DCT") return "direct";
+  if (/^(V|J|Q|T)\d+[A-Z]?$/.test(normalized)) return "airway";
+  if (/^\d{2,4}[NS]\d{3,5}[EW]$/.test(normalized) || /^\d{2,4}[NS]\/\d{3,5}[EW]$/.test(normalized)) {
+    return "coordinate";
+  }
+  if (/^[A-Z]{5}$/.test(normalized)) return "fix";
+  if (/^[A-Z]{3,6}\d[A-Z]?$/.test(normalized)) return "procedure";
+  if (/^[A-Z]{2,3}$/.test(normalized)) return "navaid";
+  if (/^[A-Z]{4}$/.test(normalized)) return "airport";
+  return "unknown";
+}
+
+function parseFiledRouteTokens(input: string): FiledRouteToken[] {
+  const normalized = normalizeRouteText(input);
+  if (!normalized) return [];
+  return normalized
+    .split(/\s+/)
+    .map((token) => token.trim().toUpperCase())
+    .filter(Boolean)
+    .map((token) => ({
+      token,
+      kind: classifyFiledRouteToken(token),
+    }));
+}
+
+function extractAirportTokensFromFiledRoute(tokens: FiledRouteToken[]) {
+  return tokens
+    .filter((token) => token.kind === "airport")
+    .map((token) => token.token);
+}
+
+function filedRouteTokenKindLabel(kind: FiledRouteTokenKind) {
+  switch (kind) {
+    case "airport":
+      return "Airport";
+    case "fix":
+      return "Fix";
+    case "navaid":
+      return "Navaid";
+    case "airway":
+      return "Airway";
+    case "procedure":
+      return "SID/STAR";
+    case "direct":
+      return "Direct";
+    case "coordinate":
+      return "Lat/Lon";
+    default:
+      return "Route token";
+  }
 }
 
 function normalizeRouteText(input: string) {
@@ -1633,7 +1716,23 @@ export default function FlightPlanner() {
   const waypoints = useMemo(() => parseWaypoints(waypointsInput), [waypointsInput]);
   const plannedStops = useMemo(() => parseWaypoints(plannedStopsInput), [plannedStopsInput]);
   const filedRouteInputNormalized = useMemo(() => normalizeRouteText(form.route), [form.route]);
-  const filedRouteAirportTokens = useMemo(() => parseWaypoints(filedRouteInputNormalized), [filedRouteInputNormalized]);
+  const filedRouteTokens = useMemo(() => parseFiledRouteTokens(filedRouteInputNormalized), [filedRouteInputNormalized]);
+  const filedRouteAirportTokens = useMemo(() => extractAirportTokensFromFiledRoute(filedRouteTokens), [filedRouteTokens]);
+  const filedRouteTokenCounts = useMemo(() => {
+    return filedRouteTokens.reduce<Record<FiledRouteTokenKind, number>>((acc, token) => {
+      acc[token.kind] = (acc[token.kind] || 0) + 1;
+      return acc;
+    }, {
+      airport: 0,
+      fix: 0,
+      navaid: 0,
+      airway: 0,
+      procedure: 0,
+      direct: 0,
+      coordinate: 0,
+      unknown: 0,
+    });
+  }, [filedRouteTokens]);
   const isUsingSuggestedWaypoints = useMemo(() => {
     if (suggestedWaypoints.length === 0) return false;
     const normalized = waypointsInput.trim().toUpperCase();
@@ -1667,9 +1766,32 @@ export default function FlightPlanner() {
     queries: routeIcaos.map((icao) => ({
       queryKey: ["/api/airports", icao],
       queryFn: async () => {
-        const res = await fetch(apiUrl(`/api/airports/${icao}`), { credentials: "include" });
-        if (!res.ok) throw new Error("Failed to fetch airport data");
-        return res.json();
+        const searchRes = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(icao)}`), {
+          credentials: "include",
+        });
+        if (!searchRes.ok) throw new Error("Failed to search airport data");
+        const matches = (await searchRes.json()) as any[];
+        const candidates = new Set(buildPlannerIcaoCandidates(icao));
+        const exactMatch = matches.find((match) => {
+          const matchIcao = String(match?.icao || "").trim().toUpperCase();
+          return candidates.has(matchIcao);
+        });
+        if (!exactMatch) return null;
+
+        const detailIcao = String(exactMatch.icao || icao).trim().toUpperCase();
+        const detailRes = await fetch(apiUrl(`/api/airports/${detailIcao}`), { credentials: "include" });
+        if (!detailRes.ok) {
+          return {
+            icao: detailIcao,
+            name: exactMatch.name ?? null,
+            lat: Number(exactMatch.lat),
+            lon: Number(exactMatch.lon),
+            elevationFt: exactMatch.elevationFt ?? null,
+            timezone: exactMatch.timezone ?? null,
+            source: "search",
+          };
+        }
+        return detailRes.json();
       },
       enabled: routeIcaos.length > 0,
       staleTime: 1000 * 60 * 60,
@@ -1680,7 +1802,21 @@ export default function FlightPlanner() {
     queries: routeIcaos.map((icao) => ({
       queryKey: ["/api/airports", icao, "frequencies"],
       queryFn: async () => {
-        const res = await fetch(apiUrl(`/api/airports/${icao}/frequencies`), { credentials: "include" });
+        const searchRes = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(icao)}`), {
+          credentials: "include",
+        });
+        if (!searchRes.ok) throw new Error("Failed to search airport frequencies");
+        const matches = (await searchRes.json()) as any[];
+        const candidates = new Set(buildPlannerIcaoCandidates(icao));
+        const exactMatch = matches.find((match) => {
+          const matchIcao = String(match?.icao || "").trim().toUpperCase();
+          return candidates.has(matchIcao);
+        });
+        if (!exactMatch) {
+          return { icao, frequencies: [] } as AirportFrequencyResponse;
+        }
+        const detailIcao = String(exactMatch.icao || icao).trim().toUpperCase();
+        const res = await fetch(apiUrl(`/api/airports/${detailIcao}/frequencies`), { credentials: "include" });
         if (!res.ok) throw new Error("Failed to fetch airport frequencies");
         return res.json() as Promise<AirportFrequencyResponse>;
       },
@@ -1835,8 +1971,18 @@ export default function FlightPlanner() {
   }, [airportQueries, routeIcaos]);
 
   const missingIcaos = useMemo(() => {
-    return routeIcaos.filter((icao) => !airportMap.has(icao));
-  }, [routeIcaos, airportMap]);
+    return routeIcaos.filter((icao, index) => {
+      const query = airportQueries[index];
+      return Boolean(icao && (query?.isPending || query?.isFetching));
+    });
+  }, [routeIcaos, airportQueries]);
+
+  const unresolvedIcaos = useMemo(() => {
+    return routeIcaos.filter((icao, index) => {
+      const query = airportQueries[index];
+      return Boolean(icao && !query?.isPending && !query?.isFetching && !query?.error && !airportMap.has(icao));
+    });
+  }, [routeIcaos, airportQueries, airportMap]);
 
   const routeAirportFrequencyCards = useMemo(() => {
     return routeSequenceOrdered
@@ -1863,6 +2009,19 @@ export default function FlightPlanner() {
     if (!airport?.name) return icao;
     return `${icao} — ${airport.name}`;
   }, [airportMap]);
+
+  const renderAirportIcaoTooltip = useCallback((icao: string, child: ReactElement) => {
+    const label = getAirportHoverLabel(icao);
+    if (label === icao) return child;
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{child}</TooltipTrigger>
+        <TooltipContent>
+          <p>{label}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }, [getAirportHoverLabel]);
 
   const airportPoints: PlannerPoint[] = useMemo(() => {
     return routeSequenceOrdered
@@ -1900,7 +2059,7 @@ export default function FlightPlanner() {
     return midpoint;
   }, [airportPoints, routeSuggestion, waypoints.length]);
 
-  const routePoints: AirportPoint[] = useMemo(() => {
+  const routePoints: PlannerPoint[] = useMemo(() => {
     if (!suggestedWaypoint) return airportPoints;
     const [start, ...rest] = airportPoints;
     if (!start || rest.length === 0) return airportPoints;
@@ -3517,9 +3676,14 @@ export default function FlightPlanner() {
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-muted-foreground">Route assist:</span>
                   {suggestedWaypoints.map((icao) => (
-                    <Badge key={`waypoint-${icao}`} variant="secondary" title={getAirportHoverLabel(icao)}>
-                      {icao}
-                    </Badge>
+                    <span key={`waypoint-${icao}`}>
+                      {renderAirportIcaoTooltip(
+                        icao,
+                        <Badge variant="secondary">
+                          {icao}
+                        </Badge>,
+                      )}
+                    </span>
                   ))}
                   <Button
                     type="button"
@@ -3549,9 +3713,14 @@ export default function FlightPlanner() {
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-muted-foreground">Suggested fuel stops:</span>
                   {suggestedStops.map((icao) => (
-                    <Badge key={`stop-${icao}`} variant="secondary" title={getAirportHoverLabel(icao)}>
-                      {icao}
-                    </Badge>
+                    <span key={`stop-${icao}`}>
+                      {renderAirportIcaoTooltip(
+                        icao,
+                        <Badge variant="secondary">
+                          {icao}
+                        </Badge>,
+                      )}
+                    </span>
                   ))}
                   <Button
                     type="button"
@@ -3610,6 +3779,63 @@ export default function FlightPlanner() {
               <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 text-xs text-muted-foreground">
                 Planning preview only: <span className="font-medium text-foreground">{routePreviewFull || "-"}</span>
               </div>
+              {filedRouteTokens.length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold">Parsed Route Structure</div>
+                      <div className="text-xs text-muted-foreground">
+                        RSF now recognizes route token types for review. Airports can drive map/frequency lookups; airways, fixes, navaids, and procedures stay in the filed route for ATC/Leidos.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      {filedRouteTokenCounts.airway > 0 && <span>{filedRouteTokenCounts.airway} airway</span>}
+                      {filedRouteTokenCounts.fix > 0 && <span>{filedRouteTokenCounts.fix} fix</span>}
+                      {filedRouteTokenCounts.navaid > 0 && <span>{filedRouteTokenCounts.navaid} navaid</span>}
+                      {filedRouteTokenCounts.procedure > 0 && <span>{filedRouteTokenCounts.procedure} SID/STAR</span>}
+                      {filedRouteTokenCounts.airport > 0 && <span>{filedRouteTokenCounts.airport} airport</span>}
+                      {filedRouteTokenCounts.direct > 0 && <span>{filedRouteTokenCounts.direct} DCT</span>}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {filedRouteTokens.map((routeToken, index) => {
+                      const badgeClassName =
+                        routeToken.kind === "airway"
+                          ? "border-sky-200 bg-sky-50 text-sky-900"
+                          : routeToken.kind === "fix"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                            : routeToken.kind === "navaid"
+                              ? "border-indigo-200 bg-indigo-50 text-indigo-900"
+                              : routeToken.kind === "procedure"
+                                ? "border-amber-200 bg-amber-50 text-amber-900"
+                                : routeToken.kind === "airport"
+                                  ? "border-slate-200 bg-white text-slate-900"
+                                  : routeToken.kind === "direct"
+                                    ? "border-violet-200 bg-violet-50 text-violet-900"
+                                    : routeToken.kind === "coordinate"
+                                      ? "border-rose-200 bg-rose-50 text-rose-900"
+                                      : "border-slate-200 bg-slate-100 text-slate-700";
+                      return (
+                        <Tooltip key={`${routeToken.token}-${index}`}>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className={badgeClassName}>
+                              {routeToken.token}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{filedRouteTokenKindLabel(routeToken.kind)}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                  {filedRouteAirportTokens.length === 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      This filed route currently contains no airport-type enroute tokens, so the map will stay anchored to departure, destination, and any planned airport stops instead of trying to draw airway segments as airports.
+                    </div>
+                  )}
+                </div>
+              )}
               {filingDraft.flightRules === "IFR" && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -3908,7 +4134,10 @@ export default function FlightPlanner() {
               <div className="grid gap-3 md:grid-cols-2">
                 {orderedPlannedStops.map((icao) => (
                   <div key={`uplift-${icao}`} className="space-y-2">
-                    <Label title={getAirportHoverLabel(icao)}>{icao} fuel added (gal)</Label>
+                    {renderAirportIcaoTooltip(
+                      icao,
+                      <Label>{icao} fuel added (gal)</Label>,
+                    )}
                     <Input
                       value={plannedFuelUplifts[icao] || ""}
                       onChange={(e) => setPlannedFuelUplifts((current) => ({ ...current, [icao]: e.target.value }))}
@@ -4088,7 +4317,10 @@ export default function FlightPlanner() {
               {routeAirportFrequencyCards.map(({ icao, airport, frequencies }) => (
                 <div key={`freq-${icao}`} className="rounded-lg border p-4 space-y-3">
                   <div>
-                    <div className="font-semibold" title={getAirportHoverLabel(icao)}>{icao}</div>
+                    {renderAirportIcaoTooltip(
+                      icao,
+                      <div className="font-semibold">{icao}</div>,
+                    )}
                     <div className="text-xs text-muted-foreground">
                       {airport?.name || "Airport"}{airport?.timezone ? ` • ${airport.timezone}` : ""}
                     </div>
@@ -4167,7 +4399,17 @@ export default function FlightPlanner() {
                 <tbody>
                   {legNavRows.map((leg) => (
                     <tr key={leg.key} className="border-b last:border-b-0">
-                      <td className="py-2 pr-3 font-medium" title={`${getAirportHoverLabel(leg.from)} to ${getAirportHoverLabel(leg.to)}`}>{leg.from}{" to "}{leg.to}</td>
+                      <td className="py-2 pr-3 font-medium">
+                        {renderAirportIcaoTooltip(
+                          leg.from,
+                          <span>{leg.from}</span>,
+                        )}
+                        {" to "}
+                        {renderAirportIcaoTooltip(
+                          leg.to,
+                          <span>{leg.to}</span>,
+                        )}
+                      </td>
                       <td className="py-2 pr-3">{String(leg.course).padStart(3, "0")}°</td>
                       <td className="py-2 pr-3">{leg.distanceNm.toFixed(1)} NM</td>
                       <td className="py-2 pr-3">{formatMinutesLabel(leg.legMinutes)}</td>
@@ -5245,7 +5487,7 @@ export default function FlightPlanner() {
               ) : (
                 <PlannerMap
                   key={`map-${mapStyle}-${mapRenderVersion}`}
-                  points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                  points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon, label: p.label ?? null }))}
                   mapStyle={mapStyle}
                   plannedAltitudeFt={plannedAltitudeValue}
                   windsAltitudeFt={windsAltitudeFt}
@@ -5265,6 +5507,11 @@ export default function FlightPlanner() {
             {airportErrors.length === 0 && missingIcaos.length > 0 && (
               <div className="mt-3 text-xs text-muted-foreground">
                 Waiting on coordinates for: {missingIcaos.join(", ")}.
+              </div>
+            )}
+            {airportErrors.length === 0 && missingIcaos.length === 0 && unresolvedIcaos.length > 0 && (
+              <div className="mt-3 text-xs text-amber-700">
+                Airport reference details are unavailable for: {unresolvedIcaos.join(", ")}. The planner will keep the route, but map labels and airport details may be limited for those helper codes.
               </div>
             )}
             <div className="mt-4 space-y-2">

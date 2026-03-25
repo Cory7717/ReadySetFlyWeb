@@ -8,6 +8,7 @@ export type PlannerPoint = {
   icao: string;
   lat: number;
   lon: number;
+  label?: string | null;
 };
 
 type PlannerMapProps = {
@@ -572,7 +573,7 @@ export default function PlannerMap({
               className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow"
               opacity={1}
             >
-              {point.icao}
+              {point.label ? `${point.icao} • ${point.label}` : point.icao}
             </Tooltip>
           </Marker>
         ))}

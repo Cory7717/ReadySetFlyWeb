@@ -4781,6 +4781,8 @@ export class DatabaseStorage implements IStorage {
       ...type,
       cruiseKtas: toRequiredDecimalString(type.cruiseKtas, "cruiseKtas"),
       fuelBurnGph: toRequiredDecimalString(type.fuelBurnGph, "fuelBurnGph"),
+      fuelBurnEconomyGph: toDecimalString(type.fuelBurnEconomyGph),
+      fuelBurnPerformanceGph: toDecimalString(type.fuelBurnPerformanceGph),
       usableFuelGal: toRequiredDecimalString(type.usableFuelGal, "usableFuelGal"),
       maxGrossWeightLb: toRequiredDecimalString(type.maxGrossWeightLb, "maxGrossWeightLb"),
       emptyArmIn: toDecimalString(type.emptyArmIn),

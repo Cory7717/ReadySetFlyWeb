@@ -1896,6 +1896,8 @@ function toNumber(value: any): number | null {
 function buildEffectiveValues(profile: any | null, baseType: any | null) {
   const baseCruise = toNumber(baseType?.cruiseKtas);
   const baseBurn = toNumber(baseType?.fuelBurnGph);
+  const economyBurn = toNumber(baseType?.fuelBurnEconomyGph);
+  const performanceBurn = toNumber(baseType?.fuelBurnPerformanceGph);
   const baseFuel = toNumber(baseType?.usableFuelGal);
   const baseWeight = toNumber(baseType?.maxGrossWeightLb);
   const overrideCruise = toNumber(profile?.cruiseKtasOverride);
@@ -1913,6 +1915,8 @@ function buildEffectiveValues(profile: any | null, baseType: any | null) {
   return {
     cruise_ktas_effective: cruise,
     fuel_burn_gph_effective: burn,
+    fuel_burn_economy_gph_effective: economyBurn,
+    fuel_burn_performance_gph_effective: performanceBurn,
     usable_fuel_gal_effective: fuel,
     max_gross_weight_lb_effective: overrideWeight ?? baseWeight,
     estimated_still_air_range_nm_effective: estimatedStillAirRangeNm,
@@ -13480,6 +13484,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const stations = await loadStationCache();
       const referenceMap = await loadAirportReferenceCache().catch(() => null);
+      const routableStations = referenceMap
+        ? stations.filter((station) => {
+            if (!station?.icao) return false;
+            return referenceMap.has(station.icao) || (station.icao.startsWith("K") && referenceMap.has(station.icao.slice(1)));
+          })
+        : stations;
       const findStation = (value: string) => {
         const candidates = buildIcaoCandidates(value);
         const station = stations.find((entry) => candidates.includes(entry.icao));
@@ -13554,7 +13564,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         );
         for (const radius of candidateRadii) {
           const candidate = findBestRouteAssistStation(
-            stations,
+            routableStations,
             departureStation,
             destinationStation,
             target,

@@ -20,6 +20,8 @@ type AircraftType = {
   engineType: string;
   cruiseKtas: number;
   fuelBurnGph: number;
+  fuelBurnEconomyGph?: number | null;
+  fuelBurnPerformanceGph?: number | null;
   usableFuelGal: number;
   maxGrossWeightLb: number;
   defaultAltitudeFt?: number | null;
@@ -38,6 +40,8 @@ const emptyForm = {
   engineType: "piston",
   cruiseKtas: "",
   fuelBurnGph: "",
+  fuelBurnEconomyGph: "",
+  fuelBurnPerformanceGph: "",
   usableFuelGal: "",
   maxGrossWeightLb: "",
   defaultAltitudeFt: "",
@@ -82,6 +86,8 @@ export default function AdminAircraftLibrary() {
         engineType: form.engineType,
         cruiseKtas: Number(form.cruiseKtas),
         fuelBurnGph: Number(form.fuelBurnGph),
+        fuelBurnEconomyGph: form.fuelBurnEconomyGph ? Number(form.fuelBurnEconomyGph) : null,
+        fuelBurnPerformanceGph: form.fuelBurnPerformanceGph ? Number(form.fuelBurnPerformanceGph) : null,
         usableFuelGal: Number(form.usableFuelGal),
         maxGrossWeightLb: Number(form.maxGrossWeightLb),
         defaultAltitudeFt: form.defaultAltitudeFt ? Number(form.defaultAltitudeFt) : null,
@@ -195,6 +201,14 @@ export default function AdminAircraftLibrary() {
               <Input value={form.fuelBurnGph} onChange={(e) => setForm({ ...form, fuelBurnGph: e.target.value })} type="number" />
             </div>
             <div className="space-y-2">
+              <Label>Fuel Burn Economy GPH</Label>
+              <Input value={form.fuelBurnEconomyGph} onChange={(e) => setForm({ ...form, fuelBurnEconomyGph: e.target.value })} type="number" />
+            </div>
+            <div className="space-y-2">
+              <Label>Fuel Burn Performance GPH</Label>
+              <Input value={form.fuelBurnPerformanceGph} onChange={(e) => setForm({ ...form, fuelBurnPerformanceGph: e.target.value })} type="number" />
+            </div>
+            <div className="space-y-2">
               <Label>Usable Fuel Gal</Label>
               <Input value={form.usableFuelGal} onChange={(e) => setForm({ ...form, usableFuelGal: e.target.value })} type="number" />
             </div>
@@ -284,6 +298,11 @@ export default function AdminAircraftLibrary() {
                     <div className="text-xs text-muted-foreground">
                       Cruise {type.cruiseKtas} KTAS | Burn {type.fuelBurnGph} gph | Fuel {type.usableFuelGal} gal | MGW {type.maxGrossWeightLb} lb
                     </div>
+                    {(type.fuelBurnEconomyGph || type.fuelBurnPerformanceGph) && (
+                      <div className="text-xs text-muted-foreground">
+                        Economy {type.fuelBurnEconomyGph || "-"} gph | Performance {type.fuelBurnPerformanceGph || "-"} gph
+                      </div>
+                    )}
                     {(type.sourceNote || type.verificationSource || type.lastVerifiedAt) && (
                       <div className="mt-1 text-xs text-muted-foreground space-y-1">
                         {type.sourceNote && <div>Note: {type.sourceNote}</div>}
@@ -313,6 +332,8 @@ export default function AdminAircraftLibrary() {
                           engineType: type.engineType,
                           cruiseKtas: String(type.cruiseKtas),
                           fuelBurnGph: String(type.fuelBurnGph),
+                          fuelBurnEconomyGph: type.fuelBurnEconomyGph ? String(type.fuelBurnEconomyGph) : "",
+                          fuelBurnPerformanceGph: type.fuelBurnPerformanceGph ? String(type.fuelBurnPerformanceGph) : "",
                           usableFuelGal: String(type.usableFuelGal),
                           maxGrossWeightLb: String(type.maxGrossWeightLb),
                           defaultAltitudeFt: type.defaultAltitudeFt ? String(type.defaultAltitudeFt) : "",

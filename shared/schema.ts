@@ -2214,6 +2214,8 @@ export const aircraftTypes = pgTable("aircraft_types", {
   engineType: text("engine_type").notNull(),
   cruiseKtas: decimal("cruise_ktas", { precision: 6, scale: 2 }).notNull(),
   fuelBurnGph: decimal("fuel_burn_gph", { precision: 6, scale: 2 }).notNull(),
+  fuelBurnEconomyGph: decimal("fuel_burn_economy_gph", { precision: 6, scale: 2 }),
+  fuelBurnPerformanceGph: decimal("fuel_burn_performance_gph", { precision: 6, scale: 2 }),
   usableFuelGal: decimal("usable_fuel_gal", { precision: 8, scale: 2 }).notNull(),
   maxGrossWeightLb: decimal("max_gross_weight_lb", { precision: 10, scale: 2 }).notNull(),
   emptyArmIn: decimal("empty_arm_in", { precision: 6, scale: 2 }),
@@ -2648,6 +2650,8 @@ export const insertAircraftTypeSchema = createInsertSchema(aircraftTypes).omit({
 }).extend({
   cruiseKtas: z.coerce.number().min(60).max(450),
   fuelBurnGph: z.coerce.number().min(1).max(100),
+  fuelBurnEconomyGph: z.coerce.number().min(1).max(100).optional().nullable(),
+  fuelBurnPerformanceGph: z.coerce.number().min(1).max(100).optional().nullable(),
   usableFuelGal: z.coerce.number().min(5).max(4000),
   maxGrossWeightLb: z.coerce.number().min(500).max(2000000),
   defaultAltitudeFt: z.coerce.number().min(1000).max(45000).optional().nullable(),

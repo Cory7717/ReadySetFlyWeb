@@ -1,5 +1,5 @@
 ﻿
-import { Suspense, lazy, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Link } from "wouter";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ import type { FlightPlan } from "@shared/schema";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 import { PageShell } from "@/components/layout/PageShell";
-import PlannerMap from "@/components/flight-planner/PlannerMap";
+import PlannerMap, { type PlannerPoint } from "@/components/flight-planner/PlannerMap";
 import NotamTranslator from "@/components/ai/NotamTranslator";
 
 const CesiumGlobe = lazy(() => import("@/components/flight-planner/CesiumGlobe"));
@@ -171,6 +171,7 @@ type AircraftProfile = {
   fuel_burn_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
   max_gross_weight_lb_effective?: number | null;
+  fuelBurnOverrideGph?: number | null;
   filingEquipmentDefault?: string | null;
   filingSoulsOnBoardDefault?: string | null;
   filingAircraftColorDefault?: string | null;
@@ -191,6 +192,8 @@ type AircraftType = {
   engineType: string;
   cruise_ktas_effective?: number | null;
   fuel_burn_gph_effective?: number | null;
+  fuel_burn_economy_gph_effective?: number | null;
+  fuel_burn_performance_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
   max_gross_weight_lb_effective?: number | null;
   isVerified?: boolean | null;
@@ -328,6 +331,7 @@ const SCRATCH_PAD_DEFAULT: ScratchPadFields = {
 
 const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
 const FLIGHT_PLANNER_ACTIVE_TAB_KEY = "rsf_planner_active_tab";
+type FuelBurnMode = "standard" | "economy" | "performance";
 const SCRATCH_PAD_KEY = "rsf.scratchPad";
 const SCRATCH_PAD_INK_KEY = "rsf.scratchPadInk";
 const SCRATCH_PAD_INK_LAYOUT_KEY = "rsf.scratchPadInkLayout";
@@ -1018,9 +1022,11 @@ export default function FlightPlanner() {
   });
   const [waypointsInput, setWaypointsInput] = useState("");
   const [plannedStopsInput, setPlannedStopsInput] = useState("");
+  const [plannedFuelUplifts, setPlannedFuelUplifts] = useState<Record<string, string>>({});
   const [departureRunway, setDepartureRunway] = useState("");
   const [selectedProfileId, setSelectedProfileId] = useState<string>("none");
   const [selectedTypeId, setSelectedTypeId] = useState<string>(FALLBACK_TYPE.id);
+  const [fuelBurnMode, setFuelBurnMode] = useState<FuelBurnMode>("standard");
   const [reserveMinutes, setReserveMinutes] = useState("45");
   const [headwind, setHeadwind] = useState("0");
   const [plannedAltitude, setPlannedAltitude] = useState("");
@@ -1175,9 +1181,15 @@ export default function FlightPlanner() {
       if (parsed?.form) setForm((current) => ({ ...current, ...parsed.form }));
       if (typeof parsed?.waypointsInput === "string") setWaypointsInput(parsed.waypointsInput);
       if (typeof parsed?.plannedStopsInput === "string") setPlannedStopsInput(parsed.plannedStopsInput);
+      if (parsed?.plannedFuelUplifts && typeof parsed.plannedFuelUplifts === "object") {
+        setPlannedFuelUplifts(parsed.plannedFuelUplifts as Record<string, string>);
+      }
       if (typeof parsed?.departureRunway === "string") setDepartureRunway(parsed.departureRunway);
       if (typeof parsed?.selectedProfileId === "string") setSelectedProfileId(parsed.selectedProfileId);
       if (typeof parsed?.selectedTypeId === "string") setSelectedTypeId(parsed.selectedTypeId);
+      if (parsed?.fuelBurnMode === "standard" || parsed?.fuelBurnMode === "economy" || parsed?.fuelBurnMode === "performance") {
+        setFuelBurnMode(parsed.fuelBurnMode);
+      }
       if (typeof parsed?.reserveMinutes === "string") setReserveMinutes(parsed.reserveMinutes);
       if (typeof parsed?.headwind === "string") setHeadwind(parsed.headwind);
       if (typeof parsed?.plannedAltitude === "string") setPlannedAltitude(parsed.plannedAltitude);
@@ -1200,9 +1212,11 @@ export default function FlightPlanner() {
         form,
         waypointsInput,
         plannedStopsInput,
+        plannedFuelUplifts,
         departureRunway,
         selectedProfileId,
         selectedTypeId,
+        fuelBurnMode,
         reserveMinutes,
         headwind,
         plannedAltitude,
@@ -1217,9 +1231,11 @@ export default function FlightPlanner() {
     customProfile,
     departureRunway,
     filingDraft,
+    fuelBurnMode,
     form,
     headwind,
     plannedAltitude,
+    plannedFuelUplifts,
     plannedStopsInput,
     reserveMinutes,
     routeSuggestion,
@@ -1506,9 +1522,18 @@ export default function FlightPlanner() {
   const planningBurn =
     (useManual ? manualBurn : null) ??
     selectedProfile?.fuel_burn_gph_effective ??
+    (fuelBurnMode === "economy"
+      ? selectedType.fuel_burn_economy_gph_effective
+      : fuelBurnMode === "performance"
+        ? selectedType.fuel_burn_performance_gph_effective
+        : null) ??
     selectedType.fuel_burn_gph_effective ??
     FALLBACK_TYPE.fuel_burn_gph_effective ??
     8;
+  const selectedTypeSupportsBurnProfiles = Boolean(
+    selectedType.fuel_burn_economy_gph_effective ||
+    selectedType.fuel_burn_performance_gph_effective
+  );
   const planningFuel =
     (useManual ? manualFuel : null) ??
     selectedProfile?.usable_fuel_gal_effective ??
@@ -1739,6 +1764,23 @@ export default function FlightPlanner() {
       .map((item) => item.icao);
   }, [plannedStops, waypoints, filedRouteAirportTokens, shouldOrderSuggestions, airportMap, departureResolved, destinationResolved]);
 
+  const orderedPlannedStops = useMemo(
+    () => orderedIntermediates.filter((icao) => plannedStops.includes(icao)),
+    [orderedIntermediates, plannedStops],
+  );
+
+  useEffect(() => {
+    setPlannedFuelUplifts((current) => {
+      const allowed = new Set(orderedPlannedStops);
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([icao, value]) => allowed.has(icao) && value !== ""),
+      );
+      const currentKeys = Object.keys(current).sort().join("|");
+      const nextKeys = Object.keys(next).sort().join("|");
+      return currentKeys === nextKeys ? current : next;
+    });
+  }, [orderedPlannedStops]);
+
   const routeSequenceOrdered = useMemo(() => {
     return [
       departureResolved.trim().toUpperCase(),
@@ -1816,14 +1858,20 @@ export default function FlightPlanner() {
       });
   }, [routeSequenceOrdered, airportMap, airportFrequencyMap]);
 
-  const airportPoints: AirportPoint[] = useMemo(() => {
+  const getAirportHoverLabel = useCallback((icao: string) => {
+    const airport = airportMap.get(icao);
+    if (!airport?.name) return icao;
+    return `${icao} — ${airport.name}`;
+  }, [airportMap]);
+
+  const airportPoints: PlannerPoint[] = useMemo(() => {
     return routeSequenceOrdered
       .map((icao) => {
         const data = airportMap.get(icao);
         if (!data || !Number.isFinite(data.lat) || !Number.isFinite(data.lon)) return null;
-        return { icao, lat: Number(data.lat), lon: Number(data.lon) };
+        return { icao, lat: Number(data.lat), lon: Number(data.lon), label: data.name || null };
       })
-      .filter(Boolean) as AirportPoint[];
+      .filter(Boolean) as PlannerPoint[];
   }, [airportMap, routeSequenceOrdered]);
 
   const suggestedWaypoint = useMemo(() => {
@@ -1925,10 +1973,18 @@ export default function FlightPlanner() {
     if (overrideFuel <= referenceFuelCapacityGallons) return null;
     return `Entered usable fuel exceeds the current aircraft reference value by ${(overrideFuel - referenceFuelCapacityGallons).toFixed(1)} gal. Verify the RSF library/profile value before planning with it.`;
   }, [customProfile.usableFuelOverrideGal, useManual, referenceFuelCapacityGallons]);
-  const fuelSurplus = fuelAvailableGallons - totalFuel;
-  const surplusMinutes = planningBurn > 0
-    ? (fuelSurplus / planningBurn) * 60
-    : 0;
+  const plannedFuelUpliftGallonsByStop = useMemo(() => {
+    const entries = orderedPlannedStops.map((icao) => {
+      const raw = Number(plannedFuelUplifts[icao]);
+      const gallons = Number.isFinite(raw) && raw > 0 ? raw : 0;
+      return [icao, gallons] as const;
+    });
+    return new Map(entries);
+  }, [orderedPlannedStops, plannedFuelUplifts]);
+  const totalPlannedFuelUplift = useMemo(
+    () => Array.from(plannedFuelUpliftGallonsByStop.values()).reduce((sum, gallons) => sum + gallons, 0),
+    [plannedFuelUpliftGallonsByStop],
+  );
   const enduranceMinutes = useMemo(() => {
     if (!planningBurn || planningBurn <= 0) return 0;
     return (fuelAvailableGallons / planningBurn) * 60;
@@ -1936,6 +1992,7 @@ export default function FlightPlanner() {
   const legNavRows = useMemo(() => {
     let cumulativeNm = 0;
     let cumulativeMinutes = 0;
+    let fuelRemainingGallons = fuelAvailableGallons;
     return legs.map((leg) => {
       cumulativeNm += leg.distanceNm;
       const course = Math.round(bearingDeg(leg.from, leg.to));
@@ -1945,6 +2002,13 @@ export default function FlightPlanner() {
       const legEtaUtc = plannedDepartureUtc
         ? new Date(plannedDepartureUtc.getTime() + cumulativeMinutes * 60000)
         : null;
+      const fuelBeforeLeg = fuelRemainingGallons;
+      const fuelAfterLeg = fuelBeforeLeg - legFuel;
+      const requestedFuelUplift = plannedFuelUpliftGallonsByStop.get(leg.to.icao) ?? 0;
+      const availableTankSpace = Math.max(0, planningFuel - Math.max(fuelAfterLeg, 0));
+      const actualFuelUplift = Math.min(requestedFuelUplift, availableTankSpace);
+      const fuelAfterUplift = fuelAfterLeg + actualFuelUplift;
+      fuelRemainingGallons = fuelAfterUplift;
       return {
         key: `${leg.from.icao}-${leg.to.icao}`,
         from: leg.from.icao,
@@ -1954,10 +2018,36 @@ export default function FlightPlanner() {
         legMinutes,
         legEtaUtc,
         legFuel,
+        fuelBeforeLeg,
+        fuelAfterLeg,
+        requestedFuelUplift,
+        actualFuelUplift,
+        fuelAfterUplift,
         cumulativeNm,
       };
     });
-  }, [legs, groundspeed, planningBurn, plannedDepartureUtc]);
+  }, [legs, fuelAvailableGallons, groundspeed, plannedDepartureUtc, plannedFuelUpliftGallonsByStop, planningBurn, planningFuel]);
+  const fuelPlanSummary = useMemo(() => {
+    const overCapacityStops = legNavRows
+      .filter((leg) => leg.requestedFuelUplift > leg.actualFuelUplift + 0.01)
+      .map((leg) => ({
+        icao: leg.to,
+        excessGallons: leg.requestedFuelUplift - leg.actualFuelUplift,
+      }));
+    const firstUnreachableLeg = legNavRows.find((leg) => leg.fuelAfterLeg < 0);
+    const endingFuelGallons = legNavRows.length > 0
+      ? legNavRows[legNavRows.length - 1].fuelAfterUplift
+      : fuelAvailableGallons;
+    const reserveBalanceGallons = endingFuelGallons - reserveFuel;
+    return {
+      overCapacityStops,
+      firstUnreachableLeg,
+      endingFuelGallons,
+      reserveBalanceGallons,
+    };
+  }, [fuelAvailableGallons, legNavRows, reserveFuel]);
+  const fuelSurplus = fuelPlanSummary.reserveBalanceGallons;
+  const surplusMinutes = planningBurn > 0 ? (fuelSurplus / planningBurn) * 60 : 0;
   const filingPacket = useMemo(() => ({
     filingLive: false,
     provider: "pending-flight-service-handoff",
@@ -2286,9 +2376,9 @@ export default function FlightPlanner() {
       });
 
       cumulativeFuelUsed += navRow.legFuel;
-      const remainingFuelGallons = fuelAvailableGallons - cumulativeFuelUsed;
-      const hasFuelDeficit = remainingFuelGallons < 0;
-      const hasFuelReserveRisk = remainingFuelGallons >= 0 && remainingFuelGallons < reserveFuel;
+      const remainingFuelGallons = navRow.fuelAfterUplift;
+      const hasFuelDeficit = navRow.fuelAfterLeg < 0;
+      const hasFuelReserveRisk = !hasFuelDeficit && remainingFuelGallons < reserveFuel;
 
       const level: LegRiskLevel =
         hasTfrConflict || hasThunderRiskForLeg || hasFuelDeficit
@@ -2309,7 +2399,7 @@ export default function FlightPlanner() {
     });
 
     return riskMap;
-  }, [tfrRouteQuery.data?.features, legs, legNavRows, weatherByIcao, fuelAvailableGallons, reserveFuel]);
+  }, [tfrRouteQuery.data?.features, legs, legNavRows, weatherByIcao, reserveFuel]);
   const weatherStatusText = weatherData.length === 0
     ? "No METARs loaded"
     : hasThunderRisk
@@ -2371,13 +2461,13 @@ export default function FlightPlanner() {
 
   const autoChecklist = useMemo(() => ({
     weather: weatherData.length > 0 && !hasIfrWeather && !hasThunderRisk,
-    fuel: totalFuel > 0 && fuelAvailableGallons >= totalFuel,
+    fuel: totalFuel > 0 && !fuelPlanSummary.firstUnreachableLeg && fuelPlanSummary.reserveBalanceGallons >= 0,
     notams: notamsSummaryQuery.isFetched && !notamsSummaryQuery.isError,
     tfr: tfrRouteQuery.isFetched && tfrConflicts.length === 0,
-    fuelSufficient: totalFuel > 0 && fuelAvailableGallons >= totalFuel,
+    fuelSufficient: totalFuel > 0 && !fuelPlanSummary.firstUnreachableLeg && fuelPlanSummary.reserveBalanceGallons >= 0,
     currency: false,
   }), [weatherData, hasIfrWeather, hasThunderRisk, totalFuel,
-    fuelAvailableGallons, notamsSummaryQuery.isFetched,
+    fuelPlanSummary.firstUnreachableLeg, fuelPlanSummary.reserveBalanceGallons, notamsSummaryQuery.isFetched,
     notamsSummaryQuery.isError, tfrRouteQuery.isFetched, tfrConflicts]);
   const checklistCompletionCount = useMemo(() => {
     const keys: (keyof typeof autoChecklist)[] = ["weather", "fuel", "currency", "notams", "tfr", "fuelSufficient"];
@@ -2629,6 +2719,7 @@ export default function FlightPlanner() {
       setDepartureRunway("");
       setSelectedProfileId("none");
       setSelectedTypeId(FALLBACK_TYPE.id);
+      setFuelBurnMode("standard");
       setReserveMinutes("45");
       setHeadwind("0");
       setPlannedAltitude("");
@@ -2641,6 +2732,7 @@ export default function FlightPlanner() {
         usableFuelOverrideGal: "",
         maxGrossWeightOverrideLb: "",
       });
+      setPlannedFuelUplifts({});
       setFilingDraft({
         flightRules: "VFR",
         aircraftId: "",
@@ -2685,7 +2777,7 @@ export default function FlightPlanner() {
 
   const exportNavLogCsv = () => {
     if (!legNavRows.length) return;
-    const header = ["Leg", "CourseDeg", "DistanceNm", "LegMinutes", "ETA (Z)", "LegFuelGal", "CumulativeNm"];
+    const header = ["Leg", "CourseDeg", "DistanceNm", "LegMinutes", "ETA (Z)", "LegFuelGal", "ArrivalFuelGal", "FuelUpliftGal", "DepartureFuelGal", "CumulativeNm"];
     const rows = legNavRows.map((leg) => [
       `${leg.from} to ${leg.to}`,
       String(leg.course),
@@ -2693,6 +2785,9 @@ export default function FlightPlanner() {
       Math.round(leg.legMinutes).toString(),
       leg.legEtaUtc ? `${leg.legEtaUtc.toISOString().slice(11, 16)}Z` : "",
       leg.legFuel.toFixed(1),
+      leg.fuelAfterLeg.toFixed(1),
+      leg.actualFuelUplift.toFixed(1),
+      leg.fuelAfterUplift.toFixed(1),
       leg.cumulativeNm.toFixed(1),
     ]);
     const csv = [header, ...rows].map((row) => row.join(",")).join("\n");
@@ -3422,7 +3517,7 @@ export default function FlightPlanner() {
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-muted-foreground">Route assist:</span>
                   {suggestedWaypoints.map((icao) => (
-                    <Badge key={`waypoint-${icao}`} variant="secondary">
+                    <Badge key={`waypoint-${icao}`} variant="secondary" title={getAirportHoverLabel(icao)}>
                       {icao}
                     </Badge>
                   ))}
@@ -3454,7 +3549,7 @@ export default function FlightPlanner() {
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <span className="text-muted-foreground">Suggested fuel stops:</span>
                   {suggestedStops.map((icao) => (
-                    <Badge key={`stop-${icao}`} variant="secondary">
+                    <Badge key={`stop-${icao}`} variant="secondary" title={getAirportHoverLabel(icao)}>
                       {icao}
                     </Badge>
                   ))}
@@ -3751,6 +3846,45 @@ export default function FlightPlanner() {
             </div>
           </div>
 
+          {selectedTypeSupportsBurnProfiles && !useManual && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Fuel Burn Profile</Label>
+                <Select
+                  value={fuelBurnMode}
+                  onValueChange={(value) => setFuelBurnMode(value as FuelBurnMode)}
+                  disabled={Boolean(selectedProfile?.fuelBurnOverrideGph)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Standard ({selectedType.fuel_burn_gph_effective?.toFixed(1) || "-"} gph)</SelectItem>
+                    {selectedType.fuel_burn_economy_gph_effective ? (
+                      <SelectItem value="economy">Economy ({selectedType.fuel_burn_economy_gph_effective.toFixed(1)} gph)</SelectItem>
+                    ) : null}
+                    {selectedType.fuel_burn_performance_gph_effective ? (
+                      <SelectItem value="performance">Performance ({selectedType.fuel_burn_performance_gph_effective.toFixed(1)} gph)</SelectItem>
+                    ) : null}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Use the profile that best matches how you plan to cruise this trip.
+                  {selectedProfile?.fuelBurnOverrideGph ? " Saved profile burn override is active, so the selector is locked." : ""}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3 text-sm">
+                <div className="text-xs text-muted-foreground">Selected burn profile</div>
+                <div className="font-semibold">{fuelBurnMode[0].toUpperCase() + fuelBurnMode.slice(1)} • {planningBurn.toFixed(1)} gph</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Library baseline {selectedType.fuel_burn_gph_effective?.toFixed(1) || "-"} gph
+                  {selectedType.fuel_burn_economy_gph_effective ? ` | Economy ${selectedType.fuel_burn_economy_gph_effective.toFixed(1)}` : ""}
+                  {selectedType.fuel_burn_performance_gph_effective ? ` | Performance ${selectedType.fuel_burn_performance_gph_effective.toFixed(1)}` : ""}
+                </div>
+              </div>
+            </div>
+          )}
+
           {(fuelOnBoardCapacityWarning || usableFuelCapacityWarning) && (
             <Alert variant="destructive">
               <AlertDescription>
@@ -3761,6 +3895,41 @@ export default function FlightPlanner() {
                 </div>
               </AlertDescription>
             </Alert>
+          )}
+
+          {orderedPlannedStops.length > 0 && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+              <div>
+                <div className="font-semibold">Planned Fuel Uplifts</div>
+                <div className="text-xs text-muted-foreground">
+                  Add the gallons you expect to take on at each planned fuel stop. This is used for planner fuel math only and is not filed with ATC or Leidos.
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {orderedPlannedStops.map((icao) => (
+                  <div key={`uplift-${icao}`} className="space-y-2">
+                    <Label title={getAirportHoverLabel(icao)}>{icao} fuel added (gal)</Label>
+                    <Input
+                      value={plannedFuelUplifts[icao] || ""}
+                      onChange={(e) => setPlannedFuelUplifts((current) => ({ ...current, [icao]: e.target.value }))}
+                      placeholder="0"
+                      type="number"
+                    />
+                  </div>
+                ))}
+              </div>
+              {fuelPlanSummary.overCapacityStops.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {fuelPlanSummary.overCapacityStops.map((stop) => (
+                      <div key={`overfill-${stop.icao}`}>
+                        {stop.icao} uplift exceeds usable capacity by {stop.excessGallons.toFixed(1)} gal.
+                      </div>
+                    ))}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
           )}
 
           {altitudeRisks.length > 0 && (
@@ -3799,17 +3968,19 @@ export default function FlightPlanner() {
           {totalFuel > 0 && (
             <div className={cn(
               "rounded-lg border px-4 py-2 text-sm font-medium",
-              fuelSurplus >= 0
+              !fuelPlanSummary.firstUnreachableLeg && fuelSurplus >= 0
                 ? "border-green-300 bg-green-50 text-green-800"
                 : "border-red-300 bg-red-50 text-red-800"
             )}>
-              {fuelSurplus >= 0
-                ? `Fuel surplus: +${fuelSurplus.toFixed(1)} gal (${formatMinutesLabel(surplusMinutes)} extra endurance)`
-                : `⚠ Fuel deficit: ${fuelSurplus.toFixed(1)} gal — add fuel or reduce route`}
+              {fuelPlanSummary.firstUnreachableLeg
+                ? `⚠ You cannot reach ${fuelPlanSummary.firstUnreachableLeg.to} on current fuel planning. Short by ${Math.abs(fuelPlanSummary.firstUnreachableLeg.fuelAfterLeg).toFixed(1)} gal before planned uplift.`
+                : fuelSurplus >= 0
+                  ? `Fuel surplus after planned stops: +${fuelSurplus.toFixed(1)} gal (${formatMinutesLabel(surplusMinutes)} beyond reserve)`
+                  : `⚠ Fuel deficit after planned stops: ${fuelSurplus.toFixed(1)} gal — add fuel, adjust stop uplifts, or reduce route`}
             </div>
           )}
           <div className="text-xs text-muted-foreground">
-            Usable fuel: {planningFuel ? `${planningFuel} gal` : "-"} | Max gross weight: {planningMaxWeight ? `${planningMaxWeight} lb` : "-"}
+            Start fuel: {fuelAvailableGallons ? `${fuelAvailableGallons.toFixed(1)} gal` : "-"} | Planned uplift: {totalPlannedFuelUplift.toFixed(1)} gal | Usable fuel: {planningFuel ? `${planningFuel} gal` : "-"} | Max gross weight: {planningMaxWeight ? `${planningMaxWeight} lb` : "-"}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild type="button" variant="outline" size="sm">
@@ -3917,7 +4088,7 @@ export default function FlightPlanner() {
               {routeAirportFrequencyCards.map(({ icao, airport, frequencies }) => (
                 <div key={`freq-${icao}`} className="rounded-lg border p-4 space-y-3">
                   <div>
-                    <div className="font-semibold">{icao}</div>
+                    <div className="font-semibold" title={getAirportHoverLabel(icao)}>{icao}</div>
                     <div className="text-xs text-muted-foreground">
                       {airport?.name || "Airport"}{airport?.timezone ? ` • ${airport.timezone}` : ""}
                     </div>
@@ -3978,7 +4149,7 @@ export default function FlightPlanner() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[620px] text-sm">
+              <table className="w-full min-w-[820px] text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="py-2 pr-3">Leg</th>
@@ -3986,14 +4157,17 @@ export default function FlightPlanner() {
                     <th className="py-2 pr-3">Dist</th>
                     <th className="py-2 pr-3">ETE</th>
                     <th className="py-2 pr-3">ETA (Z)</th>
-                    <th className="py-2 pr-3">Fuel</th>
+                    <th className="py-2 pr-3">Leg Fuel</th>
+                    <th className="py-2 pr-3">Arrive Fuel</th>
+                    <th className="py-2 pr-3">Uplift</th>
+                    <th className="py-2 pr-3">Depart Fuel</th>
                     <th className="py-2">Cum</th>
                   </tr>
                 </thead>
                 <tbody>
                   {legNavRows.map((leg) => (
                     <tr key={leg.key} className="border-b last:border-b-0">
-                      <td className="py-2 pr-3 font-medium">{leg.from}{" to "}{leg.to}</td>
+                      <td className="py-2 pr-3 font-medium" title={`${getAirportHoverLabel(leg.from)} to ${getAirportHoverLabel(leg.to)}`}>{leg.from}{" to "}{leg.to}</td>
                       <td className="py-2 pr-3">{String(leg.course).padStart(3, "0")}°</td>
                       <td className="py-2 pr-3">{leg.distanceNm.toFixed(1)} NM</td>
                       <td className="py-2 pr-3">{formatMinutesLabel(leg.legMinutes)}</td>
@@ -4003,6 +4177,9 @@ export default function FlightPlanner() {
                           : "-"}
                       </td>
                       <td className="py-2 pr-3">{leg.legFuel.toFixed(1)} gal</td>
+                      <td className="py-2 pr-3">{leg.fuelAfterLeg.toFixed(1)} gal</td>
+                      <td className="py-2 pr-3">{leg.actualFuelUplift > 0 ? `+${leg.actualFuelUplift.toFixed(1)} gal` : "-"}</td>
+                      <td className="py-2 pr-3">{leg.fuelAfterUplift.toFixed(1)} gal</td>
                       <td className="py-2">{leg.cumulativeNm.toFixed(1)} NM</td>
                     </tr>
                   ))}

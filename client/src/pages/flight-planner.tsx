@@ -945,7 +945,7 @@ export default function FlightPlanner() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const stored = window.localStorage.getItem(FLIGHT_PLANNER_ACTIVE_TAB_KEY);
-    if (stored && (FLIGHT_PLANNER_TABS as readonly string[]).includes(stored)) {
+    if (stored && stored !== "file" && (FLIGHT_PLANNER_TABS as readonly string[]).includes(stored)) {
       setActiveTab(stored as FlightPlannerTab);
     } else {
       setActiveTab("route");
@@ -3140,6 +3140,14 @@ export default function FlightPlanner() {
             <div className="text-sm text-slate-600">No saved plans yet.</div>
           ) : (
             <div className="flex gap-2 overflow-x-auto pb-1">
+              <Button
+                type="button"
+                size="sm"
+                className="min-w-[170px]"
+                onClick={resetForm}
+              >
+                Start new plan
+              </Button>
               {recentPlans.map((plan) => (
                 <button
                   key={`recent-${plan.id}`}
@@ -3398,19 +3406,21 @@ export default function FlightPlanner() {
               )}
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>Waypoints (optional)</Label>
+              <Label>Route Assist Waypoints (optional)</Label>
               <Input
                 value={waypointsInput}
                 onChange={(e) => setWaypointsInput(e.target.value.toUpperCase())}
                 placeholder="KISP KPVD (comma or space separated)"
               />
-              <p className="text-xs text-muted-foreground">Optional. Add ICAO codes separated by space or comma.</p>
+              <p className="text-xs text-muted-foreground">
+                Optional planning aids only. Add ICAO codes separated by space or comma, or use the helper suggestions below and edit as needed.
+              </p>
               {routeSuggestionQuery.isFetching && departureResolved && destinationResolved && (
-                <div className="text-xs text-muted-foreground">Calculating suggested waypoints...</div>
+                <div className="text-xs text-muted-foreground">Calculating route-assist waypoints...</div>
               )}
               {suggestedWaypoints.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Suggested:</span>
+                  <span className="text-muted-foreground">Route assist:</span>
                   {suggestedWaypoints.map((icao) => (
                     <Badge key={`waypoint-${icao}`} variant="secondary">
                       {icao}
@@ -3422,21 +3432,23 @@ export default function FlightPlanner() {
                     variant="outline"
                     onClick={() => setWaypointsInput(suggestedWaypoints.join(" "))}
                   >
-                    {waypoints.length > 0 ? "Replace with suggested" : "Use suggested"}
+                    {waypoints.length > 0 ? "Replace with assist" : "Use assist"}
                   </Button>
                 </div>
               )}
             </div>
             <div className="space-y-2 md:col-span-2">
-              <Label>Planned stops (optional)</Label>
+              <Label>Suggested Fuel Stops (optional)</Label>
               <Input
                 value={plannedStopsInput}
                 onChange={(e) => setPlannedStopsInput(e.target.value.toUpperCase())}
                 placeholder="KACT KTYR (fuel/meal stops)"
               />
-              <p className="text-xs text-muted-foreground">Use ICAO codes for planned fuel or rest stops.</p>
+              <p className="text-xs text-muted-foreground">
+                Optional planning aids for fuel or rest stops. Pilots can keep these, replace them, or ignore them entirely.
+              </p>
               {routeSuggestionQuery.isFetching && departureResolved && destinationResolved && (
-                <div className="text-xs text-muted-foreground">Estimating fuel-based stops...</div>
+                <div className="text-xs text-muted-foreground">Estimating suggested fuel stops...</div>
               )}
               {suggestedStops.length > 0 && (
                 <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -3452,7 +3464,7 @@ export default function FlightPlanner() {
                     variant="outline"
                     onClick={() => setPlannedStopsInput(suggestedStops.join(" "))}
                   >
-                    {plannedStops.length > 0 ? "Replace with suggested" : "Use suggested"}
+                    {plannedStops.length > 0 ? "Replace with suggested stops" : "Use suggested stops"}
                   </Button>
                 </div>
               )}
@@ -3468,7 +3480,7 @@ export default function FlightPlanner() {
                 <div>
                   <Label>Filed route (ATC / Leidos)</Label>
                   <p className="text-xs text-muted-foreground">
-                    Enter the actual enroute string you want to file, including fixes, VORs, airways, SIDs, STARs, or `DCT`.
+                    This is the route that actually matters for filing. Enter the enroute string you want to file, including fixes, VORs, airways, SIDs, STARs, or `DCT`.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -3501,7 +3513,7 @@ export default function FlightPlanner() {
                 className="min-h-[88px]"
               />
               <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 text-xs text-muted-foreground">
-                Full route preview: <span className="font-medium text-foreground">{routePreviewFull || "-"}</span>
+                Planning preview only: <span className="font-medium text-foreground">{routePreviewFull || "-"}</span>
               </div>
               {filingDraft.flightRules === "IFR" && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
@@ -3509,7 +3521,7 @@ export default function FlightPlanner() {
                     <div>
                       <div className="text-sm font-semibold">Leidos Route Assist</div>
                       <div className="text-xs text-muted-foreground">
-                        Pulls a recommended IFR route from Flight Service and lets you apply it directly to the filing field.
+                        Optional IFR routing help from Flight Service. Use it as a starting point, but review and edit the filed route yourself before filing.
                       </div>
                     </div>
                     {leidosRouteQuery.data?.environment && (
@@ -3535,7 +3547,7 @@ export default function FlightPlanner() {
                     {leidosRouteQuery.data?.route && (
                       <div className="rounded-md border border-emerald-200 bg-emerald-50/80 p-3">
                         <div className="text-xs font-medium uppercase tracking-wide text-emerald-700">
-                          System Recommended
+                          System Recommended Assist
                         </div>
                         <div className="mt-1 font-mono text-sm text-foreground break-words">{leidosRouteQuery.data.route}</div>
                         <div className="mt-2">
@@ -3588,7 +3600,7 @@ export default function FlightPlanner() {
                       !(leidosRouteQuery.data?.faaPreferredRoutes?.length) &&
                       !(leidosRouteQuery.data?.codedDepartureRoutes?.length) && (
                         <div className="text-xs text-muted-foreground">
-                          No Leidos route suggestions came back for this city pair yet. You can still file a custom route or use the airport-based builder above.
+                          No Leidos route assist suggestions came back for this city pair yet. You can still file a custom route or use the planning helpers above.
                         </div>
                       )}
                   </div>
@@ -3648,9 +3660,9 @@ export default function FlightPlanner() {
               </p>
             </div>
             <div className="md:col-span-2 rounded-lg border p-4 space-y-2">
-              <div className="font-semibold">Suggested routes</div>
+              <div className="font-semibold">Quick Route Helpers</div>
               <div className="text-xs text-muted-foreground">
-                Choose a quick routing hint. Midpoint adds a virtual waypoint for planning only.
+                Optional planning shortcuts only. Midpoint adds a virtual waypoint for planning and does not replace the route you choose to file.
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -3676,7 +3688,7 @@ export default function FlightPlanner() {
               )}
               {suggestedWaypoint && (
                 <div className="text-xs text-muted-foreground">
-                  Suggested waypoint: MID ({suggestedWaypoint.lat.toFixed(3)}, {suggestedWaypoint.lon.toFixed(3)})
+                  Planning helper waypoint: MID ({suggestedWaypoint.lat.toFixed(3)}, {suggestedWaypoint.lon.toFixed(3)})
                 </div>
               )}
             </div>
@@ -4721,7 +4733,18 @@ export default function FlightPlanner() {
           ) : savedPlans.length === 0 ? (
             <div className="text-sm text-muted-foreground">No flight plans saved yet.</div>
           ) : (
-            savedPlans.map((plan) => (
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={resetForm}>
+                  Start new plan
+                </Button>
+                {editingPlan && (
+                  <Button type="button" variant="outline" onClick={resetForm}>
+                    Leave saved plan
+                  </Button>
+                )}
+              </div>
+              {savedPlans.map((plan) => (
               <div key={plan.id} className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
@@ -4858,7 +4881,8 @@ export default function FlightPlanner() {
                   <div className="text-sm text-muted-foreground">Notes: {plan.notes}</div>
                 )}
               </div>
-            ))
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>

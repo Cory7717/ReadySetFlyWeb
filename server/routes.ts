@@ -1902,12 +1902,20 @@ function buildEffectiveValues(profile: any | null, baseType: any | null) {
   const overrideBurn = toNumber(profile?.fuelBurnOverrideGph);
   const overrideFuel = toNumber(profile?.usableFuelOverrideGal);
   const overrideWeight = toNumber(profile?.maxGrossWeightOverrideLb);
+  const cruise = overrideCruise ?? baseCruise;
+  const burn = overrideBurn ?? baseBurn;
+  const fuel = overrideFuel ?? baseFuel;
+  const estimatedStillAirRangeNm =
+    cruise && burn && fuel && burn > 0
+      ? Number(((fuel / burn) * cruise).toFixed(1))
+      : null;
 
   return {
-    cruise_ktas_effective: overrideCruise ?? baseCruise,
-    fuel_burn_gph_effective: overrideBurn ?? baseBurn,
-    usable_fuel_gal_effective: overrideFuel ?? baseFuel,
+    cruise_ktas_effective: cruise,
+    fuel_burn_gph_effective: burn,
+    usable_fuel_gal_effective: fuel,
     max_gross_weight_lb_effective: overrideWeight ?? baseWeight,
+    estimated_still_air_range_nm_effective: estimatedStillAirRangeNm,
   };
 }
 
@@ -2065,21 +2073,43 @@ function distanceNmBetween(lat1: number, lon1: number, lat2: number, lon2: numbe
   return radiusNm * c;
 }
 
-function findNearestStation(
+function findBestRouteAssistStation(
   stations: AirportSearchResult[],
+  departure: AirportSearchResult,
+  destination: AirportSearchResult,
   target: { lat: number; lon: number },
+  targetDistanceNm: number,
   exclude: Set<string>,
   maxRadiusNm: number
 ) {
-  let best: { station: AirportSearchResult; distanceNm: number } | null = null;
+  const directRouteNm = distanceNmBetween(departure.lat, departure.lon, destination.lat, destination.lon);
+  let best: { station: AirportSearchResult; score: number } | null = null;
   for (const station of stations) {
     if (!station?.icao) continue;
     if (exclude.has(station.icao)) continue;
     if (!Number.isFinite(station.lat) || !Number.isFinite(station.lon)) continue;
-    const distance = distanceNmBetween(target.lat, target.lon, station.lat, station.lon);
-    if (distance > maxRadiusNm) continue;
-    if (!best || distance < best.distanceNm) {
-      best = { station, distanceNm: distance };
+    const targetOffsetNm = distanceNmBetween(target.lat, target.lon, station.lat, station.lon);
+    if (targetOffsetNm > maxRadiusNm) continue;
+
+    const departureToStationNm = distanceNmBetween(departure.lat, departure.lon, station.lat, station.lon);
+    const stationToDestinationNm = distanceNmBetween(station.lat, station.lon, destination.lat, destination.lon);
+    const detourNm = Math.max(0, departureToStationNm + stationToDestinationNm - directRouteNm);
+    const alongTrackNm = directRouteNm > 0
+      ? (departureToStationNm ** 2 + directRouteNm ** 2 - stationToDestinationNm ** 2) / (2 * directRouteNm)
+      : 0;
+    const normalizedAlongTrackNm = Number.isFinite(alongTrackNm) ? alongTrackNm : 0;
+    const crossTrackNm = Math.sqrt(Math.max(0, departureToStationNm ** 2 - normalizedAlongTrackNm ** 2));
+
+    if (normalizedAlongTrackNm < -25 || normalizedAlongTrackNm > directRouteNm + 25) continue;
+
+    const score =
+      targetOffsetNm +
+      detourNm * 2 +
+      crossTrackNm * 1.75 +
+      Math.abs(normalizedAlongTrackNm - targetDistanceNm) * 1.25;
+
+    if (!best || score < best.score) {
+      best = { station, score };
     }
   }
   return best?.station ?? null;
@@ -7425,7 +7455,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Aircraft Profiles (User-specific)
   app.get("/api/aircraft/profiles", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const profiles = await storage.getAircraftProfilesByUser(userId);
       const typeIds = profiles.map((profile) => profile.typeId).filter(Boolean) as string[];
       const types = await storage.getAircraftTypesByIds(typeIds);
@@ -7444,7 +7477,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/aircraft/profiles", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const result = insertAircraftProfileSchema.safeParse(req.body);
       if (!result.success) {
         return res.status(400).json({ error: result.error.format() });
@@ -7460,7 +7496,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/aircraft/profiles/:id", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const existing = await storage.getAircraftProfileById(req.params.id);
       if (!existing) {
         return res.status(404).json({ error: "Aircraft profile not found" });
@@ -7486,7 +7525,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/aircraft/profiles/:id", isAuthenticated, aircraftProfileRateLimiter, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
       const existing = await storage.getAircraftProfileById(req.params.id);
       if (!existing) {
         return res.status(404).json({ error: "Aircraft profile not found" });
@@ -13503,14 +13545,23 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const candidateRadii = [60, 90, 120, 160];
 
       const pickAtFraction = (fraction: number) => {
+        const targetDistanceNm = routeDistanceNm * fraction;
         const target = destinationPoint(
           departureStation.lat,
           departureStation.lon,
           bearing,
-          routeDistanceNm * fraction
+          targetDistanceNm
         );
         for (const radius of candidateRadii) {
-          const candidate = findNearestStation(stations, target, used, radius);
+          const candidate = findBestRouteAssistStation(
+            stations,
+            departureStation,
+            destinationStation,
+            target,
+            targetDistanceNm,
+            used,
+            radius,
+          );
           if (candidate) {
             used.add(candidate.icao);
             return candidate.icao;

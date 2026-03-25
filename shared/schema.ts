@@ -2179,6 +2179,10 @@ export const flightPlans = pgTable("flight_plans", {
   filingAircraftColor: text("filing_aircraft_color"),
   filingPilotName: text("filing_pilot_name"),
   filingRemarks: text("filing_remarks"),
+  filingWakeTurbulence: text("filing_wake_turbulence"),
+  filingTypeOfFlight: text("filing_type_of_flight"),
+  filingSurveillanceEquipment: text("filing_surveillance_equipment"),
+  filingOtherInfo: text("filing_other_info"),
   filingTrueAirspeedKtas: integer("filing_true_airspeed_ktas"),
   filingPlannedAltitudeFt: integer("filing_planned_altitude_ft"),
   filingEstimatedEnrouteMinutes: integer("filing_estimated_enroute_minutes"),
@@ -2242,6 +2246,10 @@ export const aircraftProfiles = pgTable("aircraft_profiles", {
   filingAircraftColorDefault: text("filing_aircraft_color_default"),
   filingPilotNameDefault: text("filing_pilot_name_default"),
   filingRemarksDefault: text("filing_remarks_default"),
+  filingWakeTurbulenceDefault: text("filing_wake_turbulence_default"),
+  filingTypeOfFlightDefault: text("filing_type_of_flight_default"),
+  filingSurveillanceEquipmentDefault: text("filing_surveillance_equipment_default"),
+  filingOtherInfoDefault: text("filing_other_info_default"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -2619,6 +2627,10 @@ export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   fuelOnBoard: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   fuelRequired: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().or(z.literal('')),
   filingFlightRules: z.enum(["VFR", "IFR", "DVFR"]).optional(),
+  filingWakeTurbulence: z.string().trim().max(20).optional().nullable(),
+  filingTypeOfFlight: z.string().trim().max(10).optional().nullable(),
+  filingSurveillanceEquipment: z.string().trim().max(20).optional().nullable(),
+  filingOtherInfo: z.string().trim().max(1000).optional().nullable(),
   filingTrueAirspeedKtas: z.coerce.number().int().min(0).optional().nullable(),
   filingPlannedAltitudeFt: z.coerce.number().int().min(0).optional().nullable(),
   filingEstimatedEnrouteMinutes: z.coerce.number().int().min(0).optional().nullable(),
@@ -2659,6 +2671,10 @@ export const insertAircraftProfileSchema = createInsertSchema(aircraftProfiles).
   filingAircraftColorDefault: z.string().trim().max(50).optional().nullable(),
   filingPilotNameDefault: z.string().trim().max(120).optional().nullable(),
   filingRemarksDefault: z.string().trim().max(500).optional().nullable(),
+  filingWakeTurbulenceDefault: z.string().trim().max(20).optional().nullable(),
+  filingTypeOfFlightDefault: z.string().trim().max(10).optional().nullable(),
+  filingSurveillanceEquipmentDefault: z.string().trim().max(20).optional().nullable(),
+  filingOtherInfoDefault: z.string().trim().max(1000).optional().nullable(),
 });
 
 export const insertApproachPlateSchema = createInsertSchema(approachPlates).omit({

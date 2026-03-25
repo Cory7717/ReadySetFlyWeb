@@ -39,6 +39,18 @@ export type LeidosFlightServiceDiagnostics = {
   actionPaths: Record<FlightPlanFilingAction, string | null>;
 };
 
+export type LeidosRouteSearchResult = {
+  provider: string;
+  environment: LeidosEnvironment;
+  departure: string;
+  destination: string;
+  route: string | null;
+  atcRecentIFRRoutes: string[];
+  codedDepartureRoutes: string[];
+  faaPreferredRoutes: string[];
+  warnings: string[];
+};
+
 export interface FlightPlanFilingProvider {
   stageAction(plan: FlightPlan, action: FlightPlanFilingAction): Promise<FilingServiceResult>;
 }
@@ -227,7 +239,7 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("flightDuration", minutesToIsoDuration(plan.filingEstimatedEnrouteMinutes));
     append("speedKnots", plan.filingTrueAirspeedKtas);
     append("aircraftType", plan.aircraftType);
-    append("wakeTurbulence", config.wakeTurbulence);
+    append("wakeTurbulence", plan.filingWakeTurbulence || config.wakeTurbulence);
     append("aircraftEquipment", plan.filingEquipment);
     append("route", plan.route || "DCT");
     append("remarks", plan.filingRemarks || plan.notes);
@@ -235,11 +247,11 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("pilotData", plan.filingPilotName);
     append("peopleOnBoardExtended", plan.filingSoulsOnBoard);
     append("aircraftColor", plan.filingAircraftColor);
-    append("typeOfFlight", config.typeOfFlight);
-    append("surveillanceEquipment", config.surveillanceEquipment);
+    append("typeOfFlight", plan.filingTypeOfFlight || config.typeOfFlight);
+    append("surveillanceEquipment", plan.filingSurveillanceEquipment || config.surveillanceEquipment);
     append("pilotInCommandExtended", plan.filingPilotName);
     append("suppRemarksExtended", plan.filingRemarks || plan.notes);
-    append("otherInfo", config.otherInfo);
+    append("otherInfo", plan.filingOtherInfo || config.otherInfo);
     appendLeidosAltitudeFields(params, plan.filingPlannedAltitudeFt);
     if (action === "amend") {
       append("versionStamp", extractVersionStamp(plan));
@@ -263,6 +275,59 @@ const parseProviderResponse = async (response: Response) => {
   }
   const text = await response.text();
   return { text };
+};
+
+export const searchLeidosRoute = async ({
+  departure,
+  destination,
+  altitudeFt,
+}: {
+  departure: string;
+  destination: string;
+  altitudeFt?: number | null;
+}): Promise<LeidosRouteSearchResult> => {
+  const config = getLeidosFlightServiceConfig();
+  if (!config.username || !config.password) {
+    throw new Error("Leidos credentials are not configured.");
+  }
+
+  const baseUrl = config.baseUrl.endsWith("/") ? config.baseUrl : `${config.baseUrl}/`;
+  const url = new URL("util/routeSearch", baseUrl);
+  url.searchParams.set("departure", departure.trim().toUpperCase());
+  url.searchParams.set("destination", destination.trim().toUpperCase());
+  url.searchParams.set("searchOption", "SYSTEM_RECOMMENDED");
+  if (altitudeFt && Number.isFinite(altitudeFt) && altitudeFt > 0 && altitudeFt < 18000) {
+    url.searchParams.set("searchPathOption", "LOW_ALTITUDE_ONLY");
+  }
+
+  const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "User-Agent": config.userAgent,
+    },
+  });
+
+  const parsed = await parseProviderResponse(response);
+  if (!response.ok) {
+    throw new Error(`Leidos route search failed with status ${response.status}`);
+  }
+
+  const asStringArray = (value: unknown) =>
+    Array.isArray(value) ? value.map((item) => String(item || "").trim()).filter(Boolean) : [];
+
+  return {
+    provider: "Leidos Flight Service",
+    environment: config.environment,
+    departure: departure.trim().toUpperCase(),
+    destination: destination.trim().toUpperCase(),
+    route: String((parsed.route as string | undefined) || "").trim() || null,
+    atcRecentIFRRoutes: asStringArray(parsed.atcRecentIFRRoutes),
+    codedDepartureRoutes: asStringArray(parsed.codedDepartureRoutes),
+    faaPreferredRoutes: asStringArray(parsed.faaPreferredRoutes),
+    warnings: asStringArray(parsed.returnCodedMessage),
+  };
 };
 
 const buildStagedFallbackResult = (

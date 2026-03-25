@@ -50,6 +50,7 @@ import { aiToolsRouter } from "./routes/aiTools";
 import {
   flightPlanFilingProvider,
   getLeidosFlightServiceDiagnostics,
+  searchLeidosRoute,
   validateFlightPlanForAction,
   verifyLeidosWebhookAuthorization,
 } from "./services/flight-plan-filing/provider";
@@ -18820,6 +18821,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     soulsOnBoard: z.string().trim().optional().nullable(),
     aircraftColor: z.string().trim().optional().nullable(),
     pilotName: z.string().trim().optional().nullable(),
+    wakeTurbulence: z.string().trim().optional().nullable(),
+    typeOfFlight: z.string().trim().optional().nullable(),
+    surveillanceEquipment: z.string().trim().optional().nullable(),
+    otherInfo: z.string().trim().optional().nullable(),
     remarks: z.string().trim().optional().nullable(),
   });
 
@@ -18934,6 +18939,29 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to build filing preview:", error);
       res.status(500).json({ error: "Failed to build filing preview" });
+    }
+  });
+
+  app.get("/api/flight-plans/route-search", isAuthenticated, async (req: any, res) => {
+    try {
+      const departure = typeof req.query.departure === "string" ? req.query.departure.trim().toUpperCase() : "";
+      const destination = typeof req.query.destination === "string" ? req.query.destination.trim().toUpperCase() : "";
+      const altitudeRaw = typeof req.query.altitudeFt === "string" ? Number(req.query.altitudeFt) : null;
+      const altitudeFt = Number.isFinite(altitudeRaw) ? altitudeRaw : null;
+
+      if (!departure || !destination) {
+        return res.status(400).json({ error: "Departure and destination are required." });
+      }
+
+      if (!/^[A-Z0-9]{3,4}$/.test(departure) || !/^[A-Z0-9]{3,4}$/.test(destination)) {
+        return res.status(400).json({ error: "Departure and destination must be valid ICAO/IATA-style identifiers." });
+      }
+
+      const payload = await searchLeidosRoute({ departure, destination, altitudeFt });
+      res.json(payload);
+    } catch (error: any) {
+      console.error("Failed to search Leidos route:", error);
+      res.status(500).json({ error: error?.message || "Failed to search Leidos route" });
     }
   });
 

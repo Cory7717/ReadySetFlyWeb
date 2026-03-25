@@ -176,6 +176,10 @@ type AircraftProfile = {
   filingAircraftColorDefault?: string | null;
   filingPilotNameDefault?: string | null;
   filingRemarksDefault?: string | null;
+  filingWakeTurbulenceDefault?: string | null;
+  filingTypeOfFlightDefault?: string | null;
+  filingSurveillanceEquipmentDefault?: string | null;
+  filingOtherInfoDefault?: string | null;
 };
 
 type AircraftType = {
@@ -389,6 +393,18 @@ type AirportFrequencyResponse = {
   frequencies: AirportFrequency[];
 };
 
+type LeidosRouteSearchResponse = {
+  provider: string;
+  environment: "lab" | "production";
+  departure: string;
+  destination: string;
+  route: string | null;
+  atcRecentIFRRoutes: string[];
+  codedDepartureRoutes: string[];
+  faaPreferredRoutes: string[];
+  warnings: string[];
+};
+
 type ContextualTool = {
   id: string;
   title: string;
@@ -588,6 +604,12 @@ function formatDateTimeLocal(date: Date, timeZone: string) {
   } catch {
     return date.toISOString().slice(0, 16);
   }
+}
+
+function toUtcIso(value: string, timeZone: string) {
+  const utcDate = zonedDateTimeToUtc(value, timeZone);
+  if (utcDate) return utcDate.toISOString();
+  return new Date(value).toISOString();
 }
 
 const checklistDefaults = {
@@ -1049,6 +1071,10 @@ export default function FlightPlanner() {
     aircraftColor: "",
     pilotName: "",
     remarks: "",
+    wakeTurbulence: "MEDIUM",
+    typeOfFlight: "G",
+    surveillanceEquipment: "N",
+    otherInfo: "",
   });
   const [checklist, setChecklist] = useState(checklistDefaults);
   const [departureSuggestions, setDepartureSuggestions] = useState<AirportSearchResult[]>([]);
@@ -1426,7 +1452,11 @@ export default function FlightPlanner() {
     selectedProfile?.filingSoulsOnBoardDefault ||
     selectedProfile?.filingAircraftColorDefault ||
     selectedProfile?.filingPilotNameDefault ||
-    selectedProfile?.filingRemarksDefault
+    selectedProfile?.filingRemarksDefault ||
+    selectedProfile?.filingWakeTurbulenceDefault ||
+    selectedProfile?.filingTypeOfFlightDefault ||
+    selectedProfile?.filingSurveillanceEquipmentDefault ||
+    selectedProfile?.filingOtherInfoDefault
   );
   const planLimitReached = isFree && !editingPlan && savedPlans.length >= 1;
   const savePlanActionRef = useRef<() => Promise<void>>(async () => {});
@@ -1443,6 +1473,10 @@ export default function FlightPlanner() {
       aircraftColor: selectedProfile.filingAircraftColorDefault?.trim() || current.aircraftColor,
       pilotName: selectedProfile.filingPilotNameDefault?.trim() || current.pilotName,
       remarks: selectedProfile.filingRemarksDefault?.trim() || current.remarks,
+      wakeTurbulence: selectedProfile.filingWakeTurbulenceDefault?.trim() || current.wakeTurbulence,
+      typeOfFlight: selectedProfile.filingTypeOfFlightDefault?.trim() || current.typeOfFlight,
+      surveillanceEquipment: selectedProfile.filingSurveillanceEquipmentDefault?.trim() || current.surveillanceEquipment,
+      otherInfo: selectedProfile.filingOtherInfoDefault?.trim() || current.otherInfo,
     }));
   };
 
@@ -1476,6 +1510,11 @@ export default function FlightPlanner() {
     selectedType.max_gross_weight_lb_effective ??
     FALLBACK_TYPE.max_gross_weight_lb_effective ??
     2400;
+  const referenceFuelCapacityGallons =
+    selectedProfile?.usable_fuel_gal_effective ??
+    selectedType.usable_fuel_gal_effective ??
+    FALLBACK_TYPE.usable_fuel_gal_effective ??
+    null;
 
   const routeSuggestionQuery = useQuery<RouteSuggestionResponse>({
     queryKey: [
@@ -1515,6 +1554,40 @@ export default function FlightPlanner() {
       ICAO_REGEX.test(departureResolved.trim().toUpperCase()) &&
       ICAO_REGEX.test(destinationResolved.trim().toUpperCase()),
     staleTime: 1000 * 60 * 10,
+  });
+
+  const leidosRouteQuery = useQuery<LeidosRouteSearchResponse>({
+    queryKey: [
+      "/api/flight-plans/route-search",
+      departureResolved,
+      destinationResolved,
+      plannedAltitude,
+      filingDraft.flightRules,
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        departure: departureResolved.trim().toUpperCase(),
+        destination: destinationResolved.trim().toUpperCase(),
+      });
+      if (plannedAltitude) {
+        params.set("altitudeFt", plannedAltitude);
+      }
+      const res = await fetch(apiUrl(`/api/flight-plans/route-search?${params.toString()}`), {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(payload?.error || "Failed to load Leidos route suggestions");
+      }
+      return res.json();
+    },
+    enabled:
+      filingDraft.flightRules === "IFR" &&
+      Boolean(departureResolved && destinationResolved) &&
+      ICAO_REGEX.test(departureResolved.trim().toUpperCase()) &&
+      ICAO_REGEX.test(destinationResolved.trim().toUpperCase()),
+    staleTime: 1000 * 60 * 10,
+    retry: false,
   });
 
   const suggestedWaypoints = routeSuggestionQuery.data?.waypoints ?? [];
@@ -1826,6 +1899,21 @@ export default function FlightPlanner() {
     if (Number.isFinite(onboard) && onboard > 0) return onboard;
     return planningFuel;
   }, [form.fuelOnBoard, planningFuel]);
+  const fuelOnBoardCapacityWarning = useMemo(() => {
+    const onboard = Number(form.fuelOnBoard);
+    if (!Number.isFinite(onboard) || onboard <= 0) return null;
+    if (!Number.isFinite(planningFuel) || planningFuel <= 0) return null;
+    if (onboard <= planningFuel) return null;
+    return `Fuel on board exceeds usable fuel capacity by ${(onboard - planningFuel).toFixed(1)} gal. Reduce the value to ${planningFuel.toFixed(1)} gal or less.`;
+  }, [form.fuelOnBoard, planningFuel]);
+  const usableFuelCapacityWarning = useMemo(() => {
+    const overrideFuel = Number(customProfile.usableFuelOverrideGal);
+    if (!Number.isFinite(overrideFuel) || overrideFuel <= 0) return null;
+    if (useManual) return null;
+    if (!Number.isFinite(referenceFuelCapacityGallons) || !referenceFuelCapacityGallons || referenceFuelCapacityGallons <= 0) return null;
+    if (overrideFuel <= referenceFuelCapacityGallons) return null;
+    return `Entered usable fuel exceeds the current aircraft reference value by ${(overrideFuel - referenceFuelCapacityGallons).toFixed(1)} gal. Verify the RSF library/profile value before planning with it.`;
+  }, [customProfile.usableFuelOverrideGal, useManual, referenceFuelCapacityGallons]);
   const fuelSurplus = fuelAvailableGallons - totalFuel;
   const surplusMinutes = planningBurn > 0
     ? (fuelSurplus / planningBurn) * 60
@@ -1883,6 +1971,10 @@ export default function FlightPlanner() {
     soulsOnBoard: filingDraft.soulsOnBoard.trim() || null,
     aircraftColor: filingDraft.aircraftColor.trim() || null,
     pilotName: filingDraft.pilotName.trim() || null,
+    wakeTurbulence: filingDraft.wakeTurbulence.trim() || null,
+    typeOfFlight: filingDraft.typeOfFlight.trim() || null,
+    surveillanceEquipment: filingDraft.surveillanceEquipment.trim() || null,
+    otherInfo: filingDraft.otherInfo.trim() || null,
     remarks: [filingDraft.remarks.trim(), form.notes.trim()].filter(Boolean).join(" | ") || "Prepared in RSF",
   }), [
     filingDraft,
@@ -2546,6 +2638,10 @@ export default function FlightPlanner() {
         aircraftColor: "",
         pilotName: "",
         remarks: "",
+        wakeTurbulence: "MEDIUM",
+        typeOfFlight: "G",
+        surveillanceEquipment: "N",
+        otherInfo: "",
       });
     };
 
@@ -2614,12 +2710,6 @@ export default function FlightPlanner() {
     filingPreviewMutation.mutate();
   };
 
-  const toUtcIso = (value: string, timeZone: string) => {
-    const utcDate = zonedDateTimeToUtc(value, timeZone);
-    if (utcDate) return utcDate.toISOString();
-    return new Date(value).toISOString();
-  };
-
   const createPlanMutation = useMutation({
     mutationFn: async () => {
         const payload = {
@@ -2633,6 +2723,10 @@ export default function FlightPlanner() {
           filingAircraftColor: filingDraft.aircraftColor.trim() || null,
           filingPilotName: filingDraft.pilotName.trim() || null,
           filingRemarks: filingDraft.remarks.trim() || null,
+          filingWakeTurbulence: filingDraft.wakeTurbulence.trim() || null,
+          filingTypeOfFlight: filingDraft.typeOfFlight.trim() || null,
+          filingSurveillanceEquipment: filingDraft.surveillanceEquipment.trim() || null,
+          filingOtherInfo: filingDraft.otherInfo.trim() || null,
           filingTrueAirspeedKtas: Math.round(planningCruise) || null,
           filingPlannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
           filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
@@ -2671,6 +2765,10 @@ export default function FlightPlanner() {
         filingAircraftColor: filingDraft.aircraftColor.trim() || null,
         filingPilotName: filingDraft.pilotName.trim() || null,
         filingRemarks: filingDraft.remarks.trim() || null,
+        filingWakeTurbulence: filingDraft.wakeTurbulence.trim() || null,
+        filingTypeOfFlight: filingDraft.typeOfFlight.trim() || null,
+        filingSurveillanceEquipment: filingDraft.surveillanceEquipment.trim() || null,
+        filingOtherInfo: filingDraft.otherInfo.trim() || null,
         filingTrueAirspeedKtas: Math.round(planningCruise) || null,
         filingPlannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
         filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
@@ -2883,6 +2981,10 @@ export default function FlightPlanner() {
       aircraftColor: editingPlan.filingAircraftColor || current.aircraftColor,
       pilotName: editingPlan.filingPilotName || current.pilotName,
       remarks: editingPlan.filingRemarks || editingPlan.notes || current.remarks,
+      wakeTurbulence: editingPlan.filingWakeTurbulence || current.wakeTurbulence,
+      typeOfFlight: editingPlan.filingTypeOfFlight || current.typeOfFlight,
+      surveillanceEquipment: editingPlan.filingSurveillanceEquipment || current.surveillanceEquipment,
+      otherInfo: editingPlan.filingOtherInfo || current.otherInfo,
     }));
     const normalizedSavedRoute = normalizeRouteText(editingPlan.route || "");
     const savedRouteTokens = normalizedSavedRoute ? normalizedSavedRoute.split(/\s+/) : [];
@@ -2926,6 +3028,10 @@ export default function FlightPlanner() {
       aircraftColor: current.aircraftColor.trim() || selectedProfile.filingAircraftColorDefault?.trim() || current.aircraftColor,
       pilotName: current.pilotName.trim() || selectedProfile.filingPilotNameDefault?.trim() || current.pilotName,
       remarks: current.remarks.trim() || selectedProfile.filingRemarksDefault?.trim() || current.remarks,
+      wakeTurbulence: current.wakeTurbulence.trim() || selectedProfile.filingWakeTurbulenceDefault?.trim() || current.wakeTurbulence,
+      typeOfFlight: current.typeOfFlight.trim() || selectedProfile.filingTypeOfFlightDefault?.trim() || current.typeOfFlight,
+      surveillanceEquipment: current.surveillanceEquipment.trim() || selectedProfile.filingSurveillanceEquipmentDefault?.trim() || current.surveillanceEquipment,
+      otherInfo: current.otherInfo.trim() || selectedProfile.filingOtherInfoDefault?.trim() || current.otherInfo,
     }));
   }, [selectedProfile, editingPlan]);
 
@@ -3377,6 +3483,91 @@ export default function FlightPlanner() {
               <div className="rounded-md border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 text-xs text-muted-foreground">
                 Full route preview: <span className="font-medium text-foreground">{routePreviewFull || "-"}</span>
               </div>
+              {filingDraft.flightRules === "IFR" && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold">Leidos Route Assist</div>
+                      <div className="text-xs text-muted-foreground">
+                        Pulls a recommended IFR route from Flight Service and lets you apply it directly to the filing field.
+                      </div>
+                    </div>
+                    {leidosRouteQuery.data?.environment && (
+                      <Badge variant="secondary">{leidosRouteQuery.data.environment}</Badge>
+                    )}
+                  </div>
+                  <div className="mt-3 space-y-3 text-sm">
+                    {leidosRouteQuery.isFetching && (
+                      <div className="text-xs text-muted-foreground">Checking Leidos for recommended routes...</div>
+                    )}
+                    {leidosRouteQuery.error && (
+                      <Alert variant="destructive">
+                        <AlertDescription>
+                          {(leidosRouteQuery.error as Error).message || "Leidos route search is unavailable right now."}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {leidosRouteQuery.data?.route && (
+                      <div className="rounded-md border border-emerald-200 bg-emerald-50/80 p-3">
+                        <div className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+                          System Recommended
+                        </div>
+                        <div className="mt-1 font-mono text-sm text-foreground break-words">{leidosRouteQuery.data.route}</div>
+                        <div className="mt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => setForm((current) => ({ ...current, route: leidosRouteQuery.data?.route || "" }))}
+                          >
+                            Use recommended route
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    {[
+                      { title: "Recent ATC IFR Routes", routes: leidosRouteQuery.data?.atcRecentIFRRoutes || [] },
+                      { title: "FAA Preferred Routes", routes: leidosRouteQuery.data?.faaPreferredRoutes || [] },
+                      { title: "Coded Departure Routes", routes: leidosRouteQuery.data?.codedDepartureRoutes || [] },
+                    ].map((group) => (
+                      group.routes.length > 0 ? (
+                        <div key={group.title} className="space-y-2">
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{group.title}</div>
+                          <div className="grid gap-2">
+                            {group.routes.slice(0, 3).map((route) => (
+                              <div key={`${group.title}-${route}`} className="flex flex-wrap items-start justify-between gap-2 rounded-md border bg-background px-3 py-2">
+                                <div className="font-mono text-xs text-foreground break-words">{route}</div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setForm((current) => ({ ...current, route }))}
+                                >
+                                  Use route
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null
+                    ))}
+                    {leidosRouteQuery.data?.warnings?.length ? (
+                      <div className="rounded-md border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-900">
+                        {leidosRouteQuery.data.warnings.join(" ")}
+                      </div>
+                    ) : null}
+                    {!leidosRouteQuery.isFetching &&
+                      !leidosRouteQuery.error &&
+                      !leidosRouteQuery.data?.route &&
+                      !(leidosRouteQuery.data?.atcRecentIFRRoutes?.length) &&
+                      !(leidosRouteQuery.data?.faaPreferredRoutes?.length) &&
+                      !(leidosRouteQuery.data?.codedDepartureRoutes?.length) && (
+                        <div className="text-xs text-muted-foreground">
+                          No Leidos route suggestions came back for this city pair yet. You can still file a custom route or use the airport-based builder above.
+                        </div>
+                      )}
+                  </div>
+                </div>
+              )}
             </div>
           <div className="space-y-2">
             <Label>Alternate (optional)</Label>
@@ -3522,6 +3713,18 @@ export default function FlightPlanner() {
             </div>
           </div>
 
+          {(fuelOnBoardCapacityWarning || usableFuelCapacityWarning) && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                <div className="font-semibold mb-1">Fuel capacity warning</div>
+                <div className="space-y-1 text-sm">
+                  {fuelOnBoardCapacityWarning && <div>{fuelOnBoardCapacityWarning}</div>}
+                  {usableFuelCapacityWarning && <div>{usableFuelCapacityWarning}</div>}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {altitudeRisks.length > 0 && (
             <Alert>
               <AlertDescription>
@@ -3623,6 +3826,9 @@ export default function FlightPlanner() {
                 placeholder="40"
                 type="number"
               />
+              {usableFuelCapacityWarning && (
+                <p className="text-xs text-red-600">{usableFuelCapacityWarning}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Max Gross Weight (lb)</Label>
@@ -4167,6 +4373,38 @@ export default function FlightPlanner() {
                     value={filingDraft.pilotName}
                     onChange={(e) => setFilingDraft((current) => ({ ...current, pilotName: e.target.value }))}
                     placeholder="Pilot name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Wake Turbulence</Label>
+                  <Input
+                    value={filingDraft.wakeTurbulence}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, wakeTurbulence: e.target.value.toUpperCase() }))}
+                    placeholder="MEDIUM"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Type Of Flight</Label>
+                  <Input
+                    value={filingDraft.typeOfFlight}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, typeOfFlight: e.target.value.toUpperCase() }))}
+                    placeholder="G"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Surveillance Equipment</Label>
+                  <Input
+                    value={filingDraft.surveillanceEquipment}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, surveillanceEquipment: e.target.value.toUpperCase() }))}
+                    placeholder="N"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Other ICAO Info</Label>
+                  <Input
+                    value={filingDraft.otherInfo}
+                    onChange={(e) => setFilingDraft((current) => ({ ...current, otherInfo: e.target.value.toUpperCase() }))}
+                    placeholder="PBN/... NAV/... DAT/... SUR/..."
                   />
                 </div>
               </div>

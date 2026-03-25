@@ -35,6 +35,10 @@ type AircraftProfile = {
   filingAircraftColorDefault?: string | null;
   filingPilotNameDefault?: string | null;
   filingRemarksDefault?: string | null;
+  filingWakeTurbulenceDefault?: string | null;
+  filingTypeOfFlightDefault?: string | null;
+  filingSurveillanceEquipmentDefault?: string | null;
+  filingOtherInfoDefault?: string | null;
   cruise_ktas_effective?: number | null;
   fuel_burn_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
@@ -54,6 +58,10 @@ const emptyForm = {
   filingAircraftColorDefault: "",
   filingPilotNameDefault: "",
   filingRemarksDefault: "",
+  filingWakeTurbulenceDefault: "MEDIUM",
+  filingTypeOfFlightDefault: "G",
+  filingSurveillanceEquipmentDefault: "N",
+  filingOtherInfoDefault: "",
 };
 
 export default function MyAircraft() {
@@ -92,6 +100,10 @@ export default function MyAircraft() {
         filingAircraftColorDefault: form.filingAircraftColorDefault.trim() || null,
         filingPilotNameDefault: form.filingPilotNameDefault.trim() || null,
         filingRemarksDefault: form.filingRemarksDefault.trim() || null,
+        filingWakeTurbulenceDefault: form.filingWakeTurbulenceDefault.trim() || null,
+        filingTypeOfFlightDefault: form.filingTypeOfFlightDefault.trim() || null,
+        filingSurveillanceEquipmentDefault: form.filingSurveillanceEquipmentDefault.trim() || null,
+        filingOtherInfoDefault: form.filingOtherInfoDefault.trim() || null,
       };
       if (editingId) {
         const res = await apiRequest("PUT", `/api/aircraft/profiles/${editingId}`, payload);
@@ -217,6 +229,22 @@ export default function MyAircraft() {
                 <Label>Default Filing Remarks</Label>
                 <Input value={form.filingRemarksDefault} onChange={(e) => setForm({ ...form, filingRemarksDefault: e.target.value })} placeholder="Standard remarks for this aircraft" />
               </div>
+              <div className="space-y-2">
+                <Label>Wake Turbulence</Label>
+                <Input value={form.filingWakeTurbulenceDefault} onChange={(e) => setForm({ ...form, filingWakeTurbulenceDefault: e.target.value.toUpperCase() })} placeholder="MEDIUM" />
+              </div>
+              <div className="space-y-2">
+                <Label>Type Of Flight</Label>
+                <Input value={form.filingTypeOfFlightDefault} onChange={(e) => setForm({ ...form, filingTypeOfFlightDefault: e.target.value.toUpperCase() })} placeholder="G" />
+              </div>
+              <div className="space-y-2">
+                <Label>Surveillance Equipment</Label>
+                <Input value={form.filingSurveillanceEquipmentDefault} onChange={(e) => setForm({ ...form, filingSurveillanceEquipmentDefault: e.target.value.toUpperCase() })} placeholder="N" />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Other ICAO Info</Label>
+                <Input value={form.filingOtherInfoDefault} onChange={(e) => setForm({ ...form, filingOtherInfoDefault: e.target.value.toUpperCase() })} placeholder="PBN/... NAV/... SUR/..." />
+              </div>
             </div>
           </div>
 
@@ -270,6 +298,10 @@ export default function MyAircraft() {
                           filingAircraftColorDefault: profile.filingAircraftColorDefault || "",
                           filingPilotNameDefault: profile.filingPilotNameDefault || "",
                           filingRemarksDefault: profile.filingRemarksDefault || "",
+                          filingWakeTurbulenceDefault: profile.filingWakeTurbulenceDefault || "MEDIUM",
+                          filingTypeOfFlightDefault: profile.filingTypeOfFlightDefault || "G",
+                          filingSurveillanceEquipmentDefault: profile.filingSurveillanceEquipmentDefault || "N",
+                          filingOtherInfoDefault: profile.filingOtherInfoDefault || "",
                         });
                       }}
                     >
@@ -285,6 +317,9 @@ export default function MyAircraft() {
                 </div>
                 <div className="text-xs text-muted-foreground">
                   Filing defaults: Equip {profile.filingEquipmentDefault || "-"} | Souls {profile.filingSoulsOnBoardDefault || "-"} | PIC {profile.filingPilotNameDefault || "-"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  ICAO ops: Wake {profile.filingWakeTurbulenceDefault || "-"} | Type {profile.filingTypeOfFlightDefault || "-"} | Surveillance {profile.filingSurveillanceEquipmentDefault || "-"}
                 </div>
               </div>
             ))

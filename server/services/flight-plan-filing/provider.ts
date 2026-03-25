@@ -507,7 +507,11 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
 
     const parsedResponse = await parseProviderResponse(response);
     if (!response.ok) {
-      throw new Error(`Leidos ${action.toUpperCase()} request failed with status ${response.status}`);
+      const responseDetail =
+        typeof parsedResponse === "string"
+          ? parsedResponse
+          : JSON.stringify(parsedResponse);
+      throw new Error(`Leidos ${action.toUpperCase()} request failed with status ${response.status}${responseDetail ? `: ${responseDetail}` : ""}`);
     }
 
     const providerPlanId = String(

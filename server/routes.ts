@@ -19264,7 +19264,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       });
     } catch (error) {
       console.error("Failed to stage flight plan filing action:", error);
-      res.status(500).json({ error: "Failed to stage flight plan filing action" });
+      res.status(500).json({
+        error: error instanceof Error && error.message
+          ? error.message
+          : "Failed to stage flight plan filing action",
+      });
     }
   });
 

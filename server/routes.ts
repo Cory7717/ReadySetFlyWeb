@@ -55,6 +55,7 @@ import {
   verifyLeidosWebhookAuthorization,
 } from "./services/flight-plan-filing/provider";
 import { getCfiVerificationReadiness } from "@shared/cfi-verification";
+import { analyzeFiledRoute } from "@shared/flight-plan-route";
 import { buildWeeklyDigestProfile, type WeeklyDigestSegment } from "./weeklyEmailPersonalization";
 import {
   fetchMetar,
@@ -1977,6 +1978,11 @@ const FAA_TFR_ARCGIS_URLS = [
   "https://gis.faa.gov/arcgis/rest/services/TFMS/TFR/MapServer/0/query",
 ].filter((value, index, arr) => value && arr.indexOf(value) === index);
 let swimTokenCache: { token: string; expiresAt: number } | null = null;
+const COASTAL_STATE_CODES = new Set([
+  "AK", "AL", "CA", "CT", "DE", "FL", "GA", "HI", "LA", "MA", "MD", "ME", "MI",
+  "MN", "MS", "NC", "NH", "NJ", "NY", "OH", "OR", "PA", "RI", "SC", "TX", "VA",
+  "WA", "WI",
+]);
 
 const getTfmsCache = <T,>(key: string): T | null => {
   const entry = tfmsCache.get(key);
@@ -13468,6 +13474,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         destination,
         waypoints: [],
         plannedStops: [],
+        coastlineWaypoints: [],
+        coastlinePlannedStops: [],
         meta: null,
       };
       if (!/^[A-Z0-9]{3,4}$/.test(departure) || !/^[A-Z0-9]{3,4}$/.test(destination)) {
@@ -13484,12 +13492,41 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const stations = await loadStationCache();
       const referenceMap = await loadAirportReferenceCache().catch(() => null);
+      const runwayMap = await loadRunwayCache().catch(() => null);
+      const maxRunwayLengthFor = (icao: string) => {
+        if (!runwayMap) return null;
+        const candidates = buildIcaoCandidates(icao);
+        for (const candidate of candidates) {
+          const runways = runwayMap.get(candidate);
+          if (!runways?.length) continue;
+          const lengths = runways
+            .map((runway) => runway.lengthFt)
+            .filter((value): value is number => Number.isFinite(value ?? NaN));
+          if (lengths.length > 0) {
+            return Math.max(...lengths);
+          }
+        }
+        return null;
+      };
+      const hasAnyRunway = (icao: string) => {
+        if (!runwayMap) return true;
+        return maxRunwayLengthFor(icao) !== null;
+      };
+      const hasFuelStopRunway = (icao: string) => {
+        if (!runwayMap) return true;
+        const maxRunway = maxRunwayLengthFor(icao);
+        return maxRunway !== null && maxRunway >= 2500;
+      };
       const routableStations = referenceMap
         ? stations.filter((station) => {
             if (!station?.icao) return false;
-            return referenceMap.has(station.icao) || (station.icao.startsWith("K") && referenceMap.has(station.icao.slice(1)));
+            const inReference =
+              referenceMap.has(station.icao) ||
+              (station.icao.startsWith("K") && referenceMap.has(station.icao.slice(1)));
+            return inReference && hasAnyRunway(station.icao);
           })
         : stations;
+      const fuelStopStations = routableStations.filter((station) => hasFuelStopRunway(station.icao));
       const findStation = (value: string) => {
         const candidates = buildIcaoCandidates(value);
         const station = stations.find((entry) => candidates.includes(entry.icao));
@@ -13549,12 +13586,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         destinationStation.lat,
         destinationStation.lon
       );
-      const used = new Set<string>([departureStation.icao, destinationStation.icao]);
-      const plannedStops: string[] = [];
-      const waypoints: string[] = [];
-      const candidateRadii = [60, 90, 120, 160];
+      const buildFractions = (count: number) =>
+        count <= 0
+          ? []
+          : count === 1
+            ? [0.5]
+            : count === 2
+              ? [0.35, 0.65]
+              : count === 3
+                ? [0.25, 0.5, 0.75]
+                : [0.2, 0.4, 0.6, 0.8];
 
-      const pickAtFraction = (fraction: number) => {
+      const probeFractions = routeDistanceNm > 260 ? [0.3, 0.5, 0.7] : routeDistanceNm > 180 ? [0.5] : [];
+      const probeHits = probeFractions.filter((fraction) => {
         const targetDistanceNm = routeDistanceNm * fraction;
         const target = destinationPoint(
           departureStation.lat,
@@ -13562,50 +13606,112 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           bearing,
           targetDistanceNm
         );
-        for (const radius of candidateRadii) {
-          const candidate = findBestRouteAssistStation(
-            routableStations,
+        return Boolean(
+          findBestRouteAssistStation(
+            fuelStopStations.length > 0 ? fuelStopStations : routableStations,
             departureStation,
             destinationStation,
             target,
             targetDistanceNm,
-            used,
-            radius,
+            new Set<string>([departureStation.icao, destinationStation.icao]),
+            45,
+          )
+        );
+      }).length;
+      const likelyCoastalEndpoints = COASTAL_STATE_CODES.has(departureStation.state || "") || COASTAL_STATE_CODES.has(destinationStation.state || "");
+      const overwaterLikely =
+        routeDistanceNm >= 180 &&
+        likelyCoastalEndpoints &&
+        probeFractions.length > 0 &&
+        probeHits < Math.max(1, Math.ceil(probeFractions.length / 2));
+
+      const buildVariant = ({
+        waypointTotal,
+        stopTotal,
+        waypointRadii,
+        stopRadii,
+      }: {
+        waypointTotal: number;
+        stopTotal: number;
+        waypointRadii: number[];
+        stopRadii: number[];
+      }) => {
+        const used = new Set<string>([departureStation.icao, destinationStation.icao]);
+        const plannedStopsLocal: string[] = [];
+        const waypointsLocal: string[] = [];
+        const stopPool = fuelStopStations.length > 0 ? fuelStopStations : routableStations;
+
+        const pickAtFraction = (fraction: number, pool: AirportSearchResult[], radii: number[]) => {
+          const targetDistanceNm = routeDistanceNm * fraction;
+          const target = destinationPoint(
+            departureStation.lat,
+            departureStation.lon,
+            bearing,
+            targetDistanceNm
           );
-          if (candidate) {
-            used.add(candidate.icao);
-            return candidate.icao;
+          for (const radius of radii) {
+            const candidate = findBestRouteAssistStation(
+              pool,
+              departureStation,
+              destinationStation,
+              target,
+              targetDistanceNm,
+              used,
+              radius,
+            );
+            if (candidate) {
+              used.add(candidate.icao);
+              return candidate.icao;
+            }
+          }
+          return null;
+        };
+
+        if (stopTotal > 0) {
+          const step = 1 / (stopTotal + 1);
+          for (let i = 1; i <= stopTotal; i += 1) {
+            const suggestion = pickAtFraction(step * i, stopPool, stopRadii);
+            if (suggestion) plannedStopsLocal.push(suggestion);
           }
         }
-        return null;
+
+        for (const fraction of buildFractions(waypointTotal)) {
+          const suggestion = pickAtFraction(fraction, routableStations, waypointRadii);
+          if (suggestion) waypointsLocal.push(suggestion);
+        }
+
+        return {
+          plannedStops: plannedStopsLocal,
+          waypoints: waypointsLocal,
+        };
       };
 
-      if (stopCount > 0) {
-        const step = 1 / (stopCount + 1);
-        for (let i = 1; i <= stopCount; i += 1) {
-          const suggestion = pickAtFraction(step * i);
-          if (suggestion) plannedStops.push(suggestion);
-        }
-      }
+      const directVariant = buildVariant({
+        waypointTotal: waypointCount,
+        stopTotal: stopCount,
+        waypointRadii: [60, 90, 120, 160],
+        stopRadii: [60, 90, 120, 160],
+      });
 
-      if (waypointCount > 0) {
-        const fractions =
-          waypointCount === 1
-            ? [0.5]
-            : waypointCount === 2
-              ? [0.35, 0.65]
-              : [0.25, 0.5, 0.75];
-        for (const fraction of fractions) {
-          const suggestion = pickAtFraction(fraction);
-          if (suggestion) waypoints.push(suggestion);
-        }
-      }
+      const coastlineWaypointCount = overwaterLikely
+        ? Math.max(waypointCount, routeDistanceNm > 350 ? 3 : 2)
+        : waypointCount;
+      const coastlineVariant = overwaterLikely
+        ? buildVariant({
+            waypointTotal: coastlineWaypointCount,
+            stopTotal: stopCount,
+            waypointRadii: [110, 150, 210, 270, 330],
+            stopRadii: [90, 130, 180, 240, 300],
+          })
+        : { plannedStops: [] as string[], waypoints: [] as string[] };
 
       return res.json({
         departure: departureStation.icao,
         destination: destinationStation.icao,
-        waypoints,
-        plannedStops,
+        waypoints: directVariant.waypoints,
+        plannedStops: directVariant.plannedStops,
+        coastlineWaypoints: coastlineVariant.waypoints,
+        coastlinePlannedStops: coastlineVariant.plannedStops,
         meta: {
           routeDistanceNm: Number(routeDistanceNm.toFixed(1)),
           maxLegNm: Number(maxLegNm.toFixed(1)),
@@ -13613,6 +13719,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           fuelBurnGph,
           fuelGallons,
           reserveMinutes,
+          overwaterLikely,
         },
       });
     } catch (error) {
@@ -19039,6 +19146,51 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         available: false,
         message: error?.message || "Leidos route search is unavailable right now.",
       });
+    }
+  });
+
+  app.get("/api/flight-plans/route-analysis", async (req: any, res) => {
+    try {
+      const route = typeof req.query.route === "string" ? req.query.route : "";
+      const analysis = analyzeFiledRoute(route);
+
+      if (!analysis.normalizedRoute) {
+        return res.json({
+          ...analysis,
+          recognizedAirportTokens: [],
+          unresolvedAirportTokens: [],
+        });
+      }
+
+      const stations = await loadStationCache();
+      const referenceMap = await loadAirportReferenceCache().catch(() => null);
+
+      const recognizedAirportTokens = analysis.airportTokens.filter((token) => {
+        const candidates = buildIcaoCandidates(token);
+        if (stations.some((station) => candidates.includes(station.icao))) {
+          return true;
+        }
+        if (!referenceMap) {
+          return false;
+        }
+        return candidates.some((candidate) => referenceMap.has(candidate));
+      });
+
+      const unresolvedAirportTokens = analysis.airportTokens.filter((token) => !recognizedAirportTokens.includes(token));
+      const warnings = [...analysis.warnings];
+      if (unresolvedAirportTokens.length > 0) {
+        warnings.push(`RSF could not resolve these airport-style tokens in current route references: ${unresolvedAirportTokens.join(", ")}.`);
+      }
+
+      return res.json({
+        ...analysis,
+        warnings,
+        recognizedAirportTokens,
+        unresolvedAirportTokens,
+      });
+    } catch (error) {
+      console.error("Failed to analyze filed route:", error);
+      res.status(500).json({ error: "Failed to analyze filed route" });
     }
   });
 

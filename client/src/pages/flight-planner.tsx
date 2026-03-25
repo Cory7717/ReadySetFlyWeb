@@ -29,6 +29,14 @@ import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/fli
 import { cn } from "@/lib/utils";
 import { parseFlightCategory as getFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
 import type { FlightPlan } from "@shared/schema";
+import {
+  analyzeFiledRoute,
+  filedRouteTokenKindLabel,
+  normalizeRouteText,
+  parseAirportWaypoints,
+  type FiledRouteToken,
+  type FiledRouteTokenKind,
+} from "@shared/flight-plan-route";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 import { PageShell } from "@/components/layout/PageShell";
@@ -393,6 +401,7 @@ type RouteSuggestionMeta = {
   fuelBurnGph: number;
   fuelGallons: number;
   reserveMinutes: number;
+  overwaterLikely?: boolean;
 };
 
 type RouteSuggestionResponse = {
@@ -400,6 +409,8 @@ type RouteSuggestionResponse = {
   destination: string;
   waypoints: string[];
   plannedStops: string[];
+  coastlineWaypoints?: string[];
+  coastlinePlannedStops?: string[];
   meta: RouteSuggestionMeta;
 };
 
@@ -415,21 +426,6 @@ type AirportFrequencyResponse = {
   frequencies: AirportFrequency[];
 };
 
-type FiledRouteTokenKind =
-  | "airport"
-  | "fix"
-  | "navaid"
-  | "airway"
-  | "procedure"
-  | "direct"
-  | "coordinate"
-  | "unknown";
-
-type FiledRouteToken = {
-  token: string;
-  kind: FiledRouteTokenKind;
-};
-
 type LeidosRouteSearchResponse = {
   provider: string;
   environment: "lab" | "production";
@@ -442,6 +438,22 @@ type LeidosRouteSearchResponse = {
   warnings: string[];
   available?: boolean;
   message?: string | null;
+};
+
+type FiledRouteAnalysisResponse = {
+  normalizedRoute: string;
+  tokens: FiledRouteToken[];
+  counts: Record<FiledRouteTokenKind, number>;
+  airportTokens: string[];
+  airwaySegments: {
+    airway: string;
+    index: number;
+    entryToken: string | null;
+    exitToken: string | null;
+  }[];
+  warnings: string[];
+  recognizedAirportTokens: string[];
+  unresolvedAirportTokens: string[];
 };
 
 type ContextualTool = {
@@ -539,76 +551,6 @@ function parseRunwayHeading(runway: string) {
   const value = Number(match[1]);
   if (!Number.isFinite(value) || value <= 0) return null;
   return (value % 36) * 10;
-}
-
-function parseWaypoints(input: string) {
-  return input
-    .split(/[,\s]+/)
-    .map((item) => item.trim().toUpperCase())
-    .filter(Boolean)
-    .filter((item) => ICAO_REGEX.test(item));
-}
-
-function classifyFiledRouteToken(token: string): FiledRouteTokenKind {
-  const normalized = token.trim().toUpperCase();
-  if (!normalized) return "unknown";
-  if (normalized === "DCT") return "direct";
-  if (/^(V|J|Q|T)\d+[A-Z]?$/.test(normalized)) return "airway";
-  if (/^\d{2,4}[NS]\d{3,5}[EW]$/.test(normalized) || /^\d{2,4}[NS]\/\d{3,5}[EW]$/.test(normalized)) {
-    return "coordinate";
-  }
-  if (/^[A-Z]{5}$/.test(normalized)) return "fix";
-  if (/^[A-Z]{3,6}\d[A-Z]?$/.test(normalized)) return "procedure";
-  if (/^[A-Z]{2,3}$/.test(normalized)) return "navaid";
-  if (/^[A-Z]{4}$/.test(normalized)) return "airport";
-  return "unknown";
-}
-
-function parseFiledRouteTokens(input: string): FiledRouteToken[] {
-  const normalized = normalizeRouteText(input);
-  if (!normalized) return [];
-  return normalized
-    .split(/\s+/)
-    .map((token) => token.trim().toUpperCase())
-    .filter(Boolean)
-    .map((token) => ({
-      token,
-      kind: classifyFiledRouteToken(token),
-    }));
-}
-
-function extractAirportTokensFromFiledRoute(tokens: FiledRouteToken[]) {
-  return tokens
-    .filter((token) => token.kind === "airport")
-    .map((token) => token.token);
-}
-
-function filedRouteTokenKindLabel(kind: FiledRouteTokenKind) {
-  switch (kind) {
-    case "airport":
-      return "Airport";
-    case "fix":
-      return "Fix";
-    case "navaid":
-      return "Navaid";
-    case "airway":
-      return "Airway";
-    case "procedure":
-      return "SID/STAR";
-    case "direct":
-      return "Direct";
-    case "coordinate":
-      return "Lat/Lon";
-    default:
-      return "Route token";
-  }
-}
-
-function normalizeRouteText(input: string) {
-  return input
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, " ");
 }
 
 function buildRoutePreview(departure: string, route: string, destination: string) {
@@ -1662,7 +1604,7 @@ export default function FlightPlanner() {
       const res = await fetch(apiUrl(`/api/airports/route-suggestions?${params.toString()}`));
       if (!res.ok) {
         if (res.status === 400 || res.status === 404) {
-          return { waypoints: [], plannedStops: [], meta: null };
+          return { waypoints: [], plannedStops: [], coastlineWaypoints: [], coastlinePlannedStops: [], meta: null };
         }
         throw new Error("Failed to load route suggestions");
       }
@@ -1711,28 +1653,20 @@ export default function FlightPlanner() {
 
   const suggestedWaypoints = routeSuggestionQuery.data?.waypoints ?? [];
   const suggestedStops = routeSuggestionQuery.data?.plannedStops ?? [];
+  const suggestedCoastlineWaypoints = routeSuggestionQuery.data?.coastlineWaypoints ?? [];
+  const suggestedCoastlineStops = routeSuggestionQuery.data?.coastlinePlannedStops ?? [];
   const suggestionMeta = routeSuggestionQuery.data?.meta;
+  const hasCoastlineRouteOption = Boolean(
+    suggestionMeta?.overwaterLikely &&
+    (suggestedCoastlineWaypoints.length > 0 || suggestedCoastlineStops.length > 0)
+  );
 
-  const waypoints = useMemo(() => parseWaypoints(waypointsInput), [waypointsInput]);
-  const plannedStops = useMemo(() => parseWaypoints(plannedStopsInput), [plannedStopsInput]);
+  const waypoints = useMemo(() => parseAirportWaypoints(waypointsInput), [waypointsInput]);
+  const plannedStops = useMemo(() => parseAirportWaypoints(plannedStopsInput), [plannedStopsInput]);
   const filedRouteInputNormalized = useMemo(() => normalizeRouteText(form.route), [form.route]);
-  const filedRouteTokens = useMemo(() => parseFiledRouteTokens(filedRouteInputNormalized), [filedRouteInputNormalized]);
-  const filedRouteAirportTokens = useMemo(() => extractAirportTokensFromFiledRoute(filedRouteTokens), [filedRouteTokens]);
-  const filedRouteTokenCounts = useMemo(() => {
-    return filedRouteTokens.reduce<Record<FiledRouteTokenKind, number>>((acc, token) => {
-      acc[token.kind] = (acc[token.kind] || 0) + 1;
-      return acc;
-    }, {
-      airport: 0,
-      fix: 0,
-      navaid: 0,
-      airway: 0,
-      procedure: 0,
-      direct: 0,
-      coordinate: 0,
-      unknown: 0,
-    });
-  }, [filedRouteTokens]);
+  const filedRouteAnalysis = useMemo(() => analyzeFiledRoute(filedRouteInputNormalized), [filedRouteInputNormalized]);
+  const filedRouteTokens = filedRouteAnalysis.tokens;
+  const filedRouteAirportTokens = filedRouteAnalysis.airportTokens;
   const isUsingSuggestedWaypoints = useMemo(() => {
     if (suggestedWaypoints.length === 0) return false;
     const normalized = waypointsInput.trim().toUpperCase();
@@ -2412,6 +2346,29 @@ export default function FlightPlanner() {
     staleTime: 1000 * 60 * 10,
   });
 
+  const filedRouteAnalysisQuery = useQuery<FiledRouteAnalysisResponse>({
+    queryKey: ["/api/flight-plans/route-analysis", filedRouteInputNormalized],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        route: filedRouteInputNormalized,
+      });
+      const res = await fetch(apiUrl(`/api/flight-plans/route-analysis?${params.toString()}`), {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to analyze filed route");
+      }
+      return res.json();
+    },
+    enabled: Boolean(filedRouteInputNormalized),
+    staleTime: 1000 * 60 * 10,
+  });
+  const resolvedFiledRouteAnalysis = filedRouteAnalysisQuery.data ?? {
+    ...filedRouteAnalysis,
+    recognizedAirportTokens: filedRouteAnalysis.airportTokens,
+    unresolvedAirportTokens: [] as string[],
+  };
+
   const notamsSummaryQuery = useQuery({
     queryKey: ["/api/notams", primaryIcao],
     queryFn: async () => {
@@ -2681,6 +2638,7 @@ export default function FlightPlanner() {
     () => routeAirports.some((icao) => CONTROLLED_AIRPORTS.has(icao)),
     [routeAirports]
   );
+  const overwaterLikely = Boolean(suggestionMeta?.overwaterLikely);
 
   const trainingCostTrigger = isStudent || eteHours >= 3;
 
@@ -2714,6 +2672,16 @@ export default function FlightPlanner() {
         description: "Longer routes are a good moment to estimate training time and budget.",
         cta: "Open training cost calculator",
         href: "/student/cost",
+      });
+    }
+
+    if (overwaterLikely) {
+      tools.push({
+        id: "water-safety",
+        title: "Overwater safety check",
+        description: "This route likely spends meaningful time over water. Review flotation gear, ditching considerations, and whether the coastline assist is a better fit.",
+        cta: "Review route analysis",
+        href: "#route-analysis",
       });
     }
 
@@ -2752,6 +2720,7 @@ export default function FlightPlanner() {
     densityAltitudeTrigger,
     crosswindTrigger,
     trainingCostTrigger,
+    overwaterLikely,
     isIfrFlight,
     hasControlledAirport,
     isStudent,
@@ -2840,8 +2809,11 @@ export default function FlightPlanner() {
     if (enrouteTs.length > 0) {
       notes.push(`Thunderstorms flagged in TAFs: ${enrouteTs.join(", ")}.`);
     }
+    if (overwaterLikely) {
+      notes.push("This route likely includes a meaningful overwater segment. Review flotation devices, emergency locator gear, passenger briefing items, and whether a coastline-biased route is preferable.");
+    }
     return notes;
-  }, [enrouteIfr, enrouteTs]);
+  }, [enrouteIfr, enrouteTs, overwaterLikely]);
 
   const routeRisk = useMemo(() => {
     let risk = "Normal";
@@ -3732,6 +3704,43 @@ export default function FlightPlanner() {
                   </Button>
                 </div>
               )}
+              {hasCoastlineRouteOption && (
+                <div className="rounded-md border border-sky-200 bg-sky-50/80 p-3 text-xs text-sky-950 space-y-2">
+                  <div className="font-medium">Water crossing route options</div>
+                  <div className="text-sky-900/90">
+                    RSF sees this as a likely overwater route. You can keep the more direct helper route, or switch to a coastline-biased assist that adds land-based route guidance for pilots who prefer to stay closer to shore.
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setWaypointsInput(suggestedWaypoints.join(" "));
+                        setPlannedStopsInput(suggestedStops.join(" "));
+                      }}
+                    >
+                      Use direct / overwater assist
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        setWaypointsInput(suggestedCoastlineWaypoints.join(" "));
+                        setPlannedStopsInput(suggestedCoastlineStops.join(" "));
+                      }}
+                    >
+                      Use coastline assist
+                    </Button>
+                  </div>
+                  <div className="text-sky-900/80">
+                    Coastline assist:
+                    {" "}
+                    {suggestedCoastlineStops.length > 0 ? `stops ${suggestedCoastlineStops.join(", ")}` : "no fuel stops"}
+                    {suggestedCoastlineWaypoints.length > 0 ? ` • waypoints ${suggestedCoastlineWaypoints.join(", ")}` : ""}
+                  </div>
+                </div>
+              )}
               {suggestionMeta && suggestedStops.length > 0 && (
                 <div className="text-xs text-muted-foreground">
                   Max leg ~{suggestionMeta.maxLegNm.toFixed(0)} NM based on {suggestionMeta.fuelGallons.toFixed(0)} gal
@@ -3785,20 +3794,23 @@ export default function FlightPlanner() {
                     <div>
                       <div className="text-sm font-semibold">Parsed Route Structure</div>
                       <div className="text-xs text-muted-foreground">
-                        RSF now recognizes route token types for review. Airports can drive map/frequency lookups; airways, fixes, navaids, and procedures stay in the filed route for ATC/Leidos.
+                        RSF now recognizes route token types for review. Airports can drive map/frequency lookups; airways, fixes, navaids, and procedures stay in the filed route for ATC/Leidos while deeper route resolution is phased in.
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-                      {filedRouteTokenCounts.airway > 0 && <span>{filedRouteTokenCounts.airway} airway</span>}
-                      {filedRouteTokenCounts.fix > 0 && <span>{filedRouteTokenCounts.fix} fix</span>}
-                      {filedRouteTokenCounts.navaid > 0 && <span>{filedRouteTokenCounts.navaid} navaid</span>}
-                      {filedRouteTokenCounts.procedure > 0 && <span>{filedRouteTokenCounts.procedure} SID/STAR</span>}
-                      {filedRouteTokenCounts.airport > 0 && <span>{filedRouteTokenCounts.airport} airport</span>}
-                      {filedRouteTokenCounts.direct > 0 && <span>{filedRouteTokenCounts.direct} DCT</span>}
+                      {resolvedFiledRouteAnalysis.counts.airway > 0 && <span>{resolvedFiledRouteAnalysis.counts.airway} airway</span>}
+                      {resolvedFiledRouteAnalysis.counts.fix > 0 && <span>{resolvedFiledRouteAnalysis.counts.fix} fix</span>}
+                      {resolvedFiledRouteAnalysis.counts.navaid > 0 && <span>{resolvedFiledRouteAnalysis.counts.navaid} navaid</span>}
+                      {resolvedFiledRouteAnalysis.counts.procedure > 0 && <span>{resolvedFiledRouteAnalysis.counts.procedure} SID/STAR</span>}
+                      {resolvedFiledRouteAnalysis.counts.airport > 0 && <span>{resolvedFiledRouteAnalysis.counts.airport} airport</span>}
+                      {resolvedFiledRouteAnalysis.counts.direct > 0 && <span>{resolvedFiledRouteAnalysis.counts.direct} DCT</span>}
                     </div>
                   </div>
+                  {filedRouteAnalysisQuery.isFetching && (
+                    <div className="text-xs text-muted-foreground">Analyzing route structure...</div>
+                  )}
                   <div className="flex flex-wrap gap-2">
-                    {filedRouteTokens.map((routeToken, index) => {
+                    {resolvedFiledRouteAnalysis.tokens.map((routeToken, index) => {
                       const badgeClassName =
                         routeToken.kind === "airway"
                           ? "border-sky-200 bg-sky-50 text-sky-900"
@@ -3829,7 +3841,34 @@ export default function FlightPlanner() {
                       );
                     })}
                   </div>
-                  {filedRouteAirportTokens.length === 0 && (
+                  {resolvedFiledRouteAnalysis.airwaySegments.length > 0 && (
+                    <div className="rounded-md border border-slate-200 bg-white/80 p-3 text-xs text-slate-700 space-y-1">
+                      <div className="font-medium text-slate-900">Airway segments recognized</div>
+                      {resolvedFiledRouteAnalysis.airwaySegments.map((segment) => (
+                        <div key={`${segment.airway}-${segment.index}`}>
+                          {segment.airway}: {segment.entryToken || "?"} to {segment.exitToken || "?"}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {resolvedFiledRouteAnalysis.warnings.length > 0 && (
+                    <Alert>
+                      <AlertDescription>
+                        <div className="font-semibold">Route analysis notes</div>
+                        <ul className="mt-2 list-disc pl-5 space-y-1">
+                          {resolvedFiledRouteAnalysis.warnings.map((warning) => (
+                            <li key={warning}>{warning}</li>
+                          ))}
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {resolvedFiledRouteAnalysis.recognizedAirportTokens.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      Airport tokens currently usable for map/frequency lookups: {resolvedFiledRouteAnalysis.recognizedAirportTokens.join(", ")}.
+                    </div>
+                  )}
+                  {resolvedFiledRouteAnalysis.airportTokens.length === 0 && (
                     <div className="text-xs text-muted-foreground">
                       This filed route currently contains no airport-type enroute tokens, so the map will stay anchored to departure, destination, and any planned airport stops instead of trying to draw airway segments as airports.
                     </div>
@@ -4568,6 +4607,16 @@ export default function FlightPlanner() {
                 <AlertDescription>
                   Crosswind component estimated at{" "}
                   <strong>{crosswindComponent?.toFixed(0)} kt</strong>. Review crosswind limits for the selected runway.
+                </AlertDescription>
+              </Alert>
+            )}
+            {overwaterLikely && (
+              <Alert>
+                <AlertDescription>
+                  <div className="font-semibold">Overwater briefing item</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    This route likely includes a meaningful overwater segment. Verify that flotation devices are available for all occupants, review ditching and emergency communications procedures, and consider using the coastline assist if you prefer to stay closer to shore.
+                  </div>
                 </AlertDescription>
               </Alert>
             )}

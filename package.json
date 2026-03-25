@@ -13,6 +13,7 @@
     "deploy:pages:manual:sh": "bash scripts/deploy-pages.sh",
     "start": "NODE_ENV=production node run-migration.js && node dist/index.js",
     "start:swim-worker": "NODE_ENV=production node dist/notam-worker.js",
+    "start:swim-worker:tsx": "cross-env NODE_ENV=production tsx server/notam-worker.ts",
     "start:nms-worker": "NODE_ENV=production node run-migration.js && node dist/nms-worker-entry.js",
     "check": "tsc",
     "test:smoke": "node scripts/smoke-test.mjs",

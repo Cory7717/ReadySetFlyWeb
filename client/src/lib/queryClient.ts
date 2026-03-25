@@ -3,10 +3,11 @@ import { apiUrl } from "./api";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    const text = (await res.text()) || res.statusText;
     const contentType = res.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
       try {
-        const payload = await res.json();
+        const payload = JSON.parse(text);
         const message =
           (payload && typeof payload === "object" && "error" in payload && payload.error)
             ? String(payload.error)
@@ -17,7 +18,6 @@ async function throwIfResNotOk(res: Response) {
       }
     }
 
-    const text = (await res.text()) || res.statusText;
     throw new Error(text);
   }
 }

@@ -7345,11 +7345,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Aircraft Types (RSF Library)
   app.get("/api/aircraft/types", aircraftTypeRateLimiter, async (req, res) => {
     try {
-      const { q, category, engine_type: engineType, limit, offset } = req.query as any;
+      const { q, category, engine_type: engineType, verified, limit, offset } = req.query as any;
       const types = await storage.getAircraftTypes({
         q: typeof q === "string" ? q : undefined,
         category: typeof category === "string" ? category : undefined,
         engineType: typeof engineType === "string" ? engineType : undefined,
+        verified:
+          verified === "true" ? true :
+          verified === "false" ? false :
+          undefined,
         limit: limit ? Number(limit) : undefined,
         offset: offset ? Number(offset) : undefined,
       });
@@ -18961,7 +18965,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.json(payload);
     } catch (error: any) {
       console.error("Failed to search Leidos route:", error);
-      res.status(500).json({ error: error?.message || "Failed to search Leidos route" });
+      res.json({
+        provider: "Leidos Flight Service",
+        environment: getLeidosFlightServiceDiagnostics().environment,
+        departure: typeof req.query.departure === "string" ? req.query.departure.trim().toUpperCase() : "",
+        destination: typeof req.query.destination === "string" ? req.query.destination.trim().toUpperCase() : "",
+        route: null,
+        atcRecentIFRRoutes: [],
+        codedDepartureRoutes: [],
+        faaPreferredRoutes: [],
+        warnings: [],
+        available: false,
+        message: error?.message || "Leidos route search is unavailable right now.",
+      });
     }
   });
 

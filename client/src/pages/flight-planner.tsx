@@ -193,6 +193,11 @@ type AircraftType = {
   fuel_burn_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
   max_gross_weight_lb_effective?: number | null;
+  isVerified?: boolean | null;
+  sourceNote?: string | null;
+  verificationSource?: string | null;
+  verificationUrl?: string | null;
+  lastVerifiedAt?: string | null;
 };
 
 type AirportSearchResult = {
@@ -403,6 +408,8 @@ type LeidosRouteSearchResponse = {
   codedDepartureRoutes: string[];
   faaPreferredRoutes: string[];
   warnings: string[];
+  available?: boolean;
+  message?: string | null;
 };
 
 type ContextualTool = {
@@ -1314,12 +1321,12 @@ export default function FlightPlanner() {
     const controller = new AbortController();
     const runLookup = async () => {
       try {
-        const res = await fetch(apiUrl(`/api/airports/${value}`), {
-          credentials: "include",
+        const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(value)}`), {
           signal: controller.signal,
         });
         if (!active) return;
-        const ok = res.ok;
+        const data = res.ok ? await res.json().catch(() => []) : [];
+        const ok = Array.isArray(data) && data.some((airport) => airport?.icao?.toUpperCase() === value);
         departureLookupRef.current = { value, ok };
         if (ok) {
           setDepartureResolved(value);
@@ -1400,12 +1407,12 @@ export default function FlightPlanner() {
     const controller = new AbortController();
     const runLookup = async () => {
       try {
-        const res = await fetch(apiUrl(`/api/airports/${value}`), {
-          credentials: "include",
+        const res = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(value)}`), {
           signal: controller.signal,
         });
         if (!active) return;
-        const ok = res.ok;
+        const data = res.ok ? await res.json().catch(() => []) : [];
+        const ok = Array.isArray(data) && data.some((airport) => airport?.icao?.toUpperCase() === value);
         destinationLookupRef.current = { value, ok };
         if (ok) {
           setDestinationResolved(value);
@@ -1446,6 +1453,10 @@ export default function FlightPlanner() {
     ? null
     : savedProfiles.find((p) => p.id === selectedProfileId) || null;
   const selectedType = aircraftTypes.find((t) => t.id === selectedTypeId) || FALLBACK_TYPE;
+  const selectedTypeNeedsVerification =
+    selectedTypeId !== CUSTOM_TYPE_ID &&
+    selectedType.id !== FALLBACK_TYPE.id &&
+    selectedType.isVerified === false;
   const selectedProfileHasFilingDefaults = Boolean(
     selectedProfile?.tailNumber ||
     selectedProfile?.filingEquipmentDefault ||
@@ -3376,6 +3387,15 @@ export default function FlightPlanner() {
               <div className="text-xs text-muted-foreground">
                 Saved profiles override library values when selected. This prefill is one of RSF's strongest planning workflow advantages.
               </div>
+              {selectedTypeNeedsVerification && (
+                <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                  <AlertDescription>
+                    This RSF library template is still marked as a planning estimate. Verify the performance values against the POH/AFM before relying on them for fuel, range, or cost planning.
+                    {selectedType.sourceNote ? ` ${selectedType.sourceNote}` : ""}
+                    {selectedType.verificationSource ? ` Source: ${selectedType.verificationSource}.` : ""}
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label>Waypoints (optional)</Label>
@@ -3501,10 +3521,15 @@ export default function FlightPlanner() {
                       <div className="text-xs text-muted-foreground">Checking Leidos for recommended routes...</div>
                     )}
                     {leidosRouteQuery.error && (
-                      <Alert variant="destructive">
+                      <Alert>
                         <AlertDescription>
                           {(leidosRouteQuery.error as Error).message || "Leidos route search is unavailable right now."}
                         </AlertDescription>
+                      </Alert>
+                    )}
+                    {leidosRouteQuery.data?.available === false && leidosRouteQuery.data?.message && (
+                      <Alert>
+                        <AlertDescription>{leidosRouteQuery.data.message}</AlertDescription>
                       </Alert>
                     )}
                     {leidosRouteQuery.data?.route && (
@@ -3557,6 +3582,7 @@ export default function FlightPlanner() {
                     ) : null}
                     {!leidosRouteQuery.isFetching &&
                       !leidosRouteQuery.error &&
+                      leidosRouteQuery.data?.available !== false &&
                       !leidosRouteQuery.data?.route &&
                       !(leidosRouteQuery.data?.atcRecentIFRRoutes?.length) &&
                       !(leidosRouteQuery.data?.faaPreferredRoutes?.length) &&

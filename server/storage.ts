@@ -792,6 +792,7 @@ export interface IStorage {
     q?: string;
     category?: string;
     engineType?: string;
+    verified?: boolean;
     limit?: number;
     offset?: number;
   }): Promise<AircraftType[]>;
@@ -4733,6 +4734,7 @@ export class DatabaseStorage implements IStorage {
     q?: string;
     category?: string;
     engineType?: string;
+    verified?: boolean;
     limit?: number;
     offset?: number;
   }): Promise<AircraftType[]> {
@@ -4749,6 +4751,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters?.engineType) {
       conditions.push(eq(aircraftTypes.engineType, filters.engineType));
+    }
+    if (typeof filters?.verified === "boolean") {
+      conditions.push(eq(aircraftTypes.isVerified, filters.verified));
     }
 
     const whereClause = conditions.length ? and(...conditions) : undefined;
@@ -4783,15 +4788,25 @@ export class DatabaseStorage implements IStorage {
       rearArmIn: toDecimalString(type.rearArmIn),
       baggageArmIn: toDecimalString(type.baggageArmIn),
       fuelArmIn: toDecimalString(type.fuelArmIn),
+      lastVerifiedAt: type.isVerified ? type.lastVerifiedAt ?? new Date() : null,
     };
     const [created] = await db.insert(aircraftTypes).values(payload).returning();
     return created;
   }
 
   async updateAircraftType(id: string, updates: Partial<AircraftType>): Promise<AircraftType | undefined> {
+    const normalizedUpdates = {
+      ...updates,
+      updatedAt: new Date(),
+      ...(updates.isVerified === true
+        ? { lastVerifiedAt: updates.lastVerifiedAt ?? new Date() }
+        : updates.isVerified === false
+          ? { lastVerifiedAt: null }
+          : {}),
+    };
     const [updated] = await db
       .update(aircraftTypes)
-      .set({ ...updates, updatedAt: new Date() })
+      .set(normalizedUpdates)
       .where(eq(aircraftTypes.id, id))
       .returning();
     return updated;

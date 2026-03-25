@@ -2224,6 +2224,9 @@ export const aircraftTypes = pgTable("aircraft_types", {
   defaultAltitudeFt: integer("default_altitude_ft"),
   isVerified: boolean("is_verified").default(false),
   sourceNote: text("source_note"),
+  verificationSource: text("verification_source"),
+  verificationUrl: text("verification_url"),
+  lastVerifiedAt: timestamp("last_verified_at"),
   updatedAt: timestamp("updated_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
@@ -2653,6 +2656,7 @@ export const insertAircraftTypeSchema = createInsertSchema(aircraftTypes).omit({
   rearArmIn: z.coerce.number().min(0).max(400).optional().nullable(),
   baggageArmIn: z.coerce.number().min(0).max(400).optional().nullable(),
   fuelArmIn: z.coerce.number().min(0).max(400).optional().nullable(),
+  verificationUrl: z.string().trim().url().optional().nullable(),
 });
 
 export const insertAircraftProfileSchema = createInsertSchema(aircraftProfiles).omit({

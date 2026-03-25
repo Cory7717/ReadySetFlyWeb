@@ -25,6 +25,9 @@ type AircraftType = {
   defaultAltitudeFt?: number | null;
   isVerified?: boolean | null;
   sourceNote?: string | null;
+  verificationSource?: string | null;
+  verificationUrl?: string | null;
+  lastVerifiedAt?: string | null;
 };
 
 const emptyForm = {
@@ -38,8 +41,10 @@ const emptyForm = {
   usableFuelGal: "",
   maxGrossWeightLb: "",
   defaultAltitudeFt: "",
-  isVerified: true,
+  isVerified: false,
   sourceNote: "Typical planning estimates; verify POH/AFM.",
+  verificationSource: "",
+  verificationUrl: "",
 };
 
 export default function AdminAircraftLibrary() {
@@ -49,14 +54,17 @@ export default function AdminAircraftLibrary() {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [verifiedFilter, setVerifiedFilter] = useState<"all" | "verified" | "unverified">("all");
 
   const isAdmin = Boolean(user?.isAdmin || user?.isSuperAdmin);
 
   const { data: types = [], isLoading } = useQuery<AircraftType[]>({
-    queryKey: ["/api/aircraft/types", query],
+    queryKey: ["/api/aircraft/types", query, verifiedFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (query) params.set("q", query);
+      if (verifiedFilter === "verified") params.set("verified", "true");
+      if (verifiedFilter === "unverified") params.set("verified", "false");
       const res = await fetch(apiUrl(`/api/aircraft/types?${params.toString()}`), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load types");
       return res.json();
@@ -79,6 +87,8 @@ export default function AdminAircraftLibrary() {
         defaultAltitudeFt: form.defaultAltitudeFt ? Number(form.defaultAltitudeFt) : null,
         isVerified: Boolean(form.isVerified),
         sourceNote: form.sourceNote || null,
+        verificationSource: form.verificationSource.trim() || null,
+        verificationUrl: form.verificationUrl.trim() || null,
       };
       if (editingId) {
         const res = await apiRequest("PUT", `/api/aircraft/types/${editingId}`, payload);
@@ -112,7 +122,16 @@ export default function AdminAircraftLibrary() {
     },
   });
 
-  const filteredTypes = useMemo(() => types, [types]);
+  const filteredTypes = useMemo(
+    () => [...types].sort((a, b) => {
+      const verifiedDelta = Number(Boolean(a.isVerified)) - Number(Boolean(b.isVerified));
+      if (verifiedDelta !== 0) return verifiedDelta;
+      return `${a.make} ${a.model}`.localeCompare(`${b.make} ${b.model}`);
+    }),
+    [types],
+  );
+  const verifiedCount = filteredTypes.filter((type) => type.isVerified).length;
+  const unverifiedCount = filteredTypes.length - verifiedCount;
 
   if (!isAdmin) {
     return (
@@ -136,7 +155,7 @@ export default function AdminAircraftLibrary() {
 
       <Alert>
         <AlertDescription>
-          Planning estimates only. Always verify against the aircraft POH/AFM and current conditions.
+          Use the verified flag only when the planning values have been checked against the aircraft POH/AFM, manufacturer guidance, or another authoritative source.
         </AlertDescription>
       </Alert>
 
@@ -191,6 +210,22 @@ export default function AdminAircraftLibrary() {
               <Label>Source Note</Label>
               <Input value={form.sourceNote} onChange={(e) => setForm({ ...form, sourceNote: e.target.value })} />
             </div>
+            <div className="space-y-2">
+              <Label>Verification Source</Label>
+              <Input
+                value={form.verificationSource}
+                onChange={(e) => setForm({ ...form, verificationSource: e.target.value })}
+                placeholder="Diamond POH, manufacturer planning guide, etc."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Verification URL</Label>
+              <Input
+                value={form.verificationUrl}
+                onChange={(e) => setForm({ ...form, verificationUrl: e.target.value })}
+                placeholder="https://..."
+              />
+            </div>
             <div className="flex items-center gap-2 pt-6">
               <Checkbox
                 checked={form.isVerified}
@@ -216,8 +251,20 @@ export default function AdminAircraftLibrary() {
           <CardDescription>Search and manage the library.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search make, model, ICAO" />
+            <Button type="button" variant={verifiedFilter === "all" ? "default" : "outline"} onClick={() => setVerifiedFilter("all")}>
+              All
+            </Button>
+            <Button type="button" variant={verifiedFilter === "unverified" ? "default" : "outline"} onClick={() => setVerifiedFilter("unverified")}>
+              Needs Review
+            </Button>
+            <Button type="button" variant={verifiedFilter === "verified" ? "default" : "outline"} onClick={() => setVerifiedFilter("verified")}>
+              Verified
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Showing {filteredTypes.length} aircraft types. Verified: {verifiedCount}. Needs review: {unverifiedCount}.
           </div>
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading types...</div>
@@ -228,12 +275,29 @@ export default function AdminAircraftLibrary() {
               <div key={type.id} className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
-                    <div className="font-semibold">
+                    <div className="flex flex-wrap items-center gap-2 font-semibold">
                       {type.make} {type.model} {type.icaoType ? `(${type.icaoType})` : ""}
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] ${type.isVerified ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                        {type.isVerified ? "Verified" : "Needs review"}
+                      </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Cruise {type.cruiseKtas} KTAS | Burn {type.fuelBurnGph} gph | Fuel {type.usableFuelGal} gal | MGW {type.maxGrossWeightLb} lb
                     </div>
+                    {(type.sourceNote || type.verificationSource || type.lastVerifiedAt) && (
+                      <div className="mt-1 text-xs text-muted-foreground space-y-1">
+                        {type.sourceNote && <div>Note: {type.sourceNote}</div>}
+                        {type.verificationSource && <div>Source: {type.verificationSource}</div>}
+                        {type.lastVerifiedAt && <div>Last verified: {new Date(type.lastVerifiedAt).toLocaleDateString()}</div>}
+                        {type.verificationUrl && (
+                          <div>
+                            <a href={type.verificationUrl} target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2">
+                              Verification link
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -254,6 +318,8 @@ export default function AdminAircraftLibrary() {
                           defaultAltitudeFt: type.defaultAltitudeFt ? String(type.defaultAltitudeFt) : "",
                           isVerified: Boolean(type.isVerified),
                           sourceNote: type.sourceNote || "Typical planning estimates; verify POH/AFM.",
+                          verificationSource: type.verificationSource || "",
+                          verificationUrl: type.verificationUrl || "",
                         });
                       }}
                     >

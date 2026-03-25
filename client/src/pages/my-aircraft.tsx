@@ -19,6 +19,11 @@ type AircraftType = {
   fuel_burn_gph_effective?: number | null;
   usable_fuel_gal_effective?: number | null;
   max_gross_weight_lb_effective?: number | null;
+  isVerified?: boolean | null;
+  sourceNote?: string | null;
+  verificationSource?: string | null;
+  verificationUrl?: string | null;
+  lastVerifiedAt?: string | null;
 };
 
 type AircraftProfile = {
@@ -79,6 +84,10 @@ export default function MyAircraft() {
   });
 
   const typeOptions = useMemo(() => types, [types]);
+  const selectedLibraryType = useMemo(
+    () => typeOptions.find((type) => type.id === form.typeId) || null,
+    [form.typeId, typeOptions],
+  );
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -179,6 +188,15 @@ export default function MyAircraft() {
                   ))}
                 </SelectContent>
               </Select>
+              {selectedLibraryType && selectedLibraryType.isVerified === false && (
+                <Alert className="border-amber-200 bg-amber-50 text-amber-900">
+                  <AlertDescription>
+                    This library template is still marked as a planning estimate. Confirm its cruise, burn, fuel, and weight values against the aircraft POH/AFM before relying on it.
+                    {selectedLibraryType.sourceNote ? ` ${selectedLibraryType.sourceNote}` : ""}
+                    {selectedLibraryType.verificationSource ? ` Source: ${selectedLibraryType.verificationSource}.` : ""}
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           </div>
 

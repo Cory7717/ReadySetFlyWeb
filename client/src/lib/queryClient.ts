@@ -3,8 +3,22 @@ import { apiUrl } from "./api";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      try {
+        const payload = await res.json();
+        const message =
+          (payload && typeof payload === "object" && "error" in payload && payload.error)
+            ? String(payload.error)
+            : JSON.stringify(payload);
+        throw new Error(message || res.statusText);
+      } catch {
+        // Fall through to raw text handling if JSON parsing fails.
+      }
+    }
+
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    throw new Error(text);
   }
 }
 

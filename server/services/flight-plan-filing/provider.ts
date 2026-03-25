@@ -553,6 +553,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
     const response = await fetch(requestUrl, {
       method: "POST",
+      redirect: "manual",
       headers: {
         Authorization: `Basic ${basic}`,
         Accept: "application/json, text/plain, */*",
@@ -563,6 +564,14 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     });
 
     const parsedResponse = await parseProviderResponse(response);
+    if (response.status >= 300 && response.status < 400) {
+      const redirectLocation = response.headers.get("location");
+      throw new Error(
+        `Leidos ${action.toUpperCase()} request was redirected instead of returning a REST response` +
+        `${redirectLocation ? ` (Location: ${redirectLocation})` : ""}. ` +
+        "This usually means the REST endpoint path or account authorization is not set up correctly."
+      );
+    }
     if (typeof parsedResponse.text === "string" && looksLikeHtml(parsedResponse.text)) {
       const responseDetail = summarizeProviderError(parsedResponse, response);
       throw new Error(`Leidos ${action.toUpperCase()} request returned HTML instead of a REST response${responseDetail ? `: ${responseDetail}` : ""}`);

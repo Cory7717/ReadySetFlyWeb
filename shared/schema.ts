@@ -2433,6 +2433,7 @@ export const insertCfiLegalAcceptanceSchema = createInsertSchema(cfiLegalAccepta
 export const insertFlyingClubSchema = createInsertSchema(flyingClubs).omit({
   id: true,
   ownerUserId: true,
+  slug: true,
   createdAt: true,
   updatedAt: true,
 }).extend({

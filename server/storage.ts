@@ -335,7 +335,7 @@ export interface IStorage {
   getFlyingClubBySlug(slug: string): Promise<FlyingClub | undefined>;
   getFlyingClubsByMember(userId: string): Promise<FlyingClub[]>;
   getFlyingClubMembership(clubId: string, userId: string): Promise<FlyingClubMember | undefined>;
-  createFlyingClub(club: InsertFlyingClub & { ownerUserId: string }): Promise<FlyingClub>;
+  createFlyingClub(club: InsertFlyingClub & { ownerUserId: string; slug: string }): Promise<FlyingClub>;
   updateFlyingClub(id: string, updates: Partial<FlyingClub>): Promise<FlyingClub | undefined>;
   getFlyingClubMembers(clubId: string): Promise<FlyingClubMember[]>;
   addFlyingClubMember(member: InsertFlyingClubMember & { clubId: string; userId: string }): Promise<FlyingClubMember>;
@@ -1508,7 +1508,7 @@ export class DatabaseStorage implements IStorage {
     return membership;
   }
 
-  async createFlyingClub(club: InsertFlyingClub & { ownerUserId: string }): Promise<FlyingClub> {
+  async createFlyingClub(club: InsertFlyingClub & { ownerUserId: string; slug: string }): Promise<FlyingClub> {
     const [created] = await db
       .insert(flyingClubs)
       .values(club)

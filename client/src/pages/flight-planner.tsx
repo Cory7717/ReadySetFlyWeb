@@ -2479,6 +2479,8 @@ export default function FlightPlanner() {
           filingAircraftColor: filingDraft.aircraftColor.trim() || null,
           filingPilotName: filingDraft.pilotName.trim() || null,
           filingRemarks: filingDraft.remarks.trim() || null,
+          filingTrueAirspeedKtas: Math.round(planningCruise) || null,
+          filingPlannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
           filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
           filingEnduranceMinutes: Math.round(enduranceMinutes) || null,
           plannedDepartureAt: form.plannedDepartureAt
@@ -2519,6 +2521,8 @@ export default function FlightPlanner() {
         filingAircraftColor: filingDraft.aircraftColor.trim() || null,
         filingPilotName: filingDraft.pilotName.trim() || null,
         filingRemarks: filingDraft.remarks.trim() || null,
+        filingTrueAirspeedKtas: Math.round(planningCruise) || null,
+        filingPlannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
         filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
         filingEnduranceMinutes: Math.round(enduranceMinutes) || null,
         plannedDepartureAt: form.plannedDepartureAt
@@ -2731,7 +2735,7 @@ export default function FlightPlanner() {
     }));
     setWaypointsInput(editingPlan.route || "");
     setPlannedStopsInput("");
-    setPlannedAltitude("");
+    setPlannedAltitude(editingPlan.filingPlannedAltitudeFt ? String(editingPlan.filingPlannedAltitudeFt) : "");
     setArrivalAuto(false);
   }, [editingPlan]);
 

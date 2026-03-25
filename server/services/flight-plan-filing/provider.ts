@@ -54,6 +54,10 @@ type LeidosFlightServiceConfig = {
   actionPaths: Record<FlightPlanFilingAction, string | null>;
   webhookUsername: string | null;
   webhookPassword: string | null;
+  wakeTurbulence: string;
+  typeOfFlight: string;
+  surveillanceEquipment: string;
+  otherInfo: string | null;
 };
 
 const normalizeFlightRules = (value?: string | null) => (value || "VFR").toUpperCase();
@@ -93,6 +97,10 @@ const getLeidosFlightServiceConfig = (): LeidosFlightServiceConfig => {
     },
     webhookUsername: String(process.env.LEIDOS_FLIGHT_SERVICE_WEBHOOK_USERNAME || "").trim() || null,
     webhookPassword: String(process.env.LEIDOS_FLIGHT_SERVICE_WEBHOOK_PASSWORD || "").trim() || null,
+    wakeTurbulence: String(process.env.LEIDOS_FLIGHT_SERVICE_WAKE_TURBULENCE || "MEDIUM").trim() || "MEDIUM",
+    typeOfFlight: String(process.env.LEIDOS_FLIGHT_SERVICE_TYPE_OF_FLIGHT || "G").trim() || "G",
+    surveillanceEquipment: String(process.env.LEIDOS_FLIGHT_SERVICE_SURVEILLANCE_EQUIPMENT || "N").trim() || "N",
+    otherInfo: String(process.env.LEIDOS_FLIGHT_SERVICE_OTHER_INFO || "").trim() || null,
   };
 };
 
@@ -149,7 +157,56 @@ const getLifecycleMessage = (action: FlightPlanFilingAction) => {
 const buildProviderPlanId = (plan: FlightPlan, action: FlightPlanFilingAction) =>
   plan.filingProviderPlanId || `rsf-${plan.id}-${action}`;
 
-const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction) => {
+const minutesToIsoDuration = (minutes?: number | null) => {
+  if (!minutes || !Number.isFinite(minutes) || minutes <= 0) return null;
+  const wholeMinutes = Math.max(1, Math.round(minutes));
+  const hours = Math.floor(wholeMinutes / 60);
+  const minutesRemainder = wholeMinutes % 60;
+  const hourPart = hours > 0 ? `${hours}H` : "";
+  const minutePart = minutesRemainder > 0 ? `${minutesRemainder}M` : (!hourPart ? "0M" : "");
+  return `PT${hourPart}${minutePart}`;
+};
+
+const appendLeidosAltitudeFields = (params: URLSearchParams, altitudeFt?: number | null) => {
+  if (!altitudeFt || !Number.isFinite(altitudeFt) || altitudeFt <= 0) return;
+  const roundedAltitude = Math.round(altitudeFt);
+  if (roundedAltitude >= 18000) {
+    params.append("altitudeTypeF", String(Math.round(roundedAltitude / 100)));
+    return;
+  }
+  params.append("altitudeTypeA", String(roundedAltitude));
+};
+
+const extractVersionStamp = (plan: FlightPlan) => {
+  const raw = (plan.filingRaw && typeof plan.filingRaw === "object") ? plan.filingRaw as Record<string, any> : null;
+  return String(
+    raw?.response?.versionStamp ||
+    raw?.versionStamp ||
+    raw?.currentState?.versionStamp ||
+    "",
+  ).trim() || null;
+};
+
+const formatDepartureInstant = (value?: Date | string | null) => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+};
+
+const resolveActionPath = (baseUrl: string, actionPath: string, plan: FlightPlan) => {
+  const flightIdentifier = (plan.filingProviderPlanId || "").trim();
+  const resolvedPath = actionPath
+    .replaceAll("{flightIdentifier}", encodeURIComponent(flightIdentifier))
+    .replaceAll("{providerPlanId}", encodeURIComponent(flightIdentifier))
+    .replaceAll("{planId}", encodeURIComponent(plan.id));
+
+  return resolvedPath.startsWith("http://") || resolvedPath.startsWith("https://")
+    ? resolvedPath
+    : new URL(resolvedPath, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`).toString();
+};
+
+const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
   const params = new URLSearchParams();
 
   const append = (key: string, value: unknown) => {
@@ -159,36 +216,45 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     params.append(key, stringValue);
   };
 
-  append("action", action);
-  append("planId", plan.id);
-  append("providerPlanId", buildProviderPlanId(plan, action));
-  append("flightRules", normalizeFlightRules(plan.filingFlightRules));
-  append("departure", plan.departure);
-  append("destination", plan.destination);
-  append("route", plan.route);
-  append("alternate", plan.alternate);
-  append("plannedDepartureUtc", plan.plannedDepartureAt ? new Date(plan.plannedDepartureAt).toISOString() : null);
-  append("plannedArrivalUtc", plan.plannedArrivalAt ? new Date(plan.plannedArrivalAt).toISOString() : null);
-  append("aircraftId", plan.tailNumber);
-  append("aircraftType", plan.aircraftType);
-  append("estimatedEnrouteMinutes", plan.filingEstimatedEnrouteMinutes);
-  append("enduranceMinutes", plan.filingEnduranceMinutes);
-  append("equipment", plan.filingEquipment);
-  append("soulsOnBoard", plan.filingSoulsOnBoard);
-  append("aircraftColor", plan.filingAircraftColor);
-  append("pilotName", plan.filingPilotName);
-  append("remarks", plan.filingRemarks || plan.notes);
-  append("fuelOnBoard", plan.fuelOnBoard);
-  append("fuelRequired", plan.fuelRequired);
+  if (action === "file" || action === "amend") {
+    append("type", "ICAO");
+    append("flightRules", normalizeFlightRules(plan.filingFlightRules));
+    append("aircraftIdentifier", plan.tailNumber);
+    append("departure", plan.departure);
+    append("destination", plan.destination);
+    append("altDestination1", plan.alternate);
+    append("departureInstant", formatDepartureInstant(plan.plannedDepartureAt));
+    append("flightDuration", minutesToIsoDuration(plan.filingEstimatedEnrouteMinutes));
+    append("speedKnots", plan.filingTrueAirspeedKtas);
+    append("aircraftType", plan.aircraftType);
+    append("wakeTurbulence", config.wakeTurbulence);
+    append("aircraftEquipment", plan.filingEquipment);
+    append("route", plan.route || "DCT");
+    append("remarks", plan.filingRemarks || plan.notes);
+    append("fuelOnBoard", minutesToIsoDuration(plan.filingEnduranceMinutes));
+    append("pilotData", plan.filingPilotName);
+    append("peopleOnBoardExtended", plan.filingSoulsOnBoard);
+    append("aircraftColor", plan.filingAircraftColor);
+    append("typeOfFlight", config.typeOfFlight);
+    append("surveillanceEquipment", config.surveillanceEquipment);
+    append("pilotInCommandExtended", plan.filingPilotName);
+    append("suppRemarksExtended", plan.filingRemarks || plan.notes);
+    append("otherInfo", config.otherInfo);
+    appendLeidosAltitudeFields(params, plan.filingPlannedAltitudeFt);
+    if (action === "amend") {
+      append("versionStamp", extractVersionStamp(plan));
+    }
+    return params;
+  }
+
+  if (action === "activate") {
+    append("actualDepartureInstant", formatDepartureInstant(plan.plannedDepartureAt) || new Date().toISOString());
+    append("versionStamp", extractVersionStamp(plan));
+    return params;
+  }
 
   return params;
 };
-
-const joinBaseAndPath = (baseUrl: string, actionPath: string) => (
-  actionPath.startsWith("http://") || actionPath.startsWith("https://")
-    ? actionPath
-    : new URL(actionPath, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`).toString()
-);
 
 const parseProviderResponse = async (response: Response) => {
   const contentType = response.headers.get("content-type") || "";
@@ -252,6 +318,12 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   if (!plan.destination) errors.push("Destination airport is required.");
   if (!plan.tailNumber) errors.push("Aircraft ID / tail number is required.");
   if (!plan.aircraftType) errors.push("Aircraft type is required.");
+  if ((action === "file" || action === "amend") && !plan.filingTrueAirspeedKtas) {
+    errors.push("Cruise speed is required before sending this filing action to Leidos.");
+  }
+  if ((action === "file" || action === "amend") && !plan.filingPlannedAltitudeFt) {
+    errors.push("Planned altitude is required before sending this filing action to Leidos.");
+  }
 
   if ((action === "file" || action === "amend" || action === "activate") && !plan.plannedDepartureAt) {
     errors.push("Planned departure time is required before staging this action.");
@@ -337,8 +409,26 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       );
     }
 
-    const requestUrl = joinBaseAndPath(config.baseUrl, actionPath);
-    const requestBody = buildLeidosActionPayload(plan, action);
+    if (action !== "file" && !plan.filingProviderPlanId) {
+      return buildStagedFallbackResult(
+        plan,
+        action,
+        validation,
+        `The Leidos ${action.toUpperCase()} request needs a flightIdentifier from a prior file response, so RSF kept it staged.`,
+      );
+    }
+
+    if ((action === "amend" || action === "activate") && !extractVersionStamp(plan)) {
+      return buildStagedFallbackResult(
+        plan,
+        action,
+        validation,
+        `The Leidos ${action.toUpperCase()} request needs the current versionStamp from the filed plan, so RSF kept it staged.`,
+      );
+    }
+
+    const requestUrl = resolveActionPath(config.baseUrl, actionPath, plan);
+    const requestBody = buildLeidosActionPayload(plan, action, config);
     const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
     const response = await fetch(requestUrl, {
       method: "POST",
@@ -357,6 +447,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
 
     const providerPlanId = String(
       parsedResponse.providerPlanId ||
+      parsedResponse.flightIdentifier ||
       parsedResponse.flightPlanId ||
       parsedResponse.planId ||
       parsedResponse.id ||

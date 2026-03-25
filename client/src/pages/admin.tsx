@@ -241,6 +241,19 @@ type WeeklyEmailAudiencePreview = {
   }>;
 };
 
+type LeidosFlightServiceDiagnostics = {
+  provider: string;
+  enabled: boolean;
+  environment: "lab" | "production";
+  baseUrl: string;
+  accountEmail: string | null;
+  usernameConfigured: boolean;
+  passwordConfigured: boolean;
+  webhookUsernameConfigured: boolean;
+  webhookPasswordConfigured: boolean;
+  actionPaths: Record<"file" | "amend" | "activate" | "cancel" | "close", string | null>;
+};
+
 type CrmLeadImportSummary = {
   success: boolean;
   fileName: string;
@@ -1041,6 +1054,15 @@ export default function AdminDashboard() {
   const { data: adminUsers = [], isLoading: adminUsersLoading } = useQuery<User[]>({
     queryKey: ["/api/admin/admins"],
     enabled: activeTab === "admins" && isSuperAdmin,
+  });
+
+  const {
+    data: leidosDiagnostics,
+    isLoading: leidosDiagnosticsLoading,
+    refetch: refetchLeidosDiagnostics,
+  } = useQuery<LeidosFlightServiceDiagnostics>({
+    queryKey: ["/api/admin/leidos-flight-service/status"],
+    enabled: activeTab === "users" && isSuperAdmin,
   });
 
   const hkMonthRange = useMemo(() => {
@@ -5375,170 +5397,280 @@ export default function AdminDashboard() {
         {/* Users Tab */}
         <TabsContent value="users" className="space-y-4">
           {isSuperAdmin && (
-            <Card>
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Weekly Email Control</CardTitle>
+                  <CardDescription>
+                    Preview the personalized weekly audience, send a segment test email, or run the weekly batch manually with the same audience rules used by automation.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="weekly-email-active-window">Active Window (Days)</Label>
+                      <Input
+                        id="weekly-email-active-window"
+                        type="number"
+                        min="7"
+                        max="90"
+                        value={weeklyEmailActiveWindowDays}
+                        onChange={(e) => setWeeklyEmailActiveWindowDays(e.target.value)}
+                        data-testid="input-weekly-email-active-window"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="weekly-email-cooldown">Recent Send Cooldown (Days)</Label>
+                      <Input
+                        id="weekly-email-cooldown"
+                        type="number"
+                        min="0"
+                        max="30"
+                        value={weeklyEmailCooldownDays}
+                        onChange={(e) => setWeeklyEmailCooldownDays(e.target.value)}
+                        data-testid="input-weekly-email-cooldown"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="weekly-email-test-segment">Test Segment</Label>
+                      <Select value={weeklyEmailTestSegment} onValueChange={(value) => setWeeklyEmailTestSegment(value as WeeklyEmailSegment)}>
+                        <SelectTrigger id="weekly-email-test-segment" data-testid="select-weekly-email-test-segment">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {WEEKLY_EMAIL_SEGMENTS.map((segment) => (
+                            <SelectItem key={segment} value={segment}>
+                              {WEEKLY_EMAIL_SEGMENT_LABELS[segment]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="weekly-email-test-email">Test Email</Label>
+                      <Input
+                        id="weekly-email-test-email"
+                        type="email"
+                        value={weeklyEmailTestEmail}
+                        onChange={(e) => setWeeklyEmailTestEmail(e.target.value)}
+                        placeholder="owner@readysetfly.us"
+                        data-testid="input-weekly-email-test-email"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => previewWeeklyEmailMutation.mutate()}
+                      disabled={previewWeeklyEmailMutation.isPending}
+                      data-testid="button-preview-weekly-email-audience"
+                    >
+                      {previewWeeklyEmailMutation.isPending ? "Loading..." : "Preview Audience"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => sendWeeklyEmailTestMutation.mutate()}
+                      disabled={sendWeeklyEmailTestMutation.isPending || !weeklyEmailTestEmail.trim()}
+                      data-testid="button-send-weekly-email-test"
+                    >
+                      {sendWeeklyEmailTestMutation.isPending ? "Sending Test..." : "Send Test Email"}
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => sendWeeklyEmailBatchMutation.mutate()}
+                      disabled={sendWeeklyEmailBatchMutation.isPending}
+                      data-testid="button-send-weekly-email-batch"
+                    >
+                      {sendWeeklyEmailBatchMutation.isPending ? "Sending..." : "Send Weekly Batch"}
+                    </Button>
+                  </div>
+
+                  {weeklyEmailPreview ? (
+                    <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-md border bg-background p-3">
+                          <div className="text-xs uppercase tracking-wide text-muted-foreground">Candidates</div>
+                          <div className="text-lg font-semibold">{weeklyEmailPreview.totalCandidates}</div>
+                        </div>
+                        <div className="rounded-md border bg-background p-3">
+                          <div className="text-xs uppercase tracking-wide text-muted-foreground">Eligible</div>
+                          <div className="text-lg font-semibold">{weeklyEmailPreview.eligibleCount}</div>
+                        </div>
+                        <div className="rounded-md border bg-background p-3">
+                          <div className="text-xs uppercase tracking-wide text-muted-foreground">Recent Sends Excluded</div>
+                          <div className="text-lg font-semibold">{weeklyEmailPreview.excludedRecentlySent}</div>
+                        </div>
+                        <div className="rounded-md border bg-background p-3">
+                          <div className="text-xs uppercase tracking-wide text-muted-foreground">Rules</div>
+                          <div className="text-sm font-medium">
+                            {weeklyEmailPreview.activeWindowDays}d active / {weeklyEmailPreview.cooldownDays}d cooldown
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+                        <div className="space-y-2">
+                          <div className="text-sm font-semibold">Segment Breakdown</div>
+                          <div className="space-y-2">
+                            {Object.keys(weeklyEmailPreview.segmentBreakdown).length > 0 ? (
+                              Object.entries(weeklyEmailPreview.segmentBreakdown).map(([segment, count]) => (
+                                <div key={segment} className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm">
+                                  <span>{WEEKLY_EMAIL_SEGMENT_LABELS[segment as WeeklyEmailSegment] || segment}</span>
+                                  <Badge variant="secondary">{count}</Badge>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-muted-foreground">No audience loaded yet.</div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="text-sm font-semibold">Sample Recipients</div>
+                          <div className="max-h-64 overflow-y-auto rounded-md border bg-background">
+                            {weeklyEmailPreview.sampleRecipients.length > 0 ? (
+                              weeklyEmailPreview.sampleRecipients.map((recipient) => (
+                                <div key={recipient.id} className="border-b px-3 py-3 last:border-b-0">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="font-medium">
+                                      {[recipient.firstName, recipient.lastName].filter(Boolean).join(" ") || recipient.email}
+                                    </div>
+                                    <Badge variant="outline">
+                                      {WEEKLY_EMAIL_SEGMENT_LABELS[recipient.segment] || recipient.segment}
+                                    </Badge>
+                                  </div>
+                                  <div className="mt-1 text-sm text-muted-foreground">{recipient.email}</div>
+                                  <div className="mt-1 text-xs text-muted-foreground">{recipient.subject}</div>
+                                  <div className="mt-1 text-xs text-muted-foreground">{recipient.reasonLine}</div>
+                                  {recipient.weeklyEmailLastSentAt ? (
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                      Last weekly send {format(parseISO(String(recipient.weeklyEmailLastSentAt)), "MMM d, yyyy h:mm a")}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="px-3 py-3 text-sm text-muted-foreground">No sample recipients available.</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+
+              <Card>
               <CardHeader>
-                <CardTitle>Weekly Email Control</CardTitle>
-                <CardDescription>
-                  Preview the personalized weekly audience, send a segment test email, or run the weekly batch manually with the same audience rules used by automation.
-                </CardDescription>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>Leidos Flight Service</CardTitle>
+                    <CardDescription>
+                      Check the current filing configuration before enabling live lab/prod submission, and keep the webhook target handy for Leidos push notification testing.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => refetchLeidosDiagnostics()}
+                    disabled={leidosDiagnosticsLoading}
+                    data-testid="button-refresh-leidos-diagnostics"
+                  >
+                    {leidosDiagnosticsLoading ? "Refreshing..." : "Refresh Diagnostics"}
+                  </Button>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="weekly-email-active-window">Active Window (Days)</Label>
-                    <Input
-                      id="weekly-email-active-window"
-                      type="number"
-                      min="7"
-                      max="90"
-                      value={weeklyEmailActiveWindowDays}
-                      onChange={(e) => setWeeklyEmailActiveWindowDays(e.target.value)}
-                      data-testid="input-weekly-email-active-window"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="weekly-email-cooldown">Recent Send Cooldown (Days)</Label>
-                    <Input
-                      id="weekly-email-cooldown"
-                      type="number"
-                      min="0"
-                      max="30"
-                      value={weeklyEmailCooldownDays}
-                      onChange={(e) => setWeeklyEmailCooldownDays(e.target.value)}
-                      data-testid="input-weekly-email-cooldown"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="weekly-email-test-segment">Test Segment</Label>
-                    <Select value={weeklyEmailTestSegment} onValueChange={(value) => setWeeklyEmailTestSegment(value as WeeklyEmailSegment)}>
-                      <SelectTrigger id="weekly-email-test-segment" data-testid="select-weekly-email-test-segment">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {WEEKLY_EMAIL_SEGMENTS.map((segment) => (
-                          <SelectItem key={segment} value={segment}>
-                            {WEEKLY_EMAIL_SEGMENT_LABELS[segment]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="weekly-email-test-email">Test Email</Label>
-                    <Input
-                      id="weekly-email-test-email"
-                      type="email"
-                      value={weeklyEmailTestEmail}
-                      onChange={(e) => setWeeklyEmailTestEmail(e.target.value)}
-                      placeholder="owner@readysetfly.us"
-                      data-testid="input-weekly-email-test-email"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => previewWeeklyEmailMutation.mutate()}
-                    disabled={previewWeeklyEmailMutation.isPending}
-                    data-testid="button-preview-weekly-email-audience"
-                  >
-                    {previewWeeklyEmailMutation.isPending ? "Loading..." : "Preview Audience"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => sendWeeklyEmailTestMutation.mutate()}
-                    disabled={sendWeeklyEmailTestMutation.isPending || !weeklyEmailTestEmail.trim()}
-                    data-testid="button-send-weekly-email-test"
-                  >
-                    {sendWeeklyEmailTestMutation.isPending ? "Sending Test..." : "Send Test Email"}
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => sendWeeklyEmailBatchMutation.mutate()}
-                    disabled={sendWeeklyEmailBatchMutation.isPending}
-                    data-testid="button-send-weekly-email-batch"
-                  >
-                    {sendWeeklyEmailBatchMutation.isPending ? "Sending..." : "Send Weekly Batch"}
-                  </Button>
-                </div>
-
-                {weeklyEmailPreview ? (
-                  <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+              <CardContent className="space-y-4">
+                {leidosDiagnostics ? (
+                  <>
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                       <div className="rounded-md border bg-background p-3">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Candidates</div>
-                        <div className="text-lg font-semibold">{weeklyEmailPreview.totalCandidates}</div>
-                      </div>
-                      <div className="rounded-md border bg-background p-3">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Eligible</div>
-                        <div className="text-lg font-semibold">{weeklyEmailPreview.eligibleCount}</div>
-                      </div>
-                      <div className="rounded-md border bg-background p-3">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Recent Sends Excluded</div>
-                        <div className="text-lg font-semibold">{weeklyEmailPreview.excludedRecentlySent}</div>
-                      </div>
-                      <div className="rounded-md border bg-background p-3">
-                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Rules</div>
-                        <div className="text-sm font-medium">
-                          {weeklyEmailPreview.activeWindowDays}d active / {weeklyEmailPreview.cooldownDays}d cooldown
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Live Mode</div>
+                        <div className="mt-2">
+                          <Badge variant={leidosDiagnostics.enabled ? "default" : "secondary"}>
+                            {leidosDiagnostics.enabled ? "Enabled" : "Staged"}
+                          </Badge>
                         </div>
+                      </div>
+                      <div className="rounded-md border bg-background p-3">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Environment</div>
+                        <div className="mt-2 font-medium capitalize">{leidosDiagnostics.environment}</div>
+                      </div>
+                      <div className="rounded-md border bg-background p-3">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Account Email</div>
+                        <div className="mt-2 text-sm font-medium">{leidosDiagnostics.accountEmail || "-"}</div>
+                      </div>
+                      <div className="rounded-md border bg-background p-3">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">Webhook URL</div>
+                        <div className="mt-2 break-all text-sm font-medium">{apiUrl("/api/leidos/webhooks/flight-service")}</div>
                       </div>
                     </div>
 
-                    <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-                      <div className="space-y-2">
-                        <div className="text-sm font-semibold">Segment Breakdown</div>
-                        <div className="space-y-2">
-                          {Object.keys(weeklyEmailPreview.segmentBreakdown).length > 0 ? (
-                            Object.entries(weeklyEmailPreview.segmentBreakdown).map(([segment, count]) => (
-                              <div key={segment} className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm">
-                                <span>{WEEKLY_EMAIL_SEGMENT_LABELS[segment as WeeklyEmailSegment] || segment}</span>
-                                <Badge variant="secondary">{count}</Badge>
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                      <div className="space-y-3">
+                        <div className="rounded-md border bg-background p-3">
+                          <div className="text-xs uppercase tracking-wide text-muted-foreground">REST Base URL</div>
+                          <div className="mt-2 break-all text-sm font-medium">{leidosDiagnostics.baseUrl}</div>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                          {Object.entries(leidosDiagnostics.actionPaths).map(([action, pathValue]) => (
+                            <div key={action} className="rounded-md border bg-background p-3">
+                              <div className="text-xs uppercase tracking-wide text-muted-foreground">{action}</div>
+                              <div className="mt-2 break-all text-xs font-medium">
+                                {pathValue || "Not configured"}
                               </div>
-                            ))
-                          ) : (
-                            <div className="text-sm text-muted-foreground">No audience loaded yet.</div>
-                          )}
+                            </div>
+                          ))}
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <div className="text-sm font-semibold">Sample Recipients</div>
-                        <div className="max-h-64 overflow-y-auto rounded-md border bg-background">
-                          {weeklyEmailPreview.sampleRecipients.length > 0 ? (
-                            weeklyEmailPreview.sampleRecipients.map((recipient) => (
-                              <div key={recipient.id} className="border-b px-3 py-3 last:border-b-0">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div className="font-medium">
-                                    {[recipient.firstName, recipient.lastName].filter(Boolean).join(" ") || recipient.email}
-                                  </div>
-                                  <Badge variant="outline">
-                                    {WEEKLY_EMAIL_SEGMENT_LABELS[recipient.segment] || recipient.segment}
-                                  </Badge>
-                                </div>
-                                <div className="mt-1 text-sm text-muted-foreground">{recipient.email}</div>
-                                <div className="mt-1 text-xs text-muted-foreground">{recipient.subject}</div>
-                                <div className="mt-1 text-xs text-muted-foreground">{recipient.reasonLine}</div>
-                                {recipient.weeklyEmailLastSentAt ? (
-                                  <div className="mt-1 text-xs text-muted-foreground">
-                                    Last weekly send {format(parseISO(String(recipient.weeklyEmailLastSentAt)), "MMM d, yyyy h:mm a")}
-                                  </div>
-                                ) : null}
-                              </div>
-                            ))
-                          ) : (
-                            <div className="px-3 py-3 text-sm text-muted-foreground">No sample recipients available.</div>
-                          )}
+                      <div className="space-y-3">
+                        <div className="rounded-md border bg-background p-3">
+                          <div className="text-sm font-semibold">Credential Status</div>
+                          <div className="mt-3 space-y-2 text-sm">
+                            <div className="flex items-center justify-between gap-3">
+                              <span>Username</span>
+                              <Badge variant={leidosDiagnostics.usernameConfigured ? "default" : "destructive"}>
+                                {leidosDiagnostics.usernameConfigured ? "Configured" : "Missing"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span>Password</span>
+                              <Badge variant={leidosDiagnostics.passwordConfigured ? "default" : "destructive"}>
+                                {leidosDiagnostics.passwordConfigured ? "Configured" : "Missing"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span>Webhook Username</span>
+                              <Badge variant={leidosDiagnostics.webhookUsernameConfigured ? "default" : "secondary"}>
+                                {leidosDiagnostics.webhookUsernameConfigured ? "Configured" : "Missing"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span>Webhook Password</span>
+                              <Badge variant={leidosDiagnostics.webhookPasswordConfigured ? "default" : "secondary"}>
+                                {leidosDiagnostics.webhookPasswordConfigured ? "Configured" : "Missing"}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
+                          Keep live mode disabled until all action paths are configured and lab filing validates cleanly. This panel confirms environment wiring only.
                         </div>
                       </div>
                     </div>
+                  </>
+                ) : (
+                  <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+                    {leidosDiagnosticsLoading ? "Loading Leidos diagnostics..." : "Leidos diagnostics are not available yet."}
                   </div>
-                ) : null}
+                )}
               </CardContent>
-            </Card>
+              </Card>
+            </>
           )}
 
           <Card>

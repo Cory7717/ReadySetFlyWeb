@@ -439,6 +439,7 @@ export default function PilotTools() {
             currentStep={pressDemo.currentStep}
             onPrevious={pressDemo.previousStep}
             onNext={pressDemo.nextStep}
+            onExit={pressDemo.exitDemo}
           />
         )}
         {/* Header */}
@@ -1503,11 +1504,13 @@ export default function PilotTools() {
           </>
         )}
         </div>
+        {!pressDemo.enabled && (
         <SponsoredRightRail
           placement="pilot-tools"
           infoTestId="button-banner-ad-info-pilot-tools"
           className="xl:sticky xl:top-24 xl:self-start"
         />
+        )}
       </div>
     </div>
   );

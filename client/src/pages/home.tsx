@@ -253,9 +253,10 @@ export default function Home() {
           currentStep={pressDemo.currentStep}
           onPrevious={pressDemo.previousStep}
           onNext={pressDemo.nextStep}
+          onExit={pressDemo.exitDemo}
         />
       )}
-      {showVerificationNudge && (
+      {!pressDemo.enabled && showVerificationNudge && (
         <Alert className="border-primary/30 bg-primary/5" data-testid="alert-verification-nudge">
           <Shield className="h-4 w-4" />
           <AlertTitle>Complete Verification to Book</AlertTitle>
@@ -429,6 +430,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      </PressDemoSpotlight>
 
       <section className="container mx-auto px-4">
         <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
@@ -474,6 +476,7 @@ export default function Home() {
           </Card>
           </PressDemoSpotlight>
 
+          {!pressDemo.enabled ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 text-sm">
               <div className="text-muted-foreground">
@@ -487,9 +490,9 @@ export default function Home() {
             </div>
             <BannerAdRotation placement="rentals" variant="compact" showLeadIn={false} />
           </div>
+          ) : null}
         </div>
       </section>
-      </PressDemoSpotlight>
 
       <PressDemoSpotlight
         active={pressDemo.isActive("browse-results")}

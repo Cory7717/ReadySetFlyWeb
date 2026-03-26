@@ -46,6 +46,17 @@ export function usePressDemo(steps: PressDemoStep[]) {
   const nextStep = useCallback(() => setStepIndex(clampedStepIndex + 1), [clampedStepIndex, setStepIndex]);
   const previousStep = useCallback(() => setStepIndex(clampedStepIndex - 1), [clampedStepIndex, setStepIndex]);
 
+  const exitDemo = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete("demo");
+    params.delete("pressStep");
+    const query = params.toString();
+    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", nextUrl);
+    window.location.reload();
+  }, []);
+
   const stepMap = useMemo(
     () =>
       new Map(
@@ -67,6 +78,24 @@ export function usePressDemo(steps: PressDemoStep[]) {
     [currentStep?.id, enabled],
   );
 
+  useEffect(() => {
+    if (!enabled) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        nextStep();
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        previousStep();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        exitDemo();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [enabled, exitDemo, nextStep, previousStep]);
+
   return {
     enabled,
     steps,
@@ -75,6 +104,7 @@ export function usePressDemo(steps: PressDemoStep[]) {
     setStepIndex,
     nextStep,
     previousStep,
+    exitDemo,
     getStep,
     isActive,
   };
@@ -87,6 +117,7 @@ export function PressDemoBanner({
   currentStep,
   onPrevious,
   onNext,
+  onExit,
 }: {
   pageLabel: string;
   stepIndex: number;
@@ -94,6 +125,7 @@ export function PressDemoBanner({
   currentStep: PressDemoStep | null;
   onPrevious: () => void;
   onNext: () => void;
+  onExit: () => void;
 }) {
   if (!currentStep) return null;
 
@@ -110,8 +142,23 @@ export function PressDemoBanner({
           </div>
           <div className="text-sm font-semibold text-slate-900">{currentStep.title}</div>
           <div className="text-sm text-slate-700">{currentStep.body}</div>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {Array.from({ length: totalSteps }).map((_, index) => (
+              <span
+                key={`press-demo-step-${index + 1}`}
+                className={cn(
+                  "h-2.5 w-2.5 rounded-full border border-sky-300",
+                  index === stepIndex ? "bg-sky-600" : "bg-white",
+                )}
+              />
+            ))}
+            <span className="text-[11px] text-slate-600">Use ← / → to step, Esc to exit</span>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="ghost" onClick={onExit}>
+            Exit Demo
+          </Button>
           <Button type="button" size="sm" variant="outline" onClick={onPrevious} disabled={stepIndex <= 0}>
             Previous
           </Button>
@@ -159,6 +206,7 @@ export function PressDemoSpotlight({
         <div className="pointer-events-none absolute left-4 top-4 z-20 max-w-sm rounded-2xl border border-sky-300 bg-white/96 p-3 shadow-xl">
           <div className="flex items-center gap-2">
             <Badge className="bg-sky-600 text-white hover:bg-sky-600">Step {stepNumber}</Badge>
+            <span className="inline-flex h-2.5 w-2.5 rounded-full bg-sky-500 animate-pulse" />
             <div className="text-sm font-semibold text-slate-900">{title}</div>
           </div>
           <div className="mt-2 text-sm text-slate-700">{body}</div>

@@ -4812,16 +4812,18 @@ export default function FlightPlanner() {
         "Build the route, check the conditions, and keep the trip ready to save or file."
       }
       actions={
-        <>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10"
-            onClick={openScratchPad}
-          >
-            ✏ Scratch Pad
-          </Button>
-        </>
+        pressDemo.enabled ? undefined : (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10"
+              onClick={openScratchPad}
+            >
+              ✏ Scratch Pad
+            </Button>
+          </>
+        )
       }
       canopyClassName="hidden"
       contentClassName="max-w-[1400px] space-y-6"
@@ -4846,8 +4848,10 @@ export default function FlightPlanner() {
           currentStep={pressDemo.currentStep}
           onPrevious={pressDemo.previousStep}
           onNext={pressDemo.nextStep}
+          onExit={pressDemo.exitDemo}
         />
       )}
+      {!pressDemo.enabled && (
       <Card className="border-sky-200 bg-[linear-gradient(180deg,hsl(204_100%_98%),hsl(210_40%_97%))] text-slate-900 shadow-sm">
         <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2">
@@ -4875,8 +4879,10 @@ export default function FlightPlanner() {
           </div>
         </CardContent>
       </Card>
+      )}
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_540px]">
       <div className="min-w-0 space-y-4">
+      {!pressDemo.enabled && (
       <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Recent Flights</CardTitle>
@@ -4921,6 +4927,7 @@ export default function FlightPlanner() {
           )}
         </CardContent>
       </Card>
+      )}
       <Card className="border-slate-200 bg-white text-slate-900 shadow-sm">
         <CardContent className="pt-4">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 2xl:grid-cols-7">

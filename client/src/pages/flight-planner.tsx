@@ -1,6 +1,6 @@
 ﻿
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1135,6 +1135,7 @@ function ScratchPadInkBoard({ strokes, layout, onChange }: ScratchPadInkBoardPro
 export default function FlightPlanner() {
   const { user, isAuthenticated } = useAuth();
   const { profile: studentProfile } = useStudentProfile();
+  const [plannerLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const pressDemo = usePressDemo(FLIGHT_PLANNER_PRESS_STEPS);
@@ -1263,6 +1264,69 @@ export default function FlightPlanner() {
   }, [scratchInkLayout]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const source = String(params.get("source") || "").trim();
+    const alternateFromLiveMap = String(params.get("alternate") || "").trim().toUpperCase();
+    const destinationFromLiveMap = String(params.get("destination") || "").trim().toUpperCase();
+    const departureFromLiveMap = String(params.get("departure") || "").trim().toUpperCase();
+    const routeFromLiveMap = String(params.get("route") || "").trim().toUpperCase();
+
+    if (source === "live-map" && alternateFromLiveMap) {
+      if (appliedLiveMapAlternateRef.current === `alt:${alternateFromLiveMap}`) return;
+      appliedLiveMapAlternateRef.current = `alt:${alternateFromLiveMap}`;
+      setForm((prev) => ({ ...prev, alternate: alternateFromLiveMap }));
+      setActiveTab("route");
+      toast({
+        title: "Alternate loaded from Live Map",
+        description: `${alternateFromLiveMap} was inserted into the alternate field. This only updates the local RSF plan until you save and file or amend it.`,
+      });
+    } else if (source === "live-map-direct" && destinationFromLiveMap) {
+      const handoffKey = `direct:${departureFromLiveMap}:${destinationFromLiveMap}:${routeFromLiveMap}`;
+      if (appliedLiveMapAlternateRef.current === handoffKey) return;
+      appliedLiveMapAlternateRef.current = handoffKey;
+      setForm((prev) => ({
+        ...prev,
+        departure: departureFromLiveMap || prev.departure,
+        destination: destinationFromLiveMap,
+        route: routeFromLiveMap || "DCT",
+      }));
+      setActiveTab("route");
+      toast({
+        title: "Direct-to route loaded from Live Map",
+        description: `${destinationFromLiveMap} was loaded into Flight Planner as a local direct-to route. This does not change any filed plan until you save and file or amend it.`,
+      });
+    } else if (source === "live-map-destination" && destinationFromLiveMap) {
+      const handoffKey = `destination:${departureFromLiveMap}:${destinationFromLiveMap}:${routeFromLiveMap}`;
+      if (appliedLiveMapAlternateRef.current === handoffKey) return;
+      appliedLiveMapAlternateRef.current = handoffKey;
+      setForm((prev) => ({
+        ...prev,
+        departure: departureFromLiveMap || prev.departure,
+        destination: destinationFromLiveMap,
+        route: routeFromLiveMap || "DCT",
+        alternate: "",
+      }));
+      setActiveTab("route");
+      toast({
+        title: "Destination replaced from Live Map",
+        description: `${destinationFromLiveMap} is now the local destination in Flight Planner. This does not change any filed plan until you save and file or amend it.`,
+      });
+    } else {
+      return;
+    }
+
+    params.delete("alternate");
+    params.delete("destination");
+    params.delete("departure");
+    params.delete("route");
+    params.delete("source");
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash || ""}`;
+    window.history.replaceState({}, "", nextUrl);
+  }, [plannerLocation, toast]);
+
+  useEffect(() => {
     if (!scratchPadOpen) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setScratchPadOpen(false);
@@ -1286,6 +1350,7 @@ export default function FlightPlanner() {
     fuelOnBoard: "",
     notes: "",
   });
+  const appliedLiveMapAlternateRef = useRef<string | null>(null);
   const [waypointsInput, setWaypointsInput] = useState("");
   const [plannedStopsInput, setPlannedStopsInput] = useState("");
   const [plannedFuelUplifts, setPlannedFuelUplifts] = useState<Record<string, string>>({});

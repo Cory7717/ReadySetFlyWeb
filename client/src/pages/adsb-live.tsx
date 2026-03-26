@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, WMSTileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
@@ -20,6 +20,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
@@ -48,11 +49,28 @@ type TrafficTarget = {
   squawk: string | null;
   relativeAltitudeFt: number | null;
   distanceNm: number | null;
+  verticalRateFpm: number | null;
+  threatScore: number;
+  threatLevel: "immediate" | "advisory" | "monitor";
   onGround: boolean;
 };
 
 type AdsbExchangePayload = {
   ac?: Array<Record<string, any>>;
+};
+
+type ReceiverBridgePayload = {
+  ownship?: {
+    lat: number;
+    lon: number;
+    altitudeFt?: number | null;
+    speedKt?: number | null;
+    headingDeg?: number | null;
+    timestamp?: number | null;
+  } | null;
+  traffic?: Array<Record<string, any>>;
+  source?: string | null;
+  updatedAt?: string | number | null;
 };
 
 type SavedFlightPlan = {
@@ -161,9 +179,38 @@ type NearbyObstacleResponse = {
   }>;
 };
 
+type RunwayBriefingResponse = {
+  icao: string;
+  runwayInUse?: string | null;
+  wind?: {
+    direction: number | null;
+    speed: number | null;
+    gust: number | null;
+  } | null;
+  advisory?: {
+    runway: string;
+    heading: number | null;
+    headwind: number | null;
+    crosswind: number | null;
+  } | null;
+  runways: Array<{
+    leIdent?: string | null;
+    heIdent?: string | null;
+    leHeading?: number | null;
+    heHeading?: number | null;
+    lengthFt?: number | null;
+    surface?: string | null;
+  }>;
+};
+
 type MapStyle = "standard" | "sectional" | "radar" | "clouds";
+type TrafficFilterMode = "all" | "conflict" | "same-altitude" | "above" | "below";
+type PositionSourceMode = "device" | "bridge";
 
 const defaultCenter: [number, number] = [39.5, -98.35];
+const RECEIVER_BRIDGE_URL_KEY = "rsf.receiverBridgeUrl";
+const POSITION_SOURCE_KEY = "rsf.positionSource";
+const DEFAULT_RECEIVER_BRIDGE_URL = "http://127.0.0.1:3005/rsf-live.json";
 
 const FAA_SECTIONAL_TILE_URL =
   "https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}";
@@ -225,6 +272,12 @@ const haversineNm = (lat1: number, lon1: number, lat2: number, lon2: number) => 
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return earthRadiusKm * c * 0.539957;
+};
+
+const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
+const smallestAngleDiff = (a: number, b: number) => {
+  const diff = normalizeDegrees(a - b + 180) - 180;
+  return diff;
 };
 
 const projectLatLonToNm = (lat: number, lon: number, refLat: number) => {
@@ -335,6 +388,12 @@ const formatSpeed = (value: number | null) => {
   return `${Math.round(value)} kt`;
 };
 
+const formatVerticalRate = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return "--";
+  const rounded = Math.round(value / 100) * 100;
+  return `${rounded >= 0 ? "+" : ""}${rounded.toLocaleString()} fpm`;
+};
+
 const formatHeading = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return "--";
   return `${Math.round(value)} deg`;
@@ -358,6 +417,35 @@ const formatEtaLocal = (value: string | null) => {
   return parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 };
 
+const playCockpitAlertTone = () => {
+  if (typeof window === "undefined") return;
+  const AudioContextCtor =
+    (window as typeof window & { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext ||
+    (window as typeof window & { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextCtor) return;
+
+  try {
+    const audioContext = new AudioContextCtor();
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+    oscillator.frequency.setValueAtTime(660, audioContext.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.06, audioContext.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.26);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.28);
+    oscillator.onended = () => {
+      audioContext.close().catch(() => undefined);
+    };
+  } catch {
+    // Ignore browser audio failures.
+  }
+};
+
 const buildOwnshipIcon = (headingDeg: number | null) =>
   L.divIcon({
     className: "",
@@ -373,24 +461,41 @@ const buildOwnshipIcon = (headingDeg: number | null) =>
     iconAnchor: [14, 14],
   });
 
-const buildTrafficIcon = (trackDeg: number | null, onGround: boolean, relativeAltitudeFt: number | null) => {
+const buildTrafficIcon = (
+  trackDeg: number | null,
+  onGround: boolean,
+  relativeAltitudeFt: number | null,
+  threatLevel: TrafficTarget["threatLevel"],
+) => {
   const tone = onGround
     ? "#6b7280"
-    : relativeAltitudeFt !== null && Math.abs(relativeAltitudeFt) <= 1000
-      ? "#ef4444"
-      : "#0f766e";
+    : threatLevel === "immediate"
+      ? "#dc2626"
+      : threatLevel === "advisory"
+        ? "#f59e0b"
+        : relativeAltitudeFt !== null && Math.abs(relativeAltitudeFt) <= 1000
+          ? "#ef4444"
+          : "#0f766e";
+  const ring =
+    threatLevel === "immediate"
+      ? "0 0 0 4px rgba(220,38,38,0.2)"
+      : threatLevel === "advisory"
+        ? "0 0 0 3px rgba(245,158,11,0.18)"
+        : "none";
+  const size = threatLevel === "immediate" ? 28 : threatLevel === "advisory" ? 26 : 24;
+  const half = size / 2;
 
   return L.divIcon({
     className: "",
     html: `
-      <div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;">
-        <svg width="24" height="24" viewBox="0 0 24 24" style="transform: rotate(${trackDeg ?? 0}deg); transform-origin: 50% 50%;">
+      <div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;border-radius:9999px;box-shadow:${ring};">
+        <svg width="${size}" height="${size}" viewBox="0 0 24 24" style="transform: rotate(${trackDeg ?? 0}deg); transform-origin: 50% 50%;">
           <path d="M12 2 L14 10 L21 12 L14 14 L12 22 L10 14 L3 12 L10 10 Z" fill="${tone}" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
         </svg>
       </div>
     `,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+    iconSize: [size, size],
+    iconAnchor: [half, half],
   });
 };
 
@@ -538,8 +643,35 @@ function RecenterOwnship({
   return null;
 }
 
+function FocusMapTarget({
+  target,
+}: {
+  target: { lat: number; lon: number; label: string; nonce: number } | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!target) return;
+    map.setView([target.lat, target.lon], Math.max(map.getZoom(), 10), {
+      animate: true,
+    });
+  }, [map, target]);
+
+  return null;
+}
+
 export default function AdsbLive() {
   const { isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
+  const [positionSource, setPositionSource] = useState<PositionSourceMode>(() => {
+    if (typeof window === "undefined") return "device";
+    const stored = window.localStorage.getItem(POSITION_SOURCE_KEY);
+    return stored === "bridge" ? "bridge" : "device";
+  });
+  const [receiverBridgeUrl, setReceiverBridgeUrl] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_RECEIVER_BRIDGE_URL;
+    return window.localStorage.getItem(RECEIVER_BRIDGE_URL_KEY) || DEFAULT_RECEIVER_BRIDGE_URL;
+  });
   const [trackingEnabled, setTrackingEnabled] = useState(false);
   const [followOwnship, setFollowOwnship] = useState(true);
   const [mapStyle, setMapStyle] = useState<MapStyle>("radar");
@@ -555,9 +687,15 @@ export default function AdsbLive() {
   const [showObstacleOverlay, setShowObstacleOverlay] = useState(true);
   const [showDiversionOverlay, setShowDiversionOverlay] = useState(true);
   const [showTerrainShading, setShowTerrainShading] = useState(true);
+  const [trafficFilterMode, setTrafficFilterMode] = useState<TrafficFilterMode>("conflict");
+  const [alertAudioEnabled, setAlertAudioEnabled] = useState(true);
   const [selectedPlanId, setSelectedPlanId] = useState("none");
+  const [mapFocusTarget, setMapFocusTarget] = useState<{ lat: number; lon: number; label: string; nonce: number } | null>(null);
+  const [selectedDiversionIcao, setSelectedDiversionIcao] = useState<string | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const radarTimerRef = useRef<number | null>(null);
+  const trafficAlertAckRef = useRef<string | null>(null);
+  const diversionAlertAckRef = useRef<string | null>(null);
   const cloudDate = useMemo(
     () => new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString().slice(0, 10),
     []
@@ -567,24 +705,38 @@ export default function AdsbLive() {
     trackEvent("live_traffic_view", { page: "/live-traffic" });
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(POSITION_SOURCE_KEY, positionSource);
+  }, [positionSource]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(RECEIVER_BRIDGE_URL_KEY, receiverBridgeUrl);
+  }, [receiverBridgeUrl]);
+
   const beginTracking = useCallback(() => {
-    if (!navigator.geolocation) {
+    if (positionSource === "device" && !navigator.geolocation) {
       setGeoError("Geolocation is not supported on this device/browser.");
       return;
     }
     setGeoError(null);
     setTrackingEnabled(true);
-  }, []);
+  }, [positionSource]);
 
   const stopTracking = useCallback(() => {
     setTrackingEnabled(false);
   }, []);
 
   useEffect(() => {
-    if (!trackingEnabled) {
+    if (!trackingEnabled || positionSource !== "device") {
       if (watchIdRef.current !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
+      }
+      if (!trackingEnabled) return;
+      if (positionSource !== "device") {
+        setGeoError(null);
       }
       return;
     }
@@ -631,7 +783,7 @@ export default function AdsbLive() {
         watchIdRef.current = null;
       }
     };
-  }, [rangeNm, trackingEnabled]);
+  }, [positionSource, rangeNm, trackingEnabled]);
 
   useEffect(() => {
     if (mapStyle !== "radar") {
@@ -694,6 +846,51 @@ export default function AdsbLive() {
     };
   }, [mapStyle, radarFrames.length]);
 
+  const receiverBridgeQuery = useQuery<ReceiverBridgePayload>({
+    queryKey: ["/receiver-bridge", receiverBridgeUrl],
+    enabled: trackingEnabled && positionSource === "bridge" && Boolean(receiverBridgeUrl.trim()),
+    refetchInterval: 3000,
+    refetchIntervalInBackground: true,
+    queryFn: async () => {
+      const response = await fetch(receiverBridgeUrl.trim(), {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(`Receiver bridge unavailable (${response.status}).`);
+      }
+      return response.json();
+    },
+  });
+
+  useEffect(() => {
+    if (!trackingEnabled || positionSource !== "bridge") return;
+    const bridgeOwnship = receiverBridgeQuery.data?.ownship;
+    if (!bridgeOwnship || !Number.isFinite(Number(bridgeOwnship.lat)) || !Number.isFinite(Number(bridgeOwnship.lon))) {
+      if (receiverBridgeQuery.error) {
+        setGeoError(
+          receiverBridgeQuery.error instanceof Error
+            ? receiverBridgeQuery.error.message
+            : "Receiver bridge unavailable."
+        );
+      }
+      return;
+    }
+    const nextOwnship: LiveOwnship = {
+      lat: Number(bridgeOwnship.lat),
+      lon: Number(bridgeOwnship.lon),
+      altitudeFt: bridgeOwnship.altitudeFt != null ? Number(bridgeOwnship.altitudeFt) : null,
+      speedKt: bridgeOwnship.speedKt != null ? Number(bridgeOwnship.speedKt) : null,
+      headingDeg: bridgeOwnship.headingDeg != null ? Number(bridgeOwnship.headingDeg) : null,
+      timestamp: bridgeOwnship.timestamp != null ? Number(bridgeOwnship.timestamp) : Date.now(),
+    };
+    setOwnship(nextOwnship);
+    setTrail((current) => {
+      const next = [...current, [nextOwnship.lat, nextOwnship.lon] as [number, number]];
+      return next.slice(-25);
+    });
+    setGeoError(null);
+  }, [positionSource, receiverBridgeQuery.data, receiverBridgeQuery.error, trackingEnabled]);
+
   const trafficQuery = useQuery<AdsbExchangePayload>({
     queryKey: [
       "/api/adsb/aircraft",
@@ -701,7 +898,7 @@ export default function AdsbLive() {
       ownship ? ownship.lon.toFixed(3) : null,
       rangeNm,
     ],
-    enabled: Boolean(ownship),
+    enabled: Boolean(ownship) && !(positionSource === "bridge" && receiverBridgeQuery.data?.traffic?.length),
     refetchInterval: 15000,
     refetchIntervalInBackground: true,
     queryFn: async () => {
@@ -725,9 +922,13 @@ export default function AdsbLive() {
   });
 
   const trafficTargets = useMemo<TrafficTarget[]>(() => {
-    if (!trafficQuery.data?.ac || !ownship) return [];
+    const rawTraffic =
+      positionSource === "bridge" && Array.isArray(receiverBridgeQuery.data?.traffic)
+        ? receiverBridgeQuery.data.traffic
+        : trafficQuery.data?.ac;
+    if (!rawTraffic || !ownship) return [];
     const normalized: TrafficTarget[] = [];
-    trafficQuery.data.ac.forEach((raw, index) => {
+    rawTraffic.forEach((raw, index) => {
       const lat = Number(raw.lat);
       const lon = Number(raw.lon);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
@@ -735,11 +936,58 @@ export default function AdsbLive() {
         ? Number(raw.alt_baro)
         : Number.isFinite(Number(raw.alt_geom))
           ? Number(raw.alt_geom)
+          : Number.isFinite(Number(raw.altitudeFt))
+            ? Number(raw.altitudeFt)
           : null;
       const distanceNm = haversineNm(ownship.lat, ownship.lon, lat, lon);
       const relativeAltitudeFt = altitudeFt !== null && ownship.altitudeFt !== null
         ? altitudeFt - ownship.altitudeFt
         : null;
+      const verticalRateFpm = Number.isFinite(Number(raw.baro_rate))
+        ? Number(raw.baro_rate)
+        : Number.isFinite(Number(raw.geom_rate))
+          ? Number(raw.geom_rate)
+          : Number.isFinite(Number(raw.verticalRateFpm))
+            ? Number(raw.verticalRateFpm)
+          : null;
+      const bearingToOwnship = normalizeDegrees(
+        (Math.atan2(
+          Math.sin(((ownship.lon - lon) * Math.PI) / 180) * Math.cos((ownship.lat * Math.PI) / 180),
+          Math.cos((lat * Math.PI) / 180) * Math.sin((ownship.lat * Math.PI) / 180) -
+            Math.sin((lat * Math.PI) / 180) *
+              Math.cos((ownship.lat * Math.PI) / 180) *
+              Math.cos(((ownship.lon - lon) * Math.PI) / 180)
+        ) * 180) / Math.PI
+      );
+      let threatScore = 0;
+      if (!raw.gnd) threatScore += 5;
+      if (distanceNm <= 2) threatScore += 45;
+      else if (distanceNm <= 5) threatScore += 30;
+      else if (distanceNm <= 10) threatScore += 18;
+      else if (distanceNm <= 20) threatScore += 8;
+
+      if (relativeAltitudeFt !== null) {
+        const absRelative = Math.abs(relativeAltitudeFt);
+        if (absRelative <= 500) threatScore += 35;
+        else if (absRelative <= 1000) threatScore += 24;
+        else if (absRelative <= 2000) threatScore += 12;
+        else if (absRelative <= 5000) threatScore += 4;
+      }
+
+      const trackDeg = Number.isFinite(Number(raw.track)) ? Number(raw.track) : null;
+      if (trackDeg !== null && Math.abs(smallestAngleDiff(trackDeg, bearingToOwnship)) <= 45) {
+        threatScore += 10;
+      }
+      if (
+        relativeAltitudeFt !== null &&
+        verticalRateFpm !== null &&
+        ((relativeAltitudeFt > 0 && verticalRateFpm < -300) || (relativeAltitudeFt < 0 && verticalRateFpm > 300))
+      ) {
+        threatScore += 8;
+      }
+
+      const threatLevel: TrafficTarget["threatLevel"] =
+        threatScore >= 60 ? "immediate" : threatScore >= 30 ? "advisory" : "monitor";
       normalized.push({
         id: String(raw.hex || raw.icao || index),
         callsign: raw.flight ? String(raw.flight).trim() : null,
@@ -747,20 +995,30 @@ export default function AdsbLive() {
         lat,
         lon,
         altitudeFt,
-        groundSpeedKt: Number.isFinite(Number(raw.gs)) ? Number(raw.gs) : null,
-        trackDeg: Number.isFinite(Number(raw.track)) ? Number(raw.track) : null,
-        category: raw.t ? String(raw.t) : null,
+        groundSpeedKt: Number.isFinite(Number(raw.gs))
+          ? Number(raw.gs)
+          : Number.isFinite(Number(raw.groundSpeedKt))
+            ? Number(raw.groundSpeedKt)
+            : null,
+        trackDeg: trackDeg ?? (Number.isFinite(Number(raw.headingDeg)) ? Number(raw.headingDeg) : null),
+        category: raw.t ? String(raw.t) : raw.category ? String(raw.category) : null,
         squawk: raw.squawk ? String(raw.squawk) : null,
         relativeAltitudeFt,
         distanceNm,
-        onGround: Boolean(raw.gnd),
+        verticalRateFpm,
+        threatScore,
+        threatLevel,
+        onGround: Boolean(raw.gnd ?? raw.onGround),
       });
     });
 
     return normalized
-      .sort((a, b) => (a.distanceNm ?? Number.POSITIVE_INFINITY) - (b.distanceNm ?? Number.POSITIVE_INFINITY))
+      .sort((a, b) => {
+        if (b.threatScore !== a.threatScore) return b.threatScore - a.threatScore;
+        return (a.distanceNm ?? Number.POSITIVE_INFINITY) - (b.distanceNm ?? Number.POSITIVE_INFINITY);
+      })
       .slice(0, 40);
-  }, [ownship, trafficQuery.data]);
+  }, [ownship, positionSource, receiverBridgeQuery.data?.traffic, trafficQuery.data]);
 
   const trafficAlerts = useMemo(
     () =>
@@ -772,6 +1030,34 @@ export default function AdsbLive() {
       ),
     [trafficTargets]
   );
+  const filteredTrafficTargets = useMemo(() => {
+    return trafficTargets.filter((target) => {
+      const relative = target.relativeAltitudeFt;
+      if (trafficFilterMode === "all") return true;
+      if (trafficFilterMode === "conflict") {
+        return (
+          (target.distanceNm ?? Number.POSITIVE_INFINITY) <= 8 &&
+          relative !== null &&
+          Math.abs(relative) <= 2000
+        );
+      }
+      if (trafficFilterMode === "same-altitude") {
+        return relative !== null && Math.abs(relative) <= 3000;
+      }
+      if (trafficFilterMode === "above") {
+        return relative !== null && relative > 0;
+      }
+      if (trafficFilterMode === "below") {
+        return relative !== null && relative < 0;
+      }
+      return true;
+    });
+  }, [trafficFilterMode, trafficTargets]);
+  const immediateTrafficCount = trafficTargets.filter((target) => target.threatLevel === "immediate").length;
+  const topImmediateTraffic = trafficTargets.find((target) => target.threatLevel === "immediate") ?? null;
+  const trafficAlertKey = topImmediateTraffic
+    ? `${topImmediateTraffic.id}:${Math.round(topImmediateTraffic.distanceNm ?? 0)}:${Math.round(topImmediateTraffic.relativeAltitudeFt ?? 0)}`
+    : null;
 
   const radarTileUrl = useMemo(() => {
     if (mapStyle !== "radar" || radarFrames.length === 0) return "";
@@ -895,6 +1181,110 @@ export default function AdsbLive() {
   const diversionMapMarkers = diversionCandidates.slice(0, 5);
   const bestDiversion = diversionCandidates[0] ?? null;
   const immediateDiversions = diversionCandidates.filter((airport) => airport.immediateReady).slice(0, 3);
+  const selectedDiversion =
+    diversionCandidates.find((airport) => airport.icao === selectedDiversionIcao) ??
+    immediateDiversions.find((airport) => airport.icao === selectedDiversionIcao) ??
+    null;
+  const focusDiversionAirport = useCallback((airport: NearbyDiversionAirport) => {
+    setFollowOwnship(false);
+    setSelectedDiversionIcao(airport.icao);
+    setMapFocusTarget({
+      lat: airport.lat,
+      lon: airport.lon,
+      label: airport.icao,
+      nonce: Date.now(),
+    });
+  }, []);
+  const useDiversionAsAlternate = useCallback((airport: NearbyDiversionAirport) => {
+    const params = new URLSearchParams({
+      alternate: airport.icao,
+      source: "live-map",
+    });
+    setLocation(`/flight-planner?${params.toString()}`);
+  }, [setLocation]);
+  const buildDirectToInPlanner = useCallback((airport: NearbyDiversionAirport) => {
+    const params = new URLSearchParams({
+      destination: airport.icao,
+      route: "DCT",
+      source: "live-map-direct",
+    });
+    if (selectedPlan?.departure) {
+      params.set("departure", selectedPlan.departure);
+    }
+    setLocation(`/flight-planner?${params.toString()}`);
+  }, [selectedPlan?.departure, setLocation]);
+  const replaceDestinationInPlanner = useCallback((airport: NearbyDiversionAirport) => {
+    const params = new URLSearchParams({
+      destination: airport.icao,
+      route: "DCT",
+      source: "live-map-destination",
+    });
+    if (selectedPlan?.departure) {
+      params.set("departure", selectedPlan.departure);
+    }
+    setLocation(`/flight-planner?${params.toString()}`);
+  }, [selectedPlan?.departure, setLocation]);
+  const activateDirectToDiversion = useCallback((airport: NearbyDiversionAirport) => {
+    setSelectedDiversionIcao(airport.icao);
+    setFollowOwnship(false);
+  }, []);
+  const selectedDiversionBriefingQuery = useQuery<RunwayBriefingResponse>({
+    queryKey: ["/api/airports/runway-briefing", selectedDiversionIcao],
+    enabled: Boolean(selectedDiversionIcao),
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/airports/${selectedDiversionIcao}/runway-briefing`), {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || "Unable to load diversion runway briefing.");
+      }
+      return response.json();
+    },
+    staleTime: 60 * 1000,
+  });
+  const diversionWarning = useMemo(() => {
+    if (!selectedDiversion) return null;
+    const crosswind = selectedDiversionBriefingQuery.data?.advisory?.crosswind ?? null;
+    const flightCategory = selectedDiversion.flightCategory;
+    if (crosswind !== null && crosswind >= 18) {
+      return {
+        level: "warning" as const,
+        title: "Diversion crosswind warning",
+        description: `${selectedDiversion.icao} is currently showing about ${Math.round(crosswind)} kt crosswind on the advisory runway.`,
+      };
+    }
+    if (flightCategory === "IFR" || flightCategory === "LIFR") {
+      return {
+        level: "warning" as const,
+        title: "Diversion weather warning",
+        description: `${selectedDiversion.icao} is reporting ${flightCategory} conditions. Review whether it is still the right diversion choice.`,
+      };
+    }
+    if (crosswind !== null && crosswind >= 12) {
+      return {
+        level: "advisory" as const,
+        title: "Diversion crosswind advisory",
+        description: `${selectedDiversion.icao} is showing about ${Math.round(crosswind)} kt crosswind on the advisory runway.`,
+      };
+    }
+    return null;
+  }, [selectedDiversion, selectedDiversionBriefingQuery.data?.advisory?.crosswind]);
+  const diversionAlertKey = diversionWarning && selectedDiversion
+    ? `${selectedDiversion.icao}:${diversionWarning.title}:${diversionWarning.description}`
+    : null;
+  useEffect(() => {
+    if (!trackingEnabled || !alertAudioEnabled || !trafficAlertKey) return;
+    if (trafficAlertAckRef.current === trafficAlertKey) return;
+    playCockpitAlertTone();
+  }, [alertAudioEnabled, trafficAlertKey, trackingEnabled]);
+
+  useEffect(() => {
+    if (!trackingEnabled || !alertAudioEnabled || !diversionAlertKey) return;
+    if (diversionAlertAckRef.current === diversionAlertKey) return;
+    playCockpitAlertTone();
+  }, [alertAudioEnabled, diversionAlertKey, trackingEnabled]);
+
   const routeSummaryText = selectedPlan
     ? `${selectedPlan.departure} to ${selectedPlan.destination}${selectedPlan.alternate ? ` · alt ${selectedPlan.alternate}` : ""}`
     : "No route selected";
@@ -1215,7 +1605,9 @@ export default function AdsbLive() {
           <Alert>
             <LocateFixed className="h-4 w-4" />
             <AlertDescription className="flex flex-wrap items-center gap-3">
-              Enable device location to start ownship tracking, traffic lookups, and map following.
+              {positionSource === "bridge"
+                ? "Start the receiver bridge to pull ownship and traffic into the live map."
+                : "Enable device location to start ownship tracking, traffic lookups, and map following."}
               <Button size="sm" onClick={beginTracking}>Start live tracking</Button>
             </AlertDescription>
           </Alert>
@@ -1233,8 +1625,175 @@ export default function AdsbLive() {
             <ShieldAlert className="h-4 w-4" />
             <AlertDescription>
               {trafficAlerts.length} traffic {trafficAlerts.length === 1 ? "target is" : "targets are"} within 3 NM and 1,000 ft of your current altitude.
+              {immediateTrafficCount > 0 ? ` ${immediateTrafficCount} ${immediateTrafficCount === 1 ? "target is" : "targets are"} in the immediate-threat band.` : ""}
             </AlertDescription>
           </Alert>
+        )}
+
+        {topImmediateTraffic && trafficAlertKey !== trafficAlertAckRef.current && (
+          <Alert variant="destructive">
+            <ShieldAlert className="h-4 w-4" />
+            <AlertTitle>Immediate traffic warning</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <div>
+                {topImmediateTraffic.callsign || topImmediateTraffic.tail || topImmediateTraffic.id} is
+                {topImmediateTraffic.distanceNm ? ` ${topImmediateTraffic.distanceNm.toFixed(1)} NM away` : " nearby"} at
+                {" "}{formatSignedAltitude(topImmediateTraffic.relativeAltitudeFt)} relative altitude.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    trafficAlertAckRef.current = trafficAlertKey;
+                  }}
+                >
+                  Acknowledge
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setAlertAudioEnabled((current) => !current)}
+                >
+                  {alertAudioEnabled ? "Mute alert tone" : "Enable alert tone"}
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {diversionWarning && diversionAlertKey !== diversionAlertAckRef.current && (
+          <Alert className={diversionWarning.level === "warning" ? "border-amber-300 bg-amber-50 text-amber-950" : "border-dashed"}>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>{diversionWarning.title}</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <div>{diversionWarning.description}</div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    diversionAlertAckRef.current = diversionAlertKey;
+                  }}
+                >
+                  Acknowledge
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setAlertAudioEnabled((current) => !current)}
+                >
+                  {alertAudioEnabled ? "Mute alert tone" : "Enable alert tone"}
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {(topImmediateTraffic || selectedDiversion) && (
+          <div className="sticky top-4 z-[900]">
+            <div className="rounded-xl border bg-background/95 p-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Active Threat</div>
+                  {topImmediateTraffic ? (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-semibold">
+                            {topImmediateTraffic.callsign || topImmediateTraffic.tail || topImmediateTraffic.id}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {topImmediateTraffic.distanceNm ? `${topImmediateTraffic.distanceNm.toFixed(1)} NM` : "--"} · {formatSignedAltitude(topImmediateTraffic.relativeAltitudeFt)}
+                          </div>
+                        </div>
+                        <Badge variant="destructive">Immediate</Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <Badge variant="secondary">Track {formatHeading(topImmediateTraffic.trackDeg)}</Badge>
+                        <Badge variant="secondary">Vertical {formatVerticalRate(topImmediateTraffic.verticalRateFpm)}</Badge>
+                        <Badge variant="secondary">Score {Math.round(topImmediateTraffic.threatScore)}</Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => setTrafficFilterMode("conflict")}>
+                          Show conflict band
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            trafficAlertAckRef.current = trafficAlertKey;
+                          }}
+                        >
+                          Acknowledge
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-muted-foreground">No immediate traffic threat is active right now.</div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Active Diversion</div>
+                  {selectedDiversion ? (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-semibold">
+                            {selectedDiversion.icao}{selectedDiversion.name ? ` · ${selectedDiversion.name}` : ""}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {selectedDiversion.distanceNm.toFixed(1)} NM · {formatBearing(selectedDiversion.bearingDeg)}
+                          </div>
+                        </div>
+                        {diversionWarning ? (
+                          <Badge variant={diversionWarning.level === "warning" ? "destructive" : "secondary"}>
+                            {diversionWarning.level}
+                          </Badge>
+                        ) : (
+                          <Badge>Selected</Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <Badge variant="secondary">{selectedDiversion.flightCategory || "Weather unk"}</Badge>
+                        {selectedDiversion.runwayAdvisory ? (
+                          <Badge variant="secondary">
+                            {selectedDiversion.runwayAdvisory.runway}
+                            {selectedDiversion.runwayAdvisory.crosswindKt !== null ? ` · XW ${selectedDiversion.runwayAdvisory.crosswindKt.toFixed(0)} kt` : ""}
+                          </Badge>
+                        ) : null}
+                        {selectedDiversion.frequencySummary[0] ? (
+                          <Badge variant="secondary">
+                            {selectedDiversion.frequencySummary[0].type || selectedDiversion.frequencySummary[0].description || "Freq"}
+                            {selectedDiversion.frequencySummary[0].frequencyMhz ? ` · ${selectedDiversion.frequencySummary[0].frequencyMhz.toFixed(3)}` : ""}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => focusDiversionAirport(selectedDiversion)}>
+                          Refocus
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => activateDirectToDiversion(selectedDiversion)}>
+                          Direct-to
+                        </Button>
+                        <Button type="button" size="sm" onClick={() => replaceDestinationInPlanner(selectedDiversion)}>
+                          Use as destination
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-sm text-muted-foreground">Select a diversion candidate to pin it here for quick action.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(360px,0.7fr)]">
@@ -1273,6 +1832,28 @@ export default function AdsbLive() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center gap-4 text-sm">
+                <Select value={positionSource} onValueChange={(value) => setPositionSource(value as PositionSourceMode)}>
+                  <SelectTrigger className="w-[170px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="device">Device GPS</SelectItem>
+                    <SelectItem value="bridge">Receiver bridge</SelectItem>
+                  </SelectContent>
+                </Select>
+                {positionSource === "bridge" ? (
+                  <>
+                    <Input
+                      value={receiverBridgeUrl}
+                      onChange={(event) => setReceiverBridgeUrl(event.target.value)}
+                      className="w-[280px]"
+                      placeholder="http://127.0.0.1:3005/rsf-live.json"
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={() => receiverBridgeQuery.refetch()}>
+                      Refresh receiver
+                    </Button>
+                  </>
+                ) : null}
                 {isAuthenticated && (
                   <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
                     <SelectTrigger className="w-[280px]">
@@ -1341,6 +1922,7 @@ export default function AdsbLive() {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
+                  <FocusMapTarget target={mapFocusTarget} />
                   {mapStyle === "sectional" && (
                     <TileLayer
                       attribution="Federal Aviation Administration, Aeronautical Information Services"
@@ -1577,28 +2159,55 @@ export default function AdsbLive() {
                       </Popup>
                     </Marker>
                   ))}
-                  {trafficTargets.map((target) => (
-                    <Marker
-                      key={target.id}
-                      position={[target.lat, target.lon]}
-                      icon={buildTrafficIcon(target.trackDeg, target.onGround, target.relativeAltitudeFt)}
+                  {ownship && selectedDiversion ? (
+                    <Polyline
+                      positions={[
+                        [ownship.lat, ownship.lon],
+                        [selectedDiversion.lat, selectedDiversion.lon],
+                      ]}
+                      pathOptions={{ color: "#0f766e", weight: 3, opacity: 0.85, dashArray: "8 6" }}
                     >
-                      <Tooltip direction="top" offset={[0, -10]}>
-                        {target.callsign || target.tail || target.id}
-                      </Tooltip>
-                      <Popup>
-                        <div className="space-y-1 text-sm">
-                          <div className="font-semibold">{target.callsign || target.tail || target.id}</div>
-                          <div>Distance: {target.distanceNm ? `${target.distanceNm.toFixed(1)} NM` : "--"}</div>
-                          <div>Altitude: {formatAltitude(target.altitudeFt)}</div>
-                          <div>Relative: {formatSignedAltitude(target.relativeAltitudeFt)}</div>
-                          <div>Speed: {formatSpeed(target.groundSpeedKt)}</div>
-                          <div>Track: {formatHeading(target.trackDeg)}</div>
-                          {target.category ? <div>Type: {target.category}</div> : null}
-                          {target.squawk ? <div>Squawk: {target.squawk}</div> : null}
+                      <Tooltip direction="top" offset={[0, -8]}>
+                        <div className="space-y-0.5 text-xs">
+                          <div className="font-semibold">Direct-to diversion</div>
+                          <div>{selectedDiversion.icao} · {selectedDiversion.distanceNm.toFixed(1)} NM</div>
+                          <div>Bearing {formatBearing(selectedDiversion.bearingDeg)}</div>
                         </div>
-                      </Popup>
-                    </Marker>
+                      </Tooltip>
+                    </Polyline>
+                  ) : null}
+                  {filteredTrafficTargets.map((target) => (
+                    <Fragment key={target.id}>
+                      {target.threatLevel === "immediate" && target.distanceNm ? (
+                        <Circle
+                          center={[target.lat, target.lon]}
+                          radius={Math.max(926, target.distanceNm * 926)}
+                          pathOptions={{ color: "#dc2626", weight: 1.5, opacity: 0.8, dashArray: "4 4", fillOpacity: 0.03 }}
+                        />
+                      ) : null}
+                      <Marker
+                        position={[target.lat, target.lon]}
+                        icon={buildTrafficIcon(target.trackDeg, target.onGround, target.relativeAltitudeFt, target.threatLevel)}
+                      >
+                        <Tooltip direction="top" offset={[0, -10]}>
+                          {target.callsign || target.tail || target.id}
+                        </Tooltip>
+                        <Popup>
+                          <div className="space-y-1 text-sm">
+                            <div className="font-semibold">{target.callsign || target.tail || target.id}</div>
+                            <div>Distance: {target.distanceNm ? `${target.distanceNm.toFixed(1)} NM` : "--"}</div>
+                            <div>Altitude: {formatAltitude(target.altitudeFt)}</div>
+                            <div>Relative: {formatSignedAltitude(target.relativeAltitudeFt)}</div>
+                            <div>Speed: {formatSpeed(target.groundSpeedKt)}</div>
+                            <div>Track: {formatHeading(target.trackDeg)}</div>
+                            <div>Vertical: {formatVerticalRate(target.verticalRateFpm)}</div>
+                            <div>Threat: {target.threatLevel} · {Math.round(target.threatScore)}</div>
+                            {target.category ? <div>Type: {target.category}</div> : null}
+                            {target.squawk ? <div>Squawk: {target.squawk}</div> : null}
+                          </div>
+                        </Popup>
+                      </Marker>
+                    </Fragment>
                   ))}
                 </MapContainer>
               </div>
@@ -1607,10 +2216,20 @@ export default function AdsbLive() {
                 <div className="rounded-lg border p-3">
                   <div className="text-xs text-muted-foreground">Tracking</div>
                   <div className="font-semibold">{trackingEnabled && ownship ? "Live" : "Idle"}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {positionSource === "bridge" ? "Receiver bridge" : "Device GPS"}
+                  </div>
                 </div>
                 <div className="rounded-lg border p-3">
                   <div className="text-xs text-muted-foreground">Nearby traffic</div>
                   <div className="font-semibold">{trafficTargets.length}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Immediate threats</div>
+                  <div className={`font-semibold ${immediateTrafficCount > 0 ? "text-red-700" : ""}`}>{immediateTrafficCount}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {trafficFilterMode === "conflict" ? "Using conflict-band filter." : "Threat-ranked from nearby traffic."}
+                  </div>
                 </div>
                 <div className="rounded-lg border p-3">
                   <div className="text-xs text-muted-foreground">Ownship altitude</div>
@@ -1986,9 +2605,9 @@ export default function AdsbLive() {
                 <div className="flex items-start gap-2">
                   <Radio className="mt-0.5 h-4 w-4 text-amber-600" />
                   <div>
-                    <div className="font-medium">Portable receiver ingest is next</div>
+                    <div className="font-medium">Receiver bridge groundwork is live</div>
                     <div className="text-muted-foreground">
-                      RSF currently provides receiver setup guidance, but direct GDL-90 receiver ingestion is not yet wired in.
+                      RSF can now poll a local receiver bridge for ownship and traffic. Direct raw GDL-90 browser ingest is still the next step.
                     </div>
                   </div>
                 </div>
@@ -2007,8 +2626,24 @@ export default function AdsbLive() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Closest traffic</CardTitle>
-                <CardDescription>Sorted by distance from your current position.</CardDescription>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle>Priority traffic</CardTitle>
+                    <CardDescription>Threat-ranked traffic with altitude-band filtering.</CardDescription>
+                  </div>
+                  <Select value={trafficFilterMode} onValueChange={(value) => setTrafficFilterMode(value as TrafficFilterMode)}>
+                    <SelectTrigger className="w-[170px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="conflict">Conflict band</SelectItem>
+                      <SelectItem value="same-altitude">Same altitude</SelectItem>
+                      <SelectItem value="above">Above me</SelectItem>
+                      <SelectItem value="below">Below me</SelectItem>
+                      <SelectItem value="all">All traffic</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {trafficQuery.isLoading ? (
@@ -2020,13 +2655,13 @@ export default function AdsbLive() {
                       {trafficQuery.error instanceof Error ? trafficQuery.error.message : "Unable to load nearby traffic."}
                     </AlertDescription>
                   </Alert>
-                ) : trafficTargets.length === 0 ? (
+                ) : filteredTrafficTargets.length === 0 ? (
                   <div className="text-sm text-muted-foreground">
-                    Start tracking and wait for a position fix to load nearby traffic.
+                    No traffic currently matches the selected filter.
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {trafficTargets.slice(0, 10).map((target) => (
+                    {filteredTrafficTargets.slice(0, 10).map((target) => (
                       <div key={`list-${target.id}`} className="rounded-lg border p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -2035,15 +2670,22 @@ export default function AdsbLive() {
                               {target.category || "Traffic"} {target.onGround ? "· On ground" : ""}
                             </div>
                           </div>
-                          <Badge variant="outline">
-                            {target.distanceNm ? `${target.distanceNm.toFixed(1)} NM` : "--"}
-                          </Badge>
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge variant="outline">
+                              {target.distanceNm ? `${target.distanceNm.toFixed(1)} NM` : "--"}
+                            </Badge>
+                            <Badge variant={target.threatLevel === "immediate" ? "destructive" : target.threatLevel === "advisory" ? "default" : "secondary"}>
+                              {target.threatLevel}
+                            </Badge>
+                          </div>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                           <div>Altitude: <span className="font-medium text-foreground">{formatAltitude(target.altitudeFt)}</span></div>
                           <div>Relative: <span className="font-medium text-foreground">{formatSignedAltitude(target.relativeAltitudeFt)}</span></div>
                           <div>Speed: <span className="font-medium text-foreground">{formatSpeed(target.groundSpeedKt)}</span></div>
                           <div>Track: <span className="font-medium text-foreground">{formatHeading(target.trackDeg)}</span></div>
+                          <div>Vertical: <span className="font-medium text-foreground">{formatVerticalRate(target.verticalRateFpm)}</span></div>
+                          <div>Threat score: <span className="font-medium text-foreground">{Math.round(target.threatScore)}</span></div>
                         </div>
                       </div>
                     ))}
@@ -2120,12 +2762,36 @@ export default function AdsbLive() {
                               </span>
                             </div>
                           ) : null}
+                          <div className="col-span-2">
+                            Best comm: <span className="font-medium text-foreground">
+                              {airport.frequencySummary[0]
+                                ? `${airport.frequencySummary[0].type || airport.frequencySummary[0].description || "Freq"}${airport.frequencySummary[0].frequencyMhz ? ` · ${airport.frequencySummary[0].frequencyMhz.toFixed(3)}` : ""}`
+                                : "--"}
+                            </span>
+                          </div>
                         </div>
                         {airport.scoreReasons.length > 0 ? (
                           <div className="mt-2 text-xs text-muted-foreground">
                             Ranked for {airport.scoreReasons.join(", ")}.
                           </div>
                         ) : null}
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => focusDiversionAirport(airport)}>
+                            Focus on map
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => activateDirectToDiversion(airport)}>
+                            Direct-to
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => buildDirectToInPlanner(airport)}>
+                            Direct-to in planner
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => replaceDestinationInPlanner(airport)}>
+                            Use as destination
+                          </Button>
+                          <Button type="button" size="sm" onClick={() => useDiversionAsAlternate(airport)}>
+                            Use as alternate
+                          </Button>
+                        </div>
                         {airport.frequencySummary.length > 0 ? (
                           <div className="mt-2 flex flex-wrap gap-2 text-xs">
                             {airport.frequencySummary.map((item, freqIndex) => (
@@ -2179,6 +2845,12 @@ export default function AdsbLive() {
                         <div className="mt-2 flex flex-wrap gap-2 text-xs">
                           <Badge variant="secondary">{airport.flightCategory || "Weather unk"}</Badge>
                           <Badge variant="secondary">{airport.towered ? "Towered" : "Non-towered"}</Badge>
+                          {airport.frequencySummary[0] ? (
+                            <Badge variant="secondary">
+                              {airport.frequencySummary[0].type || airport.frequencySummary[0].description || "Freq"}
+                              {airport.frequencySummary[0].frequencyMhz ? ` · ${airport.frequencySummary[0].frequencyMhz.toFixed(3)}` : ""}
+                            </Badge>
+                          ) : null}
                           {airport.runwayAdvisory ? (
                             <Badge variant="secondary">
                               {airport.runwayAdvisory.runway}
@@ -2186,8 +2858,111 @@ export default function AdsbLive() {
                             </Badge>
                           ) : null}
                         </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => focusDiversionAirport(airport)}>
+                            Focus on map
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => activateDirectToDiversion(airport)}>
+                            Direct-to
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => buildDirectToInPlanner(airport)}>
+                            Direct-to in planner
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => replaceDestinationInPlanner(airport)}>
+                            Use as destination
+                          </Button>
+                          <Button type="button" size="sm" onClick={() => useDiversionAsAlternate(airport)}>
+                            Use as alternate
+                          </Button>
+                        </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Active diversion briefing</CardTitle>
+                <CardDescription>Runway, wind, and comm context for the diversion airport you are actively working.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!selectedDiversion ? (
+                  <div className="text-sm text-muted-foreground">
+                    Pick `Direct-to` or `Focus on map` on a diversion candidate to load its active briefing here.
+                  </div>
+                ) : selectedDiversionBriefingQuery.isLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading diversion briefing for {selectedDiversion.icao}...</div>
+                ) : selectedDiversionBriefingQuery.error ? (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      {selectedDiversionBriefingQuery.error instanceof Error
+                        ? selectedDiversionBriefingQuery.error.message
+                        : "Unable to load diversion briefing."}
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="rounded-lg border p-3">
+                      <div className="font-medium">
+                        {selectedDiversion.icao}{selectedDiversion.name ? ` · ${selectedDiversion.name}` : ""}
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {selectedDiversion.distanceNm.toFixed(1)} NM · {formatBearing(selectedDiversion.bearingDeg)}
+                        {selectedDiversion.maxRunwayFt ? ` · ${selectedDiversion.maxRunwayFt.toLocaleString()} ft max runway` : ""}
+                      </div>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-lg border bg-muted/30 p-3">
+                        <div className="text-xs text-muted-foreground">Runway in use</div>
+                        <div className="font-semibold">{selectedDiversionBriefingQuery.data?.runwayInUse || "--"}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Advisory runway {selectedDiversionBriefingQuery.data?.advisory?.runway || "--"}
+                        </div>
+                      </div>
+                      <div className="rounded-lg border bg-muted/30 p-3">
+                        <div className="text-xs text-muted-foreground">Surface wind</div>
+                        <div className="font-semibold">
+                          {selectedDiversionBriefingQuery.data?.wind?.direction != null
+                            ? `${formatBearing(selectedDiversionBriefingQuery.data.wind.direction)}`
+                            : "--"}
+                          {selectedDiversionBriefingQuery.data?.wind?.speed != null
+                            ? ` @ ${Math.round(selectedDiversionBriefingQuery.data.wind.speed)} kt`
+                            : ""}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Crosswind {selectedDiversionBriefingQuery.data?.advisory?.crosswind != null
+                            ? `${Math.round(selectedDiversionBriefingQuery.data.advisory.crosswind)} kt`
+                            : "--"}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3">
+                      <div className="text-xs text-muted-foreground">Best comms</div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                        {selectedDiversion.frequencySummary.length > 0 ? selectedDiversion.frequencySummary.map((item, index) => (
+                          <Badge key={`active-diversion-freq-${selectedDiversion.icao}-${index}`} variant="secondary" className="font-normal">
+                            {item.type || item.description || "Freq"} {item.frequencyMhz ? `· ${item.frequencyMhz.toFixed(3)}` : ""}
+                          </Badge>
+                        )) : <span className="text-muted-foreground">No airport frequencies cached yet.</span>}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => focusDiversionAirport(selectedDiversion)}>
+                        Refocus map
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => buildDirectToInPlanner(selectedDiversion)}>
+                        Direct-to in planner
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => replaceDestinationInPlanner(selectedDiversion)}>
+                        Use as destination
+                      </Button>
+                      <Button type="button" size="sm" onClick={() => useDiversionAsAlternate(selectedDiversion)}>
+                        Use as alternate
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>

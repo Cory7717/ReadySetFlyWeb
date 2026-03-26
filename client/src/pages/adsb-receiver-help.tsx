@@ -37,6 +37,33 @@ const receivers = [
   },
 ];
 
+const samplePayload = `{
+  "source": "local-gdl90-bridge",
+  "updatedAt": "2026-03-26T18:25:00Z",
+  "ownship": {
+    "lat": 30.1975,
+    "lon": -97.6664,
+    "altitudeFt": 4200,
+    "speedKt": 138,
+    "headingDeg": 087,
+    "timestamp": 1774559100000
+  },
+  "traffic": [
+    {
+      "id": "A1B2C3",
+      "callsign": "N123AB",
+      "lat": 30.2411,
+      "lon": -97.6102,
+      "altitudeFt": 4700,
+      "groundSpeedKt": 152,
+      "headingDeg": 262,
+      "verticalRateFpm": -300,
+      "category": "GA",
+      "onGround": false
+    }
+  ]
+}`;
+
 export default function AdsbReceiverHelp() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
@@ -50,6 +77,21 @@ export default function AdsbReceiverHelp() {
           Live traffic is for situational awareness only. Always use official avionics and ATC guidance.
         </AlertDescription>
       </Alert>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Receiver Bridge Mode</CardTitle>
+          <CardDescription>RSF can now poll a local JSON bridge when direct browser receiver ingest is not possible.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <div>- In Live Flight Map, switch the source to `Receiver bridge`.</div>
+          <div>- Point RSF to a local bridge URL such as `http://127.0.0.1:3005/rsf-live.json`.</div>
+          <div>- The bridge should expose ownship and optional traffic in JSON form.</div>
+          <pre className="overflow-x-auto rounded-md border bg-muted/30 p-3 text-xs text-foreground">
+            <code>{samplePayload}</code>
+          </pre>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4">
         {receivers.map((receiver) => (

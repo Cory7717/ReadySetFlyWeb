@@ -19379,12 +19379,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         ...providerResult,
         plan: updated,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to stage flight plan filing action:", error);
-      res.status(500).json({
-        error: error instanceof Error && error.message
+      const message =
+        error instanceof Error && error.message
           ? error.message
-          : "Failed to stage flight plan filing action",
+          : "Failed to stage flight plan filing action";
+      const isTimeout = /timed out before Flight Service responded|connect timeout|timed out/i.test(message);
+      res.status(isTimeout ? 504 : 500).json({
+        error: message,
       });
     }
   });

@@ -67,8 +67,27 @@ const buildPlannerIcaoCandidates = (value: string) => {
 };
 
 const summarizePlannerError = (value: unknown) => {
-  const message = String(value || "").trim();
+  let message = String(value || "").trim();
   if (!message) return "Unable to stage the filing action.";
+
+  if (message.startsWith("{") && message.includes("\"error\"")) {
+    try {
+      const parsed = JSON.parse(message);
+      if (typeof parsed?.error === "string" && parsed.error.trim()) {
+        message = parsed.error.trim();
+      }
+    } catch {
+      // Keep the original message if it is not valid JSON.
+    }
+  }
+
+  if (/Leidos .* timed out before Flight Service responded/i.test(message)) {
+    return message;
+  }
+
+  if (/connect timeout|timed out|fetch failed/i.test(message)) {
+    return "Leidos did not respond in time. The Flight Service lab is likely slow or temporarily unavailable. Please try again.";
+  }
 
   if (/<!doctype html|<html[\s>]|<body[\s>]|<head[\s>]/i.test(message)) {
     return "Leidos returned HTML instead of a REST response. Check the configured endpoint paths, credentials, and lab environment settings.";

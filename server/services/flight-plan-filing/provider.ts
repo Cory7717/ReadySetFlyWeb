@@ -561,17 +561,41 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     const requestUrl = resolveActionPath(config.baseUrl, actionPath, plan);
     const requestBody = buildLeidosActionPayload(plan, action, config);
     const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
-    const response = await fetch(requestUrl, {
-      method: "POST",
-      redirect: "manual",
-      headers: {
-        Authorization: `Basic ${basic}`,
-        Accept: "application/json, text/plain, */*",
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": config.userAgent,
-      },
-      body: requestBody.toString(),
-    });
+    let response: Response;
+    try {
+      response = await fetch(requestUrl, {
+        method: "POST",
+        redirect: "manual",
+        headers: {
+          Authorization: `Basic ${basic}`,
+          Accept: "application/json, text/plain, */*",
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": config.userAgent,
+        },
+        body: requestBody.toString(),
+      });
+    } catch (error: any) {
+      const message = String(error?.message || "");
+      const causeCode = String(error?.cause?.code || "");
+      const causeMessage = String(error?.cause?.message || "");
+      const timeoutLike =
+        error?.name === "TimeoutError" ||
+        causeCode === "UND_ERR_CONNECT_TIMEOUT" ||
+        /connect timeout|timed out|fetch failed/i.test(message) ||
+        /connect timeout|timed out/i.test(causeMessage);
+
+      if (timeoutLike) {
+        throw new Error(
+          `Leidos ${action.toUpperCase()} request timed out before Flight Service responded. ` +
+          "The lab service is likely slow or temporarily unavailable. Please try again."
+        );
+      }
+
+      throw new Error(
+        `Leidos ${action.toUpperCase()} request failed before Flight Service responded. ` +
+        `${message || "Network request failed."}`
+      );
+    }
 
     const parsedResponse = await parseProviderResponse(response);
     if (response.status >= 300 && response.status < 400) {

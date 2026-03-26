@@ -356,14 +356,24 @@ export const searchLeidosRoute = async ({
   }
 
   const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: {
-      Authorization: `Basic ${basic}`,
-      Accept: "application/json, text/plain, */*",
-      "User-Agent": config.userAgent,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        Authorization: `Basic ${basic}`,
+        Accept: "application/json, text/plain, */*",
+        "User-Agent": config.userAgent,
+      },
+    });
+  } catch (error: any) {
+    const code = String(error?.cause?.code || error?.code || "");
+    const message = String(error?.message || "");
+    if (code === "UND_ERR_CONNECT_TIMEOUT" || /connect timeout|timed out|fetch failed/i.test(message)) {
+      throw new Error("Leidos route assist timed out in the lab. Flight Service did not respond in time, so route suggestions are temporarily unavailable.");
+    }
+    throw error;
+  }
 
   const parsed = await parseProviderResponse(response);
   if (!response.ok) {

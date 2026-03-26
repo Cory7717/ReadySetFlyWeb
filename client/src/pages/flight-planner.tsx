@@ -42,6 +42,7 @@ import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight
 import { PageShell } from "@/components/layout/PageShell";
 import PlannerMap, { type PlannerPoint } from "@/components/flight-planner/PlannerMap";
 import NotamTranslator from "@/components/ai/NotamTranslator";
+import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
 
 const CesiumGlobe = lazy(() => import("@/components/flight-planner/CesiumGlobe"));
 
@@ -80,6 +81,25 @@ const summarizePlannerError = (value: unknown) => {
   }
 
   return message.length > 280 ? `${message.slice(0, 279).trimEnd()}…` : message;
+};
+
+const normalizeAircraftLabel = (value: string | null | undefined) =>
+  String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+
+const aircraftTypeMatchesPlan = (type: AircraftType, planAircraftType: string | null | undefined) => {
+  const normalizedPlanType = normalizeAircraftLabel(planAircraftType);
+  if (!normalizedPlanType) return false;
+  const candidates = [
+    `${type.make} ${type.model}`,
+    type.icaoType || "",
+    `${type.make} ${type.model}${type.icaoType ? ` (${type.icaoType})` : ""}`,
+  ]
+    .map(normalizeAircraftLabel)
+    .filter(Boolean);
+  return candidates.includes(normalizedPlanType);
 };
 
 const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
@@ -431,6 +451,14 @@ const filingStatusLabel = (status?: string | null) => {
       return "Draft";
   }
 };
+
+const escapeHtml = (value: unknown) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 
 type WeatherResponse = {
   icao: string;
@@ -3118,6 +3146,136 @@ export default function FlightPlanner() {
     filingPreviewMutation.mutate();
   };
 
+  const downloadFilingSummary = (plan: FlightPlan) => {
+    const formatDateTime = (value?: string | Date | null) => {
+      if (!value) return "—";
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return "—";
+      return parsed.toLocaleString();
+    };
+
+    const title = plan.title || `${plan.departure || "Departure"} to ${plan.destination || "Destination"}`;
+    const status = filingStatusLabel(plan.filingStatus);
+    const provider = plan.filingProvider || "leidos_flight_service";
+    const providerPlanId = plan.filingProviderPlanId || "—";
+    const history = Array.isArray(plan.filingActionHistory) ? [...plan.filingActionHistory].slice().reverse().slice(0, 8) : [];
+    const logoUrl = typeof window !== "undefined" ? new URL(logoImage, window.location.origin).toString() : logoImage;
+    const html = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(title)} - RSF Filing Summary</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 32px; color: #10243b; background: #f4f7fb; }
+      .sheet { max-width: 920px; margin: 0 auto; background: #ffffff; border: 1px solid #d6e0eb; border-radius: 18px; overflow: hidden; box-shadow: 0 16px 36px rgba(16,36,59,0.08); }
+      .header { display: flex; align-items: center; gap: 16px; padding: 24px 28px; background: linear-gradient(135deg, #123d77 0%, #1f66d1 100%); color: #ffffff; }
+      .header img { width: 52px; height: 52px; object-fit: contain; border-radius: 12px; background: rgba(255,255,255,0.14); padding: 6px; }
+      .header .eyebrow { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.82; }
+      .header .title { font-size: 28px; font-weight: 700; margin-top: 4px; }
+      .header .subtitle { font-size: 14px; opacity: 0.92; margin-top: 6px; }
+      .content { padding: 28px; display: grid; gap: 22px; }
+      .panel { border: 1px solid #d9e2ec; border-radius: 14px; padding: 18px 20px; }
+      .panel h2 { margin: 0 0 14px; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: #4d6480; }
+      .grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .cell .label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #71869d; margin-bottom: 5px; }
+      .cell .value { font-size: 16px; font-weight: 600; color: #10243b; word-break: break-word; }
+      .route { font-family: "Courier New", monospace; font-size: 14px; white-space: pre-wrap; }
+      .history-entry { border-top: 1px solid #e7edf4; padding-top: 12px; margin-top: 12px; }
+      .history-entry:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+      .history-head { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; margin-bottom: 6px; }
+      .muted { color: #5d7289; font-size: 13px; line-height: 1.5; }
+      .footer { padding: 0 28px 28px; color: #5d7289; font-size: 12px; line-height: 1.6; }
+      @media print { body { background: #ffffff; padding: 0; } .sheet { box-shadow: none; border: 0; } }
+    </style>
+  </head>
+  <body>
+    <div class="sheet">
+      <div class="header">
+        <img src="${escapeHtml(logoUrl)}" alt="Ready Set Fly" />
+        <div>
+          <div class="eyebrow">Ready Set Fly</div>
+          <div class="title">Flight Plan Filing Summary</div>
+          <div class="subtitle">${escapeHtml(title)}</div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="panel">
+          <h2>Submission Status</h2>
+          <div class="grid">
+            <div class="cell"><div class="label">Status</div><div class="value">${escapeHtml(status)}</div></div>
+            <div class="cell"><div class="label">Provider</div><div class="value">${escapeHtml(provider)}</div></div>
+            <div class="cell"><div class="label">Provider Flight ID</div><div class="value">${escapeHtml(providerPlanId)}</div></div>
+            <div class="cell"><div class="label">Last Provider Sync</div><div class="value">${escapeHtml(formatDateTime(plan.filingLastProviderSyncAt))}</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Flight Details</h2>
+          <div class="grid">
+            <div class="cell"><div class="label">Departure</div><div class="value">${escapeHtml(plan.departure || "—")}</div></div>
+            <div class="cell"><div class="label">Destination</div><div class="value">${escapeHtml(plan.destination || "—")}</div></div>
+            <div class="cell"><div class="label">Alternate</div><div class="value">${escapeHtml(plan.alternate || "—")}</div></div>
+            <div class="cell"><div class="label">Flight Rules</div><div class="value">${escapeHtml(plan.filingFlightRules || "VFR")}</div></div>
+            <div class="cell"><div class="label">Planned Departure</div><div class="value">${escapeHtml(formatDateTime(plan.plannedDepartureAt))}</div></div>
+            <div class="cell"><div class="label">Planned Arrival</div><div class="value">${escapeHtml(formatDateTime(plan.plannedArrivalAt))}</div></div>
+            <div class="cell"><div class="label">Aircraft / Tail</div><div class="value">${escapeHtml(plan.tailNumber || "—")}</div></div>
+            <div class="cell"><div class="label">Aircraft Type</div><div class="value">${escapeHtml(plan.aircraftType || "—")}</div></div>
+            <div class="cell"><div class="label">Cruise / Altitude</div><div class="value">${escapeHtml(`${plan.filingTrueAirspeedKtas || "—"} KTAS at ${plan.filingPlannedAltitudeFt || "—"} ft`)}</div></div>
+            <div class="cell"><div class="label">Endurance / Souls</div><div class="value">${escapeHtml(`${formatMinutesLabel(Number(plan.filingEnduranceMinutes || 0))} / ${plan.filingSoulsOnBoard || "—"} onboard`)}</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Filed Route</h2>
+          <div class="cell">
+            <div class="label">Enroute String</div>
+            <div class="value route">${escapeHtml(plan.route || "—")}</div>
+          </div>
+          <div class="grid" style="margin-top:14px;">
+            <div class="cell"><div class="label">Other ICAO Info</div><div class="value">${escapeHtml(plan.filingOtherInfo || "—")}</div></div>
+            <div class="cell"><div class="label">Filing Remarks</div><div class="value">${escapeHtml(plan.filingRemarks || plan.notes || "—")}</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Lifecycle History</h2>
+          ${history.length > 0 ? history.map((entry: any) => `
+            <div class="history-entry">
+              <div class="history-head">
+                <span>${escapeHtml(String(entry?.action || "Unknown action").toUpperCase())}</span>
+                <span>${escapeHtml(formatDateTime(entry?.stagedAt))}</span>
+              </div>
+              <div class="muted">${escapeHtml(entry?.message || "No summary available.")}</div>
+            </div>
+          `).join("") : `<div class="muted">No filing lifecycle history has been recorded yet.</div>`}
+        </div>
+      </div>
+      <div class="footer">
+        Generated by Ready Set Fly.<br />
+        Flight planning and filing workflow may still be under testing. Verify operational status and official provider acceptance before relying on any submission.
+      </div>
+    </div>
+  </body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `rsf-filing-summary-${(plan.departure || "dep").toLowerCase()}-${(plan.destination || "dest").toLowerCase()}-${plan.id.slice(0, 8)}.html`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    trackEvent("planner_filing_summary_download", {
+      plan_id: plan.id,
+      filing_status: plan.filingStatus || "draft",
+      departure: plan.departure || undefined,
+      destination: plan.destination || undefined,
+    });
+    toast({
+      title: "Filing summary downloaded",
+      description: "Saved an RSF-branded filing summary for this plan.",
+    });
+  };
+
   const saveCurrentPlan = async (options?: { returnToFile?: boolean }) => {
     if (!isAuthenticated) return;
     if (planLimitReached) {
@@ -3455,8 +3613,31 @@ export default function FlightPlanner() {
     setWaypointsInput(savedRouteIsAirportOnly ? normalizedSavedRoute : "");
     setPlannedStopsInput("");
     setPlannedAltitude(editingPlan.filingPlannedAltitudeFt ? String(editingPlan.filingPlannedAltitudeFt) : "");
+    const normalizedTail = normalizeAircraftLabel(editingPlan.tailNumber);
+    const normalizedAircraftType = normalizeAircraftLabel(editingPlan.aircraftType);
+    const matchingProfile = savedProfiles.find((profile) => {
+      const profileTail = normalizeAircraftLabel(profile.tailNumber);
+      const profileName = normalizeAircraftLabel(profile.name);
+      return (
+        (normalizedTail && profileTail === normalizedTail) ||
+        (normalizedAircraftType && profileName === normalizedAircraftType)
+      );
+    });
+    if (matchingProfile) {
+      setSelectedProfileId(matchingProfile.id);
+      setSelectedTypeId(matchingProfile.typeId || CUSTOM_TYPE_ID);
+    } else {
+      const matchingType = aircraftTypes.find((type) => aircraftTypeMatchesPlan(type, editingPlan.aircraftType));
+      if (matchingType) {
+        setSelectedProfileId("none");
+        setSelectedTypeId(matchingType.id);
+      } else if (normalizedAircraftType) {
+        setSelectedProfileId("none");
+        setSelectedTypeId(CUSTOM_TYPE_ID);
+      }
+    }
     setArrivalAuto(false);
-  }, [editingPlan]);
+  }, [aircraftTypes, editingPlan, savedProfiles]);
 
   useEffect(() => {
     if (selectedProfile) {
@@ -5313,6 +5494,13 @@ export default function FlightPlanner() {
                 >
                   Cancel
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => downloadFilingSummary(currentSavedPlan!)}
+                >
+                  Download filing summary
+                </Button>
               </div>
             </div>
           ) : (
@@ -5606,6 +5794,13 @@ export default function FlightPlanner() {
                     disabled={filingActionMutation.isPending}
                   >
                     Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => downloadFilingSummary(plan)}
+                  >
+                    Download filing summary
                   </Button>
                 </div>
                 <div className="text-xs text-muted-foreground">

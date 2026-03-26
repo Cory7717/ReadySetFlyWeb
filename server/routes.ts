@@ -14327,9 +14327,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       res.setHeader("Content-Type", contentType);
       res.setHeader("Cache-Control", "public, max-age=300");
       res.send(buffer);
-    } catch (error) {
-      console.error("RainViewer tile proxy failed:", error);
-      res.status(502).json({ error: "RainViewer tile unavailable" });
+    } catch (error: any) {
+      const errorName = String(error?.name || "");
+      const errorMessage = String(error?.message || "");
+      const isAbortLike =
+        errorName === "AbortError" ||
+        /aborted|timed out|timeout/i.test(errorMessage);
+
+      if (!res.headersSent) {
+        if (isAbortLike) {
+          return res.status(504).end();
+        }
+        console.error("RainViewer tile proxy failed:", error);
+        return res.status(502).json({ error: "RainViewer tile unavailable" });
+      }
+
+      if (!isAbortLike) {
+        console.error("RainViewer tile proxy failed:", error);
+      }
     }
   });
 

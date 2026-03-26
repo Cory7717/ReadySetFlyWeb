@@ -28,6 +28,15 @@ export type PlannerTerrainHotSpot = {
   lon: number;
 };
 
+export type PlannerLegHealthMarker = {
+  key: string;
+  status: "comfortable" | "caution" | "warning";
+  label: string;
+  detail: string;
+  lat: number;
+  lon: number;
+};
+
 type PlannerMapProps = {
   points: PlannerPoint[];
   heightClassName?: string;
@@ -37,6 +46,7 @@ type PlannerMapProps = {
   airportLabelMode?: "icao" | "full" | "markers";
   terrainSegments?: PlannerTerrainSegment[];
   terrainHotSpots?: PlannerTerrainHotSpot[];
+  legHealthMarkers?: PlannerLegHealthMarker[];
 };
 
 type WindsAloftPoint = {
@@ -89,6 +99,21 @@ const buildTerrainHotSpotIcon = (risk: PlannerTerrainHotSpot["risk"], rank: numb
     `,
     iconSize: [24, 22],
     iconAnchor: [12, 11],
+  });
+};
+
+const buildLegHealthIcon = (status: PlannerLegHealthMarker["status"]) => {
+  const tone = status === "warning" ? "#dc2626" : status === "caution" ? "#f59e0b" : "#2563eb";
+  const text = status === "warning" ? "!" : status === "caution" ? "~" : "OK";
+  return L.divIcon({
+    className: "",
+    html: `
+      <div style="display:flex;align-items:center;justify-content:center;min-width:26px;height:18px;padding:0 6px;border-radius:9999px;background:${tone};border:2px solid #ffffff;color:#ffffff;font-size:10px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.2);">
+        ${text}
+      </div>
+    `,
+    iconSize: [28, 18],
+    iconAnchor: [14, 9],
   });
 };
 
@@ -338,6 +363,7 @@ export default function PlannerMap({
   airportLabelMode = "icao",
   terrainSegments = [],
   terrainHotSpots = [],
+  legHealthMarkers = [],
 }: PlannerMapProps) {
   const center: [number, number] = points.length
     ? [points[0].lat, points[0].lon]
@@ -678,6 +704,23 @@ export default function PlannerMap({
               opacity={1}
             >
               Terrain hot spot {hotSpot.rank}
+            </Tooltip>
+          </Marker>
+        ))}
+        {legHealthMarkers.map((marker) => (
+          <Marker
+            key={`planner-leg-health-${marker.key}`}
+            position={[marker.lat, marker.lon]}
+            icon={buildLegHealthIcon(marker.status)}
+          >
+            <Tooltip
+              direction="top"
+              offset={[0, -10]}
+              className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow"
+              opacity={1}
+            >
+              {marker.label}
+              <div className="text-[11px] font-normal text-slate-700">{marker.detail}</div>
             </Tooltip>
           </Marker>
         ))}

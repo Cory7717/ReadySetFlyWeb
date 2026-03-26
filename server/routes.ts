@@ -2310,7 +2310,8 @@ function findBestRouteAssistStation(
   target: { lat: number; lon: number },
   targetDistanceNm: number,
   exclude: Set<string>,
-  maxRadiusNm: number
+  maxRadiusNm: number,
+  preferredLegNm?: number | null
 ) {
   const directRouteNm = distanceNmBetween(departure.lat, departure.lon, destination.lat, destination.lon);
   let best: { station: AirportSearchResult; score: number } | null = null;
@@ -2329,6 +2330,10 @@ function findBestRouteAssistStation(
       : 0;
     const normalizedAlongTrackNm = Number.isFinite(alongTrackNm) ? alongTrackNm : 0;
     const crossTrackNm = Math.sqrt(Math.max(0, departureToStationNm ** 2 - normalizedAlongTrackNm ** 2));
+    const legBiasNm =
+      preferredLegNm && preferredLegNm > 0
+        ? Math.abs(departureToStationNm - preferredLegNm)
+        : 0;
 
     if (normalizedAlongTrackNm < -25 || normalizedAlongTrackNm > directRouteNm + 25) continue;
 
@@ -2336,7 +2341,8 @@ function findBestRouteAssistStation(
       targetOffsetNm +
       detourNm * 2 +
       crossTrackNm * 1.75 +
-      Math.abs(normalizedAlongTrackNm - targetDistanceNm) * 1.25;
+      Math.abs(normalizedAlongTrackNm - targetDistanceNm) * 1.25 +
+      legBiasNm * 0.9;
 
     if (!best || score < best.score) {
       best = { station, score };
@@ -13861,23 +13867,43 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const waypointsLocal: string[] = [];
         const stopPool = fuelStopStations.length > 0 ? fuelStopStations : routableStations;
 
-        const pickAtFraction = (fraction: number, pool: AirportSearchResult[], radii: number[]) => {
-          const targetDistanceNm = routeDistanceNm * fraction;
+        const pickAtFraction = (
+          fraction: number,
+          pool: AirportSearchResult[],
+          radii: number[],
+          origin: AirportSearchResult = departureStation,
+          destinationForLeg: AirportSearchResult = destinationStation,
+          targetLegNm?: number | null,
+        ) => {
+          const legBearing = bearingBetween(
+            origin.lat,
+            origin.lon,
+            destinationForLeg.lat,
+            destinationForLeg.lon
+          );
+          const legDistanceNm = distanceNmBetween(
+            origin.lat,
+            origin.lon,
+            destinationForLeg.lat,
+            destinationForLeg.lon
+          );
+          const targetDistanceNm = legDistanceNm * fraction;
           const target = destinationPoint(
-            departureStation.lat,
-            departureStation.lon,
-            bearing,
+            origin.lat,
+            origin.lon,
+            legBearing,
             targetDistanceNm
           );
           for (const radius of radii) {
             const candidate = findBestRouteAssistStation(
               pool,
-              departureStation,
-              destinationStation,
+              origin,
+              destinationForLeg,
               target,
               targetDistanceNm,
               used,
               radius,
+              targetLegNm,
             );
             if (candidate) {
               used.add(candidate.icao);
@@ -13888,10 +13914,30 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         };
 
         if (stopTotal > 0) {
-          const step = 1 / (stopTotal + 1);
+          let legOrigin = departureStation;
           for (let i = 1; i <= stopTotal; i += 1) {
-            const suggestion = pickAtFraction(step * i, stopPool, stopRadii);
+            const remainingStops = stopTotal - i;
+            const remainingDistanceNm = distanceNmBetween(
+              legOrigin.lat,
+              legOrigin.lon,
+              destinationStation.lat,
+              destinationStation.lon
+            );
+            const targetLegNm = remainingDistanceNm / (remainingStops + 1);
+            const fraction = Math.max(0.2, Math.min(0.8, remainingStops > 0 ? 1 / (remainingStops + 2) : 0.5));
+            const suggestion = pickAtFraction(
+              fraction,
+              stopPool,
+              stopRadii,
+              legOrigin,
+              destinationStation,
+              targetLegNm,
+            );
             if (suggestion) plannedStopsLocal.push(suggestion);
+            const suggestionStation = suggestion ? findStation(suggestion) : null;
+            if (suggestionStation) {
+              legOrigin = suggestionStation;
+            }
           }
         }
 
@@ -13935,11 +13981,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         meta: {
           routeDistanceNm: Number(routeDistanceNm.toFixed(1)),
           maxLegNm: Number(maxLegNm.toFixed(1)),
+          planningLegNm: Number(planningLegNm.toFixed(1)),
           cruiseKtas,
           fuelBurnGph,
           fuelGallons,
           reserveMinutes,
           overwaterLikely,
+          stopPlanningMode: stopCount > 0 ? "sequential_topoff" : "direct_no_stop",
+          suggestedStopCount: directVariant.plannedStops.length,
+          coastlineSuggestedStopCount: coastlineVariant.plannedStops.length,
         },
       });
     } catch (error) {

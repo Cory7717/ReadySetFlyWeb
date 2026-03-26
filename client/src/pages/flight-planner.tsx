@@ -41,7 +41,7 @@ import {
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 import { PageShell } from "@/components/layout/PageShell";
-import PlannerMap, { type PlannerPoint } from "@/components/flight-planner/PlannerMap";
+import PlannerMap, { type PlannerLegHealthMarker, type PlannerPoint } from "@/components/flight-planner/PlannerMap";
 import NotamTranslator from "@/components/ai/NotamTranslator";
 import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
 
@@ -544,11 +544,15 @@ type WeatherResponse = {
 type RouteSuggestionMeta = {
   routeDistanceNm: number;
   maxLegNm: number;
+  planningLegNm?: number;
   cruiseKtas: number;
   fuelBurnGph: number;
   fuelGallons: number;
   reserveMinutes: number;
   overwaterLikely?: boolean;
+  stopPlanningMode?: "sequential_topoff" | "direct_no_stop";
+  suggestedStopCount?: number;
+  coastlineSuggestedStopCount?: number;
 };
 
 type RouteSuggestionResponse = {
@@ -654,6 +658,14 @@ type LegRiskSummary = {
   hasFuelReserveRisk: boolean;
   hasFuelDeficit: boolean;
   remainingFuelGallons: number;
+};
+
+type StopAdjustmentSuggestion = {
+  id: string;
+  detail: string;
+  action?:
+    | { kind: "use-suggested-stops"; label: string }
+    | { kind: "top-off-stop"; label: string; stopIcao: string; gallons: number };
 };
 
 type HazardSummaryItem = {
@@ -2424,6 +2436,11 @@ export default function FlightPlanner() {
     () => Array.from(plannedFuelUpliftGallonsByStop.values()).reduce((sum, gallons) => sum + gallons, 0),
     [plannedFuelUpliftGallonsByStop],
   );
+  const legPlanningTargetNm = useMemo(() => {
+    if (suggestionMeta?.planningLegNm && suggestionMeta.planningLegNm > 0) return suggestionMeta.planningLegNm;
+    if (suggestionMeta?.maxLegNm && suggestionMeta.maxLegNm > 0) return suggestionMeta.maxLegNm * 0.9;
+    return null;
+  }, [suggestionMeta]);
   const enduranceMinutes = useMemo(() => {
     if (!planningBurn || planningBurn <= 0) return 0;
     return (fuelAvailableGallons / planningBurn) * 60;
@@ -2463,9 +2480,15 @@ export default function FlightPlanner() {
         actualFuelUplift,
         fuelAfterUplift,
         cumulativeNm,
+        planningTargetStatus:
+          fuelAfterLeg < 0 || (legPlanningTargetNm != null && leg.distanceNm > (suggestionMeta?.maxLegNm ?? Number.POSITIVE_INFINITY))
+            ? ("warning" as const)
+            : legPlanningTargetNm != null && leg.distanceNm > legPlanningTargetNm
+              ? ("caution" as const)
+              : ("comfortable" as const),
       };
     });
-  }, [legs, fuelAvailableGallons, groundspeed, plannedDepartureUtc, plannedFuelUpliftGallonsByStop, planningBurn, planningFuel]);
+  }, [legPlanningTargetNm, legs, fuelAvailableGallons, groundspeed, plannedDepartureUtc, plannedFuelUpliftGallonsByStop, planningBurn, planningFuel, suggestionMeta?.maxLegNm]);
   const fuelPlanSummary = useMemo(() => {
     const overCapacityStops = legNavRows
       .filter((leg) => leg.requestedFuelUplift > leg.actualFuelUplift + 0.01)
@@ -3397,6 +3420,109 @@ export default function FlightPlanner() {
 
     return riskMap;
   }, [tfrRouteQuery.data?.features, legs, legNavRows, weatherByIcao, reserveFuel]);
+  const legHealthMarkers = useMemo<PlannerLegHealthMarker[]>(() => {
+    if (routePoints.length < 2 || legNavRows.length === 0) return [];
+    return legNavRows.map((leg, index) => {
+      const fromPoint = routePoints[index];
+      const toPoint = routePoints[index + 1];
+      if (!fromPoint || !toPoint) return null;
+      const midLat = (fromPoint.lat + toPoint.lat) / 2;
+      const midLon = (fromPoint.lon + toPoint.lon) / 2;
+      const status = leg.planningTargetStatus;
+      const detailParts = [
+        `${leg.distanceNm.toFixed(0)} NM`,
+        legPlanningTargetNm != null ? `target ${legPlanningTargetNm.toFixed(0)} NM` : null,
+        leg.fuelAfterLeg >= 0 ? `${leg.fuelAfterLeg.toFixed(1)} gal on arrival` : `short ${Math.abs(leg.fuelAfterLeg).toFixed(1)} gal`,
+      ].filter(Boolean);
+      return {
+        key: leg.key,
+        status,
+        label:
+          status === "warning"
+            ? `${leg.from} to ${leg.to}: exceeds leg plan`
+            : status === "caution"
+              ? `${leg.from} to ${leg.to}: leg is getting tight`
+              : `${leg.from} to ${leg.to}: leg looks healthy`,
+        detail: detailParts.join(" • "),
+        lat: midLat,
+        lon: midLon,
+      };
+    }).filter(Boolean) as PlannerLegHealthMarker[];
+  }, [legNavRows, legPlanningTargetNm, routePoints]);
+  const legPlanningSummary = useMemo(
+    () =>
+      legNavRows.reduce(
+        (acc, leg) => {
+          acc[leg.planningTargetStatus] += 1;
+          return acc;
+        },
+        { comfortable: 0, caution: 0, warning: 0 }
+      ),
+    [legNavRows]
+  );
+  const stopAdjustmentSuggestions = useMemo<StopAdjustmentSuggestion[]>(() => {
+    const suggestions: StopAdjustmentSuggestion[] = [];
+
+    const firstFuelShortLeg = legNavRows.find((leg) => leg.fuelAfterLeg < 0);
+    if (firstFuelShortLeg) {
+      if (orderedPlannedStops.includes(firstFuelShortLeg.to)) {
+        suggestions.push({
+          id: `short-leg-${firstFuelShortLeg.key}`,
+          detail: `You still cannot reach ${firstFuelShortLeg.to} from ${firstFuelShortLeg.from}. Add another stop before ${firstFuelShortLeg.to} or shorten that leg.`,
+          action:
+            suggestedStops.length > 0 && !isUsingSuggestedStops
+              ? { kind: "use-suggested-stops", label: "Use suggested stops" }
+              : undefined,
+        });
+      } else {
+        suggestions.push({
+          id: `new-stop-${firstFuelShortLeg.key}`,
+          detail: `Add another planned stop between ${firstFuelShortLeg.from} and ${firstFuelShortLeg.to}; the current leg runs short by about ${Math.abs(firstFuelShortLeg.fuelAfterLeg).toFixed(1)} gal.`,
+          action:
+            suggestedStops.length > 0 && !isUsingSuggestedStops
+              ? { kind: "use-suggested-stops", label: "Use suggested stop sequence" }
+              : undefined,
+        });
+      }
+    }
+
+    const reserveRiskAtStop = legNavRows.find((leg) =>
+      orderedPlannedStops.includes(leg.to) &&
+      leg.fuelAfterLeg >= 0 &&
+      leg.fuelAfterUplift < reserveFuel &&
+      (leg.actualFuelUplift <= 0 || leg.actualFuelUplift + 0.1 < planningFuel - Math.max(leg.fuelAfterLeg, 0))
+    );
+    if (reserveRiskAtStop) {
+      suggestions.push({
+        id: `topoff-${reserveRiskAtStop.key}`,
+        detail: `Plan a larger fuel uplift at ${reserveRiskAtStop.to}. You arrive with ${reserveRiskAtStop.fuelAfterLeg.toFixed(1)} gal and still leave short of reserve after the current uplift.`,
+        action: {
+          kind: "top-off-stop",
+          label: `Top off at ${reserveRiskAtStop.to}`,
+          stopIcao: reserveRiskAtStop.to,
+          gallons: Math.max(0, planningFuel - Math.max(reserveRiskAtStop.fuelAfterLeg, 0)),
+        },
+      });
+    }
+
+    const tightLegWithoutStop = legNavRows.find((leg) =>
+      leg.planningTargetStatus === "caution" &&
+      !orderedPlannedStops.includes(leg.to) &&
+      leg.fuelAfterLeg >= 0
+    );
+    if (tightLegWithoutStop && legPlanningTargetNm != null) {
+      suggestions.push({
+        id: `comfort-stop-${tightLegWithoutStop.key}`,
+        detail: `${tightLegWithoutStop.from} to ${tightLegWithoutStop.to} is longer than the current planning target of about ${legPlanningTargetNm.toFixed(0)} NM. Consider adding a comfort stop on that segment.`,
+        action:
+          suggestedStops.length > 0 && !isUsingSuggestedStops
+            ? { kind: "use-suggested-stops", label: "Apply suggested stop plan" }
+            : undefined,
+      });
+    }
+
+    return suggestions.slice(0, 3);
+  }, [isUsingSuggestedStops, legNavRows, legPlanningTargetNm, orderedPlannedStops, planningFuel, reserveFuel, suggestedStops]);
   const weatherStatusText = weatherData.length === 0
     ? "No METARs loaded"
     : hasThunderRisk
@@ -5055,9 +5181,22 @@ export default function FlightPlanner() {
                 </div>
               )}
               {suggestionMeta && suggestedStops.length > 0 && (
-                <div className="text-xs text-muted-foreground">
-                  Max leg ~{suggestionMeta.maxLegNm.toFixed(0)} NM based on {suggestionMeta.fuelGallons.toFixed(0)} gal
-                  at {suggestionMeta.fuelBurnGph.toFixed(1)} gph with {suggestionMeta.reserveMinutes} min reserve.
+                <div className="rounded-md border border-slate-200 bg-slate-50/80 p-3 text-xs text-slate-700 space-y-1">
+                  <div>
+                    Max leg ~{suggestionMeta.maxLegNm.toFixed(0)} NM based on {suggestionMeta.fuelGallons.toFixed(0)} gal
+                    at {suggestionMeta.fuelBurnGph.toFixed(1)} gph with {suggestionMeta.reserveMinutes} min reserve.
+                  </div>
+                  {suggestionMeta.planningLegNm ? (
+                    <div>
+                      RSF is targeting legs of about {suggestionMeta.planningLegNm.toFixed(0)} NM and placing fuel stops sequentially from the last stop instead of spacing everything only from departure.
+                    </div>
+                  ) : null}
+                  <div>
+                    Direct assist: {suggestionMeta.suggestedStopCount ?? suggestedStops.length} planned fuel stop{(suggestionMeta.suggestedStopCount ?? suggestedStops.length) === 1 ? "" : "s"}.
+                    {suggestionMeta.overwaterLikely
+                      ? ` Coastline assist currently uses ${suggestionMeta.coastlineSuggestedStopCount ?? suggestedCoastlineStops.length} stop${(suggestionMeta.coastlineSuggestedStopCount ?? suggestedCoastlineStops.length) === 1 ? "" : "s"} while biasing the helper route back toward shore.`
+                      : ""}
+                  </div>
                 </div>
               )}
               {terrainAdvisorSummaries.length > 0 && plannedAltitudeValue && (
@@ -5676,6 +5815,52 @@ export default function FlightPlanner() {
             </div>
           )}
 
+          {stopAdjustmentSuggestions.length > 0 && (
+            <Alert>
+              <AlertDescription>
+                <div className="font-semibold mb-1">Stop planning suggestions</div>
+                <div className="space-y-2 text-sm">
+                  {stopAdjustmentSuggestions.map((item) => (
+                    <div key={item.id} className="rounded-md border bg-background/60 px-3 py-2">
+                      <div>{item.detail}</div>
+                      {item.action ? (
+                        <div className="mt-2">
+                          {item.action.kind === "use-suggested-stops" ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setPlannedStopsInput(suggestedStops.join(" "))}
+                            >
+                              {item.action.label}
+                            </Button>
+                          ) : (() => {
+                            const action = item.action;
+                            return (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setPlannedFuelUplifts((current) => ({
+                                    ...current,
+                                    [action.stopIcao]: action.gallons.toFixed(1),
+                                  }))
+                                }
+                              >
+                                {action.label}
+                              </Button>
+                            );
+                          })()}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {altitudeRisks.length > 0 && (
             <Alert>
               <AlertDescription>
@@ -5900,6 +6085,7 @@ export default function FlightPlanner() {
                 <thead>
                   <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="py-2 pr-3">Leg</th>
+                    <th className="py-2 pr-3">Leg Health</th>
                     <th className="py-2 pr-3">Course</th>
                     <th className="py-2 pr-3">Dist</th>
                     <th className="py-2 pr-3">ETE</th>
@@ -5924,6 +6110,29 @@ export default function FlightPlanner() {
                           leg.to,
                           <span>{leg.to}</span>,
                         )}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <div className="space-y-1">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              leg.planningTargetStatus === "warning"
+                                ? "border-red-300 text-red-700"
+                                : leg.planningTargetStatus === "caution"
+                                  ? "border-amber-300 text-amber-700"
+                                  : "border-emerald-300 text-emerald-700"
+                            )}
+                          >
+                            {leg.planningTargetStatus === "warning"
+                              ? "Exceeds plan"
+                              : leg.planningTargetStatus === "caution"
+                                ? "Tight"
+                                : "Healthy"}
+                          </Badge>
+                          <div className="text-[11px] text-muted-foreground">
+                            {legPlanningTargetNm != null ? `Target ${legPlanningTargetNm.toFixed(0)} NM` : "No target"}
+                          </div>
+                        </div>
                       </td>
                       <td className="py-2 pr-3">{String(leg.course).padStart(3, "0")}°</td>
                       <td className="py-2 pr-3">{leg.distanceNm.toFixed(1)} NM</td>
@@ -7263,6 +7472,7 @@ export default function FlightPlanner() {
                   airportLabelMode={airportLabelMode}
                   terrainSegments={terrainCueSegments}
                   terrainHotSpots={terrainMapHotSpots}
+                  legHealthMarkers={legHealthMarkers}
                 />
               )
             )}
@@ -7320,6 +7530,33 @@ export default function FlightPlanner() {
                     </div>
                   </div>
                 ) : null}
+              </div>
+            )}
+            {legNavRows.length > 0 && (
+              <div className="mt-3 rounded-lg border border-sky-900/40 bg-sky-950/70 p-3 text-sm text-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold">Leg planning cue</div>
+                  <Badge variant="outline" className="border-sky-700 text-sky-100">
+                    {legPlanningTargetNm != null ? `Target ~${legPlanningTargetNm.toFixed(0)} NM` : "Fuel-aware legs"}
+                  </Badge>
+                </div>
+                <div className="mt-2 grid gap-2 md:grid-cols-3">
+                  <div className="rounded-md border border-sky-900/50 bg-slate-950/40 px-3 py-2">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Healthy</div>
+                    <div className="font-semibold text-sky-100">{legPlanningSummary.comfortable}</div>
+                  </div>
+                  <div className="rounded-md border border-amber-900/50 bg-slate-950/40 px-3 py-2">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Tight</div>
+                    <div className="font-semibold text-amber-300">{legPlanningSummary.caution}</div>
+                  </div>
+                  <div className="rounded-md border border-red-900/50 bg-slate-950/40 px-3 py-2">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Exceeds plan</div>
+                    <div className="font-semibold text-red-300">{legPlanningSummary.warning}</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-slate-300">
+                  Blue markers on the map show legs inside the current planning target. Amber markers indicate legs that are workable but getting tight. Red markers indicate a leg that exceeds the current planning target or runs out of fuel before the planned stop.
+                </div>
               </div>
             )}
             <div className="mt-4 space-y-2">

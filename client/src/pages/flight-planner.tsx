@@ -103,6 +103,11 @@ const summarizePlannerError = (value: unknown) => {
   return message.length > 280 ? `${message.slice(0, 279).trimEnd()}…` : message;
 };
 
+const roundAltitudeUp = (value: number, increment = 500) => {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.ceil(value / increment) * increment;
+};
+
 const normalizeAircraftLabel = (value: string | null | undefined) =>
   String(value || "")
     .trim()
@@ -590,6 +595,15 @@ type PlannerTerrainProfileChartPoint = {
   x: number;
   y: number;
   elevationFt: number;
+};
+
+type TerrainRouteAdvisorOption = {
+  id: "current" | "assist" | "coastline";
+  label: string;
+  description: string;
+  icaos: string[];
+  stopIcaos: string[];
+  applyKind: "current" | "assist" | "coastline";
 };
 
 type LeidosRouteSearchResponse = {
@@ -2036,6 +2050,159 @@ export default function FlightPlanner() {
       .filter((icao) => ICAO_REGEX.test(icao));
   }, [departureResolved, destinationResolved, orderedIntermediates]);
 
+  const terrainAdvisorOptions = useMemo<TerrainRouteAdvisorOption[]>(() => {
+    const options: TerrainRouteAdvisorOption[] = [];
+    if (routeSequenceOrdered.length >= 2) {
+      options.push({
+        id: "current",
+        label: "Current route",
+        description: "Your current route builder / filed-airport path.",
+        icaos: routeSequenceOrdered,
+        stopIcaos: orderedPlannedStops,
+        applyKind: "current",
+      });
+    }
+    if (departureResolved && destinationResolved && (suggestedWaypoints.length > 0 || suggestedStops.length > 0)) {
+      options.push({
+        id: "assist",
+        label: suggestionMeta?.overwaterLikely ? "Direct / overwater assist" : "Route assist",
+        description: suggestionMeta?.overwaterLikely
+          ? "Direct helper route with the current overwater planning assist."
+          : "RSF helper route using suggested waypoints and fuel stops.",
+        icaos: [
+          departureResolved.trim().toUpperCase(),
+          ...suggestedStops,
+          ...suggestedWaypoints,
+          destinationResolved.trim().toUpperCase(),
+        ].filter((icao, index, arr) => Boolean(icao) && arr.indexOf(icao) === index),
+        stopIcaos: suggestedStops,
+        applyKind: "assist",
+      });
+    }
+    if (departureResolved && destinationResolved && hasCoastlineRouteOption) {
+      options.push({
+        id: "coastline",
+        label: "Coastline assist",
+        description: "Land-biased helper route intended to stay closer to shore.",
+        icaos: [
+          departureResolved.trim().toUpperCase(),
+          ...suggestedCoastlineStops,
+          ...suggestedCoastlineWaypoints,
+          destinationResolved.trim().toUpperCase(),
+        ].filter((icao, index, arr) => Boolean(icao) && arr.indexOf(icao) === index),
+        stopIcaos: suggestedCoastlineStops,
+        applyKind: "coastline",
+      });
+    }
+    return options.filter((option, index, arr) =>
+      option.icaos.length >= 2 &&
+      arr.findIndex((candidate) => candidate.id === option.id) === index
+    );
+  }, [
+    departureResolved,
+    destinationResolved,
+    hasCoastlineRouteOption,
+    routeSequenceOrdered,
+    suggestedCoastlineStops,
+    suggestedCoastlineWaypoints,
+    suggestedStops,
+    suggestedWaypoints,
+    suggestionMeta?.overwaterLikely,
+  ]);
+  const terrainAdvisorAlternativeOptions = useMemo(
+    () => terrainAdvisorOptions.filter((option) => option.id !== "current"),
+    [terrainAdvisorOptions]
+  );
+  const terrainAdvisorCandidateIcaos = useMemo(() => {
+    const codes = terrainAdvisorAlternativeOptions.flatMap((option) => option.icaos);
+    return Array.from(new Set(codes));
+  }, [terrainAdvisorAlternativeOptions]);
+  const terrainAdvisorAirportQueries = useQueries({
+    queries: terrainAdvisorCandidateIcaos.map((icao) => ({
+      queryKey: ["/api/airports/search", icao, "terrain-advisor"],
+      queryFn: async () => {
+        const searchRes = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(icao)}`), {
+          credentials: "include",
+        });
+        if (!searchRes.ok) throw new Error("Failed to search terrain advisor airports");
+        const matches = (await searchRes.json()) as any[];
+        const candidates = new Set(buildPlannerIcaoCandidates(icao));
+        const exactMatch = matches.find((match) => {
+          const matchIcao = String(match?.icao || "").trim().toUpperCase();
+          return candidates.has(matchIcao);
+        });
+        if (!exactMatch) return null;
+        return {
+          icao,
+          lat: Number(exactMatch.lat),
+          lon: Number(exactMatch.lon),
+          name: exactMatch.name ?? null,
+        };
+      },
+      enabled: terrainAdvisorCandidateIcaos.length > 0,
+      staleTime: 1000 * 60 * 60,
+    })),
+  });
+  const terrainAdvisorAirportMap = useMemo(() => {
+    const map = new Map<string, { icao: string; lat: number; lon: number; name: string | null }>();
+    terrainAdvisorAirportQueries.forEach((query, index) => {
+      const icao = terrainAdvisorCandidateIcaos[index];
+      const data = query.data;
+      if (icao && data && Number.isFinite(data.lat) && Number.isFinite(data.lon)) {
+        map.set(icao, data);
+      }
+    });
+    return map;
+  }, [terrainAdvisorAirportQueries, terrainAdvisorCandidateIcaos]);
+  const terrainAdvisorResolvedAirportMap = useMemo(() => {
+    const map = new Map<string, { icao: string; lat: number; lon: number; name: string | null }>();
+    airportMap.forEach((airport, icao) => {
+      const lat = Number(airport?.lat);
+      const lon = Number(airport?.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      map.set(icao, {
+        icao,
+        lat,
+        lon,
+        name: airport?.name ?? null,
+      });
+    });
+    terrainAdvisorAirportMap.forEach((airport, icao) => {
+      if (map.has(icao)) return;
+      map.set(icao, airport);
+    });
+    return map;
+  }, [airportMap, terrainAdvisorAirportMap]);
+  const terrainAdvisorAlternativePathParams = useMemo(
+    () =>
+      terrainAdvisorAlternativeOptions.map((option) => {
+        const points = option.icaos
+          .map((icao) => terrainAdvisorResolvedAirportMap.get(icao))
+          .filter((point): point is { icao: string; lat: number; lon: number; name: string | null } =>
+            Boolean(point && Number.isFinite(point.lat) && Number.isFinite(point.lon))
+          );
+        const path = points.length >= 2
+          ? points.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join(";")
+          : null;
+        return { option, path };
+      }),
+    [terrainAdvisorAlternativeOptions, terrainAdvisorResolvedAirportMap]
+  );
+  const terrainAdvisorTerrainQueries = useQueries({
+    queries: terrainAdvisorAlternativePathParams.map(({ option, path }) => ({
+      queryKey: ["/api/aviation/terrain-profile", option.id, path],
+      queryFn: async () => {
+        const res = await fetch(apiUrl(`/api/aviation/terrain-profile?path=${encodeURIComponent(path as string)}`), {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error("Failed to load advisor terrain profile");
+        return res.json() as Promise<TerrainProfilePlannerResponse>;
+      },
+      enabled: Boolean(path),
+      staleTime: 1000 * 60 * 10,
+    })),
+  });
+
   const browserTimeZone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
     []
@@ -2530,6 +2697,50 @@ export default function FlightPlanner() {
         ? "Part of the route is inside the tighter 2,000 ft terrain margin."
         : "Current route stays in the comfortable terrain margin."
     : "Enter a route and planned altitude to evaluate terrain clearance.";
+  const terrainMinimumSuggestedAltitudeFt = useMemo(
+    () =>
+      terrainProfileQuery.data?.maxElevationFt != null
+        ? roundAltitudeUp(terrainProfileQuery.data.maxElevationFt + 1000)
+        : null,
+    [terrainProfileQuery.data?.maxElevationFt]
+  );
+  const terrainComfortSuggestedAltitudeFt = useMemo(
+    () =>
+      terrainProfileQuery.data?.maxElevationFt != null
+        ? roundAltitudeUp(terrainProfileQuery.data.maxElevationFt + 2000)
+        : null,
+    [terrainProfileQuery.data?.maxElevationFt]
+  );
+  const terrainOperationalNotes = useMemo(() => {
+    if (!worstTerrainSegment) return [] as string[];
+    const notes: string[] = [];
+    if (worstTerrainSegment.segment.risk === "warning") {
+      notes.push(
+        terrainComfortSuggestedAltitudeFt != null
+          ? `Planned altitude is not terrain-safe for the current route. Raise to about ${terrainComfortSuggestedAltitudeFt.toLocaleString()} ft or adjust the route.`
+          : "Planned altitude is not terrain-safe for the current route. Raise altitude or adjust the route."
+      );
+    } else if (worstTerrainSegment.segment.risk === "caution") {
+      notes.push(
+        terrainComfortSuggestedAltitudeFt != null
+          ? `Terrain clearance is tight. Consider raising to about ${terrainComfortSuggestedAltitudeFt.toLocaleString()} ft for a more comfortable margin.`
+          : "Terrain clearance is tight. Consider raising planned altitude or adjusting the route."
+      );
+    }
+    if (
+      terrainReferenceAltitudeFt != null &&
+      terrainMinimumSuggestedAltitudeFt != null &&
+      terrainReferenceAltitudeFt < terrainMinimumSuggestedAltitudeFt
+    ) {
+      notes.push(`Minimum basic terrain target for this route is about ${terrainMinimumSuggestedAltitudeFt.toLocaleString()} ft.`);
+    }
+    return notes;
+  }, [
+    terrainComfortSuggestedAltitudeFt,
+    terrainMinimumSuggestedAltitudeFt,
+    terrainReferenceAltitudeFt,
+    worstTerrainSegment,
+  ]);
   const terrainToneClass = terrainCueCounts.warning > 0
     ? "text-red-700"
     : terrainCueCounts.caution > 0
@@ -2613,6 +2824,291 @@ export default function FlightPlanner() {
       }>,
     [terrainCueSegments, terrainHotSpots]
   );
+  const terrainAdvisorSummaries = useMemo(() => {
+    const summarizeProfile = (
+      option: TerrainRouteAdvisorOption,
+      profile: TerrainProfilePlannerResponse | null | undefined,
+    ) => {
+      const optionPoints = option.icaos
+        .map((icao) => terrainAdvisorResolvedAirportMap.get(icao))
+        .filter((point): point is { icao: string; lat: number; lon: number; name: string | null } =>
+          Boolean(point && Number.isFinite(point.lat) && Number.isFinite(point.lon))
+        )
+        .map((point) => ({
+          icao: point.icao,
+          lat: point.lat,
+          lon: point.lon,
+        }));
+      const optionLegs = optionPoints.length >= 2 ? buildLegs(optionPoints) : [];
+      const fuelStopSet = new Set(option.stopIcaos);
+      let fuelRemainingGallons = fuelAvailableGallons;
+      let tripFuelGallons = 0;
+      let firstUnreachableLeg: { from: string; to: string; shortageGallons: number } | null = null;
+
+      optionLegs.forEach((leg) => {
+        const legFuelGallons =
+          groundspeed > 0 && planningBurn > 0
+            ? (leg.distanceNm / groundspeed) * planningBurn
+            : 0;
+        tripFuelGallons += legFuelGallons;
+        const fuelAfterLeg = fuelRemainingGallons - legFuelGallons;
+        if (!firstUnreachableLeg && fuelAfterLeg < 0) {
+          firstUnreachableLeg = {
+            from: leg.from.icao,
+            to: leg.to.icao,
+            shortageGallons: Math.abs(fuelAfterLeg),
+          };
+        }
+        if (fuelAfterLeg >= 0 && fuelStopSet.has(leg.to.icao) && planningFuel > 0) {
+          fuelRemainingGallons = planningFuel;
+        } else {
+          fuelRemainingGallons = fuelAfterLeg;
+        }
+      });
+
+      const reserveBalanceGallons =
+        optionLegs.length > 0 ? fuelRemainingGallons - reserveFuel : fuelAvailableGallons - reserveFuel;
+      const longestLegNm = optionLegs.reduce(
+        (maxValue, leg) => Math.max(maxValue, leg.distanceNm),
+        0,
+      );
+      const fuelStatus = firstUnreachableLeg
+        ? "unreachable"
+        : reserveBalanceGallons < 0
+          ? "tight"
+          : "healthy";
+      const samples = profile?.samples ?? [];
+      if (samples.length < 2) {
+        return {
+          ...option,
+          available: false,
+          minClearanceFt: null as number | null,
+          maxElevationFt: profile?.maxElevationFt ?? null,
+          warningCount: 0,
+          cautionCount: 0,
+          risk: "comfortable" as PlannerTerrainCueSegment["risk"],
+          fuelStatus,
+          longestLegNm: longestLegNm > 0 ? longestLegNm : null,
+          tripFuelGallons: tripFuelGallons > 0 ? tripFuelGallons : null,
+          blockFuelGallons: tripFuelGallons > 0 ? tripFuelGallons + reserveFuel : null,
+          endingFuelGallons: optionLegs.length > 0 ? fuelRemainingGallons : fuelAvailableGallons,
+          reserveBalanceGallons,
+          firstUnreachableLeg,
+        };
+      }
+      const segments = samples.slice(1).map((sample, index) => {
+        const previous = samples[index];
+        const maxElevationFt =
+          previous.elevationFt != null && sample.elevationFt != null
+            ? Math.max(previous.elevationFt, sample.elevationFt)
+            : previous.elevationFt ?? sample.elevationFt ?? null;
+        const clearanceFt =
+          terrainReferenceAltitudeFt != null && maxElevationFt != null
+            ? terrainReferenceAltitudeFt - maxElevationFt
+            : null;
+        const risk =
+          clearanceFt == null
+            ? "comfortable"
+            : clearanceFt < 1000
+              ? "warning"
+              : clearanceFt < 2000
+                ? "caution"
+                : "comfortable";
+        return { maxElevationFt, clearanceFt, risk };
+      });
+      const minClearanceFt = segments.reduce((minValue, segment) => {
+        const value = segment.clearanceFt ?? Number.POSITIVE_INFINITY;
+        return Math.min(minValue, value);
+      }, Number.POSITIVE_INFINITY);
+      const warningCount = segments.filter((segment) => segment.risk === "warning").length;
+      const cautionCount = segments.filter((segment) => segment.risk === "caution").length;
+      const risk = warningCount > 0 ? "warning" : cautionCount > 0 ? "caution" : "comfortable";
+      return {
+        ...option,
+        available: true,
+        minClearanceFt: Number.isFinite(minClearanceFt) ? minClearanceFt : null,
+        maxElevationFt: profile?.maxElevationFt ?? null,
+        warningCount,
+        cautionCount,
+        risk,
+        fuelStatus,
+        longestLegNm: longestLegNm > 0 ? longestLegNm : null,
+        tripFuelGallons: tripFuelGallons > 0 ? tripFuelGallons : null,
+        blockFuelGallons: tripFuelGallons > 0 ? tripFuelGallons + reserveFuel : null,
+        endingFuelGallons: optionLegs.length > 0 ? fuelRemainingGallons : fuelAvailableGallons,
+        reserveBalanceGallons,
+        firstUnreachableLeg,
+      };
+    };
+
+    const currentSummary = summarizeProfile(
+      terrainAdvisorOptions.find((option) => option.id === "current") ?? {
+        id: "current",
+        label: "Current route",
+        description: "Your current route builder / filed-airport path.",
+        icaos: routeSequenceOrdered,
+        stopIcaos: orderedPlannedStops,
+        applyKind: "current",
+      },
+      terrainProfileQuery.data
+    );
+    const alternativeSummaries = terrainAdvisorAlternativeOptions.map((option, index) =>
+      summarizeProfile(option, terrainAdvisorTerrainQueries[index]?.data)
+    );
+    return [currentSummary, ...alternativeSummaries].filter((summary) => summary.icaos.length >= 2);
+  }, [
+    routeSequenceOrdered,
+    terrainAdvisorAlternativeOptions,
+    terrainAdvisorResolvedAirportMap,
+    terrainAdvisorOptions,
+    terrainAdvisorTerrainQueries,
+    terrainProfileQuery.data,
+    fuelAvailableGallons,
+    groundspeed,
+    orderedPlannedStops,
+    planningBurn,
+    planningFuel,
+    reserveFuel,
+    terrainReferenceAltitudeFt,
+  ]);
+  const recommendedTerrainRoute = useMemo(() => {
+    const available = terrainAdvisorSummaries.filter((summary) => summary.available);
+    if (available.length === 0) return null;
+    return available.slice().sort((a, b) => {
+      const aFuel = a.fuelStatus === "unreachable" ? 2 : a.fuelStatus === "tight" ? 1 : 0;
+      const bFuel = b.fuelStatus === "unreachable" ? 2 : b.fuelStatus === "tight" ? 1 : 0;
+      if (aFuel !== bFuel) return aFuel - bFuel;
+      const aRisk = a.risk === "warning" ? 2 : a.risk === "caution" ? 1 : 0;
+      const bRisk = b.risk === "warning" ? 2 : b.risk === "caution" ? 1 : 0;
+      if (aRisk !== bRisk) return aRisk - bRisk;
+      const reserveDelta = (b.reserveBalanceGallons ?? Number.NEGATIVE_INFINITY) - (a.reserveBalanceGallons ?? Number.NEGATIVE_INFINITY);
+      if (reserveDelta !== 0) return reserveDelta;
+      return (b.minClearanceFt ?? Number.NEGATIVE_INFINITY) - (a.minClearanceFt ?? Number.NEGATIVE_INFINITY);
+    })[0];
+  }, [terrainAdvisorSummaries]);
+  const currentTerrainRouteSummary = useMemo(
+    () => terrainAdvisorSummaries.find((summary) => summary.id === "current") ?? null,
+    [terrainAdvisorSummaries]
+  );
+  const terrainAdjustmentRecommendation = useMemo(() => {
+    if (!currentTerrainRouteSummary || !currentTerrainRouteSummary.available) return null;
+
+    const helperRouteGainFt =
+      recommendedTerrainRoute &&
+      recommendedTerrainRoute.id !== "current" &&
+      recommendedTerrainRoute.minClearanceFt != null &&
+      currentTerrainRouteSummary.minClearanceFt != null
+        ? recommendedTerrainRoute.minClearanceFt - currentTerrainRouteSummary.minClearanceFt
+        : null;
+    const currentFuelScore =
+      currentTerrainRouteSummary.fuelStatus === "unreachable"
+        ? 2
+        : currentTerrainRouteSummary.fuelStatus === "tight"
+          ? 1
+          : 0;
+    const recommendedFuelScore =
+      recommendedTerrainRoute?.fuelStatus === "unreachable"
+        ? 2
+        : recommendedTerrainRoute?.fuelStatus === "tight"
+          ? 1
+          : 0;
+    const hasMeaningfulFuelImprovement =
+      recommendedTerrainRoute &&
+      recommendedTerrainRoute.id !== "current" &&
+      recommendedFuelScore < currentFuelScore;
+
+    if (
+      hasMeaningfulFuelImprovement &&
+      recommendedTerrainRoute &&
+      recommendedTerrainRoute.id !== "current"
+    ) {
+      return {
+        kind: "switch-route" as const,
+        title: "Best route fix: use the healthier helper route",
+        detail:
+          recommendedTerrainRoute.fuelStatus === "healthy"
+            ? `${recommendedTerrainRoute.label} keeps the legs workable with a better reserve picture while still improving route practicality at the current altitude.`
+            : `${recommendedTerrainRoute.label} removes the current leg shortfall and gives you a more workable fuel plan at the current altitude.`,
+        targetRouteId: recommendedTerrainRoute.id,
+      };
+    }
+
+    if (currentTerrainRouteSummary.risk === "warning") {
+      if (
+        recommendedTerrainRoute &&
+        recommendedTerrainRoute.id !== "current" &&
+        recommendedTerrainRoute.risk !== "warning" &&
+        (helperRouteGainFt == null || helperRouteGainFt >= 500 || terrainComfortSuggestedAltitudeFt == null)
+      ) {
+        return {
+          kind: "switch-route" as const,
+          title: "Best terrain fix: switch helper route",
+          detail:
+            recommendedTerrainRoute.minClearanceFt != null
+              ? `${recommendedTerrainRoute.label} improves minimum clearance to about ${Math.round(recommendedTerrainRoute.minClearanceFt).toLocaleString()} ft at your current altitude.`
+              : `${recommendedTerrainRoute.label} offers a stronger terrain margin at your current altitude.`,
+          targetRouteId: recommendedTerrainRoute.id,
+        };
+      }
+      if (terrainComfortSuggestedAltitudeFt != null) {
+        return {
+          kind: "raise-altitude" as const,
+          title: "Best terrain fix: raise altitude",
+          detail: `Raising the current route to about ${terrainComfortSuggestedAltitudeFt.toLocaleString()} ft should restore a more comfortable terrain margin without changing the route.`,
+          targetAltitudeFt: terrainComfortSuggestedAltitudeFt,
+        };
+      }
+    }
+
+    if (currentTerrainRouteSummary.risk === "caution") {
+      if (
+        recommendedTerrainRoute &&
+        recommendedTerrainRoute.id !== "current" &&
+        helperRouteGainFt != null &&
+        helperRouteGainFt >= 1000
+      ) {
+        return {
+          kind: "switch-route" as const,
+          title: "Best terrain fix: use the safer helper route",
+          detail: `${recommendedTerrainRoute.label} gives about ${Math.round(helperRouteGainFt).toLocaleString()} ft more minimum clearance at the current altitude.`,
+          targetRouteId: recommendedTerrainRoute.id,
+        };
+      }
+      if (terrainComfortSuggestedAltitudeFt != null) {
+        return {
+          kind: "raise-altitude" as const,
+          title: "Best terrain fix: climb a little higher",
+          detail: `Keeping this route and climbing to about ${terrainComfortSuggestedAltitudeFt.toLocaleString()} ft should move the route into a more comfortable terrain margin.`,
+          targetAltitudeFt: terrainComfortSuggestedAltitudeFt,
+        };
+      }
+    }
+
+    if (
+      recommendedTerrainRoute &&
+      recommendedTerrainRoute.id !== "current" &&
+      ((helperRouteGainFt != null && helperRouteGainFt >= 1500) ||
+        ((recommendedTerrainRoute.reserveBalanceGallons ?? Number.NEGATIVE_INFINITY) -
+          (currentTerrainRouteSummary.reserveBalanceGallons ?? Number.NEGATIVE_INFINITY) >= 3))
+    ) {
+      return {
+        kind: "switch-route" as const,
+        title: "Optional route improvement",
+        detail:
+          helperRouteGainFt != null && helperRouteGainFt >= 1500
+            ? `${recommendedTerrainRoute.label} offers a stronger terrain margin if you want a more conservative route.`
+            : `${recommendedTerrainRoute.label} keeps a little more fuel reserve in hand with the current planning assumptions.`,
+        targetRouteId: recommendedTerrainRoute.id,
+      };
+    }
+
+    return null;
+  }, [
+    currentTerrainRouteSummary,
+    recommendedTerrainRoute,
+    terrainComfortSuggestedAltitudeFt,
+    terrainReferenceAltitudeFt,
+  ]);
 
   const altitudeRisks = useMemo(() => {
     if (!Number.isFinite(plannedAltitudeFt) || plannedAltitudeFt <= 0) return [];
@@ -3297,8 +3793,19 @@ export default function FlightPlanner() {
     if (overwaterLikely) {
       notes.push("This route likely includes a meaningful overwater segment. Review flotation devices, emergency locator gear, passenger briefing items, and whether a coastline-biased route is preferable.");
     }
+    if (terrainAdjustmentRecommendation) {
+      notes.push(terrainAdjustmentRecommendation.detail);
+    }
+    if (recommendedTerrainRoute && recommendedTerrainRoute.id !== "current" && recommendedTerrainRoute.available) {
+      notes.push(
+        recommendedTerrainRoute.minClearanceFt != null
+          ? `${recommendedTerrainRoute.label} currently offers the best terrain margin at about ${Math.round(recommendedTerrainRoute.minClearanceFt).toLocaleString()} ft minimum clearance.`
+          : `${recommendedTerrainRoute.label} currently offers the best terrain margin of the available helper routes.`
+      );
+    }
+    notes.push(...terrainOperationalNotes);
     return notes;
-  }, [enrouteIfr, enrouteTs, overwaterLikely]);
+  }, [enrouteIfr, enrouteTs, overwaterLikely, recommendedTerrainRoute, terrainAdjustmentRecommendation, terrainOperationalNotes]);
 
   const routeRisk = useMemo(() => {
     let risk = "Normal";
@@ -3310,8 +3817,13 @@ export default function FlightPlanner() {
     });
     if (hasIfr) risk = "IFR Conditions";
     if (hasTs) risk = hasIfr ? "IFR + Thunderstorms" : "Thunderstorms";
+    if (worstTerrainSegment?.segment.risk === "warning") {
+      risk = risk === "Normal" ? "Terrain Warning" : `${risk} + Terrain`;
+    } else if (worstTerrainSegment?.segment.risk === "caution") {
+      risk = risk === "Normal" ? "Terrain Caution" : `${risk} + Terrain`;
+    }
     return risk;
-  }, [weatherFindings]);
+  }, [weatherFindings, worstTerrainSegment]);
   const resetForm = () => {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(FLIGHT_PLANNER_DRAFT_KEY);
@@ -4546,6 +5058,169 @@ export default function FlightPlanner() {
                 <div className="text-xs text-muted-foreground">
                   Max leg ~{suggestionMeta.maxLegNm.toFixed(0)} NM based on {suggestionMeta.fuelGallons.toFixed(0)} gal
                   at {suggestionMeta.fuelBurnGph.toFixed(1)} gph with {suggestionMeta.reserveMinutes} min reserve.
+                </div>
+              )}
+              {terrainAdvisorSummaries.length > 0 && plannedAltitudeValue && (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-950 space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium">Terrain + leg health advisor</div>
+                    <Badge variant="outline" className="border-emerald-300 text-emerald-900">
+                      {Math.round(plannedAltitudeValue).toLocaleString()} ft planned
+                    </Badge>
+                  </div>
+                  <div className="text-emerald-900/90">
+                    RSF compares the current route and helper alternatives against USGS terrain plus fuel-leg practicality at your selected altitude. Leg comparisons assume a top-off at each planned fuel stop.
+                  </div>
+                  {terrainAdjustmentRecommendation && (
+                    <div className="rounded-md border border-emerald-300 bg-white/90 p-3 space-y-2">
+                      <div className="font-semibold">{terrainAdjustmentRecommendation.title}</div>
+                      <div className="text-emerald-900/85">{terrainAdjustmentRecommendation.detail}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {terrainAdjustmentRecommendation.kind === "raise-altitude" && terrainAdjustmentRecommendation.targetAltitudeFt ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => setPlannedAltitude(String(terrainAdjustmentRecommendation.targetAltitudeFt))}
+                          >
+                            Set altitude to {terrainAdjustmentRecommendation.targetAltitudeFt.toLocaleString()} ft
+                          </Button>
+                        ) : null}
+                        {terrainAdjustmentRecommendation.kind === "switch-route" && terrainAdjustmentRecommendation.targetRouteId === "assist" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setWaypointsInput(suggestedWaypoints.join(" "));
+                              setPlannedStopsInput(suggestedStops.join(" "));
+                            }}
+                          >
+                            Apply route assist
+                          </Button>
+                        ) : null}
+                        {terrainAdjustmentRecommendation.kind === "switch-route" && terrainAdjustmentRecommendation.targetRouteId === "coastline" ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setWaypointsInput(suggestedCoastlineWaypoints.join(" "));
+                              setPlannedStopsInput(suggestedCoastlineStops.join(" "));
+                            }}
+                          >
+                            Apply coastline assist
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid gap-2 md:grid-cols-3">
+                    {terrainAdvisorSummaries.map((summary) => (
+                      <div
+                        key={`terrain-advisor-${summary.id}`}
+                        className={cn(
+                          "rounded-md border bg-white/80 p-3 space-y-2",
+                          recommendedTerrainRoute?.id === summary.id ? "border-emerald-400" : "border-emerald-200"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-semibold">{summary.label}</div>
+                            <div className="text-[11px] text-emerald-900/75">{summary.description}</div>
+                          </div>
+                          {recommendedTerrainRoute?.id === summary.id && (
+                            <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Recommended</Badge>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <div>
+                            Min clearance:{" "}
+                            <span className="font-medium">
+                              {summary.available && summary.minClearanceFt != null ? `${Math.round(summary.minClearanceFt).toLocaleString()} ft` : "--"}
+                            </span>
+                          </div>
+                          <div>
+                            Highest terrain:{" "}
+                            <span className="font-medium">
+                              {summary.available && summary.maxElevationFt != null ? `${Math.round(summary.maxElevationFt).toLocaleString()} ft` : "--"}
+                            </span>
+                          </div>
+                          <div>
+                            Risk:{" "}
+                            <span className={cn(
+                              "font-medium",
+                              summary.risk === "warning"
+                                ? "text-red-700"
+                                : summary.risk === "caution"
+                                  ? "text-amber-700"
+                                  : "text-emerald-700"
+                            )}>
+                              {summary.risk === "warning" ? "Terrain warning" : summary.risk === "caution" ? "Tight clearance" : "Comfortable"}
+                            </span>
+                          </div>
+                          <div>
+                            Fuel legs:{" "}
+                            <span
+                              className={cn(
+                                "font-medium",
+                                summary.fuelStatus === "unreachable"
+                                  ? "text-red-700"
+                                  : summary.fuelStatus === "tight"
+                                    ? "text-amber-700"
+                                    : "text-emerald-700"
+                              )}
+                            >
+                              {summary.fuelStatus === "unreachable"
+                                ? "Unreachable leg"
+                                : summary.fuelStatus === "tight"
+                                  ? "Tight reserve"
+                                  : "Healthy"}
+                            </span>
+                          </div>
+                          <div>
+                            Longest leg:{" "}
+                            <span className="font-medium">
+                              {summary.longestLegNm != null ? `${summary.longestLegNm.toFixed(0)} NM` : "--"}
+                            </span>
+                          </div>
+                          <div>
+                            Reserve balance:{" "}
+                            <span className="font-medium">
+                              {summary.reserveBalanceGallons != null
+                                ? `${summary.reserveBalanceGallons >= 0 ? "+" : ""}${summary.reserveBalanceGallons.toFixed(1)} gal`
+                                : "--"}
+                            </span>
+                          </div>
+                        </div>
+                        {summary.firstUnreachableLeg ? (
+                          <div className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-800">
+                            Cannot reach {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).to} from {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).from}; short about {(summary.firstUnreachableLeg as { from: string; to: string; shortageGallons: number }).shortageGallons.toFixed(1)} gal before the planned stop.
+                          </div>
+                        ) : null}
+                        {summary.applyKind !== "current" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={recommendedTerrainRoute?.id === summary.id ? "default" : "outline"}
+                            onClick={() => {
+                              if (summary.applyKind === "assist") {
+                                setWaypointsInput(suggestedWaypoints.join(" "));
+                                setPlannedStopsInput(suggestedStops.join(" "));
+                              } else if (summary.applyKind === "coastline") {
+                                setWaypointsInput(suggestedCoastlineWaypoints.join(" "));
+                                setPlannedStopsInput(suggestedCoastlineStops.join(" "));
+                              }
+                            }}
+                          >
+                            Apply route
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {recommendedTerrainRoute && recommendedTerrainRoute.id !== "current" && (
+                    <div className="text-emerald-900/85">
+                      {recommendedTerrainRoute.label} currently offers the healthiest balance of terrain margin and stop-planning practicality at this altitude.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -5925,6 +6600,24 @@ export default function FlightPlanner() {
               Filing guidance: validate the packet first, then use the filing actions below on the saved plan you are editing. RSF now sends Leidos actions live when the lab/production environment is enabled and fully configured.
             </AlertDescription>
           </Alert>
+          {terrainOperationalNotes.length > 0 && (
+            <Alert
+              className={cn(
+                worstTerrainSegment?.segment.risk === "warning"
+                  ? "border-red-300 bg-red-50 text-red-900"
+                  : "border-amber-300 bg-amber-50 text-amber-900"
+              )}
+            >
+              <AlertDescription>
+                <div className="font-semibold">Terrain review before filing</div>
+                <ul className="mt-2 list-disc pl-5 space-y-1">
+                  {terrainOperationalNotes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button type="button" variant="outline" onClick={copyFilingPacket}>
               Copy filing packet
@@ -7056,6 +7749,24 @@ export default function FlightPlanner() {
                       <ul className="mt-2 list-disc pl-5 space-y-1">
                         {filingPreview.warnings.map((warning) => (
                           <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {terrainOperationalNotes.length > 0 && (
+                  <Alert
+                    className={cn(
+                      worstTerrainSegment?.segment.risk === "warning"
+                        ? "border-red-300 bg-red-50 text-red-900"
+                        : "border-amber-300 bg-amber-50 text-amber-900"
+                    )}
+                  >
+                    <AlertDescription>
+                      <div className="font-semibold">Terrain review before handoff</div>
+                      <ul className="mt-2 list-disc pl-5 space-y-1">
+                        {terrainOperationalNotes.map((note) => (
+                          <li key={`preview-${note}`}>{note}</li>
                         ))}
                       </ul>
                     </AlertDescription>

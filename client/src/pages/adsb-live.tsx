@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, WMSTileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import type { FeatureCollection } from "geojson";
 import {
   AlertTriangle,
   Cloud,
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/hooks/useAuth";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 
@@ -53,12 +55,91 @@ type AdsbExchangePayload = {
   ac?: Array<Record<string, any>>;
 };
 
+type SavedFlightPlan = {
+  id: string;
+  title: string | null;
+  departure: string;
+  destination: string;
+  route: string | null;
+  alternate: string | null;
+  filingStatus: string | null;
+  filingFlightRules: string | null;
+};
+
+type AirportSearchResult = {
+  icao?: string | null;
+  iata?: string | null;
+  gpsCode?: string | null;
+  ident?: string | null;
+  name?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  lat?: number | null;
+  lon?: number | null;
+};
+
+type OverlayFeatureCollection = FeatureCollection & {
+  stale?: boolean;
+  updatedAt?: string;
+};
+
+type TerrainProfileResponse = {
+  source: string;
+  sampledPointCount: number;
+  maxElevationFt: number | null;
+  samples: Array<{
+    lat: number;
+    lon: number;
+    elevationFt: number | null;
+  }>;
+};
+
+type NearbyObstacleResponse = {
+  source: string;
+  radiusNm: number;
+  count: number;
+  highestObstacle: {
+    id: string;
+    lat: number;
+    lon: number;
+    amslFt: number | null;
+    aglFt: number | null;
+    city: string | null;
+    state: string | null;
+    kind: string | null;
+    lighting: string | null;
+    distanceNm: number;
+  } | null;
+  obstacles: Array<{
+    id: string;
+    lat: number;
+    lon: number;
+    amslFt: number | null;
+    aglFt: number | null;
+    city: string | null;
+    state: string | null;
+    kind: string | null;
+    lighting: string | null;
+    distanceNm: number;
+  }>;
+};
+
 type MapStyle = "standard" | "sectional" | "radar" | "clouds";
 
 const defaultCenter: [number, number] = [39.5, -98.35];
 
 const FAA_SECTIONAL_TILE_URL =
   "https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}";
+const ICAO_TOKEN_REGEX = /^[A-Z0-9]{3,5}$/;
+
+const routeLineStyle = { color: "#2563eb", weight: 3, opacity: 0.78 };
+
+type RoutePoint = {
+  icao: string;
+  label: string;
+  lat: number;
+  lon: number;
+};
 
 const haversineNm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const toRad = (value: number) => (value * Math.PI) / 180;
@@ -128,6 +209,105 @@ const buildTrafficIcon = (trackDeg: number | null, onGround: boolean, relativeAl
   });
 };
 
+const buildObstacleIcon = (aglFt: number | null) =>
+  L.divIcon({
+    className: "",
+    html: `
+      <div style="display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:9999px;background:#fef2f2;border:2px solid #dc2626;color:#991b1b;font-size:10px;font-weight:700;">
+        ${aglFt !== null && aglFt >= 1000 ? "!" : "O"}
+      </div>
+    `,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+
+const normalizeAirportCode = (value: string | null | undefined) => String(value || "").trim().toUpperCase();
+
+const extractRouteAirportCandidates = (plan: SavedFlightPlan | null) => {
+  if (!plan) return [] as string[];
+  const tokens = [
+    normalizeAirportCode(plan.departure),
+    ...String(plan.route || "")
+      .toUpperCase()
+      .split(/\s+/)
+      .map((token) => token.replace(/[^A-Z0-9]/g, ""))
+      .filter((token) => ICAO_TOKEN_REGEX.test(token)),
+    normalizeAirportCode(plan.destination),
+    normalizeAirportCode(plan.alternate),
+  ].filter(Boolean);
+
+  return Array.from(new Set(tokens));
+};
+
+const airportResultToPoint = (code: string, item: AirportSearchResult | null | undefined): RoutePoint | null => {
+  if (!item) return null;
+  const lat = Number(item.latitude ?? item.lat);
+  const lon = Number(item.longitude ?? item.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const icao = normalizeAirportCode(item.icao || item.gpsCode || item.ident || item.iata || code);
+  const name = String(item.name || icao).trim();
+  return {
+    icao,
+    label: `${icao} · ${name}`,
+    lat,
+    lon,
+  };
+};
+
+const GeoJsonOverlayLayer = ({
+  data,
+  kind,
+}: {
+  data: FeatureCollection | null | undefined;
+  kind: "tfr" | "sua";
+}) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!data?.features?.length) return undefined;
+    const layer = L.geoJSON(data, {
+      style: (feature: any) => {
+        if (kind === "tfr") {
+          return {
+            color: "#f97316",
+            weight: 2,
+            fillColor: "#f97316",
+            fillOpacity: 0.2,
+          };
+        }
+        const rawType = String(feature?.properties?.type || feature?.properties?.raw?.SPECIALUSEAIRSPACETYPE || "").toLowerCase();
+        const type = rawType.replace(/[^a-z]/g, "");
+        let color = "#0f766e";
+        if (type.includes("restricted")) color = "#ef4444";
+        if (type.includes("prohibited")) color = "#b91c1c";
+        if (type.includes("warning")) color = "#f59e0b";
+        if (type.includes("moa")) color = "#2563eb";
+        return {
+          color,
+          weight: 1,
+          dashArray: "4 3",
+          fillColor: color,
+          fillOpacity: 0.08,
+        };
+      },
+      onEachFeature: (feature: any, layerInstance) => {
+        const title =
+          kind === "tfr"
+            ? feature?.properties?.notamId || feature?.properties?.title || "TFR"
+            : feature?.properties?.name || feature?.properties?.raw?.FEATURENAME || "SUA";
+        layerInstance.bindTooltip(String(title), { sticky: true });
+      },
+    });
+
+    layer.addTo(map);
+    return () => {
+      layer.remove();
+    };
+  }, [data, kind, map]);
+
+  return null;
+};
+
 function RecenterOwnship({
   ownship,
   followOwnship,
@@ -148,6 +328,7 @@ function RecenterOwnship({
 }
 
 export default function AdsbLive() {
+  const { isAuthenticated } = useAuth();
   const [trackingEnabled, setTrackingEnabled] = useState(false);
   const [followOwnship, setFollowOwnship] = useState(true);
   const [mapStyle, setMapStyle] = useState<MapStyle>("radar");
@@ -158,6 +339,10 @@ export default function AdsbLive() {
   const [radarFrames, setRadarFrames] = useState<string[]>([]);
   const [radarFrameIndex, setRadarFrameIndex] = useState(0);
   const [radarFallbackActive, setRadarFallbackActive] = useState(false);
+  const [showTfrOverlay, setShowTfrOverlay] = useState(true);
+  const [showSuaOverlay, setShowSuaOverlay] = useState(false);
+  const [showObstacleOverlay, setShowObstacleOverlay] = useState(true);
+  const [selectedPlanId, setSelectedPlanId] = useState("none");
   const watchIdRef = useRef<number | null>(null);
   const radarTimerRef = useRef<number | null>(null);
   const cloudDate = useMemo(
@@ -389,6 +574,144 @@ export default function AdsbLive() {
 
   const mapCenter = ownship ? ([ownship.lat, ownship.lon] as [number, number]) : defaultCenter;
   const ownshipIcon = useMemo(() => buildOwnshipIcon(ownship?.headingDeg ?? null), [ownship?.headingDeg]);
+  const overlayBbox = useMemo(() => {
+    if (!ownship) return "";
+    const latPad = Math.max(0.4, Number(rangeNm) / 60);
+    const lonPad = Math.max(0.4, Number(rangeNm) / (60 * Math.max(Math.cos((ownship.lat * Math.PI) / 180), 0.2)));
+    return [
+      (ownship.lat - latPad).toFixed(4),
+      (ownship.lon - lonPad).toFixed(4),
+      (ownship.lat + latPad).toFixed(4),
+      (ownship.lon + lonPad).toFixed(4),
+    ].join(",");
+  }, [ownship, rangeNm]);
+
+  const savedPlansQuery = useQuery<SavedFlightPlan[]>({
+    queryKey: ["/api/flight-plans"],
+    enabled: isAuthenticated,
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/api/flight-plans"), { credentials: "include" });
+      if (!response.ok) throw new Error("Unable to load saved flight plans.");
+      return response.json();
+    },
+  });
+
+  const selectedPlan = useMemo(
+    () => savedPlansQuery.data?.find((plan) => plan.id === selectedPlanId) ?? null,
+    [savedPlansQuery.data, selectedPlanId]
+  );
+
+  useEffect(() => {
+    if (!savedPlansQuery.data?.length) return;
+    if (selectedPlanId !== "none" && savedPlansQuery.data.some((plan) => plan.id === selectedPlanId)) return;
+    setSelectedPlanId(savedPlansQuery.data[0].id);
+  }, [savedPlansQuery.data, selectedPlanId]);
+
+  const routeCodes = useMemo(() => extractRouteAirportCandidates(selectedPlan), [selectedPlan]);
+
+  const routePointsQuery = useQuery<RoutePoint[]>({
+    queryKey: ["/api/airports/search", routeCodes.join("|")],
+    enabled: routeCodes.length > 0,
+    queryFn: async () => {
+      const points: RoutePoint[] = [];
+      for (const code of routeCodes) {
+        const response = await fetch(apiUrl(`/api/airports/search?q=${encodeURIComponent(code)}`), {
+          credentials: "include",
+        });
+        if (!response.ok) continue;
+        const payload = await response.json();
+        const candidates = Array.isArray(payload) ? payload : Array.isArray(payload?.airports) ? payload.airports : [];
+        const exact = candidates.find((item: AirportSearchResult) => {
+          const itemCode = normalizeAirportCode(item.icao || item.gpsCode || item.ident || item.iata);
+          return itemCode === code;
+        }) || candidates[0];
+        const point = airportResultToPoint(code, exact);
+        if (point) {
+          points.push(point);
+        }
+      }
+      return points;
+    },
+  });
+
+  const routePoints = routePointsQuery.data ?? [];
+  const routePathParam = useMemo(
+    () => routePoints.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join(";"),
+    [routePoints]
+  );
+  const routeSummaryText = selectedPlan
+    ? `${selectedPlan.departure} to ${selectedPlan.destination}${selectedPlan.alternate ? ` · alt ${selectedPlan.alternate}` : ""}`
+    : "No route selected";
+
+  const tfrQuery = useQuery<OverlayFeatureCollection>({
+    queryKey: ["/api/tfrs", overlayBbox],
+    enabled: showTfrOverlay && Boolean(overlayBbox),
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/tfrs?bbox=${encodeURIComponent(overlayBbox)}`), {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Unable to load nearby TFRs.");
+      return response.json();
+    },
+    refetchInterval: 60 * 1000,
+  });
+
+  const suaQuery = useQuery<OverlayFeatureCollection>({
+    queryKey: ["/api/airspace/sua", overlayBbox],
+    enabled: showSuaOverlay && Boolean(overlayBbox),
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/airspace/sua?bbox=${encodeURIComponent(overlayBbox)}`), {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Unable to load nearby special use airspace.");
+      return response.json();
+    },
+    refetchInterval: 5 * 60 * 1000,
+  });
+
+  const tfrCount = tfrQuery.data?.features?.length ?? 0;
+  const suaCount = suaQuery.data?.features?.length ?? 0;
+
+  const terrainProfileQuery = useQuery<TerrainProfileResponse>({
+    queryKey: ["/api/aviation/terrain-profile", routePathParam],
+    enabled: routePoints.length >= 2,
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/aviation/terrain-profile?path=${encodeURIComponent(routePathParam)}`), {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Unable to load route terrain profile.");
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const obstacleQuery = useQuery<NearbyObstacleResponse>({
+    queryKey: ["/api/aviation/obstacles/nearby", ownship?.lat?.toFixed(4) ?? null, ownship?.lon?.toFixed(4) ?? null, rangeNm],
+    enabled: Boolean(ownship),
+    queryFn: async () => {
+      if (!ownship) {
+        return { source: "FAA Daily DOF", radiusNm: Number(rangeNm), count: 0, highestObstacle: null, obstacles: [] };
+      }
+      const params = new URLSearchParams({
+        lat: String(ownship.lat),
+        lon: String(ownship.lon),
+        radiusNm: rangeNm,
+        limit: "40",
+      });
+      const response = await fetch(apiUrl(`/api/aviation/obstacles/nearby?${params.toString()}`), {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Unable to load nearby obstacles.");
+      return response.json();
+    },
+    refetchInterval: 60 * 1000,
+    staleTime: 60 * 1000,
+  });
+
+  const terrainMaxElevationFt = terrainProfileQuery.data?.maxElevationFt ?? null;
+  const obstacleCount = obstacleQuery.data?.count ?? 0;
+  const highestObstacle = obstacleQuery.data?.highestObstacle ?? null;
+  const nearbyObstacles = obstacleQuery.data?.obstacles ?? [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -479,9 +802,36 @@ export default function AdsbLive() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center gap-4 text-sm">
+                {isAuthenticated && (
+                  <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                    <SelectTrigger className="w-[280px]">
+                      <SelectValue placeholder="Choose saved route overlay" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No saved route overlay</SelectItem>
+                      {(savedPlansQuery.data ?? []).map((plan) => (
+                        <SelectItem key={plan.id} value={plan.id}>
+                          {plan.title || `${plan.departure} to ${plan.destination}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <label className="flex items-center gap-2">
                   <Switch checked={followOwnship} onCheckedChange={setFollowOwnship} />
                   Follow ownship
+                </label>
+                <label className="flex items-center gap-2">
+                  <Switch checked={showTfrOverlay} onCheckedChange={setShowTfrOverlay} />
+                  TFR overlay
+                </label>
+                <label className="flex items-center gap-2">
+                  <Switch checked={showSuaOverlay} onCheckedChange={setShowSuaOverlay} />
+                  SUA overlay
+                </label>
+                <label className="flex items-center gap-2">
+                  <Switch checked={showObstacleOverlay} onCheckedChange={setShowObstacleOverlay} />
+                  Obstacles
                 </label>
                 <Button type="button" variant="outline" size="sm" onClick={() => trafficQuery.refetch()}>
                   <RefreshCcw className="mr-2 h-4 w-4" />
@@ -581,6 +931,59 @@ export default function AdsbLive() {
                       />
                     </>
                   )}
+                  {routePoints.length >= 2 && (
+                    <Polyline
+                      positions={routePoints.map((point) => [point.lat, point.lon] as [number, number])}
+                      pathOptions={routeLineStyle}
+                    />
+                  )}
+                  {routePoints.map((point, index) => (
+                    <Marker
+                      key={`route-${point.icao}-${index}`}
+                      position={[point.lat, point.lon]}
+                      icon={L.divIcon({
+                        className: "",
+                        html: `<div style="display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:9999px;background:#ffffff;border:2px solid #2563eb;color:#2563eb;font-weight:700;font-size:10px;">${index + 1}</div>`,
+                        iconSize: [18, 18],
+                        iconAnchor: [9, 9],
+                      })}
+                    >
+                      <Tooltip direction="top" offset={[0, -10]}>
+                        {point.label}
+                      </Tooltip>
+                    </Marker>
+                  ))}
+                  {showTfrOverlay && tfrQuery.data?.features?.length ? (
+                    <GeoJsonOverlayLayer data={tfrQuery.data} kind="tfr" />
+                  ) : null}
+                  {showSuaOverlay && suaQuery.data?.features?.length ? (
+                    <GeoJsonOverlayLayer data={suaQuery.data} kind="sua" />
+                  ) : null}
+                  {showObstacleOverlay && nearbyObstacles.map((obstacle) => (
+                    <Marker
+                      key={`obstacle-${obstacle.id}`}
+                      position={[obstacle.lat, obstacle.lon]}
+                      icon={buildObstacleIcon(obstacle.aglFt)}
+                    >
+                      <Tooltip direction="top" offset={[0, -10]}>
+                        {obstacle.kind || "Obstacle"} · {formatAltitude(obstacle.amslFt)}
+                      </Tooltip>
+                      <Popup>
+                        <div className="space-y-1 text-sm">
+                          <div className="font-semibold">{obstacle.kind || "Obstacle"}</div>
+                          <div>AMSL: {formatAltitude(obstacle.amslFt)}</div>
+                          <div>AGL: {formatAltitude(obstacle.aglFt)}</div>
+                          <div>Distance: {obstacle.distanceNm.toFixed(1)} NM</div>
+                          {(obstacle.city || obstacle.state) ? (
+                            <div>
+                              {[obstacle.city, obstacle.state].filter(Boolean).join(", ")}
+                            </div>
+                          ) : null}
+                          {obstacle.lighting ? <div>Lighting: {obstacle.lighting}</div> : null}
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
                   {trafficTargets.map((target) => (
                     <Marker
                       key={target.id}
@@ -624,11 +1027,92 @@ export default function AdsbLive() {
                   <div className="text-xs text-muted-foreground">Ownship groundspeed</div>
                   <div className="font-semibold">{formatSpeed(ownship?.speedKt ?? null)}</div>
                 </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Nearby TFRs</div>
+                  <div className="font-semibold">{showTfrOverlay ? tfrCount : "Off"}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Nearby SUA</div>
+                  <div className="font-semibold">{showSuaOverlay ? suaCount : "Off"}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Highest nearby obstacle</div>
+                  <div className="font-semibold">{highestObstacle ? formatAltitude(highestObstacle.amslFt) : "--"}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Max route terrain</div>
+                  <div className="font-semibold">{terrainMaxElevationFt !== null ? formatAltitude(terrainMaxElevationFt) : "--"}</div>
+                </div>
               </div>
             </CardContent>
           </Card>
 
           <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Active route overlay</CardTitle>
+                <CardDescription>Keep your saved planned route visible while tracking live position and terrain context.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!isAuthenticated ? (
+                  <div className="text-sm text-muted-foreground">
+                    Sign in to load saved flight plans as a live route overlay.
+                  </div>
+                ) : savedPlansQuery.isLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading saved routes...</div>
+                ) : selectedPlan ? (
+                  <>
+                    <div className="rounded-lg border p-3">
+                      <div className="font-medium">{selectedPlan.title || `${selectedPlan.departure} to ${selectedPlan.destination}`}</div>
+                      <div className="mt-1 text-sm text-muted-foreground">{routeSummaryText}</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Badge variant="outline">{selectedPlan.filingFlightRules || "VFR"}</Badge>
+                        <Badge variant="outline">{selectedPlan.filingStatus || "draft"}</Badge>
+                        <Badge variant="secondary">{routePoints.length} route points resolved</Badge>
+                      </div>
+                    </div>
+                    {routePoints.length > 0 ? (
+                      <div className="space-y-2">
+                        {terrainProfileQuery.isLoading ? (
+                          <div className="rounded-lg border px-3 py-2 text-sm text-muted-foreground">Loading terrain profile...</div>
+                        ) : null}
+                        {terrainProfileQuery.error ? (
+                          <Alert variant="destructive">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertDescription>
+                              {terrainProfileQuery.error instanceof Error ? terrainProfileQuery.error.message : "Terrain profile unavailable."}
+                            </AlertDescription>
+                          </Alert>
+                        ) : null}
+                        {terrainProfileQuery.data ? (
+                          <div className="rounded-lg border p-3">
+                            <div className="font-medium">USGS terrain profile</div>
+                            <div className="mt-1 text-sm text-muted-foreground">
+                              {terrainProfileQuery.data.sampledPointCount} samples · highest terrain {formatAltitude(terrainProfileQuery.data.maxElevationFt)}
+                            </div>
+                          </div>
+                        ) : null}
+                        {routePoints.map((point) => (
+                          <div key={`point-${point.icao}-${point.lat}-${point.lon}`} className="rounded-lg border px-3 py-2 text-sm">
+                            <div className="font-medium">{point.icao}</div>
+                            <div className="text-muted-foreground">{point.label.replace(`${point.icao} · `, "")}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        RSF could not resolve route airports from this plan yet.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    Choose a saved flight plan to overlay it on the live map.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Operational status</CardTitle>
@@ -719,14 +1203,46 @@ export default function AdsbLive() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Next integrations</CardTitle>
-                <CardDescription>Public FAA/USGS data plus Leidos where it fits.</CardDescription>
+                <CardTitle>Hazard watch</CardTitle>
+                <CardDescription>Nearby restrictions, obstacles, and terrain context around your current position and selected route.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>- FAA obstacle data for obstacle proximity and hazard markers</p>
-                <p>- USGS terrain for terrain shading and clearance alerts</p>
-                <p>- Leidos route briefings and filing lifecycle linked from the planner</p>
-                <p>- Direct portable ADS-B receiver ingestion for stronger in-flight traffic fidelity</p>
+                <div className="rounded-lg border p-3">
+                  <div className="font-medium text-foreground">TFR overlay</div>
+                  <div>{showTfrOverlay ? `${tfrCount} nearby TFR features loaded.` : "Overlay turned off."}</div>
+                  {tfrQuery.error ? <div className="text-red-600">{tfrQuery.error instanceof Error ? tfrQuery.error.message : "TFR load failed."}</div> : null}
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="font-medium text-foreground">Special use airspace</div>
+                  <div>{showSuaOverlay ? `${suaCount} nearby SUA features loaded.` : "Overlay turned off."}</div>
+                  {suaQuery.error ? <div className="text-red-600">{suaQuery.error instanceof Error ? suaQuery.error.message : "SUA load failed."}</div> : null}
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="font-medium text-foreground">FAA obstacles</div>
+                  <div>{showObstacleOverlay ? `${obstacleCount} nearby obstacles loaded from the FAA Daily DOF.` : "Overlay turned off."}</div>
+                  {highestObstacle ? (
+                    <div>
+                      Highest nearby obstacle: {formatAltitude(highestObstacle.amslFt)}
+                      {highestObstacle.distanceNm ? ` · ${highestObstacle.distanceNm.toFixed(1)} NM` : ""}
+                    </div>
+                  ) : null}
+                  {obstacleQuery.error ? <div className="text-red-600">{obstacleQuery.error instanceof Error ? obstacleQuery.error.message : "Obstacle load failed."}</div> : null}
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="font-medium text-foreground">USGS terrain</div>
+                  <div>
+                    {terrainProfileQuery.data
+                      ? `Route terrain profile loaded. Max terrain ${formatAltitude(terrainProfileQuery.data.maxElevationFt)}.`
+                      : "Terrain profile appears when a saved route overlay is selected."}
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="font-medium text-foreground">Next integrations</div>
+                  <div>- Terrain shading on the map, not just route-profile summaries</div>
+                  <div>- Clearance cueing against ownship altitude</div>
+                  <div>- Leidos route briefings linked from the active plan</div>
+                  <div>- Direct portable ADS-B receiver ingestion for stronger in-flight traffic fidelity</div>
+                </div>
               </CardContent>
             </Card>
           </div>

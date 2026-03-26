@@ -144,6 +144,34 @@ const canSubmitAmendForPlan = (plan: FlightPlan | null | undefined) => {
   );
 };
 
+const getPlannerAircraftTypeValue = ({
+  manualAircraftType,
+  selectedProfile,
+  selectedType,
+  selectedTypeId,
+}: {
+  manualAircraftType: string | null | undefined;
+  selectedProfile: AircraftProfile | null | undefined;
+  selectedType: AircraftType | null | undefined;
+  selectedTypeId: string | null | undefined;
+}) => {
+  const manual = String(manualAircraftType || "").trim();
+  const selectedTypeLabel = selectedType ? `${selectedType.make} ${selectedType.model}`.trim() : "";
+
+  if (selectedProfile?.name?.trim()) {
+    return selectedProfile.name.trim();
+  }
+
+  if (selectedTypeId && selectedTypeId !== CUSTOM_TYPE_ID && selectedTypeLabel) {
+    if (!manual) return selectedTypeLabel;
+    const normalizedManual = normalizeAircraftLabel(manual);
+    const normalizedSelected = normalizeAircraftLabel(selectedTypeLabel);
+    return normalizedManual === normalizedSelected ? selectedTypeLabel : manual;
+  }
+
+  return manual || null;
+};
+
 const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
 const toRadians = (value: number) => (value * Math.PI) / 180;
 const toDegrees = (value: number) => (value * 180) / Math.PI;
@@ -2283,7 +2311,12 @@ export default function FlightPlanner() {
     fuelRequiredGallons: totalFuel ? Number(totalFuel.toFixed(1)) : null,
     fuelOnBoardGallons: fuelAvailableGallons ? Number(fuelAvailableGallons.toFixed(1)) : null,
     aircraftId: filingDraft.aircraftId.trim() || form.tailNumber.trim() || null,
-    aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
+    aircraftType: getPlannerAircraftTypeValue({
+      manualAircraftType: form.aircraftType,
+      selectedProfile,
+      selectedType,
+      selectedTypeId,
+    }),
     equipment: filingDraft.equipment.trim() || null,
     soulsOnBoard: filingDraft.soulsOnBoard.trim() || null,
     aircraftColor: filingDraft.aircraftColor.trim() || null,
@@ -2312,9 +2345,9 @@ export default function FlightPlanner() {
     enduranceMinutes,
     totalFuel,
     fuelAvailableGallons,
-    selectedProfile?.name,
-    selectedType.make,
-    selectedType.model,
+    selectedProfile,
+    selectedType,
+    selectedTypeId,
   ]);
 
   const tfrRouteQuery = useQuery({
@@ -3384,8 +3417,8 @@ export default function FlightPlanner() {
     if (!canSubmitLiveAmend) {
       setActiveTab("route");
       toast({
-        title: "Plan loaded for amendment",
-        description: "Make your changes, then save and continue to filing. Live Amend only works after a successfully filed Leidos plan with version tracking.",
+        title: "Plan loaded to edit and refile",
+        description: "Make your changes, then save and continue to filing. This plan will need to be filed again because live amend is not available for this saved record.",
       });
       return;
     }
@@ -3393,7 +3426,7 @@ export default function FlightPlanner() {
     setActiveTab("file");
     toast({
       title: "Filed plan loaded for amendment",
-      description: "Make any needed changes, then use Save and continue to filing before you submit Amend.",
+      description: "Make any needed changes, then use Save and continue to filing before you submit the live Amend action.",
     });
   };
 
@@ -3403,7 +3436,12 @@ export default function FlightPlanner() {
           ...form,
           fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
           route: activeFiledRoute || null,
-          aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
+          aircraftType: getPlannerAircraftTypeValue({
+            manualAircraftType: form.aircraftType,
+            selectedProfile,
+            selectedType,
+            selectedTypeId,
+          }),
           fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
           filingFlightRules: filingDraft.flightRules,
           filingEquipment: filingDraft.equipment.trim() || null,
@@ -3459,7 +3497,12 @@ export default function FlightPlanner() {
         ...form,
         fuelOnBoard: form.fuelOnBoard?.trim() ? form.fuelOnBoard.trim() : "",
         route: activeFiledRoute || null,
-        aircraftType: form.aircraftType || selectedProfile?.name || `${selectedType.make} ${selectedType.model}`,
+        aircraftType: getPlannerAircraftTypeValue({
+          manualAircraftType: form.aircraftType,
+          selectedProfile,
+          selectedType,
+          selectedTypeId,
+        }),
         fuelRequired: totalFuel ? totalFuel.toFixed(1) : null,
         filingFlightRules: filingDraft.flightRules,
         filingEquipment: filingDraft.equipment.trim() || null,
@@ -5573,16 +5616,16 @@ export default function FlightPlanner() {
                   onClick={() => {
                     if (!currentSavedPlanCanAmend) {
                       toast({
-                        title: "Amend unavailable",
-                        description: "This plan is not yet in a live amendable state. Save your edits, then use File unless the plan already has a live Leidos file and version stamp.",
+                        title: "Refile required",
+                        description: "This saved plan is not in a live amendable state. Save your edits, then use File to submit the updated version.",
                       });
                       return;
                     }
                     filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "amend" });
                   }}
-                  disabled={filingActionMutation.isPending || !currentSavedPlanCanAmend}
+                  disabled={filingActionMutation.isPending}
                 >
-                  Amend
+                  {currentSavedPlanCanAmend ? "Amend" : "Refile instead of amend"}
                 </Button>
                 {currentSavedPlanFlightRules === "VFR" && (
                   <>
@@ -5622,7 +5665,7 @@ export default function FlightPlanner() {
               </div>
               {!currentSavedPlanCanAmend && (
                 <div className="text-xs text-muted-foreground">
-                  Live Amend requires a successfully filed Leidos plan with a stored version stamp. If this is still a draft or older staged copy, save your edits and use File instead.
+                  Live Amend requires a successfully filed Leidos plan with a stored version stamp. If this is a draft, older staged copy, or filed record without version tracking, save your edits and use File to submit the updated plan.
                 </div>
               )}
             </div>
@@ -5858,7 +5901,7 @@ export default function FlightPlanner() {
                     onClick={() => beginAmendWorkflow(plan)}
                     disabled={filingActionMutation.isPending}
                   >
-                    {canSubmitAmendForPlan(plan) ? "Amend" : "Prepare amend"}
+                    {canSubmitAmendForPlan(plan) ? "Amend" : "Edit for refile"}
                   </Button>
                   {(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>

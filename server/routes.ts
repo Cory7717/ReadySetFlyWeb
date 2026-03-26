@@ -7,6 +7,7 @@ import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import crypto from "crypto";
 import zlib from "zlib";
+import AdmZip from "adm-zip";
 import cors from "cors";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
@@ -214,6 +215,225 @@ function parseBasicCsvRows(csvText: string): string[][] {
   }
 
   return rows;
+}
+
+type TerrainProfilePoint = {
+  lat: number;
+  lon: number;
+  elevationFt: number | null;
+};
+
+type NearbyObstacle = {
+  id: string;
+  lat: number;
+  lon: number;
+  amslFt: number | null;
+  aglFt: number | null;
+  city: string | null;
+  state: string | null;
+  kind: string | null;
+  lighting: string | null;
+  distanceNm: number;
+};
+
+type CachedObstacleRecord = Omit<NearbyObstacle, "distanceNm">;
+
+const USGS_EPQS_URL = (process.env.USGS_EPQS_URL || "https://epqs.nationalmap.gov/v1/json").trim();
+const FAA_DDOF_ZIP_URL = (
+  process.env.FAA_DDOF_ZIP_URL ||
+  "https://aeronav.faa.gov/Obst_Data/DDOF_CSV.zip"
+).trim();
+const FAA_DDOF_CACHE_TTL_MS = Math.max(60 * 60 * 1000, Number(process.env.FAA_DDOF_CACHE_TTL_MS || 12 * 60 * 60 * 1000));
+
+let obstacleCache:
+  | {
+      loadedAt: number;
+      rows: CachedObstacleRecord[];
+    }
+  | null = null;
+let obstacleCachePromise: Promise<CachedObstacleRecord[]> | null = null;
+
+function findHeaderIndex(headers: string[], aliases: string[]) {
+  const normalizedAliases = aliases.map((alias) => alias.toUpperCase());
+  return headers.findIndex((header) => normalizedAliases.includes(header));
+}
+
+function parseCsvNumber(value: string | undefined) {
+  if (!value) return null;
+  const normalized = value.replace(/,/g, "").trim();
+  if (!normalized) return null;
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
+}
+
+function haversineNm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusKm * c * 0.539957;
+}
+
+function sampleRouteLine(points: Array<{ lat: number; lon: number }>, count: number) {
+  if (points.length === 0) return [] as Array<{ lat: number; lon: number }>;
+  if (points.length === 1) return [points[0]];
+
+  const segments = points.slice(1).map((point, index) => {
+    const start = points[index];
+    return {
+      start,
+      end: point,
+      lengthNm: haversineNm(start.lat, start.lon, point.lat, point.lon),
+    };
+  });
+  const totalNm = segments.reduce((sum, segment) => sum + segment.lengthNm, 0);
+  if (totalNm <= 0) return points;
+
+  const sampleCount = Math.max(2, Math.min(count, 80));
+  const results: Array<{ lat: number; lon: number }> = [];
+
+  for (let i = 0; i < sampleCount; i += 1) {
+    const targetNm = (totalNm * i) / (sampleCount - 1);
+    let traversed = 0;
+    let chosen = segments[segments.length - 1];
+
+    for (const segment of segments) {
+      if (traversed + segment.lengthNm >= targetNm) {
+        chosen = segment;
+        break;
+      }
+      traversed += segment.lengthNm;
+    }
+
+    const withinSegment = Math.max(0, targetNm - traversed);
+    const ratio = chosen.lengthNm > 0 ? withinSegment / chosen.lengthNm : 0;
+    results.push({
+      lat: chosen.start.lat + (chosen.end.lat - chosen.start.lat) * ratio,
+      lon: chosen.start.lon + (chosen.end.lon - chosen.start.lon) * ratio,
+    });
+  }
+
+  return results;
+}
+
+async function fetchTerrainElevationFt(lat: number, lon: number): Promise<number | null> {
+  const params = new URLSearchParams({
+    x: String(lon),
+    y: String(lat),
+    units: "Feet",
+    wkid: "4326",
+    includeDate: "false",
+  });
+  const response = await fetchWithTimeout(`${USGS_EPQS_URL}?${params.toString()}`, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "ReadySetFly Terrain/1.0",
+    },
+  }, 10000);
+
+  if (!response.ok) {
+    throw new Error(`USGS elevation query failed (${response.status})`);
+  }
+
+  const payload = await response.json();
+  const candidates = [
+    payload?.value,
+    payload?.elevation,
+    payload?.USGS_Elevation_Point_Query_Service?.Elevation_Query?.Elevation,
+  ];
+  for (const candidate of candidates) {
+    const numeric = Number(candidate);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
+}
+
+async function loadCachedObstacles(): Promise<CachedObstacleRecord[]> {
+  if (obstacleCache && obstacleCache.loadedAt + FAA_DDOF_CACHE_TTL_MS > Date.now()) {
+    return obstacleCache.rows;
+  }
+  if (obstacleCachePromise) {
+    return obstacleCachePromise;
+  }
+
+  obstacleCachePromise = (async () => {
+    const response = await fetchWithTimeout(FAA_DDOF_ZIP_URL, {
+      headers: {
+        Accept: "application/zip, application/octet-stream",
+        "User-Agent": "ReadySetFly Obstacles/1.0",
+      },
+    }, 20000);
+
+    if (!response.ok) {
+      throw new Error(`FAA DDOF download failed (${response.status})`);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const zip = new AdmZip(buffer);
+    const csvEntry = zip
+      .getEntries()
+      .find((entry) => !entry.isDirectory && entry.entryName.toLowerCase().endsWith(".csv"));
+
+    if (!csvEntry) {
+      throw new Error("FAA DDOF archive did not contain a CSV file");
+    }
+
+    const csvText = zip.readAsText(csvEntry, "utf8");
+    const rows = parseBasicCsvRows(csvText);
+    if (rows.length < 2) {
+      throw new Error("FAA DDOF CSV did not contain obstacle rows");
+    }
+
+    const headers = rows[0].map((value) => value.trim().toUpperCase());
+    const latIndex = findHeaderIndex(headers, ["LATDEC", "LATITUDE", "LATDD", "LATITUDEDECIMAL"]);
+    const lonIndex = findHeaderIndex(headers, ["LONDEC", "LONGITUDE", "LONDD", "LONGITUDEDECIMAL"]);
+    const amslIndex = findHeaderIndex(headers, ["AMSL", "ALT_MSL", "ELEVATION", "MSL"]);
+    const aglIndex = findHeaderIndex(headers, ["AGL", "HEIGHTAGL", "HEIGHT_AGL"]);
+    const cityIndex = findHeaderIndex(headers, ["CITY", "CITYNAME"]);
+    const stateIndex = findHeaderIndex(headers, ["STATE", "STATEABBR"]);
+    const kindIndex = findHeaderIndex(headers, ["TYPE", "OBSTACLETYPE", "KIND"]);
+    const lightingIndex = findHeaderIndex(headers, ["LIGHTING", "LIGHTEDIND", "MARKER"]);
+    const idIndex = findHeaderIndex(headers, ["OID", "OBSTACLEID", "ID", "NUMBER"]);
+
+    if (latIndex < 0 || lonIndex < 0) {
+      throw new Error("FAA DDOF CSV headers did not include decimal latitude/longitude");
+    }
+
+    const parsedRows: CachedObstacleRecord[] = [];
+    for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex];
+      const lat = parseCsvNumber(row[latIndex]);
+      const lon = parseCsvNumber(row[lonIndex]);
+      if (lat === null || lon === null) continue;
+      parsedRows.push({
+        id: String(row[idIndex] || `obstacle-${rowIndex}`).trim(),
+        lat,
+        lon,
+        amslFt: amslIndex >= 0 ? parseCsvNumber(row[amslIndex]) : null,
+        aglFt: aglIndex >= 0 ? parseCsvNumber(row[aglIndex]) : null,
+        city: cityIndex >= 0 ? String(row[cityIndex] || "").trim() || null : null,
+        state: stateIndex >= 0 ? String(row[stateIndex] || "").trim() || null : null,
+        kind: kindIndex >= 0 ? String(row[kindIndex] || "").trim() || null : null,
+        lighting: lightingIndex >= 0 ? String(row[lightingIndex] || "").trim() || null : null,
+      });
+    }
+
+    obstacleCache = {
+      loadedAt: Date.now(),
+      rows: parsedRows,
+    };
+    obstacleCachePromise = null;
+    return parsedRows;
+  })().catch((error) => {
+    obstacleCachePromise = null;
+    throw error;
+  });
+
+  return obstacleCachePromise;
 }
 
 function mapFlyingClubFleetCsv(csvText: string) {
@@ -14251,6 +14471,101 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       data: null,
       todo: "TODO: Implement GFA data once NOAA/AWC provides an accessible endpoint.",
     });
+  });
+
+  app.get("/api/aviation/terrain-profile", async (req, res) => {
+    try {
+      const pathParam = typeof req.query.path === "string" ? req.query.path : "";
+      const pointTokens = pathParam
+        .split(";")
+        .map((token) => token.trim())
+        .filter(Boolean);
+
+      const routePoints = pointTokens
+        .map((token) => {
+          const [latRaw, lonRaw] = token.split(",");
+          const lat = Number(latRaw);
+          const lon = Number(lonRaw);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+          return { lat, lon };
+        })
+        .filter((point): point is { lat: number; lon: number } => Boolean(point));
+
+      if (routePoints.length < 2) {
+        return res.status(400).json({ error: "At least two path points are required." });
+      }
+
+      const sampleCount = Math.max(8, Math.min(Number(req.query.samples) || 18, 48));
+      const sampledPath = sampleRouteLine(routePoints, sampleCount);
+      const elevations = await Promise.all(
+        sampledPath.map(async (point) => ({
+          lat: point.lat,
+          lon: point.lon,
+          elevationFt: await fetchTerrainElevationFt(point.lat, point.lon),
+        }))
+      );
+
+      const maxElevationFt = elevations.reduce<number | null>((max, point) => {
+        if (point.elevationFt === null) return max;
+        if (max === null) return point.elevationFt;
+        return Math.max(max, point.elevationFt);
+      }, null);
+
+      res.json({
+        source: "USGS EPQS / 3DEP",
+        samples: elevations,
+        maxElevationFt,
+        sampledPointCount: elevations.length,
+      });
+    } catch (error: any) {
+      console.error("Terrain profile fetch failed:", error);
+      res.status(502).json({ error: error?.message || "Failed to fetch terrain profile" });
+    }
+  });
+
+  app.get("/api/aviation/obstacles/nearby", async (req, res) => {
+    try {
+      const lat = Number(req.query.lat);
+      const lon = Number(req.query.lon);
+      const radiusNm = Math.min(Math.max(Number(req.query.radiusNm) || 25, 5), 100);
+      const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        return res.status(400).json({ error: "lat and lon are required." });
+      }
+
+      const obstacles = await loadCachedObstacles();
+      const nearby = obstacles
+        .map((obstacle) => ({
+          ...obstacle,
+          distanceNm: haversineNm(lat, lon, obstacle.lat, obstacle.lon),
+        }))
+        .filter((obstacle) => obstacle.distanceNm <= radiusNm)
+        .sort((a, b) => {
+          const aHeight = a.amslFt ?? a.aglFt ?? 0;
+          const bHeight = b.amslFt ?? b.aglFt ?? 0;
+          if (Math.abs(a.distanceNm - b.distanceNm) < 0.25) return bHeight - aHeight;
+          return a.distanceNm - b.distanceNm;
+        })
+        .slice(0, limit);
+
+      const highestObstacle = nearby.reduce<NearbyObstacle | null>((highest, obstacle) => {
+        const currentHeight = obstacle.amslFt ?? obstacle.aglFt ?? 0;
+        const highestHeight = highest ? highest.amslFt ?? highest.aglFt ?? 0 : -Infinity;
+        return currentHeight > highestHeight ? obstacle : highest;
+      }, null);
+
+      res.json({
+        source: "FAA Daily DOF",
+        radiusNm,
+        count: nearby.length,
+        highestObstacle,
+        obstacles: nearby,
+      });
+    } catch (error: any) {
+      console.error("Nearby obstacle fetch failed:", error);
+      res.status(502).json({ error: error?.message || "Failed to fetch nearby obstacles" });
+    }
   });
 
   app.get("/api/aviation/cloud-frames", async (req, res) => {

@@ -251,6 +251,32 @@ type AirportSearchResult = {
   lon?: number;
 };
 
+type RunwayBriefingRunway = {
+  leIdent?: string | null;
+  heIdent?: string | null;
+  leHeading?: number | null;
+  heHeading?: number | null;
+  lengthFt?: number | null;
+  surface?: string | null;
+};
+
+type RunwayBriefingResponse = {
+  icao: string;
+  runwayInUse?: string | null;
+  wind?: {
+    direction?: number | null;
+    speed?: number | null;
+    gust?: number | null;
+  } | null;
+  advisory?: {
+    runway?: string | null;
+    heading?: number | null;
+    headwind?: number | null;
+    crosswind?: number | null;
+  } | null;
+  runways: RunwayBriefingRunway[];
+};
+
 const FALLBACK_TYPE: AircraftType = {
   id: "fallback",
   make: "Generic",
@@ -569,6 +595,11 @@ function parseRunwayHeading(runway: string) {
   const value = Number(match[1]);
   if (!Number.isFinite(value) || value <= 0) return null;
   return (value % 36) * 10;
+}
+
+function extractRunwayIdent(value?: string | null) {
+  const match = String(value || "").trim().toUpperCase().match(/\b(\d{1,2}[LCR]?)\b/);
+  return match ? match[1] : null;
 }
 
 function buildRoutePreview(departure: string, route: string, destination: string) {
@@ -1144,6 +1175,7 @@ export default function FlightPlanner() {
   const destinationLookupRef = useRef<{ value: string; ok: boolean } | null>(null);
   const departureSelectedRef = useRef<string | null>(null);
   const destinationSelectedRef = useRef<string | null>(null);
+  const departureRunwayAutoAirportRef = useRef<string | null>(null);
   const lastApproachOfferKeyRef = useRef<string | null>(null);
   const plannedAltitudeFt = Number(plannedAltitude);
   const plannedAltitudeValue = Number.isFinite(plannedAltitudeFt) ? plannedAltitudeFt : undefined;
@@ -2371,6 +2403,19 @@ export default function FlightPlanner() {
     staleTime: 1000 * 60 * 10,
   });
 
+  const departureRunwayBriefingQuery = useQuery<RunwayBriefingResponse>({
+    queryKey: ["/api/airports/runway-briefing", primaryIcao],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/airports/${primaryIcao}/runway-briefing`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch runway briefing");
+      return res.json();
+    },
+    enabled: hasPrimaryIcao,
+    staleTime: 1000 * 60 * 5,
+  });
+
   const filedRouteAnalysisQuery = useQuery<FiledRouteAnalysisResponse>({
     queryKey: ["/api/flight-plans/route-analysis", filedRouteInputNormalized],
     queryFn: async () => {
@@ -2630,6 +2675,106 @@ export default function FlightPlanner() {
     const value = Number(elevation);
     return Number.isFinite(value) ? value : null;
   }, [airportMap, departureResolved]);
+
+  const departureRunwayOptions = useMemo(() => {
+    const runways = departureRunwayBriefingQuery.data?.runways || [];
+    const options = new Map<string, { label: string; heading: number | null; lengthFt: number | null; source: "runway" | "advisory" | "metar" }>();
+
+    const addOption = (
+      ident: string | null | undefined,
+      heading: number | null | undefined,
+      lengthFt: number | null | undefined,
+      source: "runway" | "advisory" | "metar",
+    ) => {
+      const normalized = extractRunwayIdent(ident);
+      if (!normalized) return;
+      if (options.has(normalized)) return;
+      const parts = [normalized];
+      if (heading !== null && heading !== undefined && Number.isFinite(heading)) {
+        parts.push(`${Math.round(heading)} deg`);
+      }
+      if (lengthFt !== null && lengthFt !== undefined && Number.isFinite(lengthFt)) {
+        parts.push(`${Math.round(lengthFt).toLocaleString()} ft`);
+      }
+      options.set(normalized, {
+        label: parts.join(" · "),
+        heading: heading ?? null,
+        lengthFt: lengthFt ?? null,
+        source,
+      });
+    };
+
+    const advisoryRunway = extractRunwayIdent(departureRunwayBriefingQuery.data?.advisory?.runway);
+    if (advisoryRunway) {
+      addOption(
+        advisoryRunway,
+        departureRunwayBriefingQuery.data?.advisory?.heading ?? null,
+        null,
+        "advisory",
+      );
+    }
+
+    const metarRunway = extractRunwayIdent(departureRunwayBriefingQuery.data?.runwayInUse);
+    if (metarRunway) {
+      addOption(metarRunway, parseRunwayHeading(metarRunway), null, "metar");
+    }
+
+    runways.forEach((runway) => {
+      addOption(runway.leIdent, runway.leHeading ?? null, runway.lengthFt ?? null, "runway");
+      addOption(runway.heIdent, runway.heHeading ?? null, runway.lengthFt ?? null, "runway");
+    });
+
+    const advisory = extractRunwayIdent(departureRunwayBriefingQuery.data?.advisory?.runway);
+    const metar = extractRunwayIdent(departureRunwayBriefingQuery.data?.runwayInUse);
+
+    return Array.from(options.entries())
+      .map(([ident, value]) => ({ ident, ...value }))
+      .sort((a, b) => {
+        const score = (item: typeof a) => {
+          if (item.ident === advisory) return 0;
+          if (item.ident === metar) return 1;
+          return 2;
+        };
+        const scoreDiff = score(a) - score(b);
+        if (scoreDiff !== 0) return scoreDiff;
+        return a.ident.localeCompare(b.ident);
+      });
+  }, [departureRunwayBriefingQuery.data]);
+
+  const departureSuggestedRunway = useMemo(() => {
+    return (
+      extractRunwayIdent(departureRunwayBriefingQuery.data?.advisory?.runway) ||
+      extractRunwayIdent(departureRunwayBriefingQuery.data?.runwayInUse) ||
+      departureRunwayOptions[0]?.ident ||
+      null
+    );
+  }, [departureRunwayBriefingQuery.data, departureRunwayOptions]);
+
+  useEffect(() => {
+    const departureIcao = departureResolved.trim().toUpperCase();
+    if (!ICAO_REGEX.test(departureIcao)) {
+      departureRunwayAutoAirportRef.current = null;
+      return;
+    }
+
+    const options = departureRunwayOptions.map((item) => item.ident);
+    const currentRunway = departureRunway.trim().toUpperCase();
+    const airportChanged = departureRunwayAutoAirportRef.current !== departureIcao;
+    const currentRunwayValid = currentRunway ? options.includes(currentRunway) : false;
+
+    if (!departureSuggestedRunway) {
+      if (airportChanged && !currentRunwayValid) {
+        setDepartureRunway("");
+        departureRunwayAutoAirportRef.current = departureIcao;
+      }
+      return;
+    }
+
+    if (!currentRunway || airportChanged || !currentRunwayValid) {
+      setDepartureRunway(departureSuggestedRunway);
+      departureRunwayAutoAirportRef.current = departureIcao;
+    }
+  }, [departureResolved, departureRunway, departureRunwayOptions, departureSuggestedRunway]);
 
   const runwayHeading = useMemo(() => parseRunwayHeading(departureRunway), [departureRunway]);
   const metarWind = useMemo(() => parseMetarWind(departureMetar), [departureMetar]);
@@ -3654,10 +3799,53 @@ export default function FlightPlanner() {
               <Input
                 value={departureRunway}
                 onChange={(e) => setDepartureRunway(e.target.value.toUpperCase())}
-                placeholder="17L"
+                list="departure-runway-options"
+                placeholder={departureSuggestedRunway || "Select runway"}
               />
+              <datalist id="departure-runway-options">
+                {departureRunwayOptions.map((option) => (
+                  <option key={option.ident} value={option.ident}>
+                    {option.label}
+                  </option>
+                ))}
+              </datalist>
+              {departureRunwayOptions.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {departureRunwayOptions.slice(0, 6).map((option) => (
+                    <Button
+                      key={option.ident}
+                      type="button"
+                      size="sm"
+                      variant={departureRunway === option.ident ? "default" : "outline"}
+                      onClick={() => setDepartureRunway(option.ident)}
+                    >
+                      {option.ident}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              {departureRunwayBriefingQuery.data && (
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  {departureRunwayBriefingQuery.data.advisory?.runway && (
+                    <div>
+                      Suggested from current wind:{" "}
+                      <span className="font-medium text-foreground">
+                        {departureRunwayBriefingQuery.data.advisory.runway}
+                      </span>
+                    </div>
+                  )}
+                  {departureRunwayBriefingQuery.data.runwayInUse && (
+                    <div>
+                      METAR runway in use:{" "}
+                      <span className="font-medium text-foreground">
+                        {departureRunwayBriefingQuery.data.runwayInUse}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
-                Add a runway to surface crosswind guidance in the route analysis.
+                Pulling live runway options for the selected departure airport. You can still type a manual runway if needed.
               </p>
             </div>
             <div className="md:col-span-2 rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">

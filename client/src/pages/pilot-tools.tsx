@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { SponsoredRightRail } from "@/components/banners/SponsoredRightRail";
 import WeatherBriefingSummarizer from "@/components/ai/WeatherBriefingSummarizer";
 import NotamTranslator from "@/components/ai/NotamTranslator";
+import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
 import { Cloud, Search, ExternalLink, AlertTriangle, FileText, Radio, Loader2, CloudSun, Plane, Wind, Gauge, Scale } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -38,6 +39,29 @@ interface AirportSearchResult {
 }
 
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
+
+const PILOT_TOOLS_PRESS_STEPS: PressDemoStep[] = [
+  {
+    id: "crosswind",
+    title: "Lead with a quick calculator",
+    body: "Start the walkthrough with the crosswind calculator to show immediate pilot value in a few clicks.",
+  },
+  {
+    id: "density-altitude",
+    title: "Show performance planning in seconds",
+    body: "Use density altitude to demonstrate a familiar, practical performance check pilots can run quickly.",
+  },
+  {
+    id: "airport-briefing",
+    title: "Highlight airport-specific briefing help",
+    body: "Show runway advisory and NOTAM review to make clear RSF goes beyond simple calculators.",
+  },
+  {
+    id: "resources",
+    title: "Finish with the full resource stack",
+    body: "Close on the aviation resources section to show how the tools connect back to planning and official sources.",
+  },
+];
 
 function formatTimeAgo(timestamp: number): string {
   const now = Date.now();
@@ -182,6 +206,7 @@ function RunwayDiagram({
 }
 
 export default function PilotTools() {
+  const pressDemo = usePressDemo(PILOT_TOOLS_PRESS_STEPS);
   const { user } = useAuth();
   const canPreviewInternal = canUseInternalPreview(user);
   const entitlements = (user as any)?.entitlements;
@@ -406,6 +431,16 @@ export default function PilotTools() {
     <div className="container mx-auto max-w-7xl px-4 py-8">
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-6">
+        {pressDemo.enabled && (
+          <PressDemoBanner
+            pageLabel="Pilot Tools"
+            stepIndex={pressDemo.stepIndex}
+            totalSteps={pressDemo.steps.length}
+            currentStep={pressDemo.currentStep}
+            onPrevious={pressDemo.previousStep}
+            onNext={pressDemo.nextStep}
+          />
+        )}
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold flex items-center justify-center gap-2">
@@ -637,6 +672,12 @@ export default function PilotTools() {
           </div>
         </div>
 
+        <PressDemoSpotlight
+          active={pressDemo.isActive("crosswind")}
+          stepNumber={(pressDemo.getStep("crosswind")?.index ?? 0) + 1}
+          title={pressDemo.getStep("crosswind")?.title ?? "Crosswind Calculator"}
+          body={pressDemo.getStep("crosswind")?.body ?? ""}
+        >
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -789,7 +830,14 @@ export default function PilotTools() {
             </Alert>
           </CardContent>
         </Card>
+        </PressDemoSpotlight>
 
+        <PressDemoSpotlight
+          active={pressDemo.isActive("density-altitude")}
+          stepNumber={(pressDemo.getStep("density-altitude")?.index ?? 0) + 1}
+          title={pressDemo.getStep("density-altitude")?.title ?? "Density Altitude Calculator"}
+          body={pressDemo.getStep("density-altitude")?.body ?? ""}
+        >
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -941,6 +989,7 @@ export default function PilotTools() {
             </Alert>
           </CardContent>
         </Card>
+        </PressDemoSpotlight>
 
         <Card>
           <CardHeader>
@@ -1208,6 +1257,12 @@ export default function PilotTools() {
               </CardContent>
             </Card>
 
+            <PressDemoSpotlight
+              active={pressDemo.isActive("airport-briefing")}
+              stepNumber={(pressDemo.getStep("airport-briefing")?.index ?? 0) + 1}
+              title={pressDemo.getStep("airport-briefing")?.title ?? "Airport Briefing"}
+              body={pressDemo.getStep("airport-briefing")?.body ?? ""}
+            >
             <Card id="airport-briefing">
               <CardHeader>
                 <CardTitle>Airport Briefing</CardTitle>
@@ -1329,8 +1384,15 @@ export default function PilotTools() {
                 </div>
               </CardContent>
             </Card>
+            </PressDemoSpotlight>
 
             {/* External Resources */}
+            <PressDemoSpotlight
+              active={pressDemo.isActive("resources")}
+              stepNumber={(pressDemo.getStep("resources")?.index ?? 0) + 1}
+              title={pressDemo.getStep("resources")?.title ?? "Aviation Resources"}
+              body={pressDemo.getStep("resources")?.body ?? ""}
+            >
             <Card>
               <CardHeader>
                 <CardTitle>Aviation Resources</CardTitle>
@@ -1437,6 +1499,7 @@ export default function PilotTools() {
                 </div>
               </CardContent>
             </Card>
+            </PressDemoSpotlight>
           </>
         )}
         </div>

@@ -20,6 +20,7 @@ import { AircraftFilters } from "@/components/aircraft-filters";
 import { AircraftDetailModal } from "@/components/aircraft-detail-modal";
 import { BannerAdRotation } from "@/components/banners/BannerAdRotation";
 import { PageShell } from "@/components/layout/PageShell";
+import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
 import { useAuth } from "@/hooks/useAuth";
 import wingtipImage from "@assets/wingtip_featured_1761494838973.jpg";
 import { trackEvent } from "@/lib/analytics";
@@ -35,8 +36,27 @@ const RENTALS_META_TITLE = "Find Aircraft Rentals Near You | ReadySetFly";
 const RENTALS_META_DESCRIPTION =
   "Search verified aircraft rentals from flight schools, flying clubs, and independent operators near you and across the U.S. Compare aircraft types and rates nationwide.";
 
+const RENTALS_PRESS_STEPS: PressDemoStep[] = [
+  {
+    id: "search-rentals",
+    title: "Search rentals by mission",
+    body: "Start with the search panel to show how pilots find an aircraft without leaving the rest of RSF behind.",
+  },
+  {
+    id: "owner-listing",
+    title: "Show the owner listing path",
+    body: "Highlight how owners and clubs verify and publish aircraft listings directly inside RSF.",
+  },
+  {
+    id: "browse-results",
+    title: "Browse and compare results",
+    body: "Finish on the aircraft results so viewers see how pilots compare options before moving into planning.",
+  },
+];
+
 export default function Home() {
   const { isAuthenticated, user } = useAuth();
+  const pressDemo = usePressDemo(RENTALS_PRESS_STEPS);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | null>(null);
   const [showVerificationNudge, setShowVerificationNudge] = useState(false);
@@ -225,6 +245,16 @@ export default function Home() {
       }
       contentClassName="space-y-8"
     >
+      {pressDemo.enabled && (
+        <PressDemoBanner
+          pageLabel="Rentals"
+          stepIndex={pressDemo.stepIndex}
+          totalSteps={pressDemo.steps.length}
+          currentStep={pressDemo.currentStep}
+          onPrevious={pressDemo.previousStep}
+          onNext={pressDemo.nextStep}
+        />
+      )}
       {showVerificationNudge && (
         <Alert className="border-primary/30 bg-primary/5" data-testid="alert-verification-nudge">
           <Shield className="h-4 w-4" />
@@ -260,6 +290,12 @@ export default function Home() {
         </Alert>
       )}
 
+      <PressDemoSpotlight
+        active={pressDemo.isActive("search-rentals")}
+        stepNumber={(pressDemo.getStep("search-rentals")?.index ?? 0) + 1}
+        title={pressDemo.getStep("search-rentals")?.title ?? "Search rentals"}
+        body={pressDemo.getStep("search-rentals")?.body ?? ""}
+      >
       <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
         <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-5">
@@ -396,6 +432,12 @@ export default function Home() {
 
       <section className="container mx-auto px-4">
         <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+          <PressDemoSpotlight
+            active={pressDemo.isActive("owner-listing")}
+            stepNumber={(pressDemo.getStep("owner-listing")?.index ?? 0) + 1}
+            title={pressDemo.getStep("owner-listing")?.title ?? "Owner listing"}
+            body={pressDemo.getStep("owner-listing")?.body ?? ""}
+          >
           <Card className="border-primary/20 bg-primary/5">
             <CardContent className="space-y-4 p-5 sm:p-6">
               <div>
@@ -430,6 +472,7 @@ export default function Home() {
               </div>
             </CardContent>
           </Card>
+          </PressDemoSpotlight>
 
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 px-4 py-3 text-sm">
@@ -446,7 +489,14 @@ export default function Home() {
           </div>
         </div>
       </section>
+      </PressDemoSpotlight>
 
+      <PressDemoSpotlight
+        active={pressDemo.isActive("browse-results")}
+        stepNumber={(pressDemo.getStep("browse-results")?.index ?? 0) + 1}
+        title={pressDemo.getStep("browse-results")?.title ?? "Browse aircraft"}
+        body={pressDemo.getStep("browse-results")?.body ?? ""}
+      >
       <section className="container mx-auto px-4 py-12">
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex-1">
@@ -542,6 +592,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      </PressDemoSpotlight>
 
       <section className="bg-muted py-16">
         <div className="container mx-auto px-4">

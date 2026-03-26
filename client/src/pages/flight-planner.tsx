@@ -42,6 +42,7 @@ import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 import { PageShell } from "@/components/layout/PageShell";
 import PlannerMap, { type PlannerLegHealthMarker, type PlannerPoint } from "@/components/flight-planner/PlannerMap";
+import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
 import NotamTranslator from "@/components/ai/NotamTranslator";
 import logoImage from "@assets/RSFOpaqueLogo_1761494760586.png";
 
@@ -53,6 +54,34 @@ const CONTROLLED_AIRPORTS = new Set([
   "KCLT", "KIAH", "KMIA", "KBOS", "KMSP", "KDCA", "KIAD", "KEWR", "KLGA", "KPDX",
   "KPHL", "KDTW", "KSTL", "KMDW", "KSAN", "KTPA", "KAUS", "KDAL", "KHOU",
 ]);
+
+const FLIGHT_PLANNER_PRESS_STEPS: PressDemoStep[] = [
+  {
+    id: "route-setup",
+    title: "Build the route quickly",
+    body: "Show airports, aircraft setup, and helper routing so the planner feels fast and approachable on camera.",
+  },
+  {
+    id: "distance-performance",
+    title: "Walk through performance and fuel",
+    body: "Highlight reserve fuel, altitude, fuel on board, uplifts, and leg health in one operational planning view.",
+  },
+  {
+    id: "route-map",
+    title: "Show the live route map",
+    body: "Use the map to show weather layers, terrain cueing, and overall route awareness while planning.",
+  },
+  {
+    id: "route-analysis",
+    title: "Review route analysis",
+    body: "Highlight terrain, weather, airspace, and filing-readiness checks before the pilot submits anything.",
+  },
+  {
+    id: "filing",
+    title: "Finish with filing and saved plans",
+    body: "Close with packet review, lifecycle actions, and filing summary download so the workflow feels complete.",
+  },
+];
 
 const buildPlannerIcaoCandidates = (value: string) => {
   const normalized = value.trim().toUpperCase();
@@ -665,6 +694,7 @@ type StopAdjustmentSuggestion = {
   detail: string;
   action?:
     | { kind: "use-suggested-stops"; label: string }
+    | { kind: "insert-comfort-stop"; label: string; from: string; to: string; fuelOnBoardGallons: number }
     | { kind: "top-off-stop"; label: string; stopIcao: string; gallons: number };
 };
 
@@ -1107,6 +1137,7 @@ export default function FlightPlanner() {
   const { profile: studentProfile } = useStudentProfile();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const pressDemo = usePressDemo(FLIGHT_PLANNER_PRESS_STEPS);
   const entitlements = (user as any)?.entitlements;
   const isPro = entitlements?.canPersist ?? (user?.logbookProStatus === "active");
   const tfmsTier: TfmsTier = entitlements?.tier === "pro_plus"
@@ -1164,6 +1195,21 @@ export default function FlightPlanner() {
   useEffect(() => {
     setShowUpgradePrompt(false);
   }, []);
+
+  useEffect(() => {
+    if (!pressDemo.enabled || !pressDemo.currentStep) return;
+    const stepToTab: Partial<Record<PressDemoStep["id"], FlightPlannerTab>> = {
+      "route-setup": "route",
+      "distance-performance": "route",
+      "route-map": "route",
+      "route-analysis": "analysis",
+      filing: "file",
+    };
+    const nextTab = stepToTab[pressDemo.currentStep.id];
+    if (nextTab && nextTab !== activeTab) {
+      setActiveTab(nextTab);
+    }
+  }, [activeTab, pressDemo.currentStep, pressDemo.enabled]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -3469,19 +3515,25 @@ export default function FlightPlanner() {
         suggestions.push({
           id: `short-leg-${firstFuelShortLeg.key}`,
           detail: `You still cannot reach ${firstFuelShortLeg.to} from ${firstFuelShortLeg.from}. Add another stop before ${firstFuelShortLeg.to} or shorten that leg.`,
-          action:
-            suggestedStops.length > 0 && !isUsingSuggestedStops
-              ? { kind: "use-suggested-stops", label: "Use suggested stops" }
-              : undefined,
+          action: {
+            kind: "insert-comfort-stop",
+            label: `Insert stop before ${firstFuelShortLeg.to}`,
+            from: firstFuelShortLeg.from,
+            to: firstFuelShortLeg.to,
+            fuelOnBoardGallons: Math.max(0, firstFuelShortLeg.fuelBeforeLeg),
+          },
         });
       } else {
         suggestions.push({
           id: `new-stop-${firstFuelShortLeg.key}`,
           detail: `Add another planned stop between ${firstFuelShortLeg.from} and ${firstFuelShortLeg.to}; the current leg runs short by about ${Math.abs(firstFuelShortLeg.fuelAfterLeg).toFixed(1)} gal.`,
-          action:
-            suggestedStops.length > 0 && !isUsingSuggestedStops
-              ? { kind: "use-suggested-stops", label: "Use suggested stop sequence" }
-              : undefined,
+          action: {
+            kind: "insert-comfort-stop",
+            label: `Insert stop between ${firstFuelShortLeg.from} and ${firstFuelShortLeg.to}`,
+            from: firstFuelShortLeg.from,
+            to: firstFuelShortLeg.to,
+            fuelOnBoardGallons: Math.max(0, firstFuelShortLeg.fuelBeforeLeg),
+          },
         });
       }
     }
@@ -3514,15 +3566,18 @@ export default function FlightPlanner() {
       suggestions.push({
         id: `comfort-stop-${tightLegWithoutStop.key}`,
         detail: `${tightLegWithoutStop.from} to ${tightLegWithoutStop.to} is longer than the current planning target of about ${legPlanningTargetNm.toFixed(0)} NM. Consider adding a comfort stop on that segment.`,
-        action:
-          suggestedStops.length > 0 && !isUsingSuggestedStops
-            ? { kind: "use-suggested-stops", label: "Apply suggested stop plan" }
-            : undefined,
+        action: {
+          kind: "insert-comfort-stop",
+          label: `Insert comfort stop between ${tightLegWithoutStop.from} and ${tightLegWithoutStop.to}`,
+          from: tightLegWithoutStop.from,
+          to: tightLegWithoutStop.to,
+          fuelOnBoardGallons: Math.max(0, tightLegWithoutStop.fuelBeforeLeg),
+        },
       });
     }
 
     return suggestions.slice(0, 3);
-  }, [isUsingSuggestedStops, legNavRows, legPlanningTargetNm, orderedPlannedStops, planningFuel, reserveFuel, suggestedStops]);
+  }, [legNavRows, legPlanningTargetNm, orderedPlannedStops, planningFuel, reserveFuel]);
   const weatherStatusText = weatherData.length === 0
     ? "No METARs loaded"
     : hasThunderRisk
@@ -4527,6 +4582,79 @@ export default function FlightPlanner() {
     },
   });
 
+  const insertComfortStopMutation = useMutation({
+    mutationFn: async ({
+      from,
+      to,
+      fuelOnBoardGallons,
+    }: {
+      from: string;
+      to: string;
+      fuelOnBoardGallons: number;
+    }) => {
+      const params = new URLSearchParams({
+        departure: from,
+        destination: to,
+        cruiseKtas: String(planningCruise),
+        fuelBurnGph: String(planningBurn),
+        usableFuelGal: String(planningFuel),
+        reserveMinutes: String(reserveMinutes),
+      });
+      if (Number.isFinite(fuelOnBoardGallons) && fuelOnBoardGallons > 0) {
+        params.set("fuelOnBoard", String(fuelOnBoardGallons));
+      }
+      const res = await fetch(apiUrl(`/api/airports/route-suggestions?${params.toString()}`));
+      if (!res.ok) {
+        throw new Error("Unable to search for a comfort stop on that leg.");
+      }
+      const payload = await res.json() as RouteSuggestionResponse;
+      const candidate = payload.plannedStops?.[0] || null;
+      if (!candidate) {
+        throw new Error(`RSF could not find a good intermediate fuel stop between ${from} and ${to} with the current planning assumptions.`);
+      }
+      const legDistanceNm = payload.meta?.routeDistanceNm ?? null;
+      const legFuelGallons =
+        legDistanceNm != null && planningCruise > 0 && planningBurn > 0
+          ? (legDistanceNm / planningCruise) * planningBurn
+          : null;
+      const arrivalFuelGallons =
+        legFuelGallons != null
+          ? Math.max(0, fuelOnBoardGallons - legFuelGallons)
+          : Math.max(0, fuelOnBoardGallons * 0.4);
+      const suggestedUpliftGallons = Math.max(0, planningFuel - arrivalFuelGallons);
+      return { from, to, candidate, suggestedUpliftGallons };
+    },
+    onSuccess: ({ candidate, from, to, suggestedUpliftGallons }) => {
+      if (plannedStops.includes(candidate)) {
+        toast({
+          title: "Comfort stop already in plan",
+          description: `${candidate} is already part of the planned stop list.`,
+        });
+        return;
+      }
+      const nextStops = Array.from(new Set([...plannedStops, candidate]));
+      setPlannedStopsInput(nextStops.join(" "));
+      setPlannedFuelUplifts((current) => ({
+        ...current,
+        [candidate]: suggestedUpliftGallons > 0 ? suggestedUpliftGallons.toFixed(1) : current[candidate] || "",
+      }));
+      toast({
+        title: "Comfort stop inserted",
+        description:
+          suggestedUpliftGallons > 0
+            ? `${candidate} was added between ${from} and ${to}, and RSF seeded about ${suggestedUpliftGallons.toFixed(1)} gal as the planned uplift.`
+            : `${candidate} was added between ${from} and ${to} in the local planner draft.`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "No comfort stop found",
+        description: error?.message || "RSF could not insert a stop on that leg with the current planning assumptions.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const guestFileMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/flight-plans/guest-file", filingPacket);
@@ -4710,6 +4838,16 @@ export default function FlightPlanner() {
           "Guest access includes two direct filings before signup is required.",
         ]}
       />
+      {pressDemo.enabled && (
+        <PressDemoBanner
+          pageLabel="Flight Planner"
+          stepIndex={pressDemo.stepIndex}
+          totalSteps={pressDemo.steps.length}
+          currentStep={pressDemo.currentStep}
+          onPrevious={pressDemo.previousStep}
+          onNext={pressDemo.nextStep}
+        />
+      )}
       <Card className="border-sky-200 bg-[linear-gradient(180deg,hsl(204_100%_98%),hsl(210_40%_97%))] text-slate-900 shadow-sm">
         <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2">
@@ -4842,6 +4980,12 @@ export default function FlightPlanner() {
           <TabsTrigger value="file" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">File &amp; Save</TabsTrigger>
         </TabsList>
         <TabsContent value="route" className="space-y-6">
+      <PressDemoSpotlight
+        active={pressDemo.isActive("route-setup")}
+        stepNumber={(pressDemo.getStep("route-setup")?.index ?? 0) + 1}
+        title={pressDemo.getStep("route-setup")?.title ?? "Route Setup"}
+        body={pressDemo.getStep("route-setup")?.body ?? ""}
+      >
       <Card>
         <CardHeader>
           <CardTitle>Quick Planning References</CardTitle>
@@ -5669,7 +5813,14 @@ export default function FlightPlanner() {
             </div>
           </CardContent>
         </Card>
+      </PressDemoSpotlight>
 
+      <PressDemoSpotlight
+        active={pressDemo.isActive("distance-performance")}
+        stepNumber={(pressDemo.getStep("distance-performance")?.index ?? 0) + 1}
+        title={pressDemo.getStep("distance-performance")?.title ?? "Distance & Performance"}
+        body={pressDemo.getStep("distance-performance")?.body ?? ""}
+      >
       <Card>
         <CardHeader>
           <CardTitle>Distance & Performance</CardTitle>
@@ -5834,6 +5985,27 @@ export default function FlightPlanner() {
                             >
                               {item.action.label}
                             </Button>
+                          ) : item.action.kind === "insert-comfort-stop" ? (
+                            (() => {
+                              const action = item.action;
+                              return (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={insertComfortStopMutation.isPending}
+                                  onClick={() =>
+                                    insertComfortStopMutation.mutate({
+                                      from: action.from,
+                                      to: action.to,
+                                      fuelOnBoardGallons: action.fuelOnBoardGallons,
+                                    })
+                                  }
+                                >
+                                  {insertComfortStopMutation.isPending ? "Searching..." : action.label}
+                                </Button>
+                              );
+                            })()
                           ) : (() => {
                             const action = item.action;
                             return (
@@ -5999,6 +6171,7 @@ export default function FlightPlanner() {
           ) : null}
         </CardContent>
       </Card>
+      </PressDemoSpotlight>
 
       <Card>
         <CardHeader>
@@ -6230,6 +6403,12 @@ export default function FlightPlanner() {
       </TabsContent>
 
       <TabsContent value="analysis" className="space-y-6">
+      <PressDemoSpotlight
+        active={pressDemo.isActive("route-analysis")}
+        stepNumber={(pressDemo.getStep("route-analysis")?.index ?? 0) + 1}
+        title={pressDemo.getStep("route-analysis")?.title ?? "Route Analysis"}
+        body={pressDemo.getStep("route-analysis")?.body ?? ""}
+      >
       <Card id="route-analysis" className="relative">
         <CardHeader>
           <CardTitle>Route Analysis</CardTitle>
@@ -6556,6 +6735,7 @@ export default function FlightPlanner() {
           </div>
         )}
       </Card>
+      </PressDemoSpotlight>
 
       {contextualTools.length > 0 && (
         <Card>
@@ -6624,6 +6804,12 @@ export default function FlightPlanner() {
 
       <TabsContent value="file" className="space-y-6">
 
+      <PressDemoSpotlight
+        active={pressDemo.isActive("filing")}
+        stepNumber={(pressDemo.getStep("filing")?.index ?? 0) + 1}
+        title={pressDemo.getStep("filing")?.title ?? "Flight Plan Summary & Filing"}
+        body={pressDemo.getStep("filing")?.body ?? ""}
+      >
       <Card>
         <CardHeader>
           <CardTitle>Flight Plan Summary &amp; Filing</CardTitle>
@@ -6954,6 +7140,7 @@ export default function FlightPlanner() {
           )}
         </CardContent>
       </Card>
+      </PressDemoSpotlight>
 
       <Card>
         <CardHeader>
@@ -7263,6 +7450,12 @@ export default function FlightPlanner() {
       </Tabs>
         </div>
       <div className="space-y-4">
+        <PressDemoSpotlight
+          active={pressDemo.isActive("route-map")}
+          stepNumber={(pressDemo.getStep("route-map")?.index ?? 0) + 1}
+          title={pressDemo.getStep("route-map")?.title ?? "Route Map"}
+          body={pressDemo.getStep("route-map")?.body ?? ""}
+        >
         <Card id="planner-route-map" className="border-slate-200 bg-white text-slate-900 shadow-sm">
           <CardHeader>
             <CardTitle>Route Map</CardTitle>
@@ -7637,6 +7830,7 @@ export default function FlightPlanner() {
             )}
           </CardContent>
         </Card>
+        </PressDemoSpotlight>
       </div>
       </div>
 

@@ -102,6 +102,28 @@ const aircraftTypeMatchesPlan = (type: AircraftType, planAircraftType: string | 
   return candidates.includes(normalizedPlanType);
 };
 
+const extractClientVersionStamp = (plan: FlightPlan | null | undefined) => {
+  const raw = plan?.filingRaw && typeof plan.filingRaw === "object"
+    ? plan.filingRaw as Record<string, any>
+    : null;
+  return String(
+    raw?.response?.versionStamp ||
+    raw?.versionStamp ||
+    raw?.currentState?.versionStamp ||
+    "",
+  ).trim() || null;
+};
+
+const canSubmitAmendForPlan = (plan: FlightPlan | null | undefined) => {
+  if (!plan) return false;
+  return Boolean(
+    plan.filingIsLive &&
+    String(plan.filingStatus || "").toLowerCase() === "filed" &&
+    plan.filingProviderPlanId &&
+    extractClientVersionStamp(plan),
+  );
+};
+
 const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
 const toRadians = (value: number) => (value * Math.PI) / 180;
 const toDegrees = (value: number) => (value * 180) / Math.PI;
@@ -3158,6 +3180,7 @@ export default function FlightPlanner() {
     const status = filingStatusLabel(plan.filingStatus);
     const provider = plan.filingProvider || "leidos_flight_service";
     const providerPlanId = plan.filingProviderPlanId || "—";
+    const versionStamp = extractClientVersionStamp(plan) || "—";
     const history = Array.isArray(plan.filingActionHistory) ? [...plan.filingActionHistory].slice().reverse().slice(0, 8) : [];
     const logoUrl = typeof window !== "undefined" ? new URL(logoImage, window.location.origin).toString() : logoImage;
     const generatedAt = new Date().toLocaleString();
@@ -3243,6 +3266,7 @@ export default function FlightPlanner() {
             <div class="cell"><div class="label">Status</div><div class="value">${escapeHtml(status)}</div></div>
             <div class="cell"><div class="label">Provider</div><div class="value">${escapeHtml(provider)}</div></div>
             <div class="cell"><div class="label">Provider Flight ID</div><div class="value">${escapeHtml(providerPlanId)}</div></div>
+            <div class="cell"><div class="label">Version Stamp</div><div class="value">${escapeHtml(versionStamp)}</div></div>
             <div class="cell"><div class="label">Last Provider Sync</div><div class="value">${escapeHtml(formatDateTime(plan.filingLastProviderSyncAt))}</div></div>
           </div>
         </div>
@@ -3259,6 +3283,9 @@ export default function FlightPlanner() {
             <div class="cell"><div class="label">Aircraft Type</div><div class="value">${escapeHtml(plan.aircraftType || "—")}</div></div>
             <div class="cell"><div class="label">Cruise / Altitude</div><div class="value">${escapeHtml(`${plan.filingTrueAirspeedKtas || "—"} KTAS at ${plan.filingPlannedAltitudeFt || "—"} ft`)}</div></div>
             <div class="cell"><div class="label">Endurance / Souls</div><div class="value">${escapeHtml(`${formatMinutesLabel(Number(plan.filingEnduranceMinutes || 0))} / ${plan.filingSoulsOnBoard || "—"} onboard`)}</div></div>
+            <div class="cell"><div class="label">Estimated Enroute Time</div><div class="value">${escapeHtml(plan.filingEstimatedEnrouteMinutes ? formatMinutesLabel(Number(plan.filingEstimatedEnrouteMinutes)) : "—")}</div></div>
+            <div class="cell"><div class="label">Total Fuel Required</div><div class="value">${escapeHtml(plan.fuelRequired ? `${plan.fuelRequired} gal` : "—")}</div></div>
+            <div class="cell"><div class="label">Fuel On Board</div><div class="value">${escapeHtml(plan.fuelOnBoard ? `${plan.fuelOnBoard} gal` : "—")}</div></div>
           </div>
         </div>
         <div class="panel">
@@ -3343,23 +3370,23 @@ export default function FlightPlanner() {
   };
 
   const beginAmendWorkflow = (plan: FlightPlan) => {
-    const hasProviderPlanId = Boolean(plan.filingProviderPlanId);
+    const canSubmitLiveAmend = canSubmitAmendForPlan(plan);
     setEditingPlan(plan);
     setReturnToFileAfterSave(false);
 
-    if (!hasProviderPlanId) {
+    if (!canSubmitLiveAmend) {
       setActiveTab("route");
       toast({
         title: "Plan loaded for amendment",
-        description: "Make your changes, then use Save and continue to filing before you submit Amend.",
+        description: "Make your changes, then save and continue to filing. Live Amend only works after a successfully filed Leidos plan with version tracking.",
       });
       return;
     }
 
     setActiveTab("file");
     toast({
-      title: "Plan ready to amend",
-      description: "Review the filing packet here, then submit Amend after saving any needed changes.",
+      title: "Filed plan loaded for amendment",
+      description: "Make any needed changes, then use Save and continue to filing before you submit Amend.",
     });
   };
 
@@ -3397,8 +3424,8 @@ export default function FlightPlanner() {
     },
     onSuccess: (savedPlan: FlightPlan) => {
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      setEditingPlan(savedPlan);
       if (returnToFileAfterSave) {
-        setEditingPlan(savedPlan);
         setActiveTab("file");
         setReturnToFileAfterSave(false);
         toast({
@@ -3407,8 +3434,11 @@ export default function FlightPlanner() {
         });
         return;
       }
-      toast({ title: "Flight plan saved" });
-      resetForm();
+      setReturnToFileAfterSave(false);
+      toast({
+        title: "Flight plan saved",
+        description: "This saved plan stays active so additional changes update the same record.",
+      });
     },
     onError: (error: any) => {
       setReturnToFileAfterSave(false);
@@ -3450,8 +3480,10 @@ export default function FlightPlanner() {
     },
     onSuccess: (updatedPlan: FlightPlan | null) => {
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
-      if (returnToFileAfterSave && updatedPlan) {
+      if (updatedPlan) {
         setEditingPlan(updatedPlan);
+      }
+      if (returnToFileAfterSave && updatedPlan) {
         setActiveTab("file");
         setReturnToFileAfterSave(false);
         toast({
@@ -3460,8 +3492,11 @@ export default function FlightPlanner() {
         });
         return;
       }
-      toast({ title: "Flight plan updated" });
-      resetForm();
+      setReturnToFileAfterSave(false);
+      toast({
+        title: "Flight plan updated",
+        description: "Changes were saved to the current plan.",
+      });
     },
     onError: (error: any) => {
       setReturnToFileAfterSave(false);
@@ -3562,6 +3597,7 @@ export default function FlightPlanner() {
   const currentSavedPlan = editingPlan;
   const currentSavedPlanFlightRules = (currentSavedPlan?.filingFlightRules || filingDraft.flightRules || "VFR").toUpperCase();
   const currentSavedPlanStatus = filingStatusLabel(currentSavedPlan?.filingStatus);
+  const currentSavedPlanCanAmend = canSubmitAmendForPlan(currentSavedPlan);
   const hasCurrentSavedPlan = Boolean(currentSavedPlan?.id);
 
   const filingActionMutation = useMutation({
@@ -5500,8 +5536,17 @@ export default function FlightPlanner() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "amend" })}
-                  disabled={filingActionMutation.isPending}
+                  onClick={() => {
+                    if (!currentSavedPlanCanAmend) {
+                      toast({
+                        title: "Amend unavailable",
+                        description: "This plan is not yet in a live amendable state. Save your edits, then use File unless the plan already has a live Leidos file and version stamp.",
+                      });
+                      return;
+                    }
+                    filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "amend" });
+                  }}
+                  disabled={filingActionMutation.isPending || !currentSavedPlanCanAmend}
                 >
                   Amend
                 </Button>
@@ -5541,6 +5586,11 @@ export default function FlightPlanner() {
                   Download filing summary
                 </Button>
               </div>
+              {!currentSavedPlanCanAmend && (
+                <div className="text-xs text-muted-foreground">
+                  Live Amend requires a successfully filed Leidos plan with a stored version stamp. If this is still a draft or older staged copy, save your edits and use File instead.
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
@@ -5804,7 +5854,7 @@ export default function FlightPlanner() {
                     onClick={() => beginAmendWorkflow(plan)}
                     disabled={filingActionMutation.isPending}
                   >
-                    Amend
+                    {canSubmitAmendForPlan(plan) ? "Amend" : "Prepare amend"}
                   </Button>
                   {(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>

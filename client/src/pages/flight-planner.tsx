@@ -3160,35 +3160,69 @@ export default function FlightPlanner() {
     const providerPlanId = plan.filingProviderPlanId || "—";
     const history = Array.isArray(plan.filingActionHistory) ? [...plan.filingActionHistory].slice().reverse().slice(0, 8) : [];
     const logoUrl = typeof window !== "undefined" ? new URL(logoImage, window.location.origin).toString() : logoImage;
+    const generatedAt = new Date().toLocaleString();
     const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)} - RSF Filing Summary</title>
     <style>
-      body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 32px; color: #10243b; background: #f4f7fb; }
-      .sheet { max-width: 920px; margin: 0 auto; background: #ffffff; border: 1px solid #d6e0eb; border-radius: 18px; overflow: hidden; box-shadow: 0 16px 36px rgba(16,36,59,0.08); }
-      .header { display: flex; align-items: center; gap: 16px; padding: 24px 28px; background: linear-gradient(135deg, #123d77 0%, #1f66d1 100%); color: #ffffff; }
+      @page { size: letter; margin: 0.55in; }
+      :root {
+        --ink: #10243b;
+        --muted: #5d7289;
+        --rule: #d9e2ec;
+        --paper: #ffffff;
+        --accent: #123d77;
+        --soft: #eef4fb;
+      }
+      * { box-sizing: border-box; }
+      body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 24px; color: var(--ink); background: #eef2f7; }
+      .toolbar { max-width: 920px; margin: 0 auto 14px; display: flex; justify-content: flex-end; gap: 10px; }
+      .toolbar button { border: 0; border-radius: 999px; background: var(--accent); color: #fff; padding: 10px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
+      .toolbar .hint { align-self: center; font-size: 12px; color: var(--muted); }
+      .sheet { max-width: 920px; margin: 0 auto; background: var(--paper); border: 1px solid #d6e0eb; border-radius: 18px; overflow: hidden; box-shadow: 0 16px 36px rgba(16,36,59,0.08); }
+      .header { display: flex; align-items: center; gap: 16px; padding: 22px 26px; background: linear-gradient(135deg, #123d77 0%, #1f66d1 100%); color: #ffffff; }
       .header img { width: 52px; height: 52px; object-fit: contain; border-radius: 12px; background: rgba(255,255,255,0.14); padding: 6px; }
-      .header .eyebrow { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.82; }
-      .header .title { font-size: 28px; font-weight: 700; margin-top: 4px; }
+      .header .eyebrow { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.82; }
+      .header .title { font-size: 27px; font-weight: 700; margin-top: 4px; }
       .header .subtitle { font-size: 14px; opacity: 0.92; margin-top: 6px; }
-      .content { padding: 28px; display: grid; gap: 22px; }
-      .panel { border: 1px solid #d9e2ec; border-radius: 14px; padding: 18px 20px; }
-      .panel h2 { margin: 0 0 14px; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: #4d6480; }
+      .meta-bar { display: flex; justify-content: space-between; gap: 16px; padding: 10px 26px; background: var(--soft); border-bottom: 1px solid var(--rule); font-size: 12px; color: var(--muted); }
+      .content { padding: 24px 26px 20px; display: grid; gap: 18px; }
+      .panel { border: 1px solid var(--rule); border-radius: 14px; padding: 16px 18px; break-inside: avoid; page-break-inside: avoid; }
+      .panel h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #4d6480; }
       .grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .cell .label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #71869d; margin-bottom: 5px; }
-      .cell .value { font-size: 16px; font-weight: 600; color: #10243b; word-break: break-word; }
-      .route { font-family: "Courier New", monospace; font-size: 14px; white-space: pre-wrap; }
-      .history-entry { border-top: 1px solid #e7edf4; padding-top: 12px; margin-top: 12px; }
+      .cell .label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #71869d; margin-bottom: 5px; }
+      .cell .value { font-size: 15px; font-weight: 600; color: var(--ink); word-break: break-word; }
+      .route { font-family: "Courier New", monospace; font-size: 13px; white-space: pre-wrap; line-height: 1.5; }
+      .history-entry { border-top: 1px solid #e7edf4; padding-top: 12px; margin-top: 12px; break-inside: avoid; page-break-inside: avoid; }
       .history-entry:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
       .history-head { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; margin-bottom: 6px; }
-      .muted { color: #5d7289; font-size: 13px; line-height: 1.5; }
-      .footer { padding: 0 28px 28px; color: #5d7289; font-size: 12px; line-height: 1.6; }
-      @media print { body { background: #ffffff; padding: 0; } .sheet { box-shadow: none; border: 0; } }
+      .muted { color: var(--muted); font-size: 13px; line-height: 1.5; }
+      .footer { padding: 0 26px 24px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+      .print-note { margin-top: 8px; font-size: 11px; color: var(--muted); }
+      @media (max-width: 720px) {
+        body { padding: 12px; }
+        .grid { grid-template-columns: 1fr; }
+        .meta-bar { flex-direction: column; }
+      }
+      @media print {
+        body { background: #ffffff; padding: 0; }
+        .toolbar { display: none !important; }
+        .sheet { box-shadow: none; border: 0; max-width: none; border-radius: 0; }
+        .header { background: #ffffff !important; color: var(--ink) !important; border-bottom: 2px solid var(--accent); }
+        .header img { background: transparent; border: 1px solid var(--rule); }
+        .meta-bar { background: #ffffff; }
+        a { color: inherit; text-decoration: none; }
+      }
     </style>
   </head>
   <body>
+    <div class="toolbar">
+      <div class="hint">Use Print and choose Save as PDF for a PDF copy.</div>
+      <button type="button" onclick="window.print()">Print / Save as PDF</button>
+    </div>
     <div class="sheet">
       <div class="header">
         <img src="${escapeHtml(logoUrl)}" alt="Ready Set Fly" />
@@ -3197,6 +3231,10 @@ export default function FlightPlanner() {
           <div class="title">Flight Plan Filing Summary</div>
           <div class="subtitle">${escapeHtml(title)}</div>
         </div>
+      </div>
+      <div class="meta-bar">
+        <div>Generated: ${escapeHtml(generatedAt)}</div>
+        <div>RSF filing summary receipt</div>
       </div>
       <div class="content">
         <div class="panel">
@@ -3250,6 +3288,7 @@ export default function FlightPlanner() {
       <div class="footer">
         Generated by Ready Set Fly.<br />
         Flight planning and filing workflow may still be under testing. Verify operational status and official provider acceptance before relying on any submission.
+        <div class="print-note">This summary is intended as a filing receipt and reference copy. The official plan state remains in Ready Set Fly and the connected filing provider.</div>
       </div>
     </div>
   </body>

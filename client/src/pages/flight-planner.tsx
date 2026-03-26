@@ -3518,6 +3518,17 @@ export default function FlightPlanner() {
           </div>
         </CardContent>
       </Card>
+      <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+        <AlertDescription className="space-y-1 text-sm">
+          <div className="font-semibold">Flight Planner testing notice</div>
+          <div>
+            RSF flight planning and filing workflow is still undergoing testing. Treat the planner as a beta feature and do not rely on RSF for operational live filing yet.
+          </div>
+          <div className="text-amber-900/90">
+            Live Leidos filing remains limited to controlled testing while validation is in progress.
+          </div>
+        </AlertDescription>
+      </Alert>
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-5">
           <TabsTrigger value="route" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">Route</TabsTrigger>

@@ -19147,7 +19147,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const payload = await searchLeidosRoute({ departure, destination, altitudeFt });
       res.json(payload);
     } catch (error: any) {
-      console.error("Failed to search Leidos route:", error);
+      const message = String(error?.message || "");
+      const isExpectedLabTimeout =
+        /route assist timed out in the lab|did not respond in time|connect timeout|fetch failed/i.test(message);
+      if (!isExpectedLabTimeout) {
+        console.error("Failed to search Leidos route:", error);
+      }
       res.json({
         provider: "Leidos Flight Service",
         environment: getLeidosFlightServiceDiagnostics().environment,
@@ -19159,7 +19164,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         faaPreferredRoutes: [],
         warnings: [],
         available: false,
-        message: error?.message || "Leidos route search is unavailable right now.",
+        message: message || "Leidos route search is unavailable right now.",
       });
     }
   });

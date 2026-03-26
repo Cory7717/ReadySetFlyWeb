@@ -3154,7 +3154,7 @@ export default function FlightPlanner() {
       setActiveTab("route");
       toast({
         title: "Plan loaded for amendment",
-        description: "Make your changes, then use Save changes and return to filing to come back to the filing tab.",
+        description: "Make your changes, then use Save and continue to filing before you submit Amend.",
       });
       return;
     }
@@ -3162,7 +3162,7 @@ export default function FlightPlanner() {
     setActiveTab("file");
     toast({
       title: "Plan ready to amend",
-      description: "Review the filing packet here, then submit Amend for the saved plan after making any needed changes.",
+      description: "Review the filing packet here, then submit Amend after saving any needed changes.",
     });
   };
 
@@ -5280,7 +5280,7 @@ export default function FlightPlanner() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => beginAmendWorkflow(currentSavedPlan!)}
+                  onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "amend" })}
                   disabled={filingActionMutation.isPending}
                 >
                   Amend
@@ -5426,7 +5426,7 @@ export default function FlightPlanner() {
               }}
               disabled={createPlanMutation.isPending || updatePlanMutation.isPending}
             >
-              {editingPlan ? "Save Changes" : "Save Flight Plan"}
+              {editingPlan ? "Save local changes" : "Save Flight Plan"}
             </Button>
             {editingPlan && (
               <Button
@@ -5441,7 +5441,7 @@ export default function FlightPlanner() {
                 }}
                 disabled={createPlanMutation.isPending || updatePlanMutation.isPending}
               >
-                Save changes and return to filing
+                Save and continue to filing
               </Button>
             )}
             <Button

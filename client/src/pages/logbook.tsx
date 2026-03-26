@@ -23,6 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { PageShell } from "@/components/layout/PageShell";
+import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
 
 const AIRCRAFT_CATEGORY_OPTIONS = [
   "Airplane",
@@ -295,6 +296,24 @@ function formatDisplayDate(value?: string | Date | null) {
   return date.toLocaleDateString();
 }
 
+const LOGBOOK_PRESS_STEPS: PressDemoStep[] = [
+  {
+    id: "overview",
+    title: "Open with the logbook overview",
+    body: "Start with totals and the core logbook value so viewers immediately understand what RSF keeps in one place.",
+  },
+  {
+    id: "entries",
+    title: "Show everyday flight logging",
+    body: "Highlight adding entries, reviewing flight history, and locking entries when they are final.",
+  },
+  {
+    id: "currency",
+    title: "Finish with long-term pilot workflow",
+    body: "Use totals, endorsements, and currency sections to show how RSF grows beyond simple recordkeeping.",
+  },
+];
+
 function formatBytes(value?: number | null) {
   if (!value) return "-";
   const units = ["B", "KB", "MB", "GB"];
@@ -311,6 +330,7 @@ export default function Logbook() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const pressDemo = usePressDemo(LOGBOOK_PRESS_STEPS);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<LogbookEntry | null>(null);
   const [viewingEntry, setViewingEntry] = useState<LogbookEntry | null>(null);
@@ -686,6 +706,23 @@ export default function Logbook() {
           "Upgrade for currency alerts, endorsements, analytics, and full history.",
         ]}
       />
+      {pressDemo.enabled && (
+        <PressDemoBanner
+          pageLabel="Logbook"
+          stepIndex={pressDemo.stepIndex}
+          totalSteps={pressDemo.steps.length}
+          currentStep={pressDemo.currentStep}
+          onPrevious={pressDemo.previousStep}
+          onNext={pressDemo.nextStep}
+          onExit={pressDemo.exitDemo}
+        />
+      )}
+      <PressDemoSpotlight
+        active={pressDemo.isActive("overview")}
+        stepNumber={(pressDemo.getStep("overview")?.index ?? 0) + 1}
+        title={pressDemo.getStep("overview")?.title ?? "Logbook Overview"}
+        body={pressDemo.getStep("overview")?.body ?? ""}
+      >
       <section className="rounded-[1.6rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.96),rgba(255,255,255,0.68))] p-5 shadow-sm sm:p-6">
         <div className="grid gap-5 xl:grid-cols-[1.3fr_0.9fr]">
           <div className="space-y-4">
@@ -826,8 +863,15 @@ export default function Logbook() {
           </div>
         </div>
       </section>
+      </PressDemoSpotlight>
 
       {/* Additional Totals */}
+      <PressDemoSpotlight
+        active={pressDemo.isActive("currency")}
+        stepNumber={(pressDemo.getStep("currency")?.index ?? 0) + 1}
+        title={pressDemo.getStep("currency")?.title ?? "Totals and Currency"}
+        body={pressDemo.getStep("currency")?.body ?? ""}
+      >
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="text-lg">Flight Time Breakdown</CardTitle>
@@ -865,7 +909,14 @@ export default function Logbook() {
           </div>
         </CardContent>
       </Card>
+      </PressDemoSpotlight>
 
+      <PressDemoSpotlight
+        active={pressDemo.isActive("entries")}
+        stepNumber={(pressDemo.getStep("entries")?.index ?? 0) + 1}
+        title={pressDemo.getStep("entries")?.title ?? "Flight Entries"}
+        body={pressDemo.getStep("entries")?.body ?? ""}
+      >
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -1010,6 +1061,7 @@ export default function Logbook() {
           )}
         </CardContent>
       </Card>
+      </PressDemoSpotlight>
 
       {isPro ? (
         <Card className="mt-6">

@@ -47,6 +47,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
 
 const listingSchema = z.object({
   make: z.string().min(1, "Make is required"),
@@ -77,10 +78,29 @@ const listingSchema = z.object({
 
 type ListingFormData = z.infer<typeof listingSchema>;
 
+const LIST_AIRCRAFT_PRESS_STEPS: PressDemoStep[] = [
+  {
+    id: "aircraft-info",
+    title: "Start with the aircraft details",
+    body: "Show the basic aircraft profile so viewers understand how owners create a polished listing from the start.",
+  },
+  {
+    id: "pricing",
+    title: "Define pricing and renter requirements",
+    body: "Highlight rates, minimums, certifications, and insurance expectations so the listing feels operational, not generic.",
+  },
+  {
+    id: "submit",
+    title: "Finish with publishing",
+    body: "Close on the submission step so owners can see the listing workflow end to end.",
+  },
+];
+
 export default function ListAircraft() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
+  const pressDemo = usePressDemo(LIST_AIRCRAFT_PRESS_STEPS);
   const [submissionKey] = useState(() => globalThis.crypto?.randomUUID?.() ?? `submission-${Date.now()}`);
   const [showVerificationNotice, setShowVerificationNotice] = useState(false);
   const [uploadingVerificationDocs, setUploadingVerificationDocs] = useState(false);
@@ -569,6 +589,19 @@ export default function ListAircraft() {
           </Alert>
         )}
         <div className="mb-8">
+          {pressDemo.enabled && (
+            <div className="mb-6">
+              <PressDemoBanner
+                pageLabel="Rental Creation"
+                stepIndex={pressDemo.stepIndex}
+                totalSteps={pressDemo.steps.length}
+                currentStep={pressDemo.currentStep}
+                onPrevious={pressDemo.previousStep}
+                onNext={pressDemo.nextStep}
+                onExit={pressDemo.exitDemo}
+              />
+            </div>
+          )}
           <h1 className="font-display text-4xl font-bold mb-2" data-testid="text-list-aircraft-title">
             {isEditMode ? "Edit Aircraft Listing" : "List Your Aircraft"}
           </h1>
@@ -582,6 +615,12 @@ export default function ListAircraft() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             {/* Basic Information */}
+            <PressDemoSpotlight
+              active={pressDemo.isActive("aircraft-info")}
+              stepNumber={(pressDemo.getStep("aircraft-info")?.index ?? 0) + 1}
+              title={pressDemo.getStep("aircraft-info")?.title ?? "Aircraft Information"}
+              body={pressDemo.getStep("aircraft-info")?.body ?? ""}
+            >
             <Card>
               <CardHeader>
                 <CardTitle>Aircraft Information</CardTitle>
@@ -756,8 +795,15 @@ export default function ListAircraft() {
                 />
               </CardContent>
             </Card>
+            </PressDemoSpotlight>
 
             {/* Location */}
+            <PressDemoSpotlight
+              active={pressDemo.isActive("pricing")}
+              stepNumber={(pressDemo.getStep("pricing")?.index ?? 0) + 1}
+              title={pressDemo.getStep("pricing")?.title ?? "Pricing & Requirements"}
+              body={pressDemo.getStep("pricing")?.body ?? ""}
+            >
             <Card>
               <CardHeader>
                 <CardTitle>Location</CardTitle>
@@ -793,6 +839,7 @@ export default function ListAircraft() {
                 </div>
               </CardContent>
             </Card>
+            </PressDemoSpotlight>
 
             {/* Pricing */}
             <Card>
@@ -1023,6 +1070,12 @@ export default function ListAircraft() {
             </Card>
 
             {/* Submit */}
+            <PressDemoSpotlight
+              active={pressDemo.isActive("submit")}
+              stepNumber={(pressDemo.getStep("submit")?.index ?? 0) + 1}
+              title={pressDemo.getStep("submit")?.title ?? "Submit Listing"}
+              body={pressDemo.getStep("submit")?.body ?? ""}
+            >
             <div className="flex gap-4">
               <Button 
                 type="submit" 
@@ -1047,6 +1100,7 @@ export default function ListAircraft() {
                 Cancel
               </Button>
             </div>
+            </PressDemoSpotlight>
           </form>
         </Form>
       </div>

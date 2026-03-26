@@ -79,6 +79,42 @@ type AirportSearchResult = {
   lon?: number | null;
 };
 
+type NearbyDiversionAirport = {
+  icao: string;
+  name: string | null;
+  city?: string | null;
+  state?: string | null;
+  lat: number;
+  lon: number;
+  distanceNm: number;
+  bearingDeg: number;
+  maxRunwayFt: number | null;
+  surfaces: string[];
+  towered: boolean;
+  score: number;
+  scoreReasons: string[];
+  immediateReady: boolean;
+  immediateReasons: string[];
+  flightCategory: string | null;
+  runwayAdvisory: {
+    runway: string;
+    headwindKt: number | null;
+    crosswindKt: number | null;
+  } | null;
+  frequencySummary: Array<{
+    type: string | null;
+    description: string | null;
+    frequencyMhz: number | null;
+  }>;
+};
+
+type NearbyDiversionResponse = {
+  lat: number;
+  lon: number;
+  radiusNm: number;
+  airports: NearbyDiversionAirport[];
+};
+
 type OverlayFeatureCollection = FeatureCollection & {
   stale?: boolean;
   updatedAt?: string;
@@ -166,6 +202,19 @@ type TerrainProfileChartPoint = {
   progressRatio: number;
 };
 
+type RouteProgressSummary = {
+  totalRouteNm: number;
+  remainingRouteNm: number;
+  directToDestinationNm: number;
+  distanceFlownNm: number;
+  progressPct: number;
+  offRouteNm: number;
+  nearestPoint: { lat: number; lon: number };
+  activeLegIndex: number;
+  nextWaypoint: RoutePoint | null;
+  etaIso: string | null;
+};
+
 const haversineNm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const toRad = (value: number) => (value * Math.PI) / 180;
   const earthRadiusKm = 6371;
@@ -176,6 +225,99 @@ const haversineNm = (lat1: number, lon1: number, lat2: number, lon2: number) => 
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return earthRadiusKm * c * 0.539957;
+};
+
+const projectLatLonToNm = (lat: number, lon: number, refLat: number) => {
+  const latNm = lat * 60;
+  const lonNm = lon * 60 * Math.cos((refLat * Math.PI) / 180);
+  return { x: lonNm, y: latNm };
+};
+
+const computeRouteProgress = (
+  routePoints: RoutePoint[],
+  ownship: LiveOwnship | null,
+): RouteProgressSummary | null => {
+  if (!ownship || routePoints.length < 2) return null;
+
+  const legLengths = routePoints.slice(1).map((point, index) =>
+    haversineNm(routePoints[index].lat, routePoints[index].lon, point.lat, point.lon),
+  );
+  const totalRouteNm = legLengths.reduce((sum, value) => sum + value, 0);
+  if (totalRouteNm <= 0) return null;
+
+  const refLat = ownship.lat;
+  const ownshipPoint = projectLatLonToNm(ownship.lat, ownship.lon, refLat);
+
+  let best:
+    | {
+        legIndex: number;
+        distanceNm: number;
+        traveledNm: number;
+        remainingNm: number;
+        nearestLat: number;
+        nearestLon: number;
+        nextWaypoint: RoutePoint | null;
+      }
+    | null = null;
+
+  let traveledBeforeLeg = 0;
+  for (let index = 0; index < routePoints.length - 1; index += 1) {
+    const start = routePoints[index];
+    const end = routePoints[index + 1];
+    const startNm = projectLatLonToNm(start.lat, start.lon, refLat);
+    const endNm = projectLatLonToNm(end.lat, end.lon, refLat);
+    const dx = endNm.x - startNm.x;
+    const dy = endNm.y - startNm.y;
+    const legLengthSq = dx * dx + dy * dy;
+    const tRaw = legLengthSq > 0
+      ? ((ownshipPoint.x - startNm.x) * dx + (ownshipPoint.y - startNm.y) * dy) / legLengthSq
+      : 0;
+    const t = Math.min(1, Math.max(0, tRaw));
+    const nearestX = startNm.x + dx * t;
+    const nearestY = startNm.y + dy * t;
+    const offRouteNm = Math.hypot(ownshipPoint.x - nearestX, ownshipPoint.y - nearestY);
+    const nearestLat = nearestY / 60;
+    const nearestLon = nearestX / (60 * Math.cos((refLat * Math.PI) / 180));
+    const legLengthNm = legLengths[index] ?? 0;
+    const traveledNm = traveledBeforeLeg + legLengthNm * t;
+    const remainingNm = Math.max(0, totalRouteNm - traveledNm);
+
+    if (!best || offRouteNm < best.distanceNm) {
+      best = {
+        legIndex: index,
+        distanceNm: offRouteNm,
+        traveledNm,
+        remainingNm,
+        nearestLat,
+        nearestLon,
+        nextWaypoint: routePoints[index + 1] ?? null,
+      };
+    }
+    traveledBeforeLeg += legLengthNm;
+  }
+
+  if (!best) return null;
+
+  const destination = routePoints[routePoints.length - 1];
+  const directToDestinationNm = haversineNm(ownship.lat, ownship.lon, destination.lat, destination.lon);
+  const speedKt = ownship.speedKt ?? null;
+  const etaIso =
+    speedKt && speedKt > 20
+      ? new Date(Date.now() + (best.remainingNm / speedKt) * 60 * 60 * 1000).toISOString()
+      : null;
+
+  return {
+    totalRouteNm,
+    remainingRouteNm: best.remainingNm,
+    directToDestinationNm,
+    distanceFlownNm: best.traveledNm,
+    progressPct: Math.min(100, Math.max(0, (best.traveledNm / totalRouteNm) * 100)),
+    offRouteNm: best.distanceNm,
+    nearestPoint: { lat: best.nearestLat, lon: best.nearestLon },
+    activeLegIndex: best.legIndex,
+    nextWaypoint: best.nextWaypoint,
+    etaIso,
+  };
 };
 
 const formatSignedAltitude = (value: number | null) => {
@@ -198,9 +340,22 @@ const formatHeading = (value: number | null) => {
   return `${Math.round(value)} deg`;
 };
 
+const formatBearing = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return "--";
+  const normalized = ((Math.round(value) % 360) + 360) % 360;
+  return `${String(normalized).padStart(3, "0")} deg`;
+};
+
 const formatClearance = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return "--";
   return `${Math.round(value).toLocaleString()} ft`;
+};
+
+const formatEtaLocal = (value: string | null) => {
+  if (!value) return "--";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "--";
+  return parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 };
 
 const buildOwnshipIcon = (headingDeg: number | null) =>
@@ -249,6 +404,18 @@ const buildObstacleIcon = (aglFt: number | null) =>
     `,
     iconSize: [18, 18],
     iconAnchor: [9, 9],
+  });
+
+const buildDiversionIcon = (rank: number) =>
+  L.divIcon({
+    className: "",
+    html: `
+      <div style="display:flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:9999px;background:#0f766e;border:2px solid #ffffff;color:#ffffff;font-size:11px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.25);">
+        D${rank}
+      </div>
+    `,
+    iconSize: [26, 22],
+    iconAnchor: [13, 11],
   });
 
 const buildTerrainHotSpotIcon = (risk: keyof typeof terrainRiskStyles, rank: number) => {
@@ -386,6 +553,7 @@ export default function AdsbLive() {
   const [showTfrOverlay, setShowTfrOverlay] = useState(true);
   const [showSuaOverlay, setShowSuaOverlay] = useState(false);
   const [showObstacleOverlay, setShowObstacleOverlay] = useState(true);
+  const [showDiversionOverlay, setShowDiversionOverlay] = useState(true);
   const [showTerrainShading, setShowTerrainShading] = useState(true);
   const [selectedPlanId, setSelectedPlanId] = useState("none");
   const watchIdRef = useRef<number | null>(null);
@@ -684,6 +852,49 @@ export default function AdsbLive() {
     () => routePoints.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join(";"),
     [routePoints]
   );
+  const routeProgress = useMemo(
+    () => computeRouteProgress(routePoints, ownship),
+    [ownship, routePoints]
+  );
+  const diversionRadiusNm = useMemo(() => {
+    const numericRange = Number(rangeNm);
+    if (!Number.isFinite(numericRange)) return 60;
+    return Math.max(40, Math.min(120, numericRange));
+  }, [rangeNm]);
+  const nearbyDiversionsQuery = useQuery<NearbyDiversionResponse>({
+    queryKey: [
+      "/api/airports/nearby",
+      ownship?.lat?.toFixed(3) ?? null,
+      ownship?.lon?.toFixed(3) ?? null,
+      diversionRadiusNm,
+    ],
+    enabled: Boolean(ownship),
+    refetchInterval: 30 * 1000,
+    refetchIntervalInBackground: true,
+    queryFn: async () => {
+      if (!ownship) {
+        return { lat: 0, lon: 0, radiusNm: diversionRadiusNm, airports: [] };
+      }
+      const params = new URLSearchParams({
+        lat: String(ownship.lat),
+        lon: String(ownship.lon),
+        radiusNm: String(diversionRadiusNm),
+        limit: "8",
+      });
+      const response = await fetch(apiUrl(`/api/airports/nearby?${params.toString()}`), {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || "Unable to load nearby diversion airports.");
+      }
+      return response.json();
+    },
+  });
+  const diversionCandidates = nearbyDiversionsQuery.data?.airports ?? [];
+  const diversionMapMarkers = diversionCandidates.slice(0, 5);
+  const bestDiversion = diversionCandidates[0] ?? null;
+  const immediateDiversions = diversionCandidates.filter((airport) => airport.immediateReady).slice(0, 3);
   const routeSummaryText = selectedPlan
     ? `${selectedPlan.departure} to ${selectedPlan.destination}${selectedPlan.alternate ? ` · alt ${selectedPlan.alternate}` : ""}`
     : "No route selected";
@@ -1094,6 +1305,10 @@ export default function AdsbLive() {
                   Obstacles
                 </label>
                 <label className="flex items-center gap-2">
+                  <Switch checked={showDiversionOverlay} onCheckedChange={setShowDiversionOverlay} />
+                  Diversions
+                </label>
+                <label className="flex items-center gap-2">
                   <Switch checked={showTerrainShading} onCheckedChange={setShowTerrainShading} />
                   Terrain shading
                 </label>
@@ -1193,6 +1408,25 @@ export default function AdsbLive() {
                         radius={Number(rangeNm) * 1852}
                         pathOptions={{ color: "#0ea5e9", weight: 1.5, dashArray: "4 4", fillOpacity: 0.03 }}
                       />
+                      {routeProgress && routeProgress.offRouteNm >= 0.2 ? (
+                        <Polyline
+                          positions={[
+                            [ownship.lat, ownship.lon],
+                            [routeProgress.nearestPoint.lat, routeProgress.nearestPoint.lon],
+                          ]}
+                          pathOptions={{ color: "#0f172a", weight: 2, opacity: 0.65, dashArray: "6 6" }}
+                        >
+                          <Tooltip direction="top" offset={[0, -8]}>
+                            <div className="space-y-0.5 text-xs">
+                              <div className="font-semibold">Route deviation</div>
+                              <div>{routeProgress.offRouteNm.toFixed(1)} NM from planned route</div>
+                              <div>
+                                Rejoin before {routeProgress.nextWaypoint?.icao || selectedPlan?.destination || "destination"}
+                              </div>
+                            </div>
+                          </Tooltip>
+                        </Polyline>
+                      ) : null}
                     </>
                   )}
                   {terrainCueSegments.length > 0
@@ -1305,6 +1539,44 @@ export default function AdsbLive() {
                       </Popup>
                     </Marker>
                   ))}
+                  {showDiversionOverlay && diversionMapMarkers.map((airport, index) => (
+                    <Marker
+                      key={`diversion-${airport.icao}-${index}`}
+                      position={[airport.lat, airport.lon]}
+                      icon={buildDiversionIcon(index + 1)}
+                    >
+                      <Tooltip direction="top" offset={[0, -10]}>
+                        {airport.icao} · {airport.name || "Diversion airport"}
+                      </Tooltip>
+                      <Popup>
+                        <div className="space-y-1 text-sm">
+                          <div className="font-semibold">{airport.icao} {airport.name ? `· ${airport.name}` : ""}</div>
+                          {(airport.city || airport.state) ? (
+                            <div>{[airport.city, airport.state].filter(Boolean).join(", ")}</div>
+                          ) : null}
+                          <div>Distance: {airport.distanceNm.toFixed(1)} NM</div>
+                          <div>Bearing: {formatBearing(airport.bearingDeg)}</div>
+                          <div>Max runway: {airport.maxRunwayFt ? `${airport.maxRunwayFt.toLocaleString()} ft` : "--"}</div>
+                          {airport.flightCategory ? <div>Weather: {airport.flightCategory}</div> : null}
+                          {airport.surfaces.length > 0 ? <div>Surface: {airport.surfaces.join(", ")}</div> : null}
+                          {airport.runwayAdvisory ? (
+                            <div>
+                              Best runway: {airport.runwayAdvisory.runway}
+                              {airport.runwayAdvisory.crosswindKt !== null
+                                ? ` · XW ${airport.runwayAdvisory.crosswindKt.toFixed(0)} kt`
+                                : ""}
+                            </div>
+                          ) : null}
+                          {airport.frequencySummary[0]?.frequencyMhz ? (
+                            <div>
+                              Primary freq: {airport.frequencySummary[0].frequencyMhz.toFixed(3)}
+                              {airport.frequencySummary[0].type ? ` · ${airport.frequencySummary[0].type}` : ""}
+                            </div>
+                          ) : null}
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
                   {trafficTargets.map((target) => (
                     <Marker
                       key={target.id}
@@ -1364,6 +1636,18 @@ export default function AdsbLive() {
                   <div className="text-xs text-muted-foreground">Max route terrain</div>
                   <div className="font-semibold">{terrainMaxElevationFt !== null ? formatAltitude(terrainMaxElevationFt) : "--"}</div>
                 </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Best diversion</div>
+                  <div className="font-semibold">{bestDiversion ? bestDiversion.icao : "--"}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {bestDiversion ? `${bestDiversion.distanceNm.toFixed(1)} NM · ${formatBearing(bestDiversion.bearingDeg)}` : "Start tracking to rank nearby airports."}
+                  </div>
+                  {bestDiversion?.scoreReasons?.length ? (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Best ranked for {bestDiversion.scoreReasons.join(", ")}.
+                    </div>
+                  ) : null}
+                </div>
                 <div className="rounded-lg border p-3 md:col-span-2">
                   <div className="text-xs text-muted-foreground">Terrain cueing</div>
                   <div className={`font-semibold ${terrainCueToneClass}`}>{terrainCueStatus}</div>
@@ -1415,6 +1699,53 @@ export default function AdsbLive() {
                         <Badge variant="secondary">{routePoints.length} route points resolved</Badge>
                       </div>
                     </div>
+                    {routeProgress ? (
+                      <div className="rounded-lg border p-3 space-y-3">
+                        <div className="font-medium">Live route progress</div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="rounded-lg border bg-muted/30 p-3">
+                            <div className="text-xs text-muted-foreground">Route remaining</div>
+                            <div className="font-semibold">{routeProgress.remainingRouteNm.toFixed(1)} NM</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Direct to destination {routeProgress.directToDestinationNm.toFixed(1)} NM
+                            </div>
+                          </div>
+                          <div className="rounded-lg border bg-muted/30 p-3">
+                            <div className="text-xs text-muted-foreground">Estimated arrival</div>
+                            <div className="font-semibold">{formatEtaLocal(routeProgress.etaIso)}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Based on current speed {formatSpeed(ownship?.speedKt ?? null)}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border bg-muted/30 p-3">
+                            <div className="text-xs text-muted-foreground">Next route point</div>
+                            <div className="font-semibold">{routeProgress.nextWaypoint?.icao || selectedPlan.destination}</div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Active leg {routeProgress.activeLegIndex + 1} of {Math.max(routePoints.length - 1, 1)}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border bg-muted/30 p-3">
+                            <div className="text-xs text-muted-foreground">Off-route deviation</div>
+                            <div className={`font-semibold ${routeProgress.offRouteNm >= 2 ? "text-red-700" : routeProgress.offRouteNm >= 0.75 ? "text-amber-700" : "text-emerald-700"}`}>
+                              {routeProgress.offRouteNm.toFixed(1)} NM
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Progress {Math.round(routeProgress.progressPct)}% · flown {routeProgress.distanceFlownNm.toFixed(1)} of {routeProgress.totalRouteNm.toFixed(1)} NM
+                            </div>
+                          </div>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                          <div
+                            className="h-full rounded-full bg-sky-600 transition-all"
+                            style={{ width: `${Math.max(3, Math.min(100, routeProgress.progressPct))}%` }}
+                          />
+                        </div>
+                      </div>
+                    ) : selectedPlan && ownship ? (
+                      <div className="rounded-lg border p-3 text-sm text-muted-foreground">
+                        RSF needs at least two resolved route points to calculate live route progress for this plan.
+                      </div>
+                    ) : null}
                     {routePoints.length > 0 ? (
                       <div className="space-y-2">
                         {terrainProfileQuery.isLoading ? (
@@ -1713,6 +2044,147 @@ export default function AdsbLive() {
                           <div>Relative: <span className="font-medium text-foreground">{formatSignedAltitude(target.relativeAltitudeFt)}</span></div>
                           <div>Speed: <span className="font-medium text-foreground">{formatSpeed(target.groundSpeedKt)}</span></div>
                           <div>Track: <span className="font-medium text-foreground">{formatHeading(target.trackDeg)}</span></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Diversion candidates</CardTitle>
+                <CardDescription>Nearest practical airports around ownship with runway and frequency context.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {nearbyDiversionsQuery.isLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading nearby diversion airports...</div>
+                ) : nearbyDiversionsQuery.error ? (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      {nearbyDiversionsQuery.error instanceof Error ? nearbyDiversionsQuery.error.message : "Unable to load diversion airports."}
+                    </AlertDescription>
+                  </Alert>
+                ) : diversionCandidates.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    Start tracking to load nearby airports suitable for quick diversion review.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {diversionCandidates.map((airport, index) => (
+                      <div key={`diversion-list-${airport.icao}-${index}`} className="rounded-lg border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2 font-medium">
+                              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-xs font-semibold">
+                                {index + 1}
+                              </span>
+                              <span>{airport.icao}</span>
+                              {airport.name ? <span className="text-muted-foreground">· {airport.name}</span> : null}
+                            </div>
+                            {(airport.city || airport.state) ? (
+                              <div className="text-xs text-muted-foreground">
+                                {[airport.city, airport.state].filter(Boolean).join(", ")}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge variant="outline">{airport.distanceNm.toFixed(1)} NM</Badge>
+                            {index === 0 ? <Badge>Best ranked</Badge> : null}
+                          </div>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                          <div>
+                            Bearing: <span className="font-medium text-foreground">{formatBearing(airport.bearingDeg)}</span>
+                          </div>
+                          <div>
+                            Max runway: <span className="font-medium text-foreground">{airport.maxRunwayFt ? `${airport.maxRunwayFt.toLocaleString()} ft` : "--"}</span>
+                          </div>
+                          <div>
+                            Weather: <span className="font-medium text-foreground">{airport.flightCategory || "--"}</span>
+                          </div>
+                          <div>
+                            Field type: <span className="font-medium text-foreground">{airport.towered ? "Towered" : "Non-towered"}</span>
+                          </div>
+                          <div className="col-span-2">
+                            Surfaces: <span className="font-medium text-foreground">{airport.surfaces.length > 0 ? airport.surfaces.join(", ") : "--"}</span>
+                          </div>
+                          {airport.runwayAdvisory ? (
+                            <div className="col-span-2">
+                              Best runway/wind: <span className="font-medium text-foreground">{airport.runwayAdvisory.runway}</span>
+                              <span className="font-medium text-foreground">
+                                {airport.runwayAdvisory.headwindKt !== null ? ` · HW ${airport.runwayAdvisory.headwindKt.toFixed(0)} kt` : ""}
+                                {airport.runwayAdvisory.crosswindKt !== null ? ` · XW ${airport.runwayAdvisory.crosswindKt.toFixed(0)} kt` : ""}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                        {airport.scoreReasons.length > 0 ? (
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            Ranked for {airport.scoreReasons.join(", ")}.
+                          </div>
+                        ) : null}
+                        {airport.frequencySummary.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                            {airport.frequencySummary.map((item, freqIndex) => (
+                              <Badge key={`diversion-freq-${airport.icao}-${freqIndex}`} variant="secondary" className="font-normal">
+                                {item.type || item.description || "Freq"} {item.frequencyMhz ? `· ${item.frequencyMhz.toFixed(3)}` : ""}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-xs text-muted-foreground">No airport frequencies cached yet for this field.</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Divert now short list</CardTitle>
+                <CardDescription>Closest immediate diversion options with acceptable runway, weather, and wind context.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {nearbyDiversionsQuery.isLoading ? (
+                  <div className="text-sm text-muted-foreground">Scoring immediate diversion options...</div>
+                ) : nearbyDiversionsQuery.error ? (
+                  <div className="text-sm text-muted-foreground">Diversion short list unavailable while airport data reloads.</div>
+                ) : immediateDiversions.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    No airport currently meets the immediate-diversion screen. Use the ranked list above for the next-best field.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {immediateDiversions.map((airport, index) => (
+                      <div key={`immediate-diversion-${airport.icao}-${index}`} className="rounded-lg border p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-medium">
+                              {airport.icao}{airport.name ? ` · ${airport.name}` : ""}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {airport.distanceNm.toFixed(1)} NM · {formatBearing(airport.bearingDeg)} · {airport.maxRunwayFt ? `${airport.maxRunwayFt.toLocaleString()} ft` : "--"}
+                            </div>
+                          </div>
+                          {index === 0 ? <Badge>Primary</Badge> : <Badge variant="outline">Alternate</Badge>}
+                        </div>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Chosen for {airport.immediateReasons.join(", ")}.
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                          <Badge variant="secondary">{airport.flightCategory || "Weather unk"}</Badge>
+                          <Badge variant="secondary">{airport.towered ? "Towered" : "Non-towered"}</Badge>
+                          {airport.runwayAdvisory ? (
+                            <Badge variant="secondary">
+                              {airport.runwayAdvisory.runway}
+                              {airport.runwayAdvisory.crosswindKt !== null ? ` · XW ${airport.runwayAdvisory.crosswindKt.toFixed(0)} kt` : ""}
+                            </Badge>
+                          ) : null}
                         </div>
                       </div>
                     ))}

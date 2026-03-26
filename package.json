@@ -20,6 +20,7 @@
     "test:smoke": "node scripts/smoke-test.mjs",
     "test:load:aircraft": "tsx scripts/load-test-aircraft-listings.ts",
     "test:unit": "tsx --test scripts/tests/marketplace-fees.test.ts",
+    "receiver:bridge": "node scripts/receiver-bridge.mjs",
     "seed:aircraft-types": "tsx seed_aircraft_types.ts",
     "import:aircraft-types": "tsx scripts/import-aircraft-types.ts",
     "db:push": "drizzle-kit push"

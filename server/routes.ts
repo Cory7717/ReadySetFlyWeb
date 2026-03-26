@@ -19,7 +19,7 @@ import { Client, Environment, LogLevel, OrdersController } from "@paypal/paypal-
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode } from "@shared/schema";
+import { insertAircraftListingSchema, insertMarketplaceListingSchema, insertRentalSchema, insertReviewSchema, insertFavoriteSchema, insertAirportFavoriteSchema, insertExpenseSchema, insertJobApplicationSchema, insertPromoAlertSchema, insertBannerAdSchema, insertLogbookEntrySchema, insertLogbookProSettingsSchema, insertLogbookArchiveSchema, insertFlightPlanSchema, insertAircraftProfileSchema, insertAircraftTypeSchema, insertEndorsementSchema, insertNotificationPreferencesSchema, insertUserSettingsSchema, insertPushTokenSchema, insertRadioCommsSessionSchema, insertAviationEventSchema, insertAnalyticsEventSchema, insertHkDailyMetricSchema, insertHkAttendantMetricSchema, insertCfiProfileSchema, insertCfiSchoolSchema, insertCfiSchoolMemberSchema, insertCfiCredentialSchema, insertCfiAvailabilityRuleSchema, insertCfiBookingRequestSchema, insertCfiStudentSchema, insertCfiLessonTemplateSchema, insertCfiLessonSchema, insertCfiStudentFileSchema, insertCfiStudentMilestoneSchema, insertCfiStudentEndorsementSchema, insertCfiConversationSchema, insertCfiMessageSchema, insertCfiLegalAcceptanceSchema, insertPartnerRedirectSchema, insertCrmWeeklyReportSchema, insertFlyingClubSchema, insertFlyingClubAircraftSchema, insertFlyingClubReservationSchema, insertFlyingClubAnnouncementSchema, insertFlyingClubJoinRequestSchema, insertFlyingClubDocumentSchema, insertFlyingClubLegalAcceptanceSchema, insertFlyingClubSquawkSchema, insertFlyingClubMaintenanceItemSchema, insertFlyingClubBlackoutSchema, insertMembershipPartnerOfferSchema, aircraftListings, verificationSubmissions, partnerRedirects, analyticsEvents, aviationEvents, marketplaceListings, promoCodeUsages, notams as notamsTable, users, cfiStudents, cfiConversations, cfiMessages, cfiProfiles, cfiLessons, cfiStudentMilestones, flightPlanFilingActions, crmSalesEmailTemplateTypes, leadCategories, leadStatuses, type BannerAdOrder, type CrmSalesEmailTemplateType, type FlightPlanFilingAction, type HkDailyMetric, type HkAttendantMetric, type LeadCategory, type LeadStatus, type PromoCode, type MembershipPartnerOffer } from "@shared/schema";
 import { renderHkMetricsPdf } from "./hk-metrics-pdf";
 import { addDays, format, getISOWeek, getISOWeekYear, parse, parseISO, startOfISOWeek, endOfISOWeek, startOfMonth, endOfMonth } from "date-fns";
 import { gpsTrainerUnits } from "@shared/gps-sims";
@@ -124,6 +124,20 @@ const getRequestUserId = (req: any): string | null => {
   const userId = req.user?.claims?.sub || req.session?.userId;
   return userId ? String(userId) : null;
 };
+
+const normalizeMembershipOfferSlug = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+const normalizePartnerMemberNumber = (value: string) =>
+  value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 
 const AIRCRAFT_VERIFICATION_DOC_FIELDS = new Set([
   "insuranceDoc",
@@ -8468,6 +8482,197 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const membershipPartnerOfferPayloadSchema = insertMembershipPartnerOfferSchema.extend({
+    memberNumbersText: z.string().optional(),
+  });
+
+  const membershipPartnerOfferUpdateSchema = insertMembershipPartnerOfferSchema.partial().extend({
+    memberNumbersText: z.string().optional(),
+  });
+
+  const membershipPartnerOfferRedeemSchema = z.object({
+    slug: z.string().min(2),
+    memberNumber: z.string().min(1),
+  });
+
+  const parseMembershipPartnerMembers = (raw: string | undefined) => {
+    const seen = new Set<string>();
+    const members: Array<{ memberNumber: string; normalizedMemberNumber: string }> = [];
+    for (const chunk of (raw || "").split(/[\n,]+/)) {
+      const memberNumber = chunk.trim();
+      if (!memberNumber) continue;
+      const normalizedMemberNumber = normalizePartnerMemberNumber(memberNumber);
+      if (!normalizedMemberNumber || seen.has(normalizedMemberNumber)) continue;
+      seen.add(normalizedMemberNumber);
+      members.push({ memberNumber, normalizedMemberNumber });
+    }
+    return members;
+  };
+
+  const getMembershipPartnerOfferSummary = async (offer: MembershipPartnerOffer) => {
+    const members = await storage.getMembershipPartnerOfferMembers(offer.id);
+    const redeemedCount = members.filter((member) => !!member.redeemedAt).length;
+    const baseUrl =
+      process.env.APP_BASE_URL ||
+      process.env.WEB_BASE_URL ||
+      (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}` : "https://readysetfly.us");
+    return {
+      ...offer,
+      totalMembers: members.length,
+      redeemedCount,
+      availableMembers: Math.max(0, members.length - redeemedCount),
+      shareUrl: `${baseUrl}/logbook/pro?offer=${encodeURIComponent(offer.slug)}`,
+    };
+  };
+
+  app.get("/api/membership-partner-offers/:slug", async (req, res) => {
+    try {
+      const slug = normalizeMembershipOfferSlug(String(req.params.slug || ""));
+      if (!slug) {
+        return res.status(400).json({ error: "Offer slug is required" });
+      }
+      const offer = await storage.getMembershipPartnerOfferBySlug(slug);
+      if (!offer || !offer.isActive) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+      res.json({
+        id: offer.id,
+        name: offer.name,
+        partnerName: offer.partnerName,
+        slug: offer.slug,
+        description: offer.description,
+        tier: offer.tier,
+        durationDays: offer.durationDays,
+      });
+    } catch (error) {
+      console.error("Failed to load membership partner offer:", error);
+      res.status(500).json({ error: "Failed to load offer" });
+    }
+  });
+
+  app.post("/api/membership-partner-offers/redeem", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const parsed = membershipPartnerOfferRedeemSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.format() });
+      }
+
+      const slug = normalizeMembershipOfferSlug(parsed.data.slug);
+      const normalizedMemberNumber = normalizePartnerMemberNumber(parsed.data.memberNumber);
+      if (!normalizedMemberNumber) {
+        return res.status(400).json({ error: "Member number is required" });
+      }
+
+      const offer = await storage.getMembershipPartnerOfferBySlug(slug);
+      if (!offer || !offer.isActive) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      const member = await storage.getMembershipPartnerOfferMemberByNumber(offer.id, normalizedMemberNumber);
+      if (!member) {
+        return res.status(400).json({ error: "Member number not recognized for this offer" });
+      }
+
+      if (member.redeemedByUserId && member.redeemedByUserId !== userId) {
+        return res.status(409).json({ error: "That member number has already been redeemed" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      const tierRank = (value?: string | null) =>
+        value === "pro_plus" ? 2 : value === "pro" ? 1 : 0;
+      const now = new Date();
+      const currentGrantEndsAt = user.membershipGrantEndsAt ? new Date(user.membershipGrantEndsAt) : null;
+      const currentGrantActive = !!currentGrantEndsAt && currentGrantEndsAt > now;
+      const requestedEndsAt = addDays(now, offer.durationDays);
+
+      let resolvedTier: "pro" | "pro_plus" = offer.tier === "pro" ? "pro" : "pro_plus";
+      let resolvedEndsAt = requestedEndsAt;
+      if (currentGrantActive && tierRank(user.membershipGrantTier) > tierRank(resolvedTier)) {
+        resolvedTier = user.membershipGrantTier as "pro" | "pro_plus";
+        resolvedEndsAt = currentGrantEndsAt as Date;
+      } else if (
+        currentGrantActive &&
+        tierRank(user.membershipGrantTier) === tierRank(resolvedTier) &&
+        currentGrantEndsAt &&
+        currentGrantEndsAt > resolvedEndsAt
+      ) {
+        resolvedEndsAt = currentGrantEndsAt;
+      }
+
+      if (!member.redeemedByUserId) {
+        const redeemed = await storage.redeemMembershipPartnerOfferMember(member.id, userId);
+        if (!redeemed) {
+          return res.status(409).json({ error: "That member number has already been redeemed" });
+        }
+      }
+
+      const reason = `${offer.partnerName} member offer: ${offer.name} (${member.memberNumber})`;
+      const updated = await storage.updateUser(userId, {
+        membershipGrantTier: resolvedTier,
+        membershipGrantEndsAt: resolvedEndsAt,
+        membershipGrantGrantedBy: null,
+        membershipGrantGrantedAt: now,
+        membershipGrantReason: reason,
+      });
+
+      const tierLabel = resolvedTier === "pro_plus" ? "RSF Pro+" : "RSF Pro Core";
+      await storage.createUserNotification({
+        userId,
+        type: "membership_grant",
+        title: `${tierLabel} access unlocked`,
+        message: `${offer.partnerName} unlocked ${tierLabel} for ${offer.durationDays} day${offer.durationDays === 1 ? "" : "s"}. Access is scheduled to end on ${resolvedEndsAt.toLocaleString()}.`,
+        channels: user.email ? ["in_app", "email"] : ["in_app"],
+        referenceDate: null,
+        meta: {
+          tier: resolvedTier,
+          durationDays: offer.durationDays,
+          grantEndsAt: resolvedEndsAt.toISOString(),
+          offerSlug: offer.slug,
+          partnerName: offer.partnerName,
+        },
+      });
+
+      if (user.email) {
+        void sendMembershipGrantEmail({
+          email: user.email,
+          firstName: user.firstName,
+          tier: resolvedTier,
+          durationDays: offer.durationDays,
+          endsAt: resolvedEndsAt,
+          reason,
+        }).catch((error) => {
+          console.error("Membership partner offer email delivery failed:", error);
+        });
+      }
+
+      res.json({
+        success: true,
+        offer: {
+          id: offer.id,
+          name: offer.name,
+          partnerName: offer.partnerName,
+          slug: offer.slug,
+          tier: resolvedTier,
+          durationDays: offer.durationDays,
+        },
+        membershipGrantEndsAt: resolvedEndsAt.toISOString(),
+        user: updated,
+      });
+    } catch (error) {
+      console.error("Failed to redeem membership partner offer:", error);
+      res.status(500).json({ error: "Failed to redeem offer" });
+    }
+  });
+
   // Auto-deactivate expired listings (called periodically or on-demand)
   app.post("/api/marketplace/check-expirations", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
@@ -12150,6 +12355,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Promo Codes (Admin only)
+  app.get("/api/admin/membership-partner-offers", isAuthenticated, requireUsersAdmin, async (req: any, res) => {
+    try {
+      const adminId = getRequestUserId(req);
+      const admin = adminId ? await storage.getUser(adminId) : null;
+      if (!admin || !admin.isSuperAdmin) {
+        return res.status(403).json({ error: "Super Admin required" });
+      }
+      const offers = await storage.getAllMembershipPartnerOffers();
+      const summaries = await Promise.all(offers.map((offer) => getMembershipPartnerOfferSummary(offer)));
+      res.json(summaries);
+    } catch (error) {
+      console.error("Failed to fetch membership partner offers:", error);
+      res.status(500).json({ error: "Failed to fetch membership partner offers" });
+    }
+  });
+
+  app.post("/api/admin/membership-partner-offers", isAuthenticated, requireUsersAdmin, async (req: any, res) => {
+    try {
+      const adminId = getRequestUserId(req);
+      const admin = adminId ? await storage.getUser(adminId) : null;
+      if (!admin || !admin.isSuperAdmin) {
+        return res.status(403).json({ error: "Super Admin required" });
+      }
+
+      const result = membershipPartnerOfferPayloadSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+
+      const members = parseMembershipPartnerMembers(result.data.memberNumbersText);
+      if (!members.length) {
+        return res.status(400).json({ error: "Add at least one member number for this offer" });
+      }
+
+      const normalizedSlug = normalizeMembershipOfferSlug(result.data.slug);
+      if (!normalizedSlug) {
+        return res.status(400).json({ error: "Offer slug must contain letters or numbers" });
+      }
+
+      const { memberNumbersText, ...offerInput } = result.data;
+      const created = await storage.createMembershipPartnerOffer({
+        ...offerInput,
+        slug: normalizedSlug,
+        createdBy: adminId || undefined,
+      });
+      await storage.addMembershipPartnerOfferMembers(created.id, members);
+      res.status(201).json(await getMembershipPartnerOfferSummary(created));
+    } catch (error: any) {
+      if (error.code === "23505") {
+        return res.status(400).json({ error: "Offer slug already exists" });
+      }
+      console.error("Failed to create membership partner offer:", error);
+      res.status(500).json({ error: "Failed to create membership partner offer" });
+    }
+  });
+
+  app.patch("/api/admin/membership-partner-offers/:id", isAuthenticated, requireUsersAdmin, async (req: any, res) => {
+    try {
+      const adminId = getRequestUserId(req);
+      const admin = adminId ? await storage.getUser(adminId) : null;
+      if (!admin || !admin.isSuperAdmin) {
+        return res.status(403).json({ error: "Super Admin required" });
+      }
+
+      const result = membershipPartnerOfferUpdateSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+
+      const existing = await storage.getMembershipPartnerOffer(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      const { memberNumbersText, ...updates } = result.data;
+      const normalizedUpdates = {
+        ...updates,
+        ...(typeof updates.slug === "string" ? { slug: normalizeMembershipOfferSlug(updates.slug) } : {}),
+      };
+      if (typeof normalizedUpdates.slug === "string" && !normalizedUpdates.slug) {
+        return res.status(400).json({ error: "Offer slug must contain letters or numbers" });
+      }
+      const updated = await storage.updateMembershipPartnerOffer(req.params.id, normalizedUpdates);
+      if (!updated) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      const members = parseMembershipPartnerMembers(memberNumbersText);
+      if (members.length) {
+        await storage.addMembershipPartnerOfferMembers(updated.id, members);
+      }
+
+      res.json(await getMembershipPartnerOfferSummary(updated));
+    } catch (error: any) {
+      if (error.code === "23505") {
+        return res.status(400).json({ error: "Offer slug already exists" });
+      }
+      console.error("Failed to update membership partner offer:", error);
+      res.status(500).json({ error: "Failed to update membership partner offer" });
+    }
+  });
+
   app.get("/api/admin/promo-codes", isAuthenticated, requirePromoCodesAdmin, async (req, res) => {
     try {
       const promoCodes = await storage.getAllPromoCodes();

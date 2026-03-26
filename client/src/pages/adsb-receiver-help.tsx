@@ -84,6 +84,7 @@ export default function AdsbReceiverHelp() {
           <CardDescription>RSF can now poll a local JSON bridge when direct browser receiver ingest is not possible.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <div>- Start the included bridge with `npm run receiver:bridge`.</div>
           <div>- In Live Flight Map, switch the source to `Receiver bridge`.</div>
           <div>- Point RSF to a local bridge URL such as `http://127.0.0.1:3005/rsf-live.json`.</div>
           <div>- The bridge should expose ownship and optional traffic in JSON form.</div>

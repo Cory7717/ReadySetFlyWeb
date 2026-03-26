@@ -882,6 +882,37 @@ export const promoCodeUsages = pgTable("promo_code_usages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const membershipPartnerOffers = pgTable("membership_partner_offers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  partnerName: text("partner_name").notNull(),
+  slug: varchar("slug", { length: 120 }).notNull().unique(),
+  description: text("description"),
+  tier: text("tier").notNull().default("pro_plus"), // pro, pro_plus
+  durationDays: integer("duration_days").notNull().default(90),
+  isActive: boolean("is_active").default(true),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_membership_partner_offers_active").on(table.isActive),
+  index("idx_membership_partner_offers_partner").on(table.partnerName),
+]);
+
+export const membershipPartnerOfferMembers = pgTable("membership_partner_offer_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  offerId: varchar("offer_id").notNull().references(() => membershipPartnerOffers.id, { onDelete: "cascade" }),
+  memberNumber: text("member_number").notNull(),
+  normalizedMemberNumber: varchar("normalized_member_number", { length: 120 }).notNull(),
+  redeemedByUserId: varchar("redeemed_by_user_id").references(() => users.id),
+  redeemedAt: timestamp("redeemed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("idx_membership_partner_offer_members_unique").on(table.offerId, table.normalizedMemberNumber),
+  index("idx_membership_partner_offer_members_offer").on(table.offerId),
+  index("idx_membership_partner_offer_members_redeemed_by").on(table.redeemedByUserId),
+]);
+
 export const aiToolUsages = pgTable("ai_tool_usages", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: varchar("user_id").references(() => users.id),
@@ -2859,6 +2890,25 @@ export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({
   applicableToBannerAds: z.boolean().default(false),
 });
 
+export const insertMembershipPartnerOfferSchema = createInsertSchema(membershipPartnerOffers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().min(1, "Offer name is required").max(120),
+  partnerName: z.string().min(1, "Partner name is required").max(120),
+  slug: z
+    .string()
+    .min(2, "Offer slug is required")
+    .max(120)
+    .regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers, and hyphens only"),
+  description: z.string().max(500).optional(),
+  tier: z.enum(["pro", "pro_plus"]),
+  durationDays: z.number().int().min(1).max(365),
+  isActive: z.boolean().default(true),
+  createdBy: z.string().optional(),
+});
+
 export const insertExpenseSchema = createInsertSchema(expenses).omit({
   id: true,
   createdAt: true,
@@ -3169,6 +3219,10 @@ export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
 
 export type PromoCodeUsage = typeof promoCodeUsages.$inferSelect;
 export type InsertPromoCodeUsage = typeof promoCodeUsages.$inferInsert;
+export type MembershipPartnerOffer = typeof membershipPartnerOffers.$inferSelect;
+export type InsertMembershipPartnerOffer = z.infer<typeof insertMembershipPartnerOfferSchema>;
+export type MembershipPartnerOfferMember = typeof membershipPartnerOfferMembers.$inferSelect;
+export type InsertMembershipPartnerOfferMember = typeof membershipPartnerOfferMembers.$inferInsert;
 export type AiToolUsage = typeof aiToolUsages.$inferSelect;
 export type InsertAiToolUsage = typeof aiToolUsages.$inferInsert;
 

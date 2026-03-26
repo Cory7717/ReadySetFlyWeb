@@ -63,6 +63,10 @@ import {
   type InsertPromoCode,
   type PromoCodeUsage,
   type InsertPromoCodeUsage,
+  type MembershipPartnerOffer,
+  type InsertMembershipPartnerOffer,
+  type MembershipPartnerOfferMember,
+  type InsertMembershipPartnerOfferMember,
   type AdminInvite,
   type InsertAdminInvite,
   type PartnerToolMetric,
@@ -176,6 +180,8 @@ import {
   hkRoomsSoldImports,
   promoCodes,
   promoCodeUsages,
+  membershipPartnerOffers,
+  membershipPartnerOfferMembers,
   refreshTokens,
   oauthExchangeTokens,
   contactSubmissions,
@@ -600,6 +606,17 @@ export interface IStorage {
   validatePromoCodeForContext(code: string, context: "banner-ad" | "marketplace"): Promise<PromoCode | null>;
   recordPromoCodeUsage(usage: { promoCodeId: string; userId?: string; marketplaceListingId?: string; bannerAdOrderId?: string }): Promise<PromoCodeUsage>;
   getPromoCodeUsageCount(promoCodeId: string): Promise<number>;
+
+  // Membership Partner Offers
+  getAllMembershipPartnerOffers(): Promise<MembershipPartnerOffer[]>;
+  getMembershipPartnerOffer(id: string): Promise<MembershipPartnerOffer | undefined>;
+  getMembershipPartnerOfferBySlug(slug: string): Promise<MembershipPartnerOffer | undefined>;
+  createMembershipPartnerOffer(offer: InsertMembershipPartnerOffer): Promise<MembershipPartnerOffer>;
+  updateMembershipPartnerOffer(id: string, updates: Partial<MembershipPartnerOffer>): Promise<MembershipPartnerOffer | undefined>;
+  addMembershipPartnerOfferMembers(offerId: string, members: Array<{ memberNumber: string; normalizedMemberNumber: string }>): Promise<number>;
+  getMembershipPartnerOfferMembers(offerId: string): Promise<MembershipPartnerOfferMember[]>;
+  getMembershipPartnerOfferMemberByNumber(offerId: string, normalizedMemberNumber: string): Promise<MembershipPartnerOfferMember | undefined>;
+  redeemMembershipPartnerOfferMember(memberId: string, userId: string): Promise<MembershipPartnerOfferMember | undefined>;
   
   // Admin Notifications
   getAllAdminNotifications(): Promise<AdminNotification[]>;
@@ -3477,6 +3494,128 @@ export class DatabaseStorage implements IStorage {
       .from(promoCodeUsages)
       .where(eq(promoCodeUsages.promoCodeId, promoCodeId));
     return result[0]?.count || 0;
+  }
+
+  async getAllMembershipPartnerOffers(): Promise<MembershipPartnerOffer[]> {
+    return await db
+      .select()
+      .from(membershipPartnerOffers)
+      .orderBy(desc(membershipPartnerOffers.createdAt));
+  }
+
+  async getMembershipPartnerOffer(id: string): Promise<MembershipPartnerOffer | undefined> {
+    const [offer] = await db
+      .select()
+      .from(membershipPartnerOffers)
+      .where(eq(membershipPartnerOffers.id, id));
+    return offer;
+  }
+
+  async getMembershipPartnerOfferBySlug(slug: string): Promise<MembershipPartnerOffer | undefined> {
+    const [offer] = await db
+      .select()
+      .from(membershipPartnerOffers)
+      .where(eq(membershipPartnerOffers.slug, slug.trim().toLowerCase()));
+    return offer;
+  }
+
+  async createMembershipPartnerOffer(offer: InsertMembershipPartnerOffer): Promise<MembershipPartnerOffer> {
+    const [created] = await db
+      .insert(membershipPartnerOffers)
+      .values({
+        ...offer,
+        slug: offer.slug.trim().toLowerCase(),
+      })
+      .returning();
+    return created;
+  }
+
+  async updateMembershipPartnerOffer(
+    id: string,
+    updates: Partial<MembershipPartnerOffer>
+  ): Promise<MembershipPartnerOffer | undefined> {
+    const updateData: Partial<MembershipPartnerOffer> = {
+      ...updates,
+      updatedAt: new Date(),
+    };
+    if (typeof updates.slug === "string") {
+      updateData.slug = updates.slug.trim().toLowerCase();
+    }
+    const [updated] = await db
+      .update(membershipPartnerOffers)
+      .set(updateData)
+      .where(eq(membershipPartnerOffers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async addMembershipPartnerOfferMembers(
+    offerId: string,
+    members: Array<{ memberNumber: string; normalizedMemberNumber: string }>
+  ): Promise<number> {
+    if (!members.length) return 0;
+    const inserted = await db
+      .insert(membershipPartnerOfferMembers)
+      .values(
+        members.map((member) => ({
+          offerId,
+          memberNumber: member.memberNumber,
+          normalizedMemberNumber: member.normalizedMemberNumber,
+        })) as InsertMembershipPartnerOfferMember[]
+      )
+      .onConflictDoNothing({
+        target: [
+          membershipPartnerOfferMembers.offerId,
+          membershipPartnerOfferMembers.normalizedMemberNumber,
+        ],
+      })
+      .returning({ id: membershipPartnerOfferMembers.id });
+    return inserted.length;
+  }
+
+  async getMembershipPartnerOfferMembers(offerId: string): Promise<MembershipPartnerOfferMember[]> {
+    return await db
+      .select()
+      .from(membershipPartnerOfferMembers)
+      .where(eq(membershipPartnerOfferMembers.offerId, offerId))
+      .orderBy(asc(membershipPartnerOfferMembers.memberNumber));
+  }
+
+  async getMembershipPartnerOfferMemberByNumber(
+    offerId: string,
+    normalizedMemberNumber: string
+  ): Promise<MembershipPartnerOfferMember | undefined> {
+    const [member] = await db
+      .select()
+      .from(membershipPartnerOfferMembers)
+      .where(
+        and(
+          eq(membershipPartnerOfferMembers.offerId, offerId),
+          eq(membershipPartnerOfferMembers.normalizedMemberNumber, normalizedMemberNumber)
+        )
+      )
+      .limit(1);
+    return member;
+  }
+
+  async redeemMembershipPartnerOfferMember(
+    memberId: string,
+    userId: string
+  ): Promise<MembershipPartnerOfferMember | undefined> {
+    const [updated] = await db
+      .update(membershipPartnerOfferMembers)
+      .set({
+        redeemedByUserId: userId,
+        redeemedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(membershipPartnerOfferMembers.id, memberId),
+          isNull(membershipPartnerOfferMembers.redeemedAt)
+        )
+      )
+      .returning();
+    return updated;
   }
 
   // Admin Notifications

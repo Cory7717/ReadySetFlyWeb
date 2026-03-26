@@ -1,24 +1,76 @@
 import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PageShell } from "@/components/layout/PageShell";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, type MembershipTier } from "@shared/membership-plans";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
-import { getSourceFromWindow } from "@/lib/returnTo";
+import { getSourceFromWindow, withReturnTo } from "@/lib/returnTo";
+
+type MembershipPartnerOfferDetails = {
+  id: string;
+  name: string;
+  partnerName: string;
+  slug: string;
+  description?: string | null;
+  tier: "pro" | "pro_plus";
+  durationDays: number;
+};
 
 export default function LogbookProPage() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedTier, setSelectedTier] = useState<MembershipTier>("pro");
   const [selectedInterval, setSelectedInterval] = useState<MembershipInterval>("monthly");
   const [loading, setLoading] = useState(false);
   const sourcePage = getSourceFromWindow();
+  const offerSlug = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("offer")?.trim().toLowerCase() || "";
+  }, []);
+  const [partnerMemberNumber, setPartnerMemberNumber] = useState("");
+
+  const {
+    data: partnerOffer,
+    isLoading: partnerOfferLoading,
+  } = useQuery<MembershipPartnerOfferDetails>({
+    queryKey: [`/api/membership-partner-offers/${offerSlug}`],
+    enabled: !!offerSlug,
+  });
+
+  const redeemPartnerOfferMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/membership-partner-offers/redeem", {
+        slug: offerSlug,
+        memberNumber: partnerMemberNumber,
+      });
+      return res.json();
+    },
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      toast({
+        title: "Offer redeemed",
+        description: `${data.offer?.partnerName || "Partner"} unlocked ${data.offer?.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"} on this account.`,
+      });
+      setPartnerMemberNumber("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not redeem offer",
+        description: error.message || "Check the member number and try again.",
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     trackEvent("upgrade_page_viewed", { page: "/logbook/pro", source_page: sourcePage });
@@ -26,13 +78,26 @@ export default function LogbookProPage() {
   }, [sourcePage]);
 
   if (!isAuthenticated) {
+    const returnTarget = offerSlug ? `/logbook/pro?offer=${encodeURIComponent(offerSlug)}` : "/logbook/pro";
     return (
       <div className="container mx-auto px-4 py-10">
         <Card>
           <CardHeader>
             <CardTitle>RSF Pro Membership</CardTitle>
-            <CardDescription>Please sign in to manage membership.</CardDescription>
+            <CardDescription>
+              {offerSlug
+                ? "Create or sign in to a free RSF account first, then redeem your partner membership offer."
+                : "Please sign in to manage membership."}
+            </CardDescription>
           </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            <Button asChild>
+              <a href={withReturnTo("/register", returnTarget)}>Create free account</a>
+            </Button>
+            <Button asChild variant="outline">
+              <a href={withReturnTo("/login", returnTarget)}>Sign in</a>
+            </Button>
+          </CardContent>
         </Card>
       </div>
     );
@@ -219,6 +284,70 @@ export default function LogbookProPage() {
                 </div>
               ) : null}
             </div>
+
+            {offerSlug ? (
+              <div className="rounded-[1.25rem] border border-primary/16 bg-white/80 p-4 shadow-[0_12px_26px_rgba(15,23,42,0.08)] sm:p-5">
+                <span className="rsf-kicker">Partner offer</span>
+                {partnerOfferLoading ? (
+                  <div className="mt-3 text-sm text-muted-foreground">Loading partner offer...</div>
+                ) : partnerOffer ? (
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="mt-2 text-xl font-semibold text-slate-900">{partnerOffer.name}</h3>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {partnerOffer.partnerName} members can unlock {partnerOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"} for {partnerOffer.durationDays} days by entering their member number below.
+                      </p>
+                      {partnerOffer.description ? (
+                        <p className="mt-2 text-xs text-muted-foreground">{partnerOffer.description}</p>
+                      ) : null}
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-[1rem] border border-primary/12 bg-white/70 p-4">
+                        <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Tier</div>
+                        <div className="mt-2 text-sm font-semibold text-slate-900">
+                          {partnerOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
+                        </div>
+                      </div>
+                      <div className="rounded-[1rem] border border-primary/12 bg-white/70 p-4">
+                        <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Length</div>
+                        <div className="mt-2 text-sm font-semibold text-slate-900">{partnerOffer.durationDays} days</div>
+                      </div>
+                      <div className="rounded-[1rem] border border-primary/12 bg-white/70 p-4">
+                        <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Redemption</div>
+                        <div className="mt-2 text-sm font-semibold text-slate-900">One member number per account</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="partner-member-number">Member number</Label>
+                      <Input
+                        id="partner-member-number"
+                        value={partnerMemberNumber}
+                        onChange={(event) => setPartnerMemberNumber(event.target.value)}
+                        placeholder="Enter your CPA member number"
+                        data-testid="input-partner-member-number"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        onClick={() => redeemPartnerOfferMutation.mutate()}
+                        disabled={redeemPartnerOfferMutation.isPending || !partnerMemberNumber.trim()}
+                        data-testid="button-redeem-partner-offer"
+                      >
+                        {redeemPartnerOfferMutation.isPending ? "Redeeming..." : "Redeem partner offer"}
+                      </Button>
+                      <Badge variant="outline">This applies a temporary RSF grant and does not start recurring billing.</Badge>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm text-muted-foreground">
+                    This partner offer link is not active right now. Contact support if you expected access.
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-4 rounded-[1.4rem] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.78),rgba(255,255,255,0.56))] p-5 shadow-[0_18px_38px_rgba(15,23,42,0.12)]">

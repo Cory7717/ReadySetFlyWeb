@@ -254,6 +254,22 @@ type LeidosFlightServiceDiagnostics = {
   actionPaths: Record<"file" | "amend" | "activate" | "cancel" | "close", string | null>;
 };
 
+type MembershipPartnerOfferSummary = {
+  id: string;
+  name: string;
+  partnerName: string;
+  slug: string;
+  description: string | null;
+  tier: "pro" | "pro_plus";
+  durationDays: number;
+  isActive: boolean | null;
+  totalMembers: number;
+  redeemedCount: number;
+  availableMembers: number;
+  shareUrl: string;
+  createdAt?: string | Date | null;
+};
+
 type CrmLeadImportSummary = {
   success: boolean;
   fileName: string;
@@ -571,6 +587,13 @@ export default function AdminDashboard() {
   const [promoCodeDialogOpen, setPromoCodeDialogOpen] = useState(false);
   const [editingPromoCode, setEditingPromoCode] = useState<PromoCode | null>(null);
   const [promoCodeSearch, setPromoCodeSearch] = useState("");
+  const [membershipOfferName, setMembershipOfferName] = useState("");
+  const [membershipOfferPartnerName, setMembershipOfferPartnerName] = useState("Cessna Pilots Association");
+  const [membershipOfferSlug, setMembershipOfferSlug] = useState("cpa-3mo-pro-plus");
+  const [membershipOfferTier, setMembershipOfferTier] = useState<"pro" | "pro_plus">("pro_plus");
+  const [membershipOfferDurationDays, setMembershipOfferDurationDays] = useState("90");
+  const [membershipOfferDescription, setMembershipOfferDescription] = useState("Exclusive Cessna Pilots Association member offer for 3 months of RSF Pro+.");
+  const [membershipOfferMemberNumbers, setMembershipOfferMemberNumbers] = useState("");
   
   // Banner ads state
   const [bannerDialogOpen, setBannerDialogOpen] = useState(false);
@@ -1062,6 +1085,14 @@ export default function AdminDashboard() {
     refetch: refetchLeidosDiagnostics,
   } = useQuery<LeidosFlightServiceDiagnostics>({
     queryKey: ["/api/admin/leidos-flight-service/status"],
+    enabled: activeTab === "users" && isSuperAdmin,
+  });
+
+  const {
+    data: membershipPartnerOffers = [],
+    isLoading: membershipPartnerOffersLoading,
+  } = useQuery<MembershipPartnerOfferSummary[]>({
+    queryKey: ["/api/admin/membership-partner-offers"],
     enabled: activeTab === "users" && isSuperAdmin,
   });
 
@@ -1767,6 +1798,55 @@ export default function AdminDashboard() {
         title: "Error", 
         description: error.message || "Failed to update promo code status",
         variant: "destructive" 
+      });
+    },
+  });
+
+  const createMembershipPartnerOfferMutation = useMutation({
+    mutationFn: async (payload: {
+      name: string;
+      partnerName: string;
+      slug: string;
+      tier: "pro" | "pro_plus";
+      durationDays: number;
+      description?: string;
+      memberNumbersText: string;
+    }) => {
+      return await apiRequest("POST", "/api/admin/membership-partner-offers", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-partner-offers"] });
+      setMembershipOfferName("");
+      setMembershipOfferPartnerName("Cessna Pilots Association");
+      setMembershipOfferSlug("cpa-3mo-pro-plus");
+      setMembershipOfferTier("pro_plus");
+      setMembershipOfferDurationDays("90");
+      setMembershipOfferDescription("Exclusive Cessna Pilots Association member offer for 3 months of RSF Pro+.");
+      setMembershipOfferMemberNumbers("");
+      toast({ title: "Partner membership offer created" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to create offer",
+        description: error.message || "Could not create partner membership offer",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateMembershipPartnerOfferMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<{ isActive: boolean; memberNumbersText: string }> }) => {
+      return await apiRequest("PATCH", `/api/admin/membership-partner-offers/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-partner-offers"] });
+      toast({ title: "Partner membership offer updated" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update offer",
+        description: error.message || "Could not update partner membership offer",
+        variant: "destructive",
       });
     },
   });
@@ -5669,6 +5749,213 @@ export default function AdminDashboard() {
                   </div>
                 )}
               </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Partner Membership Offers</CardTitle>
+                  <CardDescription>
+                    Create controlled RSF Pro / Pro+ offers for partner organizations and gate redemption by member number. This is the right path for the CPA 3-month Pro+ rollout.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="membership-offer-name">Offer name</Label>
+                      <Input
+                        id="membership-offer-name"
+                        value={membershipOfferName}
+                        onChange={(e) => setMembershipOfferName(e.target.value)}
+                        placeholder="CPA 3 Months Free RSF Pro+"
+                        data-testid="input-membership-offer-name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="membership-offer-partner">Partner</Label>
+                      <Input
+                        id="membership-offer-partner"
+                        value={membershipOfferPartnerName}
+                        onChange={(e) => setMembershipOfferPartnerName(e.target.value)}
+                        placeholder="Cessna Pilots Association"
+                        data-testid="input-membership-offer-partner"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="membership-offer-slug">Share slug</Label>
+                      <Input
+                        id="membership-offer-slug"
+                        value={membershipOfferSlug}
+                        onChange={(e) => setMembershipOfferSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))}
+                        placeholder="cpa-3mo-pro-plus"
+                        data-testid="input-membership-offer-slug"
+                      />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Tier</Label>
+                        <Select value={membershipOfferTier} onValueChange={(value) => setMembershipOfferTier(value as "pro" | "pro_plus")}>
+                          <SelectTrigger data-testid="select-membership-offer-tier">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pro">RSF Pro</SelectItem>
+                            <SelectItem value="pro_plus">RSF Pro+</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="membership-offer-duration">Duration (days)</Label>
+                        <Input
+                          id="membership-offer-duration"
+                          type="number"
+                          min="1"
+                          max="365"
+                          value={membershipOfferDurationDays}
+                          onChange={(e) => setMembershipOfferDurationDays(e.target.value)}
+                          data-testid="input-membership-offer-duration"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="membership-offer-description">Description</Label>
+                    <Textarea
+                      id="membership-offer-description"
+                      value={membershipOfferDescription}
+                      onChange={(e) => setMembershipOfferDescription(e.target.value)}
+                      rows={2}
+                      placeholder="Shown on the membership page when the partner link is opened."
+                      data-testid="textarea-membership-offer-description"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="membership-offer-members">Member numbers</Label>
+                    <Textarea
+                      id="membership-offer-members"
+                      value={membershipOfferMemberNumbers}
+                      onChange={(e) => setMembershipOfferMemberNumbers(e.target.value)}
+                      rows={7}
+                      placeholder={"Paste one member number per line\n123456\n123457\nCPA-8821"}
+                      data-testid="textarea-membership-offer-members"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      One member number per line. RSF normalizes spacing and punctuation so pilots can type their number naturally during redemption.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        createMembershipPartnerOfferMutation.mutate({
+                          name: membershipOfferName.trim(),
+                          partnerName: membershipOfferPartnerName.trim(),
+                          slug: membershipOfferSlug.trim(),
+                          tier: membershipOfferTier,
+                          durationDays: Number(membershipOfferDurationDays || "0"),
+                          description: membershipOfferDescription.trim() || undefined,
+                          memberNumbersText: membershipOfferMemberNumbers,
+                        })
+                      }
+                      disabled={
+                        createMembershipPartnerOfferMutation.isPending ||
+                        !membershipOfferName.trim() ||
+                        !membershipOfferPartnerName.trim() ||
+                        !membershipOfferSlug.trim() ||
+                        !membershipOfferMemberNumbers.trim()
+                      }
+                      data-testid="button-create-membership-offer"
+                    >
+                      {createMembershipPartnerOfferMutation.isPending ? "Creating..." : "Create partner offer"}
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="text-sm font-semibold">Configured offers</div>
+                    {membershipPartnerOffersLoading ? (
+                      <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+                        Loading partner offers...
+                      </div>
+                    ) : membershipPartnerOffers.length === 0 ? (
+                      <div className="rounded-md border bg-muted/20 p-4 text-sm text-muted-foreground">
+                        No partner membership offers have been created yet.
+                      </div>
+                    ) : (
+                      membershipPartnerOffers.map((offer) => (
+                        <div key={offer.id} className="rounded-lg border bg-background p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="font-semibold">{offer.name}</div>
+                                <Badge variant={offer.isActive ? "default" : "secondary"}>
+                                  {offer.isActive ? "Active" : "Paused"}
+                                </Badge>
+                                <Badge variant="outline">{offer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}</Badge>
+                                <Badge variant="outline">{offer.durationDays} days</Badge>
+                              </div>
+                              <div className="text-sm text-muted-foreground">{offer.partnerName}</div>
+                              {offer.description ? (
+                                <div className="text-xs text-muted-foreground">{offer.description}</div>
+                              ) : null}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={async () => {
+                                  await navigator.clipboard.writeText(offer.shareUrl);
+                                  toast({ title: "Offer link copied", description: offer.shareUrl });
+                                }}
+                                data-testid={`button-copy-membership-offer-${offer.id}`}
+                              >
+                                Copy share link
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  updateMembershipPartnerOfferMutation.mutate({
+                                    id: offer.id,
+                                    data: { isActive: !offer.isActive },
+                                  })
+                                }
+                                disabled={updateMembershipPartnerOfferMutation.isPending}
+                                data-testid={`button-toggle-membership-offer-${offer.id}`}
+                              >
+                                {offer.isActive ? "Pause" : "Activate"}
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid gap-3 md:grid-cols-4">
+                            <div className="rounded-md border bg-muted/10 p-3">
+                              <div className="text-xs uppercase tracking-wide text-muted-foreground">Slug</div>
+                              <div className="mt-1 text-sm font-medium">{offer.slug}</div>
+                            </div>
+                            <div className="rounded-md border bg-muted/10 p-3">
+                              <div className="text-xs uppercase tracking-wide text-muted-foreground">Roster</div>
+                              <div className="mt-1 text-sm font-medium">{offer.totalMembers} members</div>
+                            </div>
+                            <div className="rounded-md border bg-muted/10 p-3">
+                              <div className="text-xs uppercase tracking-wide text-muted-foreground">Redeemed</div>
+                              <div className="mt-1 text-sm font-medium">{offer.redeemedCount}</div>
+                            </div>
+                            <div className="rounded-md border bg-muted/10 p-3">
+                              <div className="text-xs uppercase tracking-wide text-muted-foreground">Available</div>
+                              <div className="mt-1 text-sm font-medium">{offer.availableMembers}</div>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 break-all rounded-md border bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
+                            {offer.shareUrl}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </CardContent>
               </Card>
             </>
           )}

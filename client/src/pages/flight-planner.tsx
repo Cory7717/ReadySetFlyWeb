@@ -568,6 +568,30 @@ type AirportFrequencyResponse = {
   frequencies: AirportFrequency[];
 };
 
+type TerrainProfilePlannerResponse = {
+  source: string;
+  sampledPointCount: number;
+  maxElevationFt: number | null;
+  samples: Array<{
+    lat: number;
+    lon: number;
+    elevationFt: number | null;
+  }>;
+};
+
+type PlannerTerrainCueSegment = {
+  positions: [[number, number], [number, number]];
+  maxElevationFt: number | null;
+  clearanceFt: number | null;
+  risk: "comfortable" | "caution" | "warning";
+};
+
+type PlannerTerrainProfileChartPoint = {
+  x: number;
+  y: number;
+  elevationFt: number;
+};
+
 type LeidosRouteSearchResponse = {
   provider: string;
   environment: "lab" | "production";
@@ -2169,6 +2193,10 @@ export default function FlightPlanner() {
   const tfrBboxParam = routeBbox
     ? `${routeBbox.west},${routeBbox.south},${routeBbox.east},${routeBbox.north}`
     : null;
+  const routePathParam = useMemo(
+    () => routePoints.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join(";"),
+    [routePoints]
+  );
 
   const legs = useMemo(() => buildLegs(routePoints), [routePoints]);
   const totalDistance = useMemo(() => sumDistance(legs), [legs]);
@@ -2350,6 +2378,19 @@ export default function FlightPlanner() {
     selectedTypeId,
   ]);
 
+  const terrainProfileQuery = useQuery<TerrainProfilePlannerResponse>({
+    queryKey: ["/api/aviation/terrain-profile", routePathParam],
+    queryFn: async () => {
+      const res = await fetch(apiUrl(`/api/aviation/terrain-profile?path=${encodeURIComponent(routePathParam)}`), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to load terrain profile");
+      return res.json();
+    },
+    enabled: routePoints.length >= 2,
+    staleTime: 1000 * 60 * 10,
+  });
+
   const tfrRouteQuery = useQuery({
     queryKey: ["/api/tfrs", "route", tfrBboxParam],
     queryFn: async () => {
@@ -2397,6 +2438,181 @@ export default function FlightPlanner() {
       tfrIds: tfrConflictIds.slice(0, 6),
     });
   }, [tfrConflictIds, routePoints.length]);
+
+  const terrainReferenceAltitudeFt = plannedAltitudeValue ?? null;
+  const terrainCueSegments = useMemo<PlannerTerrainCueSegment[]>(() => {
+    const samples = terrainProfileQuery.data?.samples ?? [];
+    if (samples.length < 2) return [];
+
+    return samples.slice(1).map((sample, index) => {
+      const previous = samples[index];
+      const maxElevationFt =
+        previous.elevationFt != null && sample.elevationFt != null
+          ? Math.max(previous.elevationFt, sample.elevationFt)
+          : previous.elevationFt ?? sample.elevationFt ?? null;
+      const clearanceFt =
+        terrainReferenceAltitudeFt != null && maxElevationFt != null
+          ? terrainReferenceAltitudeFt - maxElevationFt
+          : null;
+      const risk =
+        clearanceFt == null
+          ? "comfortable"
+          : clearanceFt < 1000
+            ? "warning"
+            : clearanceFt < 2000
+              ? "caution"
+              : "comfortable";
+      return {
+        positions: [
+          [previous.lat, previous.lon],
+          [sample.lat, sample.lon],
+        ],
+        maxElevationFt,
+        clearanceFt,
+        risk,
+      };
+    });
+  }, [terrainProfileQuery.data?.samples, terrainReferenceAltitudeFt]);
+  const terrainCueCounts = useMemo(
+    () =>
+      terrainCueSegments.reduce(
+        (acc, segment) => {
+          acc[segment.risk] += 1;
+          return acc;
+        },
+        { comfortable: 0, caution: 0, warning: 0 }
+      ),
+    [terrainCueSegments]
+  );
+  const worstTerrainSegment = useMemo(() => {
+    if (terrainCueSegments.length === 0) return null;
+    return terrainCueSegments.reduce((worst, segment, index) => {
+      const segmentClearance = segment.clearanceFt ?? Number.POSITIVE_INFINITY;
+      const worstClearance = worst.segment.clearanceFt ?? Number.POSITIVE_INFINITY;
+      if (segmentClearance < worstClearance) {
+        return { index, segment };
+      }
+      return worst;
+    }, { index: 0, segment: terrainCueSegments[0] });
+  }, [terrainCueSegments]);
+  const terrainHotSpots = useMemo(() => {
+    if (terrainCueSegments.length === 0) return [] as Array<{
+      index: number;
+      segment: PlannerTerrainCueSegment;
+      progressLabel: string;
+    }>;
+    return terrainCueSegments
+      .map((segment, index) => {
+        const startPct = Math.round((index / terrainCueSegments.length) * 100);
+        const endPct = Math.round(((index + 1) / terrainCueSegments.length) * 100);
+        return {
+          index,
+          segment,
+          progressLabel: `${startPct}% to ${endPct}%`,
+          riskScore: segment.risk === "warning" ? 0 : segment.risk === "caution" ? 1 : 2,
+          clearanceScore: segment.clearanceFt ?? Number.POSITIVE_INFINITY,
+        };
+      })
+      .sort((a, b) => {
+        if (a.riskScore !== b.riskScore) return a.riskScore - b.riskScore;
+        return a.clearanceScore - b.clearanceScore;
+      })
+      .slice(0, 3)
+      .map(({ index, segment, progressLabel }) => ({ index, segment, progressLabel }));
+  }, [terrainCueSegments]);
+  const terrainClearanceHeadline = worstTerrainSegment
+    ? `${Math.round(worstTerrainSegment.segment.clearanceFt ?? 0).toLocaleString()} ft minimum clearance`
+    : "--";
+  const terrainClearanceAdvisory = worstTerrainSegment
+    ? worstTerrainSegment.segment.risk === "warning"
+      ? "One or more route segments are below the 1,000 ft terrain buffer."
+      : worstTerrainSegment.segment.risk === "caution"
+        ? "Part of the route is inside the tighter 2,000 ft terrain margin."
+        : "Current route stays in the comfortable terrain margin."
+    : "Enter a route and planned altitude to evaluate terrain clearance.";
+  const terrainToneClass = terrainCueCounts.warning > 0
+    ? "text-red-700"
+    : terrainCueCounts.caution > 0
+      ? "text-amber-700"
+      : terrainCueSegments.length > 0
+        ? "text-emerald-700"
+        : "text-slate-700";
+  const terrainProfileChart = useMemo(() => {
+    const samples = terrainProfileQuery.data?.samples ?? [];
+    const validSamples = samples
+      .map((sample, index) => ({
+        index,
+        elevationFt: sample.elevationFt,
+      }))
+      .filter((sample): sample is { index: number; elevationFt: number } => sample.elevationFt != null && Number.isFinite(sample.elevationFt));
+
+    if (validSamples.length < 2) return null;
+
+    const chartWidth = 320;
+    const chartHeight = 148;
+    const padding = { top: 10, right: 8, bottom: 22, left: 8 };
+    const innerWidth = chartWidth - padding.left - padding.right;
+    const innerHeight = chartHeight - padding.top - padding.bottom;
+    const maxTerrainFt = Math.max(...validSamples.map((sample) => sample.elevationFt));
+    const topAltitudeFt = Math.max(
+      maxTerrainFt + 2500,
+      terrainReferenceAltitudeFt != null ? terrainReferenceAltitudeFt + 1000 : 0,
+      4000
+    );
+    const altitudeSpanFt = Math.max(1000, topAltitudeFt);
+    const sampleCount = samples.length;
+
+    const points: PlannerTerrainProfileChartPoint[] = validSamples.map((sample) => {
+      const progressRatio = sampleCount > 1 ? sample.index / (sampleCount - 1) : 0;
+      return {
+        x: padding.left + progressRatio * innerWidth,
+        y: padding.top + ((topAltitudeFt - sample.elevationFt) / altitudeSpanFt) * innerHeight,
+        elevationFt: sample.elevationFt,
+      };
+    });
+    const terrainLine = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+    const terrainArea = [
+      `${padding.left},${chartHeight - padding.bottom}`,
+      ...points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`),
+      `${padding.left + innerWidth},${chartHeight - padding.bottom}`,
+    ].join(" ");
+    const referenceY = terrainReferenceAltitudeFt != null
+      ? padding.top + ((topAltitudeFt - terrainReferenceAltitudeFt) / altitudeSpanFt) * innerHeight
+      : null;
+    const yTicks = [0.25, 0.5, 0.75].map((ratio) => ({
+      y: padding.top + ratio * innerHeight,
+      altitudeFt: Math.round(topAltitudeFt - ratio * altitudeSpanFt),
+    }));
+    return { chartWidth, chartHeight, padding, terrainLine, terrainArea, referenceY, yTicks };
+  }, [terrainProfileQuery.data?.samples, terrainReferenceAltitudeFt]);
+  const terrainMapHotSpots = useMemo(
+    () =>
+      terrainHotSpots.map((item, hotSpotIndex) => {
+        const point = terrainCueSegments[item.index + 1]?.positions?.[0]
+          ?? terrainCueSegments[item.index]?.positions?.[1]
+          ?? terrainCueSegments[item.index]?.positions?.[0]
+          ?? null;
+        if (!point) return null;
+        return {
+          rank: hotSpotIndex + 1,
+          risk: item.segment.risk,
+          progressLabel: item.progressLabel,
+          maxElevationFt: item.segment.maxElevationFt,
+          clearanceFt: item.segment.clearanceFt,
+          lat: point[0],
+          lon: point[1],
+        };
+      }).filter(Boolean) as Array<{
+        rank: number;
+        risk: PlannerTerrainCueSegment["risk"];
+        progressLabel: string;
+        maxElevationFt: number | null;
+        clearanceFt: number | null;
+        lat: number;
+        lon: number;
+      }>,
+    [terrainCueSegments, terrainHotSpots]
+  );
 
   const altitudeRisks = useMemo(() => {
     if (!Number.isFinite(plannedAltitudeFt) || plannedAltitudeFt <= 0) return [];
@@ -5205,6 +5421,166 @@ export default function FlightPlanner() {
                 </AlertDescription>
               </Alert>
             )}
+            {(terrainProfileQuery.isLoading || terrainProfileQuery.data || terrainProfileQuery.error) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Terrain Clearance</CardTitle>
+                  <CardDescription>USGS route terrain against your planned cruise altitude.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {terrainProfileQuery.isLoading ? (
+                    <div className="text-sm text-muted-foreground">Loading terrain profile...</div>
+                  ) : terrainProfileQuery.error ? (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {terrainProfileQuery.error instanceof Error ? terrainProfileQuery.error.message : "Terrain profile unavailable."}
+                      </AlertDescription>
+                    </Alert>
+                  ) : terrainProfileQuery.data ? (
+                    <>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="rounded-lg border p-3">
+                          <div className="text-xs text-muted-foreground">Highest terrain</div>
+                          <div className="font-semibold">
+                            {terrainProfileQuery.data.maxElevationFt != null
+                              ? `${Math.round(terrainProfileQuery.data.maxElevationFt).toLocaleString()} ft`
+                              : "--"}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border p-3">
+                          <div className="text-xs text-muted-foreground">Minimum clearance</div>
+                          <div className={cn("font-semibold", terrainToneClass)}>{terrainClearanceHeadline}</div>
+                        </div>
+                        <div className="rounded-lg border p-3">
+                          <div className="text-xs text-muted-foreground">Reference altitude</div>
+                          <div className="font-semibold">
+                            {terrainReferenceAltitudeFt != null ? `${Math.round(terrainReferenceAltitudeFt).toLocaleString()} ft` : "--"}
+                          </div>
+                        </div>
+                      </div>
+                      <Alert className={cn(
+                        worstTerrainSegment?.segment.risk === "warning"
+                          ? "border-red-300 bg-red-50 text-red-900"
+                          : worstTerrainSegment?.segment.risk === "caution"
+                            ? "border-amber-300 bg-amber-50 text-amber-900"
+                            : "border-emerald-300 bg-emerald-50 text-emerald-900"
+                      )}>
+                        <AlertDescription>{terrainClearanceAdvisory}</AlertDescription>
+                      </Alert>
+                      {terrainProfileChart ? (
+                        <div className="rounded-lg border bg-muted/20 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm font-medium">Vertical profile</div>
+                            <div className="text-xs text-muted-foreground">
+                              Terrain vs {terrainReferenceAltitudeFt != null ? `${Math.round(terrainReferenceAltitudeFt).toLocaleString()} ft planned` : "reference altitude"}
+                            </div>
+                          </div>
+                          <div className="mt-3 overflow-hidden rounded-md border bg-background">
+                            <svg
+                              viewBox={`0 0 ${terrainProfileChart.chartWidth} ${terrainProfileChart.chartHeight}`}
+                              className="h-40 w-full"
+                              role="img"
+                              aria-label="Flight planner terrain profile chart"
+                            >
+                              <rect width={terrainProfileChart.chartWidth} height={terrainProfileChart.chartHeight} fill="transparent" />
+                              {terrainProfileChart.yTicks.map((tick) => (
+                                <g key={`planner-terrain-tick-${tick.altitudeFt}`}>
+                                  <line
+                                    x1={terrainProfileChart.padding.left}
+                                    x2={terrainProfileChart.chartWidth - terrainProfileChart.padding.right}
+                                    y1={tick.y}
+                                    y2={tick.y}
+                                    stroke="currentColor"
+                                    strokeOpacity="0.12"
+                                    strokeDasharray="4 4"
+                                  />
+                                  <text
+                                    x={terrainProfileChart.chartWidth - terrainProfileChart.padding.right - 2}
+                                    y={tick.y - 4}
+                                    textAnchor="end"
+                                    fontSize="10"
+                                    fill="currentColor"
+                                    opacity="0.65"
+                                  >
+                                    {Math.round(tick.altitudeFt).toLocaleString()} ft
+                                  </text>
+                                </g>
+                              ))}
+                              <polygon points={terrainProfileChart.terrainArea} fill="#c084fc" fillOpacity="0.22" />
+                              <polyline
+                                points={terrainProfileChart.terrainLine}
+                                fill="none"
+                                stroke="#7c3aed"
+                                strokeWidth="2"
+                                strokeLinejoin="round"
+                                strokeLinecap="round"
+                              />
+                              {terrainProfileChart.referenceY != null ? (
+                                <line
+                                  x1={terrainProfileChart.padding.left}
+                                  x2={terrainProfileChart.chartWidth - terrainProfileChart.padding.right}
+                                  y1={terrainProfileChart.referenceY}
+                                  y2={terrainProfileChart.referenceY}
+                                  stroke="#2563eb"
+                                  strokeWidth="2"
+                                  strokeDasharray="6 4"
+                                />
+                              ) : null}
+                              {terrainHotSpots.map((hotSpot, hotSpotIndex) => {
+                                const x = terrainProfileChart.padding.left + (((hotSpot.index + 1) / Math.max(terrainCueSegments.length, 1)) * (terrainProfileChart.chartWidth - terrainProfileChart.padding.left - terrainProfileChart.padding.right));
+                                const y = terrainProfileChart.padding.top + (((Math.max(terrainProfileQuery.data?.maxElevationFt ?? 0, terrainReferenceAltitudeFt ?? 0) + 2500) - (hotSpot.segment.maxElevationFt ?? 0)) / Math.max(Math.max(terrainProfileQuery.data?.maxElevationFt ?? 0, terrainReferenceAltitudeFt ?? 0) + 2500, 1000)) * (terrainProfileChart.chartHeight - terrainProfileChart.padding.top - terrainProfileChart.padding.bottom);
+                                return (
+                                  <g key={`planner-hotspot-${hotSpot.index}`}>
+                                    <circle
+                                      cx={x}
+                                      cy={y}
+                                      r="4"
+                                      fill={hotSpot.segment.risk === "warning" ? "#dc2626" : hotSpot.segment.risk === "caution" ? "#f59e0b" : "#16a34a"}
+                                      stroke="#ffffff"
+                                      strokeWidth="1.5"
+                                    />
+                                    <text x={x + 6} y={y - 6} fontSize="10" fill="currentColor" opacity="0.75">
+                                      {hotSpotIndex + 1}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                            </svg>
+                          </div>
+                        </div>
+                      ) : null}
+                      {terrainHotSpots.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Terrain hot spots</div>
+                          {terrainHotSpots.map((item, hotSpotIndex) => (
+                            <div key={`planner-terrain-hotspot-${item.index}`} className="rounded-lg border px-3 py-2 text-sm">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 font-medium">
+                                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-xs font-semibold">
+                                    {hotSpotIndex + 1}
+                                  </span>
+                                  <span>
+                                    {item.segment.risk === "warning"
+                                      ? "Warning segment"
+                                      : item.segment.risk === "caution"
+                                        ? "Tight clearance segment"
+                                        : "Comfortable segment"}
+                                  </span>
+                                </div>
+                                <Badge variant="outline">{item.progressLabel}</Badge>
+                              </div>
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                Highest terrain {item.segment.maxElevationFt != null ? `${Math.round(item.segment.maxElevationFt).toLocaleString()} ft` : "--"} · clearance {item.segment.clearanceFt != null ? `${Math.round(item.segment.clearanceFt).toLocaleString()} ft` : "--"}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                </CardContent>
+              </Card>
+            )}
             {weatherData.length === 0 ? (
               <div className="text-sm text-muted-foreground">Enter airports to load weather summaries.</div>
             ) : (
@@ -6192,6 +6568,8 @@ export default function FlightPlanner() {
                   plannedAltitudeFt={plannedAltitudeValue}
                   windsAltitudeFt={windsAltitudeFt}
                   airportLabelMode={airportLabelMode}
+                  terrainSegments={terrainCueSegments}
+                  terrainHotSpots={terrainMapHotSpots}
                 />
               )
             )}
@@ -6213,6 +6591,42 @@ export default function FlightPlanner() {
             {airportErrors.length === 0 && missingIcaos.length === 0 && unresolvedIcaos.length > 0 && (
               <div className="mt-3 text-xs text-amber-700">
                 Airport reference details are unavailable for: {unresolvedIcaos.join(", ")}. The planner will keep the route, but map labels and airport details may be limited for those helper codes.
+              </div>
+            )}
+            {(terrainProfileQuery.isLoading || terrainProfileQuery.data || terrainProfileQuery.error) && (
+              <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/80 p-3 text-sm text-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold">Terrain clearance</div>
+                  <Badge variant="outline" className="border-slate-500 text-slate-100">
+                    {plannedAltitudeValue ? `${plannedAltitudeValue.toLocaleString()} ft planned` : "set planned altitude"}
+                  </Badge>
+                </div>
+                {terrainProfileQuery.isLoading ? (
+                  <div className="mt-2 text-xs text-slate-300">Loading USGS terrain profile...</div>
+                ) : terrainProfileQuery.error ? (
+                  <div className="mt-2 text-xs text-red-300">
+                    {terrainProfileQuery.error instanceof Error ? terrainProfileQuery.error.message : "Terrain profile unavailable."}
+                  </div>
+                ) : terrainProfileQuery.data ? (
+                  <div className="mt-2 grid gap-2 md:grid-cols-3">
+                    <div className="rounded-md border border-slate-700 bg-slate-950/50 px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Highest terrain</div>
+                      <div className="font-semibold">{terrainProfileQuery.data.maxElevationFt != null ? `${Math.round(terrainProfileQuery.data.maxElevationFt).toLocaleString()} ft` : "--"}</div>
+                    </div>
+                    <div className="rounded-md border border-slate-700 bg-slate-950/50 px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Minimum clearance</div>
+                      <div className={cn("font-semibold", terrainToneClass)}>
+                        {terrainClearanceHeadline}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-slate-700 bg-slate-950/50 px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">Hot spots</div>
+                      <div className="font-semibold">
+                        {terrainHotSpots.length > 0 ? `${terrainHotSpots.length} flagged` : "None"}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
             <div className="mt-4 space-y-2">

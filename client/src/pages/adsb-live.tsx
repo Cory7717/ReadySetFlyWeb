@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer, Tooltip, WMSTileLayer, useMap } from "react-leaflet";
@@ -64,6 +64,7 @@ type SavedFlightPlan = {
   alternate: string | null;
   filingStatus: string | null;
   filingFlightRules: string | null;
+  filingPlannedAltitudeFt?: number | null;
 };
 
 type AirportSearchResult = {
@@ -133,12 +134,36 @@ const FAA_SECTIONAL_TILE_URL =
 const ICAO_TOKEN_REGEX = /^[A-Z0-9]{3,5}$/;
 
 const routeLineStyle = { color: "#2563eb", weight: 3, opacity: 0.78 };
+const terrainRiskStyles = {
+  comfortable: { color: "#16a34a", weight: 5, opacity: 0.9 },
+  caution: { color: "#f59e0b", weight: 5, opacity: 0.92 },
+  warning: { color: "#dc2626", weight: 5, opacity: 0.96 },
+} as const;
+const terrainSurfaceStyles = {
+  comfortable: { color: "#16a34a", weight: 16, opacity: 0.14, lineCap: "round" as const },
+  caution: { color: "#f59e0b", weight: 18, opacity: 0.18, lineCap: "round" as const },
+  warning: { color: "#dc2626", weight: 20, opacity: 0.22, lineCap: "round" as const },
+} as const;
 
 type RoutePoint = {
   icao: string;
   label: string;
   lat: number;
   lon: number;
+};
+
+type TerrainCueSegment = {
+  positions: [[number, number], [number, number]];
+  maxElevationFt: number | null;
+  clearanceFt: number | null;
+  risk: keyof typeof terrainRiskStyles;
+};
+
+type TerrainProfileChartPoint = {
+  x: number;
+  y: number;
+  elevationFt: number;
+  progressRatio: number;
 };
 
 const haversineNm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -171,6 +196,11 @@ const formatSpeed = (value: number | null) => {
 const formatHeading = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return "--";
   return `${Math.round(value)} deg`;
+};
+
+const formatClearance = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return "--";
+  return `${Math.round(value).toLocaleString()} ft`;
 };
 
 const buildOwnshipIcon = (headingDeg: number | null) =>
@@ -220,6 +250,20 @@ const buildObstacleIcon = (aglFt: number | null) =>
     iconSize: [18, 18],
     iconAnchor: [9, 9],
   });
+
+const buildTerrainHotSpotIcon = (risk: keyof typeof terrainRiskStyles, rank: number) => {
+  const tone = risk === "warning" ? "#dc2626" : risk === "caution" ? "#f59e0b" : "#16a34a";
+  return L.divIcon({
+    className: "",
+    html: `
+      <div style="display:flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:9999px;background:${tone};border:2px solid #ffffff;color:#ffffff;font-size:11px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.25);">
+        ${rank}
+      </div>
+    `,
+    iconSize: [24, 22],
+    iconAnchor: [12, 11],
+  });
+};
 
 const normalizeAirportCode = (value: string | null | undefined) => String(value || "").trim().toUpperCase();
 
@@ -342,6 +386,7 @@ export default function AdsbLive() {
   const [showTfrOverlay, setShowTfrOverlay] = useState(true);
   const [showSuaOverlay, setShowSuaOverlay] = useState(false);
   const [showObstacleOverlay, setShowObstacleOverlay] = useState(true);
+  const [showTerrainShading, setShowTerrainShading] = useState(true);
   const [selectedPlanId, setSelectedPlanId] = useState("none");
   const watchIdRef = useRef<number | null>(null);
   const radarTimerRef = useRef<number | null>(null);
@@ -712,6 +757,221 @@ export default function AdsbLive() {
   const obstacleCount = obstacleQuery.data?.count ?? 0;
   const highestObstacle = obstacleQuery.data?.highestObstacle ?? null;
   const nearbyObstacles = obstacleQuery.data?.obstacles ?? [];
+  const terrainReferenceAltitudeFt = selectedPlan?.filingPlannedAltitudeFt ?? ownship?.altitudeFt ?? null;
+  const terrainReferenceSource = selectedPlan?.filingPlannedAltitudeFt != null
+    ? "planned altitude"
+    : ownship?.altitudeFt != null
+      ? "ownship altitude"
+      : null;
+  const terrainCueSegments = useMemo<TerrainCueSegment[]>(() => {
+    const samples = terrainProfileQuery.data?.samples ?? [];
+    if (samples.length < 2) return [];
+
+    const classifyRisk = (clearanceFt: number | null): keyof typeof terrainRiskStyles => {
+      if (clearanceFt === null || !Number.isFinite(clearanceFt)) return "comfortable";
+      if (clearanceFt < 1000) return "warning";
+      if (clearanceFt < 2000) return "caution";
+      return "comfortable";
+    };
+
+    const segments: TerrainCueSegment[] = [];
+    for (let index = 1; index < samples.length; index += 1) {
+      const previous = samples[index - 1];
+      const current = samples[index];
+      const maxElevationFt =
+        previous.elevationFt != null && current.elevationFt != null
+          ? Math.max(previous.elevationFt, current.elevationFt)
+          : previous.elevationFt ?? current.elevationFt ?? null;
+      const clearanceFt =
+        terrainReferenceAltitudeFt != null && maxElevationFt != null
+          ? terrainReferenceAltitudeFt - maxElevationFt
+          : null;
+
+      segments.push({
+        positions: [
+          [previous.lat, previous.lon],
+          [current.lat, current.lon],
+        ],
+        maxElevationFt,
+        clearanceFt,
+        risk: classifyRisk(clearanceFt),
+      });
+    }
+
+    return segments;
+  }, [terrainProfileQuery.data?.samples, terrainReferenceAltitudeFt]);
+  const terrainCueCounts = useMemo(
+    () =>
+      terrainCueSegments.reduce(
+        (acc, segment) => {
+          acc[segment.risk] += 1;
+          return acc;
+        },
+        { comfortable: 0, caution: 0, warning: 0 }
+      ),
+    [terrainCueSegments]
+  );
+  const terrainCueStatus = useMemo(() => {
+    if (!terrainReferenceSource) return "No altitude source yet";
+    if (terrainCueCounts.warning > 0) return "Terrain warning segments";
+    if (terrainCueCounts.caution > 0) return "Tight terrain clearance";
+    if (terrainCueSegments.length > 0) return "Comfortable terrain clearance";
+    return "No terrain cueing yet";
+  }, [terrainCueCounts, terrainCueSegments.length, terrainReferenceSource]);
+  const terrainCueToneClass = terrainCueCounts.warning > 0
+    ? "text-red-600"
+    : terrainCueCounts.caution > 0
+      ? "text-amber-600"
+      : terrainCueSegments.length > 0
+        ? "text-emerald-600"
+        : "text-muted-foreground";
+  const worstTerrainSegment = useMemo(() => {
+    if (terrainCueSegments.length === 0) return null;
+    return terrainCueSegments.reduce((worst, segment, index) => {
+      const currentClearance = segment.clearanceFt ?? Number.POSITIVE_INFINITY;
+      const worstClearance = worst.segment.clearanceFt ?? Number.POSITIVE_INFINITY;
+      if (currentClearance < worstClearance) {
+        return { index, segment };
+      }
+      return worst;
+    }, { index: 0, segment: terrainCueSegments[0] });
+  }, [terrainCueSegments]);
+  const terrainHotSpots = useMemo(() => {
+    if (terrainCueSegments.length === 0) return [] as Array<{
+      index: number;
+      segment: TerrainCueSegment;
+      progressLabel: string;
+    }>;
+
+    const scored = terrainCueSegments
+      .map((segment, index) => {
+        const startPct = Math.round((index / terrainCueSegments.length) * 100);
+        const endPct = Math.round(((index + 1) / terrainCueSegments.length) * 100);
+        const riskScore = segment.risk === "warning" ? 0 : segment.risk === "caution" ? 1 : 2;
+        const clearanceScore = segment.clearanceFt ?? Number.POSITIVE_INFINITY;
+        return {
+          index,
+          segment,
+          progressLabel: `${startPct}% to ${endPct}%`,
+          riskScore,
+          clearanceScore,
+        };
+      })
+      .sort((a, b) => {
+        if (a.riskScore !== b.riskScore) return a.riskScore - b.riskScore;
+        return a.clearanceScore - b.clearanceScore;
+      });
+
+    return scored.slice(0, 3).map(({ index, segment, progressLabel }) => ({
+      index,
+      segment,
+      progressLabel,
+    }));
+  }, [terrainCueSegments]);
+  const terrainClearanceHeadline = worstTerrainSegment
+    ? `${formatClearance(worstTerrainSegment.segment.clearanceFt)} minimum clearance`
+    : "--";
+  const terrainClearanceAdvisory = worstTerrainSegment
+    ? worstTerrainSegment.segment.risk === "warning"
+      ? "One or more route segments are below the 1,000 ft terrain buffer."
+      : worstTerrainSegment.segment.risk === "caution"
+        ? "Part of the route is inside the tighter 2,000 ft terrain margin."
+        : "Current route stays in the comfortable terrain margin."
+    : "Select a saved route overlay to evaluate terrain clearance.";
+  const terrainProfileChart = useMemo(() => {
+    const samples = terrainProfileQuery.data?.samples ?? [];
+    const validSamples = samples
+      .map((sample, index) => ({
+        index,
+        elevationFt: sample.elevationFt,
+      }))
+      .filter((sample): sample is { index: number; elevationFt: number } => sample.elevationFt != null && Number.isFinite(sample.elevationFt));
+
+    if (validSamples.length < 2) return null;
+
+    const chartWidth = 320;
+    const chartHeight = 148;
+    const padding = { top: 10, right: 8, bottom: 22, left: 8 };
+    const innerWidth = chartWidth - padding.left - padding.right;
+    const innerHeight = chartHeight - padding.top - padding.bottom;
+    const maxTerrainFt = Math.max(...validSamples.map((sample) => sample.elevationFt));
+    const topAltitudeFt = Math.max(maxTerrainFt + 2500, terrainReferenceAltitudeFt != null ? terrainReferenceAltitudeFt + 1000 : 0, 4000);
+    const minAltitudeFt = 0;
+    const altitudeSpanFt = Math.max(1000, topAltitudeFt - minAltitudeFt);
+    const sampleCount = samples.length;
+
+    const points: TerrainProfileChartPoint[] = validSamples.map((sample) => {
+      const progressRatio = sampleCount > 1 ? sample.index / (sampleCount - 1) : 0;
+      return {
+        x: padding.left + progressRatio * innerWidth,
+        y: padding.top + ((topAltitudeFt - sample.elevationFt) / altitudeSpanFt) * innerHeight,
+        elevationFt: sample.elevationFt,
+        progressRatio,
+      };
+    });
+
+    const terrainLine = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+    const terrainArea = [
+      `${padding.left},${chartHeight - padding.bottom}`,
+      ...points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`),
+      `${padding.left + innerWidth},${chartHeight - padding.bottom}`,
+    ].join(" ");
+    const referenceY = terrainReferenceAltitudeFt != null
+      ? padding.top + ((topAltitudeFt - terrainReferenceAltitudeFt) / altitudeSpanFt) * innerHeight
+      : null;
+    const yTicks = [0.25, 0.5, 0.75].map((ratio) => {
+      const y = padding.top + ratio * innerHeight;
+      const altitudeFt = Math.round(topAltitudeFt - ratio * altitudeSpanFt);
+      return { y, altitudeFt };
+    });
+    const hotSpots = terrainHotSpots.map((item) => {
+      const point = points[Math.min(item.index + 1, points.length - 1)] ?? points[points.length - 1];
+      return {
+        ...item,
+        x: point.x,
+        y: point.y,
+      };
+    });
+
+    return {
+      chartWidth,
+      chartHeight,
+      padding,
+      terrainLine,
+      terrainArea,
+      referenceY,
+      yTicks,
+      hotSpots,
+    };
+  }, [terrainHotSpots, terrainProfileQuery.data?.samples, terrainReferenceAltitudeFt]);
+  const terrainHotSpotMarkers = useMemo(
+    () =>
+      terrainHotSpots.map((item, rank) => {
+        const point = terrainCueSegments[item.index + 1]?.positions?.[0]
+          ?? terrainCueSegments[item.index]?.positions?.[1]
+          ?? terrainCueSegments[item.index]?.positions?.[0]
+          ?? null;
+        if (!point) return null;
+        return {
+          rank: rank + 1,
+          risk: item.segment.risk,
+          progressLabel: item.progressLabel,
+          maxElevationFt: item.segment.maxElevationFt,
+          clearanceFt: item.segment.clearanceFt,
+          lat: point[0],
+          lon: point[1],
+        };
+      }).filter(Boolean) as Array<{
+        rank: number;
+        risk: keyof typeof terrainRiskStyles;
+        progressLabel: string;
+        maxElevationFt: number | null;
+        clearanceFt: number | null;
+        lat: number;
+        lon: number;
+      }>,
+    [terrainCueSegments, terrainHotSpots]
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -727,8 +987,8 @@ export default function AdsbLive() {
           </h1>
           <p className="text-muted-foreground max-w-4xl">
             Follow your flight with device GPS, nearby traffic, and live weather overlays. This first phase is built around
-            browser GPS and RSF traffic/weather layers while terrain, obstacles, and direct portable receiver ingestion are
-            being added next.
+            browser GPS, RSF traffic/weather layers, and first-pass terrain/obstacle awareness while direct portable
+            receiver ingestion continues next.
           </p>
         </div>
 
@@ -833,6 +1093,10 @@ export default function AdsbLive() {
                   <Switch checked={showObstacleOverlay} onCheckedChange={setShowObstacleOverlay} />
                   Obstacles
                 </label>
+                <label className="flex items-center gap-2">
+                  <Switch checked={showTerrainShading} onCheckedChange={setShowTerrainShading} />
+                  Terrain shading
+                </label>
                 <Button type="button" variant="outline" size="sm" onClick={() => trafficQuery.refetch()}>
                   <RefreshCcw className="mr-2 h-4 w-4" />
                   Refresh traffic
@@ -931,12 +1195,43 @@ export default function AdsbLive() {
                       />
                     </>
                   )}
-                  {routePoints.length >= 2 && (
-                    <Polyline
-                      positions={routePoints.map((point) => [point.lat, point.lon] as [number, number])}
-                      pathOptions={routeLineStyle}
-                    />
-                  )}
+                  {terrainCueSegments.length > 0
+                    ? terrainCueSegments.map((segment, index) => (
+                        <Fragment key={`terrain-segment-wrap-${index}`}>
+                          {showTerrainShading ? (
+                            <Polyline
+                              key={`terrain-surface-${index}`}
+                              positions={segment.positions}
+                              pathOptions={terrainSurfaceStyles[segment.risk]}
+                            />
+                          ) : null}
+                          <Polyline
+                            key={`terrain-segment-${index}`}
+                            positions={segment.positions}
+                            pathOptions={terrainRiskStyles[segment.risk]}
+                          >
+                            <Tooltip direction="top" offset={[0, -8]}>
+                              <div className="space-y-0.5 text-xs">
+                                <div className="font-semibold">
+                                  {segment.risk === "warning"
+                                    ? "Terrain warning"
+                                    : segment.risk === "caution"
+                                      ? "Tight clearance"
+                                      : "Comfortable clearance"}
+                                </div>
+                                <div>Highest terrain: {formatAltitude(segment.maxElevationFt)}</div>
+                                <div>Clearance: {formatClearance(segment.clearanceFt)}</div>
+                              </div>
+                            </Tooltip>
+                          </Polyline>
+                        </Fragment>
+                      ))
+                    : routePoints.length >= 2 && (
+                        <Polyline
+                          positions={routePoints.map((point) => [point.lat, point.lon] as [number, number])}
+                          pathOptions={routeLineStyle}
+                        />
+                      )}
                   {routePoints.map((point, index) => (
                     <Marker
                       key={`route-${point.icao}-${index}`}
@@ -951,6 +1246,32 @@ export default function AdsbLive() {
                       <Tooltip direction="top" offset={[0, -10]}>
                         {point.label}
                       </Tooltip>
+                    </Marker>
+                  ))}
+                  {terrainHotSpotMarkers.map((hotSpot) => (
+                    <Marker
+                      key={`terrain-hotspot-marker-${hotSpot.rank}-${hotSpot.progressLabel}`}
+                      position={[hotSpot.lat, hotSpot.lon]}
+                      icon={buildTerrainHotSpotIcon(hotSpot.risk, hotSpot.rank)}
+                    >
+                      <Tooltip direction="top" offset={[0, -10]}>
+                        Terrain hot spot {hotSpot.rank}
+                      </Tooltip>
+                      <Popup>
+                        <div className="space-y-1 text-sm">
+                          <div className="font-semibold">Terrain hot spot {hotSpot.rank}</div>
+                          <div>
+                            {hotSpot.risk === "warning"
+                              ? "Warning segment"
+                              : hotSpot.risk === "caution"
+                                ? "Tight clearance segment"
+                                : "Comfortable segment"}
+                          </div>
+                          <div>Route progress: {hotSpot.progressLabel}</div>
+                          <div>Highest terrain: {formatAltitude(hotSpot.maxElevationFt)}</div>
+                          <div>Clearance: {formatClearance(hotSpot.clearanceFt)}</div>
+                        </div>
+                      </Popup>
                     </Marker>
                   ))}
                   {showTfrOverlay && tfrQuery.data?.features?.length ? (
@@ -1043,6 +1364,29 @@ export default function AdsbLive() {
                   <div className="text-xs text-muted-foreground">Max route terrain</div>
                   <div className="font-semibold">{terrainMaxElevationFt !== null ? formatAltitude(terrainMaxElevationFt) : "--"}</div>
                 </div>
+                <div className="rounded-lg border p-3 md:col-span-2">
+                  <div className="text-xs text-muted-foreground">Terrain cueing</div>
+                  <div className={`font-semibold ${terrainCueToneClass}`}>{terrainCueStatus}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {terrainReferenceSource
+                      ? `Using ${terrainReferenceSource} ${formatAltitude(terrainReferenceAltitudeFt)} for map clearance cueing.`
+                      : "Select a saved route with planned altitude or start GPS tracking for terrain cueing."}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-1">
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />
+                      Comfortable {terrainCueCounts.comfortable > 0 ? terrainCueCounts.comfortable : ""}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-1">
+                      <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                      Tight {terrainCueCounts.caution > 0 ? terrainCueCounts.caution : ""}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-1">
+                      <span className="h-2.5 w-2.5 rounded-full bg-red-600" />
+                      Warning {terrainCueCounts.warning > 0 ? terrainCueCounts.warning : ""}
+                    </span>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1085,11 +1429,186 @@ export default function AdsbLive() {
                           </Alert>
                         ) : null}
                         {terrainProfileQuery.data ? (
-                          <div className="rounded-lg border p-3">
+                          <div className="rounded-lg border p-3 space-y-3">
                             <div className="font-medium">USGS terrain profile</div>
                             <div className="mt-1 text-sm text-muted-foreground">
                               {terrainProfileQuery.data.sampledPointCount} samples · highest terrain {formatAltitude(terrainProfileQuery.data.maxElevationFt)}
                             </div>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                              <Badge variant="outline">
+                                Ref {terrainReferenceSource ? `${terrainReferenceSource} ${formatAltitude(terrainReferenceAltitudeFt)}` : "none"}
+                              </Badge>
+                              <Badge variant="outline" className="border-emerald-200 text-emerald-700">
+                                Comfortable {terrainCueCounts.comfortable}
+                              </Badge>
+                              <Badge variant="outline" className="border-amber-200 text-amber-700">
+                                Tight {terrainCueCounts.caution}
+                              </Badge>
+                              <Badge variant="outline" className="border-red-200 text-red-700">
+                                Warning {terrainCueCounts.warning}
+                              </Badge>
+                            </div>
+                            <div className="grid gap-2 md:grid-cols-2">
+                              <div className="rounded-lg border bg-muted/30 p-3">
+                                <div className="text-xs text-muted-foreground">Worst clearance</div>
+                                <div className={`font-semibold ${terrainCueToneClass}`}>{terrainClearanceHeadline}</div>
+                                <div className="mt-1 text-xs text-muted-foreground">{terrainClearanceAdvisory}</div>
+                              </div>
+                              {worstTerrainSegment ? (
+                                <div className="rounded-lg border bg-muted/30 p-3">
+                                  <div className="text-xs text-muted-foreground">Highest-risk stretch</div>
+                                  <div className="font-semibold">
+                                    Segment {worstTerrainSegment.index + 1} of {terrainCueSegments.length}
+                                  </div>
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    Highest terrain {formatAltitude(worstTerrainSegment.segment.maxElevationFt)} · clearance {formatClearance(worstTerrainSegment.segment.clearanceFt)}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                            {terrainProfileChart ? (
+                              <div className="rounded-lg border bg-muted/20 p-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="text-sm font-medium">Vertical profile</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Terrain vs {terrainReferenceSource ? `${terrainReferenceSource} ${formatAltitude(terrainReferenceAltitudeFt)}` : "reference altitude"}
+                                  </div>
+                                </div>
+                                <div className="mt-3 overflow-hidden rounded-md border bg-background">
+                                  <svg
+                                    viewBox={`0 0 ${terrainProfileChart.chartWidth} ${terrainProfileChart.chartHeight}`}
+                                    className="h-40 w-full"
+                                    role="img"
+                                    aria-label="Terrain profile chart"
+                                  >
+                                    <rect width={terrainProfileChart.chartWidth} height={terrainProfileChart.chartHeight} fill="transparent" />
+                                    {terrainProfileChart.yTicks.map((tick) => (
+                                      <g key={`terrain-tick-${tick.altitudeFt}`}>
+                                        <line
+                                          x1={terrainProfileChart.padding.left}
+                                          x2={terrainProfileChart.chartWidth - terrainProfileChart.padding.right}
+                                          y1={tick.y}
+                                          y2={tick.y}
+                                          stroke="currentColor"
+                                          strokeOpacity="0.12"
+                                          strokeDasharray="4 4"
+                                        />
+                                        <text
+                                          x={terrainProfileChart.chartWidth - terrainProfileChart.padding.right - 2}
+                                          y={tick.y - 4}
+                                          textAnchor="end"
+                                          fontSize="10"
+                                          fill="currentColor"
+                                          opacity="0.65"
+                                        >
+                                          {Math.round(tick.altitudeFt).toLocaleString()} ft
+                                        </text>
+                                      </g>
+                                    ))}
+                                    <polygon points={terrainProfileChart.terrainArea} fill="#c084fc" fillOpacity="0.22" />
+                                    <polyline
+                                      points={terrainProfileChart.terrainLine}
+                                      fill="none"
+                                      stroke="#7c3aed"
+                                      strokeWidth="2"
+                                      strokeLinejoin="round"
+                                      strokeLinecap="round"
+                                    />
+                                    {terrainProfileChart.referenceY != null ? (
+                                      <line
+                                        x1={terrainProfileChart.padding.left}
+                                        x2={terrainProfileChart.chartWidth - terrainProfileChart.padding.right}
+                                        y1={terrainProfileChart.referenceY}
+                                        y2={terrainProfileChart.referenceY}
+                                        stroke="#2563eb"
+                                        strokeWidth="2"
+                                        strokeDasharray="6 4"
+                                      />
+                                    ) : null}
+                                    {terrainProfileChart.hotSpots.map((hotSpot) => (
+                                      <g key={`terrain-profile-hotspot-${hotSpot.index}`}>
+                                        <circle
+                                          cx={hotSpot.x}
+                                          cy={hotSpot.y}
+                                          r="4"
+                                          fill={
+                                            hotSpot.segment.risk === "warning"
+                                              ? "#dc2626"
+                                              : hotSpot.segment.risk === "caution"
+                                                ? "#f59e0b"
+                                                : "#16a34a"
+                                          }
+                                          stroke="#ffffff"
+                                          strokeWidth="1.5"
+                                        />
+                                      </g>
+                                    ))}
+                                    <text
+                                      x={terrainProfileChart.padding.left}
+                                      y={terrainProfileChart.chartHeight - 6}
+                                      fontSize="10"
+                                      fill="currentColor"
+                                      opacity="0.65"
+                                    >
+                                      Departure
+                                    </text>
+                                    <text
+                                      x={terrainProfileChart.chartWidth - terrainProfileChart.padding.right}
+                                      y={terrainProfileChart.chartHeight - 6}
+                                      textAnchor="end"
+                                      fontSize="10"
+                                      fill="currentColor"
+                                      opacity="0.65"
+                                    >
+                                      Destination
+                                    </text>
+                                  </svg>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                  <span className="inline-flex items-center gap-1">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-violet-600" />
+                                    Terrain profile
+                                  </span>
+                                  <span className="inline-flex items-center gap-1">
+                                    <span className="h-0.5 w-4 bg-blue-600" style={{ borderTop: "2px dashed currentColor" }} />
+                                    Reference altitude
+                                  </span>
+                                  <span className="inline-flex items-center gap-1">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-red-600" />
+                                    Hot spots
+                                  </span>
+                                </div>
+                              </div>
+                            ) : null}
+                            {terrainHotSpots.length > 0 ? (
+                              <div className="space-y-2">
+                                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                  Terrain hot spots
+                                </div>
+                                {terrainHotSpots.map((item, hotSpotIndex) => (
+                                  <div key={`terrain-hot-spot-${item.index}`} className="rounded-lg border px-3 py-2 text-sm">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-2 font-medium">
+                                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-xs font-semibold">
+                                          {hotSpotIndex + 1}
+                                        </span>
+                                        <span>
+                                          {item.segment.risk === "warning"
+                                            ? "Warning segment"
+                                            : item.segment.risk === "caution"
+                                              ? "Tight clearance segment"
+                                              : "Comfortable segment"}
+                                        </span>
+                                      </div>
+                                      <Badge variant="outline">{item.progressLabel}</Badge>
+                                    </div>
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                      Highest terrain {formatAltitude(item.segment.maxElevationFt)} · clearance {formatClearance(item.segment.clearanceFt)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                         {routePoints.map((point) => (
@@ -1145,9 +1664,10 @@ export default function AdsbLive() {
                 <div className="flex items-start gap-2">
                   <Cloud className="mt-0.5 h-4 w-4 text-amber-600" />
                   <div>
-                    <div className="font-medium">Terrain and obstacles are next-phase work</div>
+                    <div className="font-medium">Terrain and obstacles are in first-pass beta</div>
                     <div className="text-muted-foreground">
-                      The next FAA/public-data layer is USGS terrain plus FAA obstacle data so RSF can add hazard shading and clearance cues.
+                      RSF now shows obstacle proximity plus terrain clearance cueing on the route. The next step is richer
+                      map shading and more advanced hazard logic.
                     </div>
                   </div>
                 </div>
@@ -1235,11 +1755,16 @@ export default function AdsbLive() {
                       ? `Route terrain profile loaded. Max terrain ${formatAltitude(terrainProfileQuery.data.maxElevationFt)}.`
                       : "Terrain profile appears when a saved route overlay is selected."}
                   </div>
+                  {terrainProfileQuery.data ? (
+                    <div className={`mt-1 ${terrainCueToneClass}`}>
+                      {terrainClearanceHeadline} · {terrainClearanceAdvisory}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="rounded-lg border p-3">
                   <div className="font-medium text-foreground">Next integrations</div>
-                  <div>- Terrain shading on the map, not just route-profile summaries</div>
-                  <div>- Clearance cueing against ownship altitude</div>
+                  <div>- Vertical profile visualization and top-of-climb style route context</div>
+                  <div>- Terrain labels and corridor hotspot annotations directly on the map</div>
                   <div>- Leidos route briefings linked from the active plan</div>
                   <div>- Direct portable ADS-B receiver ingestion for stronger in-flight traffic fidelity</div>
                 </div>

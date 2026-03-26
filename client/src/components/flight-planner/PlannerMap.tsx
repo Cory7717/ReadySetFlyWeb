@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip, WMSTileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -11,6 +11,23 @@ export type PlannerPoint = {
   label?: string | null;
 };
 
+export type PlannerTerrainSegment = {
+  positions: [[number, number], [number, number]];
+  maxElevationFt: number | null;
+  clearanceFt: number | null;
+  risk: "comfortable" | "caution" | "warning";
+};
+
+export type PlannerTerrainHotSpot = {
+  rank: number;
+  risk: "comfortable" | "caution" | "warning";
+  progressLabel: string;
+  maxElevationFt: number | null;
+  clearanceFt: number | null;
+  lat: number;
+  lon: number;
+};
+
 type PlannerMapProps = {
   points: PlannerPoint[];
   heightClassName?: string;
@@ -18,6 +35,8 @@ type PlannerMapProps = {
   plannedAltitudeFt?: number;
   windsAltitudeFt?: number;
   airportLabelMode?: "icao" | "full" | "markers";
+  terrainSegments?: PlannerTerrainSegment[];
+  terrainHotSpots?: PlannerTerrainHotSpot[];
 };
 
 type WindsAloftPoint = {
@@ -46,6 +65,32 @@ const defaultIcon = L.icon({
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
+
+const terrainRiskStyles = {
+  comfortable: { color: "#16a34a", weight: 5, opacity: 0.9 },
+  caution: { color: "#f59e0b", weight: 5, opacity: 0.92 },
+  warning: { color: "#dc2626", weight: 5, opacity: 0.96 },
+} as const;
+
+const terrainSurfaceStyles = {
+  comfortable: { color: "#16a34a", weight: 16, opacity: 0.14, lineCap: "round" as const },
+  caution: { color: "#f59e0b", weight: 18, opacity: 0.18, lineCap: "round" as const },
+  warning: { color: "#dc2626", weight: 20, opacity: 0.22, lineCap: "round" as const },
+} as const;
+
+const buildTerrainHotSpotIcon = (risk: PlannerTerrainHotSpot["risk"], rank: number) => {
+  const tone = risk === "warning" ? "#dc2626" : risk === "caution" ? "#f59e0b" : "#16a34a";
+  return L.divIcon({
+    className: "",
+    html: `
+      <div style="display:flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:9999px;background:${tone};border:2px solid #ffffff;color:#ffffff;font-size:11px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.25);">
+        ${rank}
+      </div>
+    `,
+    iconSize: [24, 22],
+    iconAnchor: [12, 11],
+  });
+};
 
 function FitBounds({ points, mapStyle }: { points: PlannerPoint[]; mapStyle: "standard" | "sectional" | "radar" | "winds" | "clouds" }) {
   const map = useMap();
@@ -291,6 +336,8 @@ export default function PlannerMap({
   plannedAltitudeFt,
   windsAltitudeFt,
   airportLabelMode = "icao",
+  terrainSegments = [],
+  terrainHotSpots = [],
 }: PlannerMapProps) {
   const center: [number, number] = points.length
     ? [points[0].lat, points[0].lon]
@@ -568,12 +615,39 @@ export default function PlannerMap({
           );
         })}
         <MapStyleController mapStyle={mapStyle} />
-        {points.length > 1 && (
-          <Polyline
-            positions={points.map((p) => [p.lat, p.lon])}
-            pathOptions={{ color: "#0ea5e9", weight: 4 }}
-          />
-        )}
+        {terrainSegments.length > 0
+          ? terrainSegments.map((segment, index) => (
+              <Fragment key={`planner-terrain-segment-${index}`}>
+                <Polyline
+                  positions={segment.positions}
+                  pathOptions={terrainSurfaceStyles[segment.risk]}
+                />
+                <Polyline
+                  positions={segment.positions}
+                  pathOptions={terrainRiskStyles[segment.risk]}
+                >
+                  <Tooltip
+                    direction="top"
+                    offset={[0, -12]}
+                    className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow"
+                    opacity={1}
+                  >
+                    {segment.risk === "warning"
+                      ? "Terrain warning"
+                      : segment.risk === "caution"
+                        ? "Tight clearance"
+                        : "Comfortable clearance"}
+                    {` · ${segment.clearanceFt != null ? `${Math.round(segment.clearanceFt).toLocaleString()} ft` : "--"}`}
+                  </Tooltip>
+                </Polyline>
+              </Fragment>
+            ))
+          : points.length > 1 && (
+              <Polyline
+                positions={points.map((p) => [p.lat, p.lon])}
+                pathOptions={{ color: "#0ea5e9", weight: 4 }}
+              />
+            )}
         {points.map((point) => (
           <Marker
             key={point.icao}
@@ -588,6 +662,22 @@ export default function PlannerMap({
               opacity={1}
             >
               {point.label ? `${point.icao} • ${point.label}` : point.icao}
+            </Tooltip>
+          </Marker>
+        ))}
+        {terrainHotSpots.map((hotSpot) => (
+          <Marker
+            key={`planner-terrain-hotspot-${hotSpot.rank}-${hotSpot.progressLabel}`}
+            position={[hotSpot.lat, hotSpot.lon]}
+            icon={buildTerrainHotSpotIcon(hotSpot.risk, hotSpot.rank)}
+          >
+            <Tooltip
+              direction="top"
+              offset={[0, -10]}
+              className="rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-slate-900 shadow"
+              opacity={1}
+            >
+              Terrain hot spot {hotSpot.rank}
             </Tooltip>
           </Marker>
         ))}

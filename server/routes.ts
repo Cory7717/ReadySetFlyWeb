@@ -19129,7 +19129,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/flight-plans/route-search", isAuthenticated, async (req: any, res) => {
+  app.get("/api/flight-plans/route-search", async (req: any, res) => {
     try {
       const departure = typeof req.query.departure === "string" ? req.query.departure.trim().toUpperCase() : "";
       const destination = typeof req.query.destination === "string" ? req.query.destination.trim().toUpperCase() : "";
@@ -19211,6 +19211,85 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to analyze filed route:", error);
       res.status(500).json({ error: "Failed to analyze filed route" });
+    }
+  });
+
+  app.post("/api/flight-plans/guest-file", async (req: any, res) => {
+    try {
+      const result = filingPreviewSchema.safeParse(req.body ?? {});
+      if (!result.success) {
+        return res.status(400).json({ error: result.error.format() });
+      }
+
+      const packet = result.data;
+      const flightRules = (packet.flightRules || "VFR").toUpperCase();
+      const guestPlan = {
+        id: `guest-${crypto.randomUUID()}`,
+        userId: "guest",
+        title: `${packet.departure || "Departure"} to ${packet.destination || "Destination"}`,
+        departure: packet.departure || "",
+        destination: packet.destination || "",
+        route: packet.route || null,
+        alternate: packet.alternate || null,
+        plannedDepartureAt: packet.plannedDepartureUtc ? new Date(packet.plannedDepartureUtc) : null,
+        plannedArrivalAt: packet.plannedArrivalUtc ? new Date(packet.plannedArrivalUtc) : null,
+        aircraftType: packet.aircraftType || null,
+        tailNumber: packet.aircraftId || null,
+        fuelOnBoard: packet.fuelOnBoardGallons != null ? String(packet.fuelOnBoardGallons) : null,
+        fuelRequired: packet.fuelRequiredGallons != null ? String(packet.fuelRequiredGallons) : null,
+        filingProvider: "leidos_flight_service",
+        filingProviderPlanId: null,
+        filingFlightRules: flightRules,
+        filingEquipment: packet.equipment || null,
+        filingSoulsOnBoard: packet.soulsOnBoard || null,
+        filingAircraftColor: packet.aircraftColor || null,
+        filingPilotName: packet.pilotName || null,
+        filingRemarks: packet.remarks || null,
+        filingWakeTurbulence: packet.wakeTurbulence || null,
+        filingTypeOfFlight: packet.typeOfFlight || null,
+        filingSurveillanceEquipment: packet.surveillanceEquipment || null,
+        filingOtherInfo: packet.otherInfo || null,
+        filingTrueAirspeedKtas: packet.trueAirspeedKtas ?? null,
+        filingPlannedAltitudeFt: packet.plannedAltitudeFt != null && packet.plannedAltitudeFt !== ""
+          ? Number(packet.plannedAltitudeFt)
+          : null,
+        filingEstimatedEnrouteMinutes: packet.estimatedEnrouteMinutes ?? null,
+        filingEnduranceMinutes: packet.enduranceMinutes ?? null,
+        filingStatus: "draft",
+        filingPendingAction: null,
+        filingIsLive: false,
+        filedAt: null,
+        activatedAt: null,
+        cancelledAt: null,
+        closedAt: null,
+        filingLastProviderSyncAt: null,
+        filingRaw: null,
+        filingActionHistory: [],
+        notes: packet.remarks || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any;
+
+      const validation = validateFlightPlanForAction(guestPlan, "file");
+      if (!validation.ready) {
+        return res.status(400).json({
+          error: "Flight plan is not ready for filing.",
+          validation,
+        });
+      }
+
+      const providerResult = await flightPlanFilingProvider.stageAction(guestPlan, "file");
+      res.json({
+        ...providerResult,
+        guest: true,
+      });
+    } catch (error) {
+      console.error("Failed to file guest flight plan:", error);
+      res.status(500).json({
+        error: error instanceof Error && error.message
+          ? error.message
+          : "Failed to file guest flight plan",
+      });
     }
   });
 
@@ -19320,11 +19399,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
-      const entitlements = getEntitlementsForUser(user);
       let plans = await storage.getFlightPlansByUser(userId);
-      if (!entitlements.canPersist && plans.length > 1) {
-        plans = plans.slice(0, 1);
-      }
       res.json(plans);
     } catch (error) {
       console.error("Failed to fetch flight plans:", error);
@@ -19341,15 +19416,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
-      }
-      const entitlements = getEntitlementsForUser(user);
-      if (!entitlements.canPersist) {
-        const existingPlans = await storage.getFlightPlansByUser(userId);
-        if (existingPlans.length >= 1) {
-          return res.status(403).json({
-            error: "Free accounts can save one flight plan. Upgrade to RSF Pro to save more.",
-          });
-        }
       }
       const payload = { ...req.body };
       if (payload.fuelOnBoard === "") payload.fuelOnBoard = null;

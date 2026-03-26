@@ -107,6 +107,26 @@ function StudentPageLoader({ component: Component }: { component: ComponentType 
   );
 }
 
+function PaidToolAccess({ component: Component }: { component: ComponentType }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const entitlements = (user as any)?.entitlements;
+  const isPaid = entitlements?.tier ? entitlements.tier !== "free" : user?.logbookProStatus === "active";
+
+  if (isLoading) {
+    return <div className="container mx-auto px-4 py-10 text-sm text-muted-foreground">Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <RequireAuth />;
+  }
+
+  if (!isPaid) {
+    return <LogbookPro />;
+  }
+
+  return <Component />;
+}
+
 function RedirectTo({ to }: { to: string }) {
   const [location, setLocation] = useLocation();
   useEffect(() => {
@@ -177,6 +197,17 @@ function Router() {
       <Route path="/faq" component={FaqPage} />
       <Route path="/synthetic-vision" component={SyntheticVisionPage} />
       <Route path="/logbook/pro" component={LogbookPro} />
+      <Route path="/flight-planner" component={FlightPlanner} />
+      <Route path="/pilot-tools" component={() => <PaidToolAccess component={PilotTools} />} />
+      <Route path="/aviation-weather" component={() => <PaidToolAccess component={AviationWeatherHub} />} />
+      <Route path="/tfr-map" component={() => <PaidToolAccess component={TfrMap} />} />
+      <Route path="/approach-plates" component={() => <PaidToolAccess component={ApproachPlates} />} />
+      <Route path="/ownership-cost-calculator" component={() => <PaidToolAccess component={OwnershipCostCalculator} />} />
+      <Route path="/weight-balance" component={() => <PaidToolAccess component={WeightBalance} />} />
+      <Route path="/tools/e6b" component={() => <PaidToolAccess component={Eb6Calculator} />} />
+      <Route path="/radio-comms-trainer" component={() => <PaidToolAccess component={RadioCommsTrainer} />} />
+      <Route path="/adsb-receiver-help" component={() => <PaidToolAccess component={AdsbReceiverHelp} />} />
+      <Route path="/live-traffic" component={() => <PaidToolAccess component={AdsbLive} />} />
       <Route path="/events" component={() => <StudentPageLoader component={EventsPage} />} />
       <Route path="/admin/invite" component={RequireAuth} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
@@ -213,18 +244,9 @@ function Router() {
           <Route path="/marketplace" component={Marketplace} />
           <Route path="/cfi/:slug/request" component={CfiRequest} />
           <Route path="/aircraft/:id" component={AircraftDetail} />
-          <Route path="/pilot-tools" component={PilotTools} />
+          
           <Route path="/tool-hub" component={ToolHub} />
-          <Route path="/aviation-weather" component={AviationWeatherHub} />
-          <Route path="/tfr-map" component={TfrMap} />
-          <Route path="/approach-plates" component={ApproachPlates} />
-          <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
-          <Route path="/weight-balance" component={WeightBalance} />
-          <Route path="/tools/e6b" component={Eb6Calculator} />
-          <Route path="/flight-planner" component={FlightPlanner} />
-          <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
-          <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
-          <Route path="/live-traffic" component={AdsbLive} />
+          
           <Route path="/list-aircraft" component={ListAircraft} />
           <Route path="/edit-aircraft/:id" component={ListAircraft} />
           <Route path="/create-marketplace-listing" component={CreateMarketplaceListing} />
@@ -240,8 +262,7 @@ function Router() {
           <Route path="/logbook" component={Logbook} />
           <Route path="/logbook/pro/success" component={LogbookProSuccess} />
           <Route path="/logbook/pro/cancel" component={LogbookProCancel} />
-          <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
-          <Route path="/live-traffic" component={AdsbLive} />
+          
           <Route path="/my-aircraft" component={MyAircraft} />
           <Route path="/notifications" component={NotificationsPage} />
           <Route path="/admin/aircraft-library" component={AdminAircraftLibrary} />
@@ -277,18 +298,9 @@ function Router() {
           <Route path="/marketplace" component={Marketplace} />
           <Route path="/cfi/:slug/request" component={RequireAuth} />
           <Route path="/aircraft/:id" component={AircraftDetail} />
-          <Route path="/pilot-tools" component={PilotTools} />
+          
           <Route path="/tool-hub" component={ToolHub} />
-          <Route path="/aviation-weather" component={AviationWeatherHub} />
-          <Route path="/tfr-map" component={TfrMap} />
-          <Route path="/approach-plates" component={ApproachPlates} />
-          <Route path="/ownership-cost-calculator" component={OwnershipCostCalculator} />
-          <Route path="/weight-balance" component={WeightBalance} />
-          <Route path="/tools/e6b" component={Eb6Calculator} />
-          <Route path="/flight-planner" component={FlightPlanner} />
-          <Route path="/radio-comms-trainer" component={RadioCommsTrainer} />
-          <Route path="/adsb-receiver-help" component={AdsbReceiverHelp} />
-          <Route path="/live-traffic" component={AdsbLive} />
+          
           <Route path="/list-aircraft" component={RequireAuth} />
           <Route path="/edit-aircraft/:id" component={RequireAuth} />
           <Route path="/create-marketplace-listing" component={RequireAuth} />
@@ -304,7 +316,7 @@ function Router() {
           <Route path="/logbook" component={RequireAuth} />
           <Route path="/logbook/pro/success" component={RequireAuth} />
           <Route path="/logbook/pro/cancel" component={RequireAuth} />
-          <Route path="/adsb-receiver-help" component={RequireAuth} />
+          
           <Route path="/my-aircraft" component={RequireAuth} />
           <Route path="/notifications" component={RequireAuth} />
           <Route path="/admin/aircraft-library" component={RequireAuth} />

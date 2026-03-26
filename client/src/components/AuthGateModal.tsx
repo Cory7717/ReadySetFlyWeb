@@ -24,6 +24,10 @@ const authGateMessages: Record<string, { title: string; description: string }> =
     title: "Sign in to continue to Pro sync",
     description: "RSF Pro connects planner workflow to your digital logbook, currency, and training history.",
   },
+  file_flight_plan: {
+    title: "Create a free account to keep filing through RSF",
+    description: "Guest access includes two direct flight plan submissions. Sign in to save plans, keep filing, and manage filing lifecycle actions in RSF.",
+  },
 };
 
 export function AuthGateModal() {

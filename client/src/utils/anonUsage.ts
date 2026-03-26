@@ -1,6 +1,7 @@
 const SESSION_MARKER_KEY = "rsf.anon.session";
 const SESSION_COUNT_KEY = "anon_session_count";
 const TOOL_INTERACTIONS_KEY = "anon_tool_interactions";
+const FLIGHT_PLAN_FILES_KEY = "anon_flight_plan_files";
 const LAST_SEEN_KEY = "anon_last_seen_at";
 const DISMISS_UNTIL_KEY = "anon_banner_dismissed_until";
 
@@ -58,9 +59,20 @@ export const getAnonUsage = () => {
   return {
     sessionCount: readNumber(SESSION_COUNT_KEY),
     toolInteractions: readNumber(TOOL_INTERACTIONS_KEY),
+    flightPlanFiles: readNumber(FLIGHT_PLAN_FILES_KEY),
     lastSeenAt: readNumber(LAST_SEEN_KEY),
     dismissedUntil: readNumber(DISMISS_UNTIL_KEY),
   };
+};
+
+export const getAnonFlightPlanFileCount = () => readNumber(FLIGHT_PLAN_FILES_KEY);
+
+export const recordAnonFlightPlanFile = () => {
+  if (!isSoftAuthEnabled() || typeof window === "undefined") return;
+  const next = readNumber(FLIGHT_PLAN_FILES_KEY) + 1;
+  writeNumber(FLIGHT_PLAN_FILES_KEY, next);
+  writeNumber(LAST_SEEN_KEY, Date.now());
+  emitUsageEvent();
 };
 
 export const dismissSignupBanner = (days: number) => {

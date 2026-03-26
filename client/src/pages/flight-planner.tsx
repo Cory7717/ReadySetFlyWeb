@@ -25,6 +25,7 @@ import { useStudentProfile } from "@/hooks/useStudentProfile";
 import { trackEvent } from "@/lib/analytics";
 import { getCurrentReturnTo, withReturnTo, withSourceParam } from "@/lib/returnTo";
 import { runWithAuth } from "@/utils/authGate";
+import { getAnonFlightPlanFileCount, recordAnonFlightPlanFile } from "@/utils/anonUsage";
 import { buildLegs, sumDistance, distanceNm, type AirportPoint } from "@/lib/flightPlanner";
 import { cn } from "@/lib/utils";
 import { parseFlightCategory as getFlightCategory, parseWeatherHazards } from "@/lib/weatherInterpretation";
@@ -1022,6 +1023,7 @@ export default function FlightPlanner() {
     studentProfile?.wizardJson || studentProfile?.roadmapJson || studentProfile?.progressJson
   );
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [guestFlightPlanFiles, setGuestFlightPlanFiles] = useState(() => getAnonFlightPlanFileCount());
   const [activeTab, setActiveTab] = useState<FlightPlannerTab>("route");
   const [returnToFileAfterSave, setReturnToFileAfterSave] = useState(false);
   const [showFilingPayload, setShowFilingPayload] = useState(false);
@@ -1063,13 +1065,8 @@ export default function FlightPlanner() {
   }, []);
 
   useEffect(() => {
-    if (isPro) return;
-    if (typeof window === "undefined") return;
-    const key = "rsf_upgrade_prompt_flight_planner";
-    if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, "1");
-    setShowUpgradePrompt(true);
-  }, [isPro]);
+    setShowUpgradePrompt(false);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1584,7 +1581,7 @@ export default function FlightPlanner() {
 
   const { data: savedProfiles = [] } = useQuery<AircraftProfile[]>({
     queryKey: ["/api/aircraft/profiles"],
-    enabled: isAuthenticated && isPro,
+    enabled: isAuthenticated,
   });
 
   const { data: aircraftTypes = [] } = useQuery<AircraftType[]>({
@@ -1617,7 +1614,7 @@ export default function FlightPlanner() {
     selectedProfile?.filingSurveillanceEquipmentDefault ||
     selectedProfile?.filingOtherInfoDefault
   );
-  const planLimitReached = isFree && !editingPlan && savedPlans.length >= 1;
+  const planLimitReached = false;
   const savePlanActionRef = useRef<() => Promise<void>>(async () => {});
   const saveProfileActionRef = useRef<() => Promise<void>>(async () => {});
   const sendToLogbookActionRef = useRef<() => Promise<void>>(async () => {});
@@ -3344,15 +3341,6 @@ export default function FlightPlanner() {
 
   const saveCurrentPlan = async (options?: { returnToFile?: boolean }) => {
     if (!isAuthenticated) return;
-    if (planLimitReached) {
-      toast({
-        title: "Upgrade to RSF Pro",
-        description: "Free accounts can save one plan. Upgrade to unlock unlimited plans.",
-      });
-      trackEvent("planner_upgrade_prompt", { action: "save_plan_limit" });
-      window.location.href = "/logbook/pro";
-      return;
-    }
 
     if (options?.returnToFile) {
       setReturnToFileAfterSave(true);
@@ -3592,6 +3580,8 @@ export default function FlightPlanner() {
       });
     },
   });
+  const guestFlightPlanFileLimitReached = isGuest && guestFlightPlanFiles >= 2;
+  const guestFlightPlanFilesRemaining = Math.max(0, 2 - guestFlightPlanFiles);
   const filingStateText = filingPreviewMutation.isPending ? "Preview building" : "Packet ready";
   const filingStateTone = filingPreviewMutation.isPending ? "text-amber-300" : "text-emerald-300";
   const currentSavedPlan = editingPlan;
@@ -3621,20 +3611,36 @@ export default function FlightPlanner() {
     },
   });
 
+  const guestFileMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/flight-plans/guest-file", filingPacket);
+      return res.json() as Promise<{ live: boolean; message: string; providerPlanId?: string | null }>;
+    },
+    onSuccess: (result) => {
+      recordAnonFlightPlanFile();
+      setGuestFlightPlanFiles((current) => current + 1);
+      toast({
+        title: result.live ? "Guest flight plan submitted" : "Guest filing staged",
+        description: result.live
+          ? "RSF submitted this guest filing to Leidos. Create a free account to save future plans and manage amendments."
+          : (result.message || "RSF processed the guest filing request."),
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Guest filing failed",
+        description: error.message || "Unable to submit the guest flight plan.",
+        variant: "destructive",
+      });
+    },
+  });
+
   savePlanActionRef.current = async () => {
     await saveCurrentPlan();
   };
 
   saveProfileActionRef.current = async () => {
     if (!isAuthenticated) return;
-    if (!isPro) {
-      toast({
-        title: "Upgrade to RSF Pro",
-        description: "RSF Pro unlocks saved aircraft profiles.",
-      });
-      window.location.href = "/logbook/pro";
-      return;
-    }
     saveProfileMutation.mutate();
   };
 
@@ -3759,18 +3765,10 @@ export default function FlightPlanner() {
       kicker="Plan"
       title="Plan a Flight"
       description={
-        <>
-          Build the route, check the conditions, and keep the trip ready to save or file.
-          {!isPro ? (
-            <span className="block pt-2 text-xs text-slate-200/80 sm:text-sm">
-              Free accounts can save the first plan. RSF Pro adds unlimited saved plans, aircraft profiles, alerts, and planning history.
-            </span>
-          ) : null}
-        </>
+        "Build the route, check the conditions, and keep the trip ready to save or file."
       }
       actions={
         <>
-          {!isPro && <Badge variant="outline" className="border-white/12 bg-white/8 text-slate-100">Preview mode</Badge>}
           <Button
             variant="outline"
             size="sm"
@@ -3778,17 +3776,6 @@ export default function FlightPlanner() {
             onClick={openScratchPad}
           >
             ✏ Scratch Pad
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            className="border-white/14 bg-white/6 text-slate-100 hover:bg-white/10"
-            onClick={() => {
-              trackEvent("planner_upgrade_click", { target: "/logbook/pro" });
-              trackEvent("subscription_cta_click", { source_page: "/flight-planner", target: "/logbook/pro", context: "planner_header" });
-            }}
-          >
-            <Link href={withSourceParam("/logbook/pro", "/flight-planner")}>Upgrade to RSF Pro</Link>
           </Button>
         </>
       }
@@ -3803,8 +3790,8 @@ export default function FlightPlanner() {
         freeFeatures={[
           "Build routes with basic advisory summaries.",
           "Live METAR/TAF, runway, and NOTAM context.",
-          "One saved plan with manual updates.",
-          "Upgrade for unlimited saved plans, alerts, and advanced analytics.",
+          "Free accounts can save and manage flight plans.",
+          "Guest access includes two direct filings before signup is required.",
         ]}
       />
       <Card className="border-sky-200 bg-[linear-gradient(180deg,hsl(204_100%_98%),hsl(210_40%_97%))] text-slate-900 shadow-sm">
@@ -4870,7 +4857,7 @@ export default function FlightPlanner() {
           {!isAuthenticated ? (
             <p className="text-xs text-muted-foreground">Create a free account to save custom aircraft profiles.</p>
           ) : !isPro ? (
-            <p className="text-xs text-muted-foreground">Upgrade to RSF Pro to save aircraft profiles.</p>
+            <p className="text-xs text-muted-foreground">Save aircraft profiles to reuse your planning defaults on future flights.</p>
           ) : null}
         </CardContent>
       </Card>
@@ -5507,12 +5494,40 @@ export default function FlightPlanner() {
             <Button type="button" variant="outline" onClick={openFlightServiceHandoff} disabled={filingPreviewMutation.isPending}>
               {filingPreviewMutation.isPending ? "Building preview..." : "Validate filing packet"}
             </Button>
+            {isGuest && (
+              <Button
+                type="button"
+                onClick={() => {
+                  if (guestFlightPlanFileLimitReached) {
+                    runWithAuth("file_flight_plan", async () => {
+                      await saveCurrentPlan({ returnToFile: true });
+                    });
+                    return;
+                  }
+                  guestFileMutation.mutate();
+                }}
+                disabled={filingPreviewMutation.isPending || guestFileMutation.isPending}
+              >
+                {guestFileMutation.isPending
+                  ? "Submitting guest filing..."
+                  : guestFlightPlanFileLimitReached
+                    ? "Create free account to keep filing"
+                    : `File as guest (${guestFlightPlanFilesRemaining} free ${guestFlightPlanFilesRemaining === 1 ? "filing" : "filings"} left)`}
+              </Button>
+            )}
             <Button type="button" variant="ghost" asChild>
               <a href="https://www.1800wxbrief.com/" target="_blank" rel="noopener noreferrer">
                 Open Flight Service
               </a>
             </Button>
           </div>
+          {isGuest && (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              {guestFlightPlanFileLimitReached
+                ? "Guest filing limit reached. Create a free RSF account to save plans, keep filing through RSF, and manage lifecycle actions."
+                : `Guest access includes ${guestFlightPlanFilesRemaining} remaining direct ${guestFlightPlanFilesRemaining === 1 ? "flight plan filing" : "flight plan filings"} before a free RSF account is required. Amend, cancel, activate, and close actions still require a saved account plan.`}
+            </div>
+          )}
           {hasCurrentSavedPlan ? (
             <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -5604,7 +5619,7 @@ export default function FlightPlanner() {
         <CardHeader>
           <CardTitle>Save Flight Plan</CardTitle>
           <CardDescription>
-            Save one plan with a free account. After you fly, log it to update currency and history.
+            Save plans with a free account. After you fly, log it to update currency and history.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -5633,36 +5648,6 @@ export default function FlightPlanner() {
                   Sign In
                 </Link>
               </Button>
-            </div>
-          )}
-          {planLimitReached && (
-            <Alert>
-              <AlertDescription>
-                Free accounts can save one active plan. Upgrade to RSF Pro for unlimited saved plans, aircraft profiles, and planning history.
-              </AlertDescription>
-            </Alert>
-          )}
-          {isFree && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-              <div className="text-sm font-semibold text-emerald-900">
-                Want unlimited saved plans and a full planning workflow?
-              </div>
-              <div className="mt-1 text-xs text-emerald-800">
-                Start a 14-day Pro trial for unlimited saved plans, aircraft profiles, and linked logbook workflow.
-              </div>
-              <div className="mt-3">
-                <Button asChild size="sm" variant="outline" className="border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100">
-                  <Link
-                    href={withSourceParam("/logbook/pro", "/flight-planner")}
-                    onClick={() => {
-                      trackEvent("cta_click", { label: "planner_save_start_trial", target: "/logbook/pro" });
-                      trackEvent("subscription_cta_click", { source_page: "/flight-planner", target: "/logbook/pro", context: "planner_save_banner" });
-                    }}
-                  >
-                    Start 14-day Pro trial
-                  </Link>
-                </Button>
-              </div>
             </div>
           )}
           <div className="grid gap-4 md:grid-cols-2">

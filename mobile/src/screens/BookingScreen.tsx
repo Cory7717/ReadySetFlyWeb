@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { apiEndpoints } from '../services/api';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
@@ -74,6 +75,7 @@ function SectionCard({
 }
 
 export default function BookingScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { aircraftId } = route.params;
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -167,7 +169,13 @@ export default function BookingScreen({ route, navigation }: Props) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: Math.max(insets.top, spacing.sm), paddingBottom: 120 + insets.bottom },
+      ]}
+    >
       <View style={styles.heroPanel}>
         <View style={styles.heroTopRow}>
           <View style={{ flex: 1 }}>

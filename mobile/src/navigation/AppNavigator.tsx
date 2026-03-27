@@ -97,6 +97,7 @@ const linking: LinkingOptions<AppTabParamList> = {
 
 export default function AppNavigator() {
   const insets = useSafeAreaInsets();
+  const tabBottomInset = Math.max(insets.bottom, 14);
 
   return (
     <NavigationContainer
@@ -145,13 +146,13 @@ export default function AppNavigator() {
             position: 'absolute',
             left: 12,
             right: 12,
-            bottom: Math.max(insets.bottom, 10),
-            height: 62 + Math.max(insets.bottom, 10),
+            bottom: tabBottomInset,
+            height: 64 + tabBottomInset,
             borderTopWidth: 0,
             borderRadius: radius.xl,
             backgroundColor: 'rgba(255,255,255,0.96)',
             paddingTop: 10,
-            paddingBottom: Math.max(insets.bottom, 10),
+            paddingBottom: tabBottomInset,
             ...shadow.floating,
           },
           tabBarLabelStyle: {

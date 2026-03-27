@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } fr
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { apiEndpoints } from '../services/api';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
@@ -28,6 +29,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 }
 
 export default function RentalPaymentScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { paymentData } = route.params as { paymentData: PaymentData };
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -87,7 +89,12 @@ export default function RentalPaymentScreen({ route, navigation }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        { paddingTop: Math.max(insets.top, spacing.sm), paddingBottom: Math.max(insets.bottom, spacing.xs) },
+      ]}
+    >
       <View style={styles.topPanel}>
         <View style={styles.topHeader}>
           <View style={{ flex: 1 }}>

@@ -1,5 +1,6 @@
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
@@ -53,8 +54,16 @@ function DocumentRow({
 }
 
 export default function VerificationScreen() {
+  const insets = useSafeAreaInsets();
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: Math.max(insets.top, spacing.sm), paddingBottom: 120 + insets.bottom },
+      ]}
+    >
       <View style={styles.heroPanel}>
         <View style={styles.heroTopRow}>
           <View style={styles.heroIconWrap}>
@@ -75,7 +84,11 @@ export default function VerificationScreen() {
           <SummaryTile label="Access" value="Limited" />
         </View>
 
-        <TouchableOpacity style={styles.heroAction} activeOpacity={0.92}>
+        <TouchableOpacity
+          style={styles.heroAction}
+          activeOpacity={0.92}
+          onPress={() => Linking.openURL('https://readysetfly.us/verify-identity')}
+        >
           <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
           <Text style={styles.heroActionText}>Continue verification</Text>
         </TouchableOpacity>

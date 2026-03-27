@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { format, isValid } from 'date-fns';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { apiEndpoints } from '../services/api';
 import { StarRating } from '../components/StarRating';
@@ -51,6 +52,7 @@ function SectionCard({
 export default function AircraftDetailScreen({ route, navigation }: Props) {
   const { aircraftId } = route.params;
   const verificationNoticeKey = 'rsf-verification-renter-v1';
+  const insets = useSafeAreaInsets();
   const openVerification = () => {
     navigation.getParent()?.navigate('Profile', {
       screen: 'Verification',
@@ -160,7 +162,13 @@ export default function AircraftDetailScreen({ route, navigation }: Props) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: Math.max(insets.top, spacing.sm), paddingBottom: 120 + insets.bottom },
+      ]}
+    >
       <View style={styles.heroPanel}>
         <View style={styles.heroTopRow}>
           <View style={{ flex: 1 }}>

@@ -38,6 +38,8 @@ import {
   type FiledRouteToken,
   type FiledRouteTokenKind,
 } from "@shared/flight-plan-route";
+import { extractFilingVersionStamp } from "@shared/flight-plan-filing";
+import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
 import { OpenInAppBanner } from "@/components/OpenInAppBanner";
@@ -161,23 +163,50 @@ const extractClientVersionStamp = (plan: FlightPlan | null | undefined) => {
   const raw = plan?.filingRaw && typeof plan.filingRaw === "object"
     ? plan.filingRaw as Record<string, any>
     : null;
-  return String(
-    raw?.response?.versionStamp ||
-    raw?.versionStamp ||
-    raw?.currentState?.versionStamp ||
-    "",
-  ).trim() || null;
+  return extractFilingVersionStamp(raw);
 };
+
+const normalizedClientFilingStatus = (plan: FlightPlan | null | undefined) =>
+  String(plan?.filingStatus || "").toLowerCase();
+
+const hasLiveProviderPlan = (plan: FlightPlan | null | undefined) =>
+  Boolean(plan?.filingIsLive && plan?.filingProviderPlanId);
 
 const canSubmitAmendForPlan = (plan: FlightPlan | null | undefined) => {
   if (!plan) return false;
+  const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
+  const status = normalizedClientFilingStatus(plan);
   return Boolean(
-    plan.filingIsLive &&
-    String(plan.filingStatus || "").toLowerCase() === "filed" &&
-    plan.filingProviderPlanId &&
+    hasLiveProviderPlan(plan) &&
+    (rules === "VFR" ? ["filed", "activated"].includes(status) : status === "filed") &&
     extractClientVersionStamp(plan),
   );
 };
+
+const canActivatePlan = (plan: FlightPlan | null | undefined) =>
+  Boolean(
+    plan &&
+    String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
+    normalizedClientFilingStatus(plan) === "filed" &&
+    hasLiveProviderPlan(plan) &&
+    extractClientVersionStamp(plan),
+  );
+
+const canClosePlan = (plan: FlightPlan | null | undefined) =>
+  Boolean(
+    plan &&
+    String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
+    normalizedClientFilingStatus(plan) === "activated" &&
+    hasLiveProviderPlan(plan) &&
+    !isFlightPlanCloseOverdue(plan.plannedArrivalAt),
+  );
+
+const canCancelPlan = (plan: FlightPlan | null | undefined) =>
+  Boolean(
+    plan &&
+    normalizedClientFilingStatus(plan) === "filed" &&
+    hasLiveProviderPlan(plan),
+  );
 
 const getPlannerAircraftTypeValue = ({
   manualAircraftType,
@@ -4660,6 +4689,9 @@ export default function FlightPlanner() {
   const currentSavedPlanFlightRules = (currentSavedPlan?.filingFlightRules || filingDraft.flightRules || "VFR").toUpperCase();
   const currentSavedPlanStatus = filingStatusLabel(currentSavedPlan?.filingStatus);
   const currentSavedPlanCanAmend = canSubmitAmendForPlan(currentSavedPlan);
+  const currentSavedPlanCanActivate = canActivatePlan(currentSavedPlan);
+  const currentSavedPlanCanClose = canClosePlan(currentSavedPlan);
+  const currentSavedPlanCanCancel = canCancelPlan(currentSavedPlan);
   const hasCurrentSavedPlan = Boolean(currentSavedPlan?.id);
   const currentPlanAmendWorkflowActive = Boolean(
     currentSavedPlan?.id &&
@@ -7210,8 +7242,8 @@ export default function FlightPlanner() {
                   onClick={() => {
                     if (!currentSavedPlanCanAmend) {
                       toast({
-                        title: "Refile required",
-                        description: "This saved plan is not in a live amendable state. Save your edits, then use File to submit the updated version.",
+                        title: "Live amend unavailable",
+                        description: "This filed plan is missing Leidos amend tracking. Save your edits, then use File to submit the updated version.",
                       });
                       return;
                     }
@@ -7227,7 +7259,7 @@ export default function FlightPlanner() {
                 >
                   {currentSavedPlanCanAmend
                     ? (currentPlanAmendWorkflowActive ? "Submit Amend" : "Amend")
-                    : "Refile instead of amend"}
+                    : "Amend unavailable"}
                 </Button>
                 {currentSavedPlanFlightRules === "VFR" && (
                   <>
@@ -7235,7 +7267,7 @@ export default function FlightPlanner() {
                       size="sm"
                       variant="outline"
                       onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "activate" })}
-                      disabled={filingActionMutation.isPending}
+                      disabled={filingActionMutation.isPending || !currentSavedPlanCanActivate}
                     >
                       Activate
                     </Button>
@@ -7243,7 +7275,7 @@ export default function FlightPlanner() {
                       size="sm"
                       variant="outline"
                       onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "close" })}
-                      disabled={filingActionMutation.isPending}
+                      disabled={filingActionMutation.isPending || !currentSavedPlanCanClose}
                     >
                       Close
                     </Button>
@@ -7253,7 +7285,7 @@ export default function FlightPlanner() {
                   size="sm"
                   variant="outline"
                   onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "cancel" })}
-                  disabled={filingActionMutation.isPending}
+                  disabled={filingActionMutation.isPending || !currentSavedPlanCanCancel}
                 >
                   Cancel
                 </Button>
@@ -7272,7 +7304,12 @@ export default function FlightPlanner() {
               )}
               {!currentSavedPlanCanAmend && (
                 <div className="text-xs text-muted-foreground">
-                  Live Amend requires a successfully filed Leidos plan with a stored version stamp. If this is a draft, older staged copy, or filed record without version tracking, save your edits and use File to submit the updated plan.
+                  Live Amend requires a successfully filed Leidos plan with a stored version stamp. If this is a draft, older staged copy, or filed record without version tracking, save your edits and use <span className="font-medium text-foreground">File</span> to submit the updated plan.
+                </div>
+              )}
+              {currentSavedPlan && isFlightPlanCloseOverdue(currentSavedPlan.plannedArrivalAt) && normalizedClientFilingStatus(currentSavedPlan) === "activated" && (
+                <div className="text-xs text-muted-foreground">
+                  Overdue VFR closes need additional Leidos destination-close data that RSF does not collect yet. Close this one directly with Flight Service until that field is implemented.
                 </div>
               )}
             </div>
@@ -7517,7 +7554,7 @@ export default function FlightPlanner() {
                     onClick={() => beginAmendWorkflow(plan)}
                     disabled={filingActionMutation.isPending}
                   >
-                    {canSubmitAmendForPlan(plan) ? "Amend" : "Edit for refile"}
+                    {canSubmitAmendForPlan(plan) ? "Amend" : "Review amend requirements"}
                   </Button>
                   {(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>
@@ -7525,7 +7562,7 @@ export default function FlightPlanner() {
                         size="sm"
                         variant="outline"
                         onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "activate" })}
-                        disabled={filingActionMutation.isPending}
+                        disabled={filingActionMutation.isPending || !canActivatePlan(plan)}
                       >
                         Activate
                       </Button>
@@ -7533,7 +7570,7 @@ export default function FlightPlanner() {
                         size="sm"
                         variant="outline"
                         onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "close" })}
-                        disabled={filingActionMutation.isPending}
+                        disabled={filingActionMutation.isPending || !canClosePlan(plan)}
                       >
                         Close
                       </Button>
@@ -7543,7 +7580,7 @@ export default function FlightPlanner() {
                     size="sm"
                     variant="outline"
                     onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "cancel" })}
-                    disabled={filingActionMutation.isPending}
+                    disabled={filingActionMutation.isPending || !canCancelPlan(plan)}
                   >
                     Cancel
                   </Button>

@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import { isFlightPlanCloseOverdue } from "@shared/flight-plan-lifecycle";
+import { extractFilingProviderPlanId, extractFilingVersionStamp } from "@shared/flight-plan-filing";
 import type { FlightPlan, FlightPlanFilingAction, FlightPlanFilingStatus } from "@shared/schema";
 
 const LAB_REST_BASE_URL = "https://ffspelabs.leidos.com/Website2/rest/";
@@ -191,12 +193,7 @@ const appendLeidosAltitudeFields = (params: URLSearchParams, altitudeFt?: number
 
 const extractVersionStamp = (plan: FlightPlan) => {
   const raw = (plan.filingRaw && typeof plan.filingRaw === "object") ? plan.filingRaw as Record<string, any> : null;
-  return String(
-    raw?.response?.versionStamp ||
-    raw?.versionStamp ||
-    raw?.currentState?.versionStamp ||
-    "",
-  ).trim() || null;
+  return extractFilingVersionStamp(raw);
 };
 
 const formatDepartureInstant = (value?: Date | string | null) => {
@@ -282,6 +279,8 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     if (!stringValue) return;
     params.append(key, stringValue);
   };
+
+  append("includeCodedMessages", "true");
 
   if (action === "file" || action === "amend") {
     append("type", "ICAO");
@@ -444,6 +443,7 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   const errors: string[] = [];
   const warnings: string[] = [];
   const rules = normalizeFlightRules(plan.filingFlightRules);
+  const lifecycleStatus = String(plan.filingStatus || "").toLowerCase();
 
   if (!plan.departure) errors.push("Departure airport is required.");
   if (!plan.destination) errors.push("Destination airport is required.");
@@ -472,16 +472,35 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
     errors.push("Stage or file the plan first so a provider plan ID exists before using this action.");
   }
 
+  if (action === "amend") {
+    const amendableStatuses = rules === "VFR" ? ["filed", "activated"] : ["filed"];
+    if (!amendableStatuses.includes(lifecycleStatus)) {
+      errors.push(
+        rules === "VFR"
+          ? "Only a filed or active VFR plan can be amended."
+          : "Only a filed IFR plan can be amended before ATC cutoff.",
+      );
+    }
+  }
+
+  if (action === "cancel" && lifecycleStatus !== "filed") {
+    errors.push("Only a filed flight plan in the PROPOSED state can be cancelled through Leidos.");
+  }
+
+  if (action === "activate" && lifecycleStatus !== "filed") {
+    errors.push("Only a filed VFR plan in the PROPOSED state can be activated.");
+  }
+
+  if (action === "close" && lifecycleStatus !== "activated") {
+    errors.push("Only an active VFR flight plan can be closed.");
+  }
+
+  if (action === "close" && isFlightPlanCloseOverdue(plan.plannedArrivalAt)) {
+    errors.push("This VFR flight plan appears overdue. Leidos requires closeDestinationInfo for overdue closes, and RSF does not collect that field yet.");
+  }
+
   if (action === "cancel" && ["cancelled", "closed"].includes((plan.filingStatus || "").toLowerCase())) {
     errors.push(`This plan is already ${String(plan.filingStatus).toLowerCase()}.`);
-  }
-
-  if (action === "close" && ["draft", "cancelled", "closed"].includes((plan.filingStatus || "").toLowerCase())) {
-    errors.push("Only an active or previously filed VFR plan can be closed.");
-  }
-
-  if (action === "activate" && ["draft", "cancelled", "closed"].includes((plan.filingStatus || "").toLowerCase())) {
-    errors.push("Only a staged or filed VFR plan can be activated.");
   }
 
   if (!plan.fuelOnBoard) {
@@ -615,15 +634,11 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       throw new Error(`Leidos ${action.toUpperCase()} request failed with status ${response.status}${responseDetail ? `: ${responseDetail}` : ""}`);
     }
 
-    const providerPlanId = String(
-      parsedResponse.providerPlanId ||
-      parsedResponse.flightIdentifier ||
-      parsedResponse.flightPlanId ||
-      parsedResponse.planId ||
-      parsedResponse.id ||
+    const providerPlanId =
+      extractFilingProviderPlanId(parsedResponse) ||
       plan.filingProviderPlanId ||
-      buildProviderPlanId(plan, action),
-    );
+      buildProviderPlanId(plan, action);
+    const versionStamp = extractFilingVersionStamp(parsedResponse);
 
     return {
       live: true,
@@ -638,6 +653,8 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       raw: {
         requestUrl,
         requestPayload: Object.fromEntries(requestBody.entries()),
+        providerPlanId,
+        versionStamp,
         response: parsedResponse,
       },
     };

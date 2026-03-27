@@ -6,8 +6,58 @@ import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
 const LOGO_IMAGE = require('../../assets/logo.png');
 
+type ShortcutCardProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  accent: string;
+  onPress: () => void;
+};
+
+function ShortcutCard({ icon, title, subtitle, accent, onPress }: ShortcutCardProps) {
+  return (
+    <TouchableOpacity style={styles.shortcutCard} onPress={onPress} activeOpacity={0.9}>
+      <View style={[styles.shortcutIconWrap, { backgroundColor: accent }]}>
+        <Ionicons name={icon} size={20} color="#fff" />
+      </View>
+      <Text style={styles.shortcutTitle}>{title}</Text>
+      <Text style={styles.shortcutSubtitle}>{subtitle}</Text>
+      <View style={styles.shortcutFooter}>
+        <Text style={styles.shortcutAction}>Open</Text>
+        <Ionicons name="arrow-forward" size={16} color={colors.primary} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+type RailCardProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+};
+
+function RailCard({ icon, title, subtitle, onPress }: RailCardProps) {
+  return (
+    <TouchableOpacity style={styles.railCard} onPress={onPress} activeOpacity={0.9}>
+      <View style={styles.railIconWrap}>
+        <Ionicons name={icon} size={22} color={colors.primary} />
+      </View>
+      <View style={styles.railText}>
+        <Text style={styles.railTitle}>{title}</Text>
+        <Text style={styles.railSubtitle}>{subtitle}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textSoft} />
+    </TouchableOpacity>
+  );
+}
+
 export default function HomeScreen({ navigation }: any) {
   const { isAuthenticated, user, isLoading } = useIsAuthenticated();
+  const entitlements = (user as any)?.entitlements;
+  const membershipTier = entitlements?.tier || 'free';
+  const membershipLabel =
+    membershipTier === 'pro_plus' ? 'Pro+' : membershipTier === 'pro' ? 'Pro' : 'Free';
 
   const handleLogin = () => {
     navigation.navigate('Profile', { screen: 'Auth' });
@@ -15,166 +65,193 @@ export default function HomeScreen({ navigation }: any) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Hero Section with Wingtip Background */}
-      <ImageBackground 
-        source={WINGTIP_IMAGE}
-        style={styles.hero}
-        imageStyle={styles.heroImage}
-      >
+      <ImageBackground source={WINGTIP_IMAGE} style={styles.hero} imageStyle={styles.heroImage}>
         <View style={styles.heroOverlay}>
-          <Image source={LOGO_IMAGE} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.heroTitle}>Ready Set Fly</Text>
-          <Text style={styles.heroSubtitle}>The premier hub for General Aviation tools, training, and community.</Text>
-          
-          {!isAuthenticated && !isLoading && (
-            <TouchableOpacity 
-              style={styles.loginButton}
-              onPress={handleLogin}
-              data-testid="button-login-home"
-            >
-              <Ionicons name="log-in-outline" size={20} color="#fff" />
-              <Text style={styles.loginButtonText}>
-                Sign In
-              </Text>
-            </TouchableOpacity>
-          )}
-          
-          {isAuthenticated && user && (
-            <View style={styles.welcomeContainer}>
-              <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-              <Text style={styles.welcomeText}>Welcome back, {user.firstName}!</Text>
+          <View style={styles.heroTopRow}>
+            <View style={styles.brandRow}>
+              <Image source={LOGO_IMAGE} style={styles.logo} resizeMode="contain" />
+              <View>
+                <Text style={styles.brandEyebrow}>READY SET FLY</Text>
+                <Text style={styles.brandTitle}>Plan on the web. Fly in the app.</Text>
+              </View>
             </View>
-          )}
+            <View style={styles.membershipPill}>
+              <Text style={styles.membershipPillText}>{membershipLabel}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.heroHeadline}>
+            {isAuthenticated && user?.firstName
+              ? `Good to see you, ${user.firstName}.`
+              : 'Built for pilots who want one connected workflow.'}
+          </Text>
+          <Text style={styles.heroSubtitle}>
+            Flight planning, live cockpit tools, rentals, training, and pilot utilities without the clutter.
+          </Text>
+
+          <View style={styles.heroActionRow}>
+            <TouchableOpacity
+              style={styles.primaryHeroButton}
+              onPress={() => navigation.navigate('Profile', { screen: 'FlightPlanner' })}
+              activeOpacity={0.9}
+            >
+              <Ionicons name="navigate" size={18} color="#fff" />
+              <Text style={styles.primaryHeroButtonText}>Open Flight Planner</Text>
+            </TouchableOpacity>
+
+            {!isAuthenticated && !isLoading ? (
+              <TouchableOpacity
+                style={styles.secondaryHeroButton}
+                onPress={handleLogin}
+                activeOpacity={0.9}
+              >
+                <Ionicons name="log-in-outline" size={18} color={colors.text} />
+                <Text style={styles.secondaryHeroButtonText}>Sign In</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.secondaryHeroButton}
+                onPress={() => navigation.navigate('Profile', { screen: 'Logbook' })}
+                activeOpacity={0.9}
+              >
+                <Ionicons name="book-outline" size={18} color={colors.text} />
+                <Text style={styles.secondaryHeroButtonText}>Open Logbook</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.statusGrid}>
+            <View style={styles.statusTile}>
+              <Text style={styles.statusLabel}>Mode</Text>
+              <Text style={styles.statusValue}>Preflight + Cockpit</Text>
+            </View>
+            <View style={styles.statusTile}>
+              <Text style={styles.statusLabel}>Membership</Text>
+              <Text style={styles.statusValue}>{membershipLabel}</Text>
+            </View>
+            <View style={styles.statusTile}>
+              <Text style={styles.statusLabel}>Best Surface</Text>
+              <Text style={styles.statusValue}>Tablet App</Text>
+            </View>
+          </View>
         </View>
       </ImageBackground>
 
-      {/* Quick Actions */}
-      <View style={styles.quickActions}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => navigation.navigate('Rentals')}
-          data-testid="button-browse-aircraft"
-        >
-          <Ionicons name="airplane-outline" size={32} color="#1e40af" />
-          <View style={styles.actionText}>
-            <Text style={styles.actionTitle}>Browse Aircraft</Text>
-            <Text style={styles.actionSubtitle}>Find and rent aircraft</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
-        </TouchableOpacity>
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Mission Control</Text>
+          <Text style={styles.sectionSubtitle}>The fastest way into RSF’s core workflows.</Text>
+        </View>
+        <View style={styles.shortcutGrid}>
+          <ShortcutCard
+            icon="map-outline"
+            title="Plan"
+            subtitle="Build routes, weather, filing, and terrain review."
+            accent={colors.primary}
+            onPress={() => navigation.navigate('Profile', { screen: 'FlightPlanner' })}
+          />
+          <ShortcutCard
+            icon="radio-outline"
+            title="Fly"
+            subtitle="Receiver-backed traffic, live map, and diversions."
+            accent={colors.cockpit}
+            onPress={() => navigation.navigate('Profile', { screen: 'FlightPlanner' })}
+          />
+          <ShortcutCard
+            icon="airplane-outline"
+            title="Rent"
+            subtitle="Browse aircraft and move straight into booking."
+            accent={colors.info}
+            onPress={() => navigation.navigate('Rentals')}
+          />
+          <ShortcutCard
+            icon="book-outline"
+            title="Log"
+            subtitle="Track time, currency, and member-only history."
+            accent={colors.accent}
+            onPress={() => navigation.navigate('Profile', { screen: 'Logbook' })}
+          />
+        </View>
+      </View>
 
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => navigation.navigate('Marketplace')}
-          data-testid="button-marketplace"
-        >
-          <Ionicons name="storefront-outline" size={32} color="#1e40af" />
-          <View style={styles.actionText}>
-            <Text style={styles.actionTitle}>Marketplace</Text>
-            <Text style={styles.actionSubtitle}>Jobs, sales, CFIs & more</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
-        </TouchableOpacity>
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Pilot Tools</Text>
+          <Text style={styles.sectionSubtitle}>Quick-launch the tools pilots use most.</Text>
+        </View>
+        <View style={styles.pillRow}>
+          <TouchableOpacity style={styles.toolPill} onPress={() => navigation.navigate('Profile', { screen: 'AviationWeatherHub' })}>
+            <Ionicons name="cloud-outline" size={16} color={colors.primary} />
+            <Text style={styles.toolPillText}>Weather</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.toolPill} onPress={() => navigation.navigate('Profile', { screen: 'AirportBriefing' })}>
+            <Ionicons name="business-outline" size={16} color={colors.primary} />
+            <Text style={styles.toolPillText}>Airport Briefing</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.toolPill} onPress={() => navigation.navigate('Profile', { screen: 'ApproachPlates' })}>
+            <Ionicons name="document-text-outline" size={16} color={colors.primary} />
+            <Text style={styles.toolPillText}>Plates</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.toolPill} onPress={() => navigation.navigate('Profile', { screen: 'Tfrs' })}>
+            <Ionicons name="warning-outline" size={16} color={colors.primary} />
+            <Text style={styles.toolPillText}>TFRs</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.toolPill} onPress={() => navigation.navigate('Profile', { screen: 'PilotTools' })}>
+            <Ionicons name="grid-outline" size={16} color={colors.primary} />
+            <Text style={styles.toolPillText}>All Tools</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => navigation.navigate('Profile', { screen: 'PilotTools' })}
-          data-testid="button-pilot-tools"
-        >
-          <Ionicons name="compass-outline" size={32} color="#1e40af" />
-          <View style={styles.actionText}>
-            <Text style={styles.actionTitle}>Pilot Tools</Text>
-            <Text style={styles.actionSubtitle}>Flight planning, weather, plates</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.actionCard}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Training & Growth</Text>
+          <Text style={styles.sectionSubtitle}>Student, recurrent, and proficiency workflows.</Text>
+        </View>
+        <RailCard
+          icon="school-outline"
+          title="Student Pilot Hub"
+          subtitle="Roadmaps, wizard flow, syllabi, and study support."
           onPress={() => navigation.navigate('Profile', { screen: 'StudentHub' })}
-          data-testid="button-student-hub"
-        >
-          <Ionicons name="school-outline" size={32} color="#1e40af" />
-          <View style={styles.actionText}>
-            <Text style={styles.actionTitle}>Student Pilot Hub</Text>
-            <Text style={styles.actionSubtitle}>Wizard, roadmap, study tools</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => navigation.navigate('Profile')}
-          data-testid="button-my-profile"
-        >
-          <Ionicons name="person-outline" size={32} color="#1e40af" />
-          <View style={styles.actionText}>
-            <Text style={styles.actionTitle}>My Profile</Text>
-            <Text style={styles.actionSubtitle}>Manage account & verification</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
-        </TouchableOpacity>
+        />
+        <RailCard
+          icon="radio-outline"
+          title="Radio Comms Trainer"
+          subtitle="Practice phraseology with guided scenario work."
+          onPress={() => navigation.navigate('Profile', { screen: 'RadioCommsTrainer' })}
+        />
+        <RailCard
+          icon="navigate-circle-outline"
+          title="GPS & VOR Training"
+          subtitle="Structured nav training for procedural confidence."
+          onPress={() => navigation.navigate('Profile', { screen: 'GpsSimsHub' })}
+        />
       </View>
 
-      {/* Quick Calculators */}
-      <View style={styles.quickActions}>
-        <Text style={styles.sectionTitle}>Quick Calculators</Text>
-
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => navigation.navigate('Profile', { screen: 'CrosswindCalc' })}
-          data-testid="button-crosswind-calc"
-        >
-          <Ionicons name="speedometer-outline" size={32} color="#1e40af" />
-          <View style={styles.actionText}>
-            <Text style={styles.actionTitle}>Crosswind Calculator</Text>
-            <Text style={styles.actionSubtitle}>Headwind & crosswind components</Text>
+      <View style={styles.section}>
+        <View style={styles.memberPanel}>
+          <View style={styles.memberPanelHeader}>
+            <View>
+              <Text style={styles.memberPanelEyebrow}>RSF MEMBERSHIP</Text>
+              <Text style={styles.memberPanelTitle}>Monthly, flexible, and synced across web + app.</Text>
+            </View>
+            <View style={styles.memberTierChip}>
+              <Text style={styles.memberTierChipText}>{membershipLabel}</Text>
+            </View>
           </View>
-          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionCard}
-          onPress={() => navigation.navigate('Profile', { screen: 'DensityAltitude' })}
-          data-testid="button-density-altitude"
-        >
-          <Ionicons name="analytics-outline" size={32} color="#1e40af" />
-          <View style={styles.actionText}>
-            <Text style={styles.actionTitle}>Density Altitude</Text>
-            <Text style={styles.actionSubtitle}>Pressure + density altitude</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Features */}
-      <View style={styles.features}>
-        <Text style={styles.sectionTitle}>Why Ready Set Fly</Text>
-        
-        <View style={styles.featureItem}>
-          <Ionicons name="shield-checkmark" size={24} color="#10b981" />
-          <View style={styles.featureText}>
-            <Text style={styles.featureTitle}>Pilot-first tools</Text>
-            <Text style={styles.featureDescription}>Flight planning, training, logbook, and comms in one place</Text>
-          </View>
-        </View>
-
-        <View style={styles.featureItem}>
-          <Ionicons name="cash" size={24} color="#10b981" />
-          <View style={styles.featureText}>
-            <Text style={styles.featureTitle}>Marketplace growth</Text>
-            <Text style={styles.featureDescription}>Rentals, schools, CFIs, and listings grow as the community grows</Text>
-          </View>
-        </View>
-
-        <View style={styles.featureItem}>
-          <Ionicons name="chatbubbles" size={24} color="#10b981" />
-          <View style={styles.featureText}>
-            <Text style={styles.featureTitle}>Verified community</Text>
-            <Text style={styles.featureDescription}>Secure messaging and trusted profiles</Text>
-          </View>
+          <Text style={styles.memberPanelBody}>
+            Free users can plan and explore. Pro unlocks deeper history, calculators, alerts, and advanced workflows.
+          </Text>
+          <TouchableOpacity
+            style={styles.memberPanelButton}
+            onPress={() => navigation.navigate('Profile', { screen: 'LogbookPro' })}
+            activeOpacity={0.9}
+          >
+            <Text style={styles.memberPanelButtonText}>
+              {membershipTier === 'free' ? 'View Membership Options' : 'Open Membership Dashboard'}
+            </Text>
+            <Ionicons name="arrow-forward" size={18} color="#fff" />
+          </TouchableOpacity>
         </View>
       </View>
     </ScrollView>
@@ -187,131 +264,301 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    paddingBottom: spacing.lg,
+    paddingBottom: 120,
   },
   hero: {
-    height: 320,
-    justifyContent: 'center',
-    alignItems: 'center',
+    minHeight: 430,
   },
   heroImage: {
-    opacity: 0.9,
+    opacity: 0.95,
   },
   heroOverlay: {
     flex: 1,
-    width: '100%',
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
     paddingHorizontal: spacing.lg,
+    paddingTop: 52,
+    paddingBottom: spacing.xl,
+    backgroundColor: 'rgba(11, 20, 34, 0.76)',
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
   },
   logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 16,
+    width: 52,
+    height: 52,
   },
-  heroTitle: {
-    fontSize: 32,
+  brandEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    color: '#cbd5e1',
+  },
+  brandTitle: {
+    fontSize: 16,
     fontWeight: '700',
+    color: '#f8fafc',
+    marginTop: 4,
+  },
+  membershipPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
+  membershipPillText: {
+    color: '#f8fafc',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  heroHeadline: {
+    ...typography.display,
     color: '#fff',
-    marginTop: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    marginTop: 28,
+    maxWidth: 320,
   },
   heroSubtitle: {
-    fontSize: 16,
-    color: '#e2e8f0',
-    marginTop: 8,
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 330,
   },
-  loginButton: {
+  heroActionRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.success,
-    paddingHorizontal: 28,
-    paddingVertical: 12,
-    borderRadius: radius.lg,
+    gap: spacing.sm,
     marginTop: spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
   },
-  loginButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-    marginLeft: 8,
-  },
-  welcomeContainer: {
+  primaryHeroButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    marginTop: 20,
+    gap: 8,
+    backgroundColor: colors.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+    ...shadow.card,
   },
-  welcomeText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginLeft: 8,
+  primaryHeroButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
   },
-  quickActions: {
-    padding: spacing.lg,
+  secondaryHeroButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+  },
+  secondaryHeroButtonText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  statusGrid: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  statusTile: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  statusLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+  },
+  statusValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  section: {
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  sectionHeader: {
+    marginBottom: spacing.md,
   },
   sectionTitle: {
     ...typography.h2,
-    marginBottom: spacing.md,
   },
-  actionCard: {
+  sectionSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  shortcutGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  shortcutCard: {
+    width: '48%',
     backgroundColor: colors.surface,
+    borderRadius: radius.xl,
     padding: spacing.md,
-    borderRadius: radius.lg,
-    marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadow.card,
   },
-  actionText: {
-    flex: 1,
-    marginLeft: 16,
+  shortcutIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
-  actionTitle: {
-    ...typography.h3,
+  shortcutTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
   },
-  actionSubtitle: {
-    fontSize: 13,
-    color: colors.textMuted,
-    marginTop: 2,
+  shortcutSubtitle: {
+    ...typography.muted,
+    marginTop: 6,
+    minHeight: 54,
   },
-  features: {
-    padding: spacing.lg,
-    paddingTop: 0,
-  },
-  featureItem: {
+  shortcutFooter: {
+    marginTop: spacing.sm,
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 20,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  featureText: {
-    flex: 1,
-    marginLeft: 16,
+  shortcutAction: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
   },
-  featureTitle: {
-    ...typography.h3,
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
-  featureDescription: {
+  toolPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  toolPillText: {
     fontSize: 13,
-    color: colors.textMuted,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  railCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+    ...shadow.card,
+  },
+  railIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  railText: {
+    flex: 1,
+    marginLeft: spacing.sm,
+  },
+  railTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  railSubtitle: {
+    ...typography.muted,
     marginTop: 4,
+  },
+  memberPanel: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.card,
+  },
+  memberPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  memberPanelEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+  },
+  memberPanelTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#fff',
+    marginTop: 8,
+    maxWidth: 250,
+  },
+  memberTierChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignSelf: 'flex-start',
+  },
+  memberTierChipText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  memberPanelBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#dbe4f0',
+    marginTop: spacing.md,
+  },
+  memberPanelButton: {
+    marginTop: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+  },
+  memberPanelButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

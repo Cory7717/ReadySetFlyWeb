@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import MapView, { Callout, Marker, Polyline, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
@@ -87,6 +87,89 @@ function greatCircleNm(a: AirportMeta, b: AirportMeta) {
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function projectLatLonToNm(lat: number, lon: number, refLat: number) {
+  const latNm = lat * 60;
+  const lonNm = lon * 60 * Math.cos((refLat * Math.PI) / 180);
+  return { x: lonNm, y: latNm };
+}
+
+type MobileRouteProgressSummary = {
+  totalRouteNm: number;
+  remainingRouteNm: number;
+  progressPct: number;
+  offRouteNm: number;
+  nextWaypoint: string | null;
+  etaText: string | null;
+};
+
+function computeMobileRouteProgress(
+  routePoints: AirportMeta[],
+  ownship: { lat: number; lon: number; speedKts?: number | null } | null,
+): MobileRouteProgressSummary | null {
+  if (!ownship || routePoints.length < 2) return null;
+
+  const legLengths = routePoints.slice(1).map((point, index) => greatCircleNm(routePoints[index], point));
+  const totalRouteNm = legLengths.reduce((sum, value) => sum + value, 0);
+  if (!Number.isFinite(totalRouteNm) || totalRouteNm <= 0) return null;
+
+  const refLat = ownship.lat;
+  const ownshipPoint = projectLatLonToNm(ownship.lat, ownship.lon, refLat);
+  let best:
+    | {
+        legIndex: number;
+        offRouteNm: number;
+        traveledNm: number;
+      }
+    | null = null;
+
+  let traveledBeforeLeg = 0;
+  for (let index = 0; index < routePoints.length - 1; index += 1) {
+    const start = routePoints[index];
+    const end = routePoints[index + 1];
+    const startNm = projectLatLonToNm(start.latitude, start.longitude, refLat);
+    const endNm = projectLatLonToNm(end.latitude, end.longitude, refLat);
+    const dx = endNm.x - startNm.x;
+    const dy = endNm.y - startNm.y;
+    const legLengthSq = dx * dx + dy * dy;
+    const tRaw =
+      legLengthSq > 0
+        ? ((ownshipPoint.x - startNm.x) * dx + (ownshipPoint.y - startNm.y) * dy) / legLengthSq
+        : 0;
+    const t = Math.min(1, Math.max(0, tRaw));
+    const nearestX = startNm.x + dx * t;
+    const nearestY = startNm.y + dy * t;
+    const offRouteNm = Math.hypot(ownshipPoint.x - nearestX, ownshipPoint.y - nearestY);
+    const legLengthNm = legLengths[index] ?? 0;
+    const traveledNm = traveledBeforeLeg + legLengthNm * t;
+
+    if (!best || offRouteNm < best.offRouteNm) {
+      best = { legIndex: index, offRouteNm, traveledNm };
+    }
+    traveledBeforeLeg += legLengthNm;
+  }
+
+  if (!best) return null;
+
+  const remainingRouteNm = Math.max(0, totalRouteNm - best.traveledNm);
+  const speedKts = ownship.speedKts ?? null;
+  const etaText =
+    speedKts && speedKts > 20
+      ? new Date(Date.now() + (remainingRouteNm / speedKts) * 60 * 60 * 1000).toLocaleTimeString([], {
+          hour: 'numeric',
+          minute: '2-digit',
+        })
+      : null;
+
+  return {
+    totalRouteNm,
+    remainingRouteNm,
+    progressPct: Math.min(100, Math.max(0, (best.traveledNm / totalRouteNm) * 100)),
+    offRouteNm: best.offRouteNm,
+    nextWaypoint: routePoints[best.legIndex + 1]?.icao || routePoints[routePoints.length - 1]?.icao || null,
+    etaText,
+  };
 }
 
 function parseFlightCategory(metar: any): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNKNOWN' {
@@ -251,6 +334,7 @@ function isWithinHawaii(lat: number, lon: number) {
 
 export default function FlightPlannerScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const { isAuthenticated } = useIsAuthenticated();
   const [departure, setDeparture] = useState('KJFK');
   const [destination, setDestination] = useState('KBOS');
@@ -339,6 +423,23 @@ export default function FlightPlannerScreen() {
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
     []
   );
+  const routeProgress = useMemo(
+    () => computeMobileRouteProgress(routePoints, gpsData),
+    [gpsData, routePoints]
+  );
+
+  useEffect(() => {
+    const routeParams = route.params || {};
+    const nextDeparture = typeof routeParams.departure === 'string' ? routeParams.departure.trim().toUpperCase() : '';
+    const nextDestination = typeof routeParams.destination === 'string' ? routeParams.destination.trim().toUpperCase() : '';
+    const nextWaypoints = typeof routeParams.waypoints === 'string' ? routeParams.waypoints.trim().toUpperCase() : '';
+    const nextPlannedStops = typeof routeParams.plannedStops === 'string' ? routeParams.plannedStops.trim().toUpperCase() : '';
+
+    if (nextDeparture) setDeparture(nextDeparture);
+    if (nextDestination) setDestination(nextDestination);
+    if (nextWaypoints) setWaypoints(nextWaypoints);
+    if (nextPlannedStops) setPlannedStops(nextPlannedStops);
+  }, [route.params]);
 
   useEffect(() => {
     if (trafficEnabled || gpsEnabled) {
@@ -1006,12 +1107,12 @@ export default function FlightPlannerScreen() {
         <Text style={styles.sectionSubtitle}>Build a route, estimate time and fuel, then save with RSF Pro.</Text>
         <View style={styles.infoCard}>
           <Text style={styles.infoTitle}>RSF Pro</Text>
-          <Text style={styles.helperText}>Unlock saved plans, per-leg breakdowns, and export tools.</Text>
+          <Text style={styles.helperText}>Saved plans, per-leg breakdowns, and export tools follow your existing RSF membership.</Text>
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={() => navigation?.navigate?.('LogbookPro')}
           >
-            <Text style={styles.secondaryButtonText}>Upgrade to RSF Pro</Text>
+            <Text style={styles.secondaryButtonText}>View membership details</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1507,6 +1608,37 @@ export default function FlightPlannerScreen() {
               <Text style={styles.instrumentValue}>{verticalSpeedFpm ? `${verticalSpeedFpm.toFixed(0)} fpm` : '-'}</Text>
             </View>
           </View>
+          {routeProgress && (
+            <>
+              <Text style={[styles.instrumentTitle, { marginTop: spacing.sm }]}>Route Progress</Text>
+              <View style={styles.instrumentRow}>
+                <View style={styles.instrumentBox}>
+                  <Text style={styles.instrumentLabel}>Remaining</Text>
+                  <Text style={styles.instrumentValue}>{routeProgress.remainingRouteNm.toFixed(1)} NM</Text>
+                </View>
+                <View style={styles.instrumentBox}>
+                  <Text style={styles.instrumentLabel}>ETA</Text>
+                  <Text style={styles.instrumentValue}>{routeProgress.etaText || '-'}</Text>
+                </View>
+              </View>
+              <View style={styles.instrumentRow}>
+                <View style={styles.instrumentBox}>
+                  <Text style={styles.instrumentLabel}>Next Point</Text>
+                  <Text style={styles.instrumentValue}>{routeProgress.nextWaypoint || '-'}</Text>
+                </View>
+                <View style={styles.instrumentBox}>
+                  <Text style={styles.instrumentLabel}>Off Route</Text>
+                  <Text style={styles.instrumentValue}>{routeProgress.offRouteNm.toFixed(1)} NM</Text>
+                </View>
+              </View>
+              <View style={styles.progressBarTrack}>
+                <View style={[styles.progressBarFill, { width: `${routeProgress.progressPct}%` }]} />
+              </View>
+              <Text style={styles.helperText}>
+                {routeProgress.progressPct.toFixed(0)}% complete on the current route.
+              </Text>
+            </>
+          )}
         </View>
       </View>
 
@@ -1965,5 +2097,16 @@ const styles = StyleSheet.create({
   instrumentBox: { flex: 1, padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface },
   instrumentLabel: { fontSize: 11, color: colors.textMuted },
   instrumentValue: { fontSize: 14, fontWeight: '700', color: colors.text, marginTop: 4 },
+  progressBarTrack: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: colors.border,
+    marginTop: spacing.sm,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: colors.primary,
+  },
 });
-

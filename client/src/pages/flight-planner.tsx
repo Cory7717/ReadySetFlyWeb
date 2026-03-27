@@ -3693,6 +3693,14 @@ export default function FlightPlanner() {
       tfrRouteQuery.dataUpdatedAt,
     ]
   );
+  const plannerAppDeepLink = useMemo(() => {
+    const params = new URLSearchParams();
+    const departureCode = form.departure.trim().toUpperCase();
+    const destinationCode = form.destination.trim().toUpperCase();
+    if (departureCode) params.set("departure", departureCode);
+    if (destinationCode) params.set("destination", destinationCode);
+    return `readysetfly://flight-planner${params.toString() ? `?${params.toString()}` : ""}`;
+  }, [form.departure, form.destination]);
   const isBriefingStale = latestBriefingUpdatedAtMs > 0 && Date.now() - latestBriefingUpdatedAtMs > 20 * 60 * 1000;
   const briefingUpdatedLabel = latestBriefingUpdatedAtMs
     ? new Date(latestBriefingUpdatedAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -5047,7 +5055,7 @@ export default function FlightPlanner() {
       <OpenInAppBanner
         title="Use the app for native in-flight tracking"
         description="RSF on the web is the right place to build routes, review hazards, save plans, and file with Flight Service. For tablet flying with direct ADS-B receiver traffic and native ownship tracking, open the RSF app."
-        deepLink="readysetfly://flight-planner"
+        deepLink={plannerAppDeepLink}
         note="Your web plan stays useful for planning and testing. Opening the app is mainly for native cockpit use."
       />
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">

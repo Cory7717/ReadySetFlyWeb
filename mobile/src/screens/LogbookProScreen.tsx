@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
@@ -42,29 +42,6 @@ export default function LogbookProScreen({ navigation }: any) {
   const membershipTrialEndsAt = (user as any)?.membershipTrialEndsAt;
   const membershipInterval = (user as any)?.membershipInterval;
   const isTrialing = membershipStatus === 'trialing';
-
-  const handleSubscribe = async () => {
-    if (!isAuthenticated) {
-      Alert.alert('Sign in required', 'Please sign in to upgrade to RSF Pro.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await api.post('/api/paypal/membership/subscribe', {
-        tier: selectedTier,
-        interval: selectedInterval,
-      });
-      const approveUrl = res.data?.approveUrl;
-      if (!approveUrl) {
-        throw new Error('Missing approval link.');
-      }
-      await Linking.openURL(approveUrl);
-    } catch (error: any) {
-      Alert.alert('Subscription error', error?.response?.data?.error || error.message || 'Unable to start subscription.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadProData = async () => {
     if (!isAuthenticated || !hasAccess) return;
@@ -281,7 +258,17 @@ export default function LogbookProScreen({ navigation }: any) {
       <View style={styles.header}>
         <Text style={styles.title}>RSF Pro</Text>
         <Text style={styles.subtitle}>
-          Save, alerts, analytics require RSF Pro.
+          Use this screen to review Pro tiers and confirm whether your existing membership is active in the app.
+        </Text>
+      </View>
+
+      <View style={styles.infoBanner}>
+        <Text style={styles.infoBannerTitle}>Memberships sync into the app</Text>
+        <Text style={styles.infoBannerText}>
+          If you already subscribed to RSF elsewhere, sign in with the same account and your access should appear here automatically.
+        </Text>
+        <Text style={styles.infoBannerText}>
+          This app does not launch an external checkout flow. Billing stays managed on the platform where the membership was started.
         </Text>
       </View>
 
@@ -341,15 +328,35 @@ export default function LogbookProScreen({ navigation }: any) {
       </View>
 
       <View style={styles.totalRow}>
-        <Text style={styles.totalLabel}>Total today</Text>
+        <Text style={styles.totalLabel}>Sample {selectedInterval} price</Text>
         <Text style={styles.totalValue}>${selectedPlanTotal.toFixed(2)}</Text>
       </View>
 
-      <TouchableOpacity style={styles.primaryButton} onPress={handleSubscribe} disabled={loading}>
-        <Text style={styles.primaryButtonText}>
-          {loading ? 'Redirecting...' : hasTrial ? 'Start free trial with PayPal' : 'Become a Member with PayPal'}
+      <View style={styles.membershipStatusCard}>
+        <Text style={styles.membershipStatusTitle}>App membership status</Text>
+        <Text style={styles.membershipStatusText}>
+          {!isAuthenticated
+            ? 'Sign in to see whether this account already has RSF Pro access.'
+            : hasAccess
+              ? 'Your signed-in account currently has RSF membership access in the app.'
+              : 'No active RSF membership is currently attached to this signed-in account.'}
         </Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => {
+            if (!isAuthenticated) {
+              navigation.navigate('Auth');
+              return;
+            }
+            navigation.navigate('ProfileHome');
+          }}
+          disabled={loading}
+        >
+          <Text style={styles.secondaryButtonText}>
+            {!isAuthenticated ? 'Sign in to check access' : 'Return to profile'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {membershipStatus && (
         <Text style={styles.statusText}>Current status: {membershipStatus}</Text>
@@ -422,6 +429,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   secondaryButtonText: { color: colors.text, fontWeight: '600' },
+  infoBanner: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    marginBottom: spacing.md,
+  },
+  infoBannerTitle: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 6 },
+  infoBannerText: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   featureList: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   featureTitle: { fontSize: 13, fontWeight: '700', color: colors.text, marginBottom: 8 },
   featureRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
@@ -444,7 +461,16 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
   totalLabel: { fontSize: 14, color: colors.textMuted },
   totalValue: { fontSize: 16, fontWeight: '600', color: colors.text },
-  primaryButton: { backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginTop: spacing.md, ...shadow.card },
-  primaryButtonText: { color: '#fff', fontWeight: '600' },
+  membershipStatusCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: spacing.md,
+    ...shadow.card,
+  },
+  membershipStatusTitle: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 6 },
+  membershipStatusText: { fontSize: 13, color: colors.textMuted },
   statusText: { marginTop: spacing.sm, fontSize: 12, color: colors.textMuted },
 });

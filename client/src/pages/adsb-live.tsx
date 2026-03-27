@@ -1478,6 +1478,13 @@ export default function AdsbLive() {
     ? `${selectedPlan.departure} to ${selectedPlan.destination}${selectedPlan.alternate ? ` · alt ${selectedPlan.alternate}` : ""}`
     : "No route selected";
 
+  const liveMapAppDeepLink = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selectedPlan?.departure) params.set("departure", String(selectedPlan.departure).trim().toUpperCase());
+    if (selectedPlan?.destination) params.set("destination", String(selectedPlan.destination).trim().toUpperCase());
+    return `readysetfly://flight-planner${params.toString() ? `?${params.toString()}` : ""}`;
+  }, [selectedPlan?.departure, selectedPlan?.destination]);
+
   const tfrQuery = useQuery<OverlayFeatureCollection>({
     queryKey: ["/api/tfrs", overlayBbox],
     enabled: showTfrOverlay && Boolean(overlayBbox),
@@ -1793,7 +1800,7 @@ export default function AdsbLive() {
         <OpenInAppBanner
           title="Plan on the web. Fly in the app."
           description="Use the native RSF app on your tablet for direct ADS-B receiver traffic and cockpit-style in-flight tracking. Keep the web live map for planning, testing, and browser-based situational review."
-          deepLink="readysetfly://flight-planner"
+          deepLink={liveMapAppDeepLink}
           note="If the RSF app is installed on this device, it should open directly to the mobile flight planner."
         />
 

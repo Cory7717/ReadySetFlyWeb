@@ -100,7 +100,7 @@ export default function LogbookScreen({ navigation }: any) {
             : 'Unlock currency alerts, endorsements, radio comms training, and advanced tools.'}
         </Text>
         <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('LogbookPro')}>
-          <Text style={styles.secondaryButtonText}>{isPro ? 'Open Member Dashboard' : 'Upgrade to RSF Pro'}</Text>
+          <Text style={styles.secondaryButtonText}>{isPro ? 'Open Member Dashboard' : 'View membership details'}</Text>
         </TouchableOpacity>
       </View>
 

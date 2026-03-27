@@ -529,12 +529,12 @@ export default function ProfileScreen({ navigation }: any) {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => Linking.openURL('https://readysetfly.us/settings')}
+              onPress={() => navigation.navigate('LogbookPro')}
               data-testid="button-manage-subscription"
             >
               <Ionicons name="card-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Manage Subscription</Text>
-              <Ionicons name="open-outline" size={20} color="#9ca3af" />
+              <Text style={styles.menuText}>Membership & Billing</Text>
+              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
             </TouchableOpacity>
 
             <TouchableOpacity 

@@ -4117,10 +4117,13 @@ export default function FlightPlanner() {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(FLIGHT_PLANNER_DRAFT_KEY);
     }
+    setActiveTab("route");
     setReturnToFileAfterSave(false);
     setPendingFilingActionAfterSave(null);
     setAmendWorkflowPlanId(null);
     setEditingPlan(null);
+      setFilingPreview(null);
+      setShowFilingPayload(false);
       setForm({
         title: "",
         departure: "",
@@ -4167,6 +4170,39 @@ export default function FlightPlanner() {
         otherInfo: "",
       });
     };
+
+  const plannerHasDraftContent = Boolean(
+    editingPlan ||
+    form.title ||
+    form.departure ||
+    form.destination ||
+    form.route ||
+    form.alternate ||
+    form.plannedDepartureAt ||
+    form.plannedArrivalAt ||
+    form.aircraftType ||
+    form.tailNumber ||
+    form.fuelOnBoard ||
+    form.notes ||
+    waypointsInput ||
+    plannedStopsInput ||
+    departureRunway,
+  );
+
+  const handleClearForm = () => {
+    if (
+      plannerHasDraftContent &&
+      typeof window !== "undefined" &&
+      !window.confirm("Clear the current flight plan form and start fresh?")
+    ) {
+      return;
+    }
+    resetForm();
+    toast({
+      title: "Form cleared",
+      description: "The planner is ready for a fresh flight plan.",
+    });
+  };
 
   const copyFilingPacket = async () => {
     try {
@@ -5044,9 +5080,9 @@ export default function FlightPlanner() {
                 type="button"
                 size="sm"
                 className="min-w-[170px]"
-                onClick={resetForm}
+                onClick={handleClearForm}
               >
-                Start new plan
+                Clear form
               </Button>
               {recentPlans.map((plan) => (
                 <button
@@ -7428,7 +7464,7 @@ export default function FlightPlanner() {
             >
               Log this flight (after you fly)
             </Button>
-            <Button variant="ghost" onClick={resetForm}>
+            <Button variant="ghost" onClick={handleClearForm}>
               Clear Form
             </Button>
           </div>
@@ -7468,11 +7504,11 @@ export default function FlightPlanner() {
           ) : (
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={resetForm}>
-                  Start new plan
+                <Button type="button" onClick={handleClearForm}>
+                  Clear form
                 </Button>
                 {editingPlan && (
-                  <Button type="button" variant="outline" onClick={resetForm}>
+                  <Button type="button" variant="outline" onClick={handleClearForm}>
                     Leave saved plan
                   </Button>
                 )}

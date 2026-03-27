@@ -248,37 +248,63 @@ export default function AviationWeatherHubScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Aviation Weather Hub</Text>
-        <Text style={styles.subtitle}>NOAA/AWC METARs, TAFs, NOTAMs, PIREPs, hazards, and winds aloft.</Text>
+      <View style={styles.heroPanel}>
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroIconWrap}>
+            <Ionicons name="partly-sunny-outline" size={34} color="#93c5fd" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroEyebrow}>AVIATION WEATHER HUB</Text>
+            <Text style={styles.heroTitle}>Weather, hazards, and briefing context in one place.</Text>
+            <Text style={styles.heroSubtitle}>NOAA/AWC METARs, TAFs, NOTAMs, PIREPs, hazards, and winds aloft.</Text>
+          </View>
+        </View>
+
+        <View style={styles.heroSummaryRow}>
+          <View style={styles.heroSummaryTile}>
+            <Text style={styles.heroSummaryLabel}>Airport</Text>
+            <Text style={styles.heroSummaryValue}>{searchIcao}</Text>
+          </View>
+          <View style={styles.heroSummaryTile}>
+            <Text style={styles.heroSummaryLabel}>Favorites</Text>
+            <Text style={styles.heroSummaryValue}>{favorites.length}</Text>
+          </View>
+          <View style={styles.heroSummaryTile}>
+            <Text style={styles.heroSummaryLabel}>Active tab</Text>
+            <Text style={styles.heroSummaryValue}>{tabs.find((tab) => tab.id === activeTab)?.label || 'Overview'}</Text>
+          </View>
+        </View>
       </View>
 
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.input}
-          value={icaoInput}
-          onChangeText={setIcaoInput}
-          onSubmitEditing={submitIcao}
-          autoCapitalize="characters"
-          placeholder="ICAO (e.g., KAUS)"
-        />
-        <TouchableOpacity style={[styles.primaryButton, !canSearch && styles.buttonDisabled]} onPress={submitIcao} disabled={!canSearch}>
-          <Ionicons name="search" size={16} color="#fff" />
-          <Text style={styles.primaryButtonText}>Load</Text>
-        </TouchableOpacity>
+      <View style={styles.searchCard}>
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.input}
+            value={icaoInput}
+            onChangeText={setIcaoInput}
+            onSubmitEditing={submitIcao}
+            autoCapitalize="characters"
+            placeholder="ICAO (e.g., KAUS)"
+            placeholderTextColor={colors.textSoft}
+          />
+          <TouchableOpacity style={[styles.primaryButton, !canSearch && styles.buttonDisabled]} onPress={submitIcao} disabled={!canSearch}>
+            <Ionicons name="search" size={16} color="#fff" />
+            <Text style={styles.primaryButtonText}>Load</Text>
+          </TouchableOpacity>
+        </View>
+        {!canSearch && icaoInput.trim().length > 0 && (
+          <Text style={styles.inlineHelperText}>Enter a valid 3-4 character ICAO code.</Text>
+        )}
       </View>
-      {!canSearch && icaoInput.trim().length > 0 && (
-        <Text style={styles.helperText}>Enter a valid 3-4 character ICAO code.</Text>
-      )}
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Favorite airports & alerts</Text>
         <View style={styles.summaryRow}>
           <View>
             <Text style={styles.summaryLabel}>{searchIcao}</Text>
-            <Text style={styles.helperText}>
+            <Text style={styles.inlineHelperText}>
               {airportQuery.data?.name
-                ? `${airportQuery.data?.name}${airportQuery.data?.city ? ` · ${airportQuery.data?.city}` : ''}${airportQuery.data?.state ? `, ${airportQuery.data?.state}` : ''}`
+                ? `${airportQuery.data?.name}${airportQuery.data?.city ? ` - ${airportQuery.data?.city}` : ''}${airportQuery.data?.state ? `, ${airportQuery.data?.state}` : ''}`
                 : 'Save this airport for quick access and alerts.'}
             </Text>
           </View>
@@ -290,7 +316,7 @@ export default function AviationWeatherHubScreen() {
         </View>
 
         {!isAuthenticated && (
-          <Text style={styles.helperText}>Sign in to save airports and receive alerts.</Text>
+          <Text style={styles.inlineHelperText}>Sign in to save airports and receive alerts.</Text>
         )}
 
         {currentFavorite && (
@@ -370,8 +396,8 @@ export default function AviationWeatherHubScreen() {
             <Text style={styles.summaryValue}>{tafQuery.data?.raw || tafQuery.data?.data?.rawTAF || 'No TAF loaded.'}</Text>
           </View>
           <View style={styles.pillRow}>
-            <Text style={styles.pill}>NOTAMs {notamsCount} · US-only</Text>
-            <Text style={styles.pill}>PIREPs {pirepsCount} · US-only</Text>
+            <Text style={styles.pill}>NOTAMs {notamsCount} - US-only</Text>
+            <Text style={styles.pill}>PIREPs {pirepsCount} - US-only</Text>
             <Text style={styles.pill}>Winds {windsCount}</Text>
           </View>
         </View>
@@ -576,19 +602,93 @@ export default function AviationWeatherHubScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.lg },
-  header: { padding: spacing.lg, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
-  title: { ...typography.h2 },
-  subtitle: { marginTop: spacing.xs, fontSize: 13, color: colors.textMuted },
-  searchRow: { flexDirection: 'row', gap: spacing.sm, padding: spacing.lg, paddingBottom: 0 },
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  heroPanel: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  heroIconWrap: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: '#fff',
+    marginTop: 10,
+    maxWidth: 320,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  heroSummaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  heroSummaryTile: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  heroSummaryLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+  },
+  heroSummaryValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  searchCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    ...shadow.card,
+  },
+  searchRow: { flexDirection: 'row', gap: spacing.sm },
   input: {
     flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    backgroundColor: colors.surfaceMuted,
+    color: colors.text,
   },
   primaryButton: {
     flexDirection: 'row',
@@ -596,41 +696,43 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
   },
-  primaryButtonText: { color: '#fff', fontWeight: '600' },
+  primaryButtonText: { color: '#fff', fontWeight: '800' },
   buttonDisabled: { opacity: 0.5 },
-  helperText: { fontSize: 12, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingTop: spacing.xs },
+  helperText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
+  inlineHelperText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
   secondaryButton: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
   },
   secondaryButtonActive: {
     borderColor: colors.primary,
     backgroundColor: colors.primarySoft,
   },
-  secondaryButtonText: { color: colors.textMuted, fontWeight: '600', fontSize: 12 },
+  secondaryButtonText: { color: colors.textMuted, fontWeight: '800', fontSize: 12 },
   secondaryButtonTextActive: { color: colors.primary },
-  tabRow: { paddingHorizontal: spacing.lg, marginTop: spacing.sm },
+  tabRow: { marginBottom: spacing.sm },
   tabButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     marginRight: 8,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceMuted,
-  },
-  tabButtonActive: { backgroundColor: colors.primarySoft },
-  tabText: { fontSize: 12, color: colors.textMuted },
-  tabTextActive: { color: colors.primary, fontWeight: '600' },
-  card: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    padding: spacing.md,
     borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  tabButtonActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  tabText: { fontSize: 12, color: colors.textMuted },
+  tabTextActive: { color: colors.primary, fontWeight: '800' },
+  card: {
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
@@ -648,31 +750,31 @@ const styles = StyleSheet.create({
   favoriteChip: {
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
   },
   favoriteChipActive: {
     backgroundColor: colors.primarySoft,
     borderColor: colors.primary,
   },
   favoriteChipText: { fontSize: 12, color: colors.textMuted },
-  favoriteChipTextActive: { color: colors.primary, fontWeight: '600' },
+  favoriteChipTextActive: { color: colors.primary, fontWeight: '800' },
   sectionTitle: { ...typography.h3, marginBottom: spacing.sm },
   summaryRow: { marginBottom: spacing.sm },
   summaryLabel: { fontSize: 12, color: colors.textMuted },
   summaryValue: { fontSize: 13, color: colors.text, marginTop: 4 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  pill: { fontSize: 12, color: colors.primary, backgroundColor: colors.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.md },
-  codeBlock: { fontSize: 11, color: colors.textMuted, backgroundColor: colors.surfaceMuted, padding: spacing.sm, borderRadius: radius.md },
-  listItem: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.xs },
+  pill: { fontSize: 12, color: colors.primary, backgroundColor: colors.primarySoft, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.lg },
+  codeBlock: { fontSize: 11, color: colors.textMuted, backgroundColor: colors.surfaceMuted, padding: spacing.sm, borderRadius: radius.lg },
+  listItem: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.sm, marginBottom: spacing.xs, backgroundColor: colors.backgroundElevated },
   listTitle: { fontSize: 12, fontWeight: '700', color: colors.text },
   listText: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   listMeta: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
   altitudeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: spacing.sm },
-  altitudeButton: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
+  altitudeButton: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
   altitudeButtonActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   altitudeText: { fontSize: 11, color: colors.textMuted },
-  altitudeTextActive: { color: colors.primary, fontWeight: '600' },
+  altitudeTextActive: { color: colors.primary, fontWeight: '800' },
 });

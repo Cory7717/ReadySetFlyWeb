@@ -835,6 +835,31 @@ function getPublicBaseUrl() {
   return base.startsWith("http") ? base : `https://${base}`;
 }
 
+function getPublicFrontendBaseUrl() {
+  const candidates = [
+    process.env.FRONTEND_BASE_URL,
+    process.env.APP_BASE_URL,
+    process.env.WEB_BASE_URL,
+    process.env.RENDER_EXTERNAL_URL,
+    process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}` : null,
+    "https://readysetfly.us",
+  ].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    try {
+      const normalized = candidate.startsWith("http") ? candidate : `https://${candidate}`;
+      const parsed = new URL(normalized);
+      const host = parsed.hostname.toLowerCase();
+      if (host === "localhost" || host === "127.0.0.1") continue;
+      return parsed.origin;
+    } catch {
+      continue;
+    }
+  }
+
+  return "https://readysetfly.us";
+}
+
 const marketingSecret = process.env.JWT_SECRET || process.env.SESSION_SECRET || "default-jwt-secret-change-in-production";
 
 function signMarketingToken(payload: Record<string, any>) {
@@ -8712,10 +8737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const getMembershipPartnerOfferSummary = async (offer: MembershipPartnerOffer) => {
     const members = await storage.getMembershipPartnerOfferMembers(offer.id);
     const redeemedCount = members.filter((member) => !!member.redeemedAt).length;
-    const baseUrl =
-      process.env.APP_BASE_URL ||
-      process.env.WEB_BASE_URL ||
-      (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}` : "https://readysetfly.us");
+    const baseUrl = getPublicFrontendBaseUrl();
     return {
       ...offer,
       totalMembers: members.length,

@@ -66,6 +66,16 @@ interface FuelPriceResponse {
   communityEnabled: boolean;
 }
 
+interface MembershipPartnerOfferPublic {
+  id: string;
+  name: string;
+  partnerName: string;
+  slug: string;
+  description?: string | null;
+  tier: "pro" | "pro_plus";
+  durationDays: number;
+}
+
 type LandingModuleId = "conditions" | "cfi" | "partner" | "events";
 type MobileTab = "weather" | "find" | "plan" | "log" | "pricing";
 
@@ -106,6 +116,15 @@ export default function Landing() {
       }
       return response.json();
     },
+  });
+  const { data: cpaOffer } = useQuery<MembershipPartnerOfferPublic | null>({
+    queryKey: ["/api/membership-partner-offers", "cpa-3mo-pro-plus", "landing"],
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/api/membership-partner-offers/cpa-3mo-pro-plus"));
+      if (!response.ok) return null;
+      return response.json();
+    },
+    staleTime: 1000 * 60 * 10,
   });
   const events = eventsData?.events ?? [];
   const feedEvents = events.slice(0, 10);
@@ -1534,6 +1553,7 @@ export default function Landing() {
 
       <div className="border-b border-sky-200/70 bg-[linear-gradient(135deg,hsl(206_68%_95%),hsl(212_72%_97%))]">
         <div className="container mx-auto px-4 py-6 sm:py-8">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.95fr)]">
           <div className="rounded-[1.35rem] border border-sky-200/80 bg-white/80 p-5 shadow-[var(--shadow-rsf-panel)] backdrop-blur sm:p-6">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl space-y-2">
@@ -1568,6 +1588,57 @@ export default function Landing() {
                 }}
               />
             </div>
+          </div>
+            {cpaOffer ? (
+              <div className="rounded-[1.35rem] border border-[#1f4d8f]/15 bg-[linear-gradient(165deg,#0c1c34,#153159)] p-5 text-white shadow-[var(--shadow-rsf-panel)] sm:p-6">
+                <div className="flex h-full flex-col justify-between gap-4">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="border border-white/20 bg-white/10 text-white hover:bg-white/10">
+                        CPA Exclusive
+                      </Badge>
+                      <Badge variant="secondary" className="bg-[#f0b429] text-slate-950 hover:bg-[#f0b429]">
+                        {cpaOffer.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"}
+                      </Badge>
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-xl font-semibold tracking-tight">
+                        {cpaOffer.durationDays / 30} months free for {cpaOffer.partnerName} members
+                      </h3>
+                      <p className="text-sm leading-6 text-slate-200">
+                        Enter your CPA member number, create a free RSF account, and unlock the partner offer directly through Ready Set Fly.
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/12 bg-white/10 p-3 text-xs leading-5 text-slate-200">
+                      Member verification is required.
+                      <br />
+                      New RSF account signup is part of the redemption flow.
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <Button
+                      asChild
+                      className="w-full bg-[#f0b429] text-slate-950 hover:bg-[#e4aa22]"
+                    >
+                      <Link
+                        href={`/logbook/pro?offer=${encodeURIComponent(cpaOffer.slug)}`}
+                        onClick={() =>
+                          trackEvent("cta_click", {
+                            label: "landing_cpa_partner_offer",
+                            target: `/logbook/pro?offer=${cpaOffer.slug}`,
+                          })
+                        }
+                      >
+                        Claim CPA offer
+                      </Link>
+                    </Button>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-300">
+                      Monthly RSF membership platform. No annual lock-in required.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

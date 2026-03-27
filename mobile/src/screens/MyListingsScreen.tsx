@@ -37,6 +37,15 @@ const formatPrice = (value?: string | number | null) => {
   return typeof value === 'number' ? value.toFixed(0) : value;
 };
 
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTile}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
 export default function MyListingsScreen({ navigation }: any) {
   const { isAuthenticated, user, isLoading: authLoading } = useIsAuthenticated();
 
@@ -51,17 +60,42 @@ export default function MyListingsScreen({ navigation }: any) {
   });
 
   const listings = Array.isArray(data) ? (data as MarketplaceListing[]) : [];
+  const activeCount = listings.filter((listing) => listing.isActive).length;
+  const totalViews = listings.reduce((sum, listing) => sum + Number(listing.viewCount || 0), 0);
 
   if (!isAuthenticated && !authLoading) {
     return (
-      <View style={styles.centerContainer}>
-        <Ionicons name="lock-closed-outline" size={64} color="#9ca3af" />
-        <Text style={styles.emptyTitle}>Sign in required</Text>
-        <Text style={styles.emptyText}>Sign in to manage your marketplace listings.</Text>
-        <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('ProfileHome')}>
-          <Text style={styles.primaryButtonText}>Go to Profile</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.heroPanel}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroIconWrap}>
+              <Ionicons name="pricetags-outline" size={34} color="#93c5fd" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.heroEyebrow}>SELLER WORKSPACE</Text>
+              <Text style={styles.heroTitle}>Sign in to manage your listings.</Text>
+              <Text style={styles.heroSubtitle}>
+                Use the member workspace to launch, monitor, and refine marketplace listings across Ready Set Fly.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.summaryRow}>
+            <SummaryTile label="Listings" value="Locked" />
+            <SummaryTile label="Views" value="Locked" />
+            <SummaryTile label="Status" value="Guest" />
+          </View>
+
+          <TouchableOpacity
+            style={styles.heroAction}
+            onPress={() => navigation.navigate('Profile')}
+            activeOpacity={0.92}
+          >
+            <Ionicons name="log-in-outline" size={18} color="#fff" />
+            <Text style={styles.heroActionText}>Go to profile</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
   }
 
@@ -86,30 +120,47 @@ export default function MyListingsScreen({ navigation }: any) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.headerRow}>
-        <View style={styles.headerText}>
-          <Text style={styles.title}>My Listings</Text>
-          <Text style={styles.subtitle}>Manage your marketplace listings.</Text>
+      <View style={styles.heroPanel}>
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroIconWrap}>
+            <Ionicons name="pricetags-outline" size={34} color="#93c5fd" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroEyebrow}>SELLER WORKSPACE</Text>
+            <Text style={styles.heroTitle}>Manage your marketplace presence.</Text>
+            <Text style={styles.heroSubtitle}>
+              Track what is live, how much attention each listing is getting, and where to launch the next listing.
+            </Text>
+          </View>
         </View>
+
+        <View style={styles.summaryRow}>
+          <SummaryTile label="Total" value={String(listings.length)} />
+          <SummaryTile label="Active" value={String(activeCount)} />
+          <SummaryTile label="Views" value={String(totalViews)} />
+        </View>
+
         <TouchableOpacity
-          style={styles.createButton}
+          style={styles.heroAction}
           onPress={() => navigation.navigate('Marketplace', { screen: 'CreateMarketplaceListing' })}
+          activeOpacity={0.92}
         >
-          <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
-          <Text style={styles.createButtonText}>New</Text>
+          <Ionicons name="add-circle-outline" size={18} color="#fff" />
+          <Text style={styles.heroActionText}>Create new listing</Text>
         </TouchableOpacity>
       </View>
 
       {listings.length === 0 ? (
         <View style={styles.emptyState}>
-          <Ionicons name="storefront-outline" size={64} color="#9ca3af" />
+          <Ionicons name="storefront-outline" size={64} color={colors.textSoft} />
           <Text style={styles.emptyTitle}>No listings yet</Text>
           <Text style={styles.emptyText}>Create your first marketplace listing to get started.</Text>
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={() => navigation.navigate('Marketplace', { screen: 'CreateMarketplaceListing' })}
+            activeOpacity={0.92}
           >
-            <Text style={styles.primaryButtonText}>Create Listing</Text>
+            <Text style={styles.primaryButtonText}>Create listing</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -126,32 +177,44 @@ export default function MyListingsScreen({ navigation }: any) {
                   params: { listingId: listing.id },
                 })
               }
+              activeOpacity={0.92}
             >
               <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>{listing.title || 'Untitled Listing'}</Text>
+                <View style={{ flex: 1, marginRight: spacing.sm }}>
+                  <Text style={styles.cardTitle}>{listing.title || 'Untitled Listing'}</Text>
+                  <Text style={styles.cardMeta}>{formatCategory(listing.category)}</Text>
+                </View>
                 <View style={[styles.statusPill, listing.isActive ? styles.statusActive : styles.statusInactive]}>
-                  <Text style={[styles.statusText, listing.isActive ? styles.statusTextActive : styles.statusTextInactive]}>
+                  <Text
+                    style={[
+                      styles.statusText,
+                      listing.isActive ? styles.statusTextActive : styles.statusTextInactive,
+                    ]}
+                  >
                     {listing.isActive ? 'Active' : 'Inactive'}
                   </Text>
                 </View>
               </View>
-              <Text style={styles.cardMeta}>{formatCategory(listing.category)}</Text>
-              {listing.location ? (
-                <View style={styles.infoRow}>
-                  <Ionicons name="location-outline" size={14} color={colors.textMuted} />
-                  <Text style={styles.infoText}>{listing.location}</Text>
+
+              <View style={styles.metricRow}>
+                {listing.location ? (
+                  <View style={styles.metricPill}>
+                    <Ionicons name="location-outline" size={14} color={colors.textSoft} />
+                    <Text style={styles.metricPillText}>{listing.location}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.metricPill}>
+                  <Ionicons name="calendar-outline" size={14} color={colors.textSoft} />
+                  <Text style={styles.metricPillText}>Created {formatDate(listing.createdAt)}</Text>
                 </View>
-              ) : null}
-              <View style={styles.infoRow}>
-                <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
-                <Text style={styles.infoText}>Created {formatDate(listing.createdAt)}</Text>
+                <View style={styles.metricPill}>
+                  <Ionicons name="time-outline" size={14} color={colors.textSoft} />
+                  <Text style={styles.metricPillText}>Expires {formatDate(listing.expiresAt)}</Text>
+                </View>
               </View>
-              <View style={styles.infoRow}>
-                <Ionicons name="time-outline" size={14} color={colors.textMuted} />
-                <Text style={styles.infoText}>Expires {formatDate(listing.expiresAt)}</Text>
-              </View>
+
               <View style={styles.footerRow}>
-                {hasPrice ? <Text style={styles.priceText}>${price}</Text> : <Text style={styles.priceText}>No price</Text>}
+                <Text style={styles.priceText}>{hasPrice ? `$${price}` : 'No price'}</Text>
                 <Text style={styles.viewText}>{listing.viewCount || 0} views</Text>
               </View>
             </TouchableOpacity>
@@ -164,58 +227,166 @@ export default function MyListingsScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, paddingBottom: spacing.xl },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  headerText: { flex: 1, marginRight: spacing.sm },
-  title: { ...typography.h2 },
-  subtitle: { color: colors.textMuted, marginTop: spacing.xs },
-  createButton: {
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
+  heroPanel: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  heroIconWrap: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: '#fff',
+    marginTop: 10,
+    maxWidth: 320,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  summaryTile: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  heroAction: {
+    marginTop: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: colors.primarySoft,
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: radius.lg,
+    paddingVertical: 15,
+    backgroundColor: colors.primary,
   },
-  createButtonText: { marginLeft: 6, color: colors.primary, fontWeight: '600' },
+  heroActionText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
   card: {
     backgroundColor: colors.surface,
     padding: spacing.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.sm,
     ...shadow.card,
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { fontSize: 15, fontWeight: '600', color: colors.text, flex: 1, marginRight: spacing.sm },
-  cardMeta: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  cardMeta: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
   statusActive: { backgroundColor: '#dcfce7' },
   statusInactive: { backgroundColor: '#fee2e2' },
-  statusText: { fontSize: 11, fontWeight: '600' },
+  statusText: { fontSize: 11, fontWeight: '800' },
   statusTextActive: { color: '#166534' },
   statusTextInactive: { color: '#991b1b' },
-  infoRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
-  infoText: { marginLeft: 6, fontSize: 12, color: colors.textMuted },
-  footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
-  priceText: { fontSize: 13, fontWeight: '600', color: colors.text },
+  metricRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  metricPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  metricPillText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: '700',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  priceText: { fontSize: 14, fontWeight: '800', color: colors.text },
   viewText: { fontSize: 12, color: colors.textMuted },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
   loadingText: { marginTop: spacing.sm, color: colors.textMuted },
-  errorText: { marginTop: spacing.sm, color: colors.danger, fontWeight: '600' },
+  errorText: { marginTop: spacing.sm, color: colors.danger, fontWeight: '800' },
   errorSubtext: { marginTop: 6, color: colors.textMuted, textAlign: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: spacing.xl },
-  emptyTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginTop: spacing.sm },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: colors.text, marginTop: spacing.sm },
   emptyText: { fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
   primaryButton: {
     marginTop: spacing.md,
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
   },
-  primaryButtonText: { color: '#fff', fontWeight: '600' },
+  primaryButtonText: { color: '#fff', fontWeight: '800' },
 });

@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../services/api';
@@ -23,6 +32,33 @@ function toNumber(value: string) {
   const cleaned = value.replace(/[^0-9.\-]/g, '');
   const num = Number(cleaned);
   return Number.isFinite(num) ? num : 0;
+}
+
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTile}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.sectionCard}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+      <View style={styles.sectionContent}>{children}</View>
+    </View>
+  );
 }
 
 export default function WeightBalanceScreen() {
@@ -108,8 +144,8 @@ export default function WeightBalanceScreen() {
       ? totals.cg < cgMinValue
         ? 'forward'
         : totals.cg > cgMaxValue
-        ? 'aft'
-        : 'within'
+          ? 'aft'
+          : 'within'
       : 'unknown';
   const cgRangeSpan = hasCgRange ? cgMaxValue - cgMinValue : 0;
   const cgMarkerPercent =
@@ -119,32 +155,54 @@ export default function WeightBalanceScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Weight & Balance</Text>
-      <Text style={styles.subtitle}>
-        Planning estimates only. Always verify against the aircraft POH/AFM.
-      </Text>
+      <View style={styles.heroPanel}>
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroIconWrap}>
+            <Ionicons name="barbell-outline" size={34} color="#93c5fd" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroEyebrow}>LOADING TOOL</Text>
+            <Text style={styles.heroTitle}>Build a quick weight and balance picture.</Text>
+            <Text style={styles.heroSubtitle}>
+              Start with an aircraft from the RSF library, add your loading stations, and estimate total weight, moment, and CG location for planning.
+            </Text>
+          </View>
+        </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Select Aircraft (Library)</Text>
-        <Text style={styles.cardSubtitle}>Sets max gross weight as a starting point.</Text>
+        <View style={styles.summaryRow}>
+          <SummaryTile label="Total wt" value={`${totals.totalWeight.toFixed(1)} lb`} />
+          <SummaryTile label="CG" value={totals.totalWeight > 0 ? totals.cg.toFixed(1) : '--'} />
+          <SummaryTile label="Status" value={isOverMax ? 'Over gross' : 'Planning'} />
+        </View>
+      </View>
+
+      <SectionCard
+        title="Aircraft baseline"
+        subtitle="Start from the RSF library to prefill max gross and station arm defaults where available."
+      >
         {isLoading ? (
           <ActivityIndicator size="small" color={colors.primary} />
         ) : (
           <>
-            <TouchableOpacity style={styles.selectButton} onPress={() => setShowPicker(true)}>
+            <TouchableOpacity style={styles.selectButton} onPress={() => setShowPicker(true)} activeOpacity={0.92}>
               <Text style={styles.selectButtonText}>
                 {selectedType ? `${selectedType.make} ${selectedType.model}` : 'Choose aircraft from library'}
               </Text>
               <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
             </TouchableOpacity>
-            {selectedType && (
-              <Text style={styles.listSubtitle}>
-                {selectedType.icaoType || 'No ICAO'} - Max gross {selectedType.maxGrossWeightLb} lb
-              </Text>
-            )}
+            {selectedType ? (
+              <View style={styles.selectedTypeCard}>
+                <Text style={styles.selectedTypeTitle}>
+                  {selectedType.make} {selectedType.model} ({selectedType.icaoType || 'N/A'})
+                </Text>
+                <Text style={styles.selectedTypeMeta}>
+                  Max gross {selectedType.maxGrossWeightLb} lb · Usable fuel {selectedType.usableFuelGal} gal
+                </Text>
+              </View>
+            ) : null}
           </>
         )}
-      </View>
+      </SectionCard>
 
       <Modal visible={showPicker} animationType="slide" onRequestClose={() => setShowPicker(false)}>
         <View style={styles.modalContainer}>
@@ -157,6 +215,7 @@ export default function WeightBalanceScreen() {
           <TextInput
             style={styles.input}
             placeholder="Search make, model, ICAO"
+            placeholderTextColor={colors.textSoft}
             value={query}
             onChangeText={setQuery}
             autoCapitalize="characters"
@@ -173,14 +232,15 @@ export default function WeightBalanceScreen() {
                     setSelectedType(type);
                     setShowPicker(false);
                   }}
+                  activeOpacity={0.92}
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.listTitle}>{label}</Text>
                     <Text style={styles.listSubtitle}>
-                      {type.icaoType || 'No ICAO'} - Max gross {type.maxGrossWeightLb} lb
+                      {type.icaoType || 'No ICAO'} · Max gross {type.maxGrossWeightLb} lb
                     </Text>
                   </View>
-                  {isSelected && <Ionicons name="checkmark-circle" size={18} color={colors.primary} />}
+                  {isSelected ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} /> : null}
                 </TouchableOpacity>
               );
             })}
@@ -188,73 +248,77 @@ export default function WeightBalanceScreen() {
         </View>
       </Modal>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Weight Stations</Text>
-
-        <Text style={styles.label}>Empty weight (lb)</Text>
-        <TextInput style={styles.input} value={emptyWeight} onChangeText={setEmptyWeight} keyboardType="numeric" />
-        <Text style={styles.label}>Empty weight arm (in)</Text>
-        <TextInput style={styles.input} value={emptyArm} onChangeText={setEmptyArm} keyboardType="numeric" />
-
-        <View style={styles.divider} />
-
-        <Text style={styles.label}>Front seats total (lb)</Text>
-        <TextInput style={styles.input} value={frontWeight} onChangeText={setFrontWeight} keyboardType="numeric" />
-        <Text style={styles.label}>Front seats arm (in)</Text>
-        <TextInput style={styles.input} value={frontArm} onChangeText={setFrontArm} keyboardType="numeric" />
+      <SectionCard
+        title="Weight stations"
+        subtitle="Enter each station and use the library values as your starting arms when available."
+      >
+        <Text style={styles.inputLabel}>Empty weight (lb)</Text>
+        <TextInput style={styles.input} value={emptyWeight} onChangeText={setEmptyWeight} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
+        <Text style={styles.inputLabel}>Empty weight arm (in)</Text>
+        <TextInput style={styles.input} value={emptyArm} onChangeText={setEmptyArm} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
 
         <View style={styles.divider} />
 
-        <Text style={styles.label}>Rear seats total (lb)</Text>
-        <TextInput style={styles.input} value={rearWeight} onChangeText={setRearWeight} keyboardType="numeric" />
-        <Text style={styles.label}>Rear seats arm (in)</Text>
-        <TextInput style={styles.input} value={rearArm} onChangeText={setRearArm} keyboardType="numeric" />
+        <Text style={styles.inputLabel}>Front seats total (lb)</Text>
+        <TextInput style={styles.input} value={frontWeight} onChangeText={setFrontWeight} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
+        <Text style={styles.inputLabel}>Front seats arm (in)</Text>
+        <TextInput style={styles.input} value={frontArm} onChangeText={setFrontArm} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
 
         <View style={styles.divider} />
 
-        <Text style={styles.label}>Baggage (lb)</Text>
-        <TextInput style={styles.input} value={baggageWeight} onChangeText={setBaggageWeight} keyboardType="numeric" />
-        <Text style={styles.label}>Baggage arm (in)</Text>
-        <TextInput style={styles.input} value={baggageArm} onChangeText={setBaggageArm} keyboardType="numeric" />
+        <Text style={styles.inputLabel}>Rear seats total (lb)</Text>
+        <TextInput style={styles.input} value={rearWeight} onChangeText={setRearWeight} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
+        <Text style={styles.inputLabel}>Rear seats arm (in)</Text>
+        <TextInput style={styles.input} value={rearArm} onChangeText={setRearArm} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
 
         <View style={styles.divider} />
 
-        <Text style={styles.label}>Fuel on board (gal)</Text>
-        <TextInput style={styles.input} value={fuelGallons} onChangeText={setFuelGallons} keyboardType="numeric" />
-        <Text style={styles.label}>Fuel arm (in)</Text>
-        <TextInput style={styles.input} value={fuelArm} onChangeText={setFuelArm} keyboardType="numeric" />
-        <Text style={styles.hint}>Fuel weight uses 6.0 lb/gal.</Text>
+        <Text style={styles.inputLabel}>Baggage (lb)</Text>
+        <TextInput style={styles.input} value={baggageWeight} onChangeText={setBaggageWeight} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
+        <Text style={styles.inputLabel}>Baggage arm (in)</Text>
+        <TextInput style={styles.input} value={baggageArm} onChangeText={setBaggageArm} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
 
         <View style={styles.divider} />
 
-        <Text style={styles.label}>Max gross weight (lb)</Text>
-        <TextInput style={styles.input} value={maxGrossOverride} onChangeText={setMaxGrossOverride} keyboardType="numeric" />
-        <Text style={styles.label}>CG min (in)</Text>
-        <TextInput style={styles.input} value={cgMin} onChangeText={setCgMin} keyboardType="numeric" />
-        <Text style={styles.label}>CG max (in)</Text>
-        <TextInput style={styles.input} value={cgMax} onChangeText={setCgMax} keyboardType="numeric" />
-      </View>
+        <Text style={styles.inputLabel}>Fuel on board (gal)</Text>
+        <TextInput style={styles.input} value={fuelGallons} onChangeText={setFuelGallons} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
+        <Text style={styles.inputLabel}>Fuel arm (in)</Text>
+        <TextInput style={styles.input} value={fuelArm} onChangeText={setFuelArm} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
+        <Text style={styles.helperText}>Fuel weight uses 6.0 lb/gal.</Text>
+      </SectionCard>
 
-      <View style={styles.cardRow}>
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>Total Weight</Text>
-          <Text style={styles.cardValue}>{totals.totalWeight.toFixed(1)} lb</Text>
-          <Text style={[styles.cardHint, isOverMax && { color: colors.danger }]}>
-            {isOverMax ? 'Over max gross' : 'Within limits (est.)'}
-          </Text>
+      <SectionCard
+        title="Limits and summary"
+        subtitle="Set max gross and CG range to visualize whether this loading estimate fits the plan."
+      >
+        <Text style={styles.inputLabel}>Max gross weight (lb)</Text>
+        <TextInput style={styles.input} value={maxGrossOverride} onChangeText={setMaxGrossOverride} keyboardType="numeric" placeholder="0" placeholderTextColor={colors.textSoft} />
+        <Text style={styles.inputLabel}>CG min (in)</Text>
+        <TextInput style={styles.input} value={cgMin} onChangeText={setCgMin} keyboardType="numeric" placeholder="Optional" placeholderTextColor={colors.textSoft} />
+        <Text style={styles.inputLabel}>CG max (in)</Text>
+        <TextInput style={styles.input} value={cgMax} onChangeText={setCgMax} keyboardType="numeric" placeholder="Optional" placeholderTextColor={colors.textSoft} />
+
+        <View style={styles.metricRow}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>Total weight</Text>
+            <Text style={styles.metricValue}>{totals.totalWeight.toFixed(1)} lb</Text>
+            <Text style={[styles.metricHint, isOverMax && styles.metricHintDanger]}>
+              {isOverMax ? 'Over max gross' : 'Within limits (est.)'}
+            </Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricLabel}>CG</Text>
+            <Text style={styles.metricValue}>{totals.totalWeight > 0 ? totals.cg.toFixed(1) : '--'}</Text>
+            <Text style={styles.metricHint}>Moment / total weight</Text>
+          </View>
         </View>
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>CG (in)</Text>
-          <Text style={styles.cardValue}>{totals.totalWeight > 0 ? totals.cg.toFixed(1) : '--'}</Text>
-          <Text style={styles.cardHint}>Total moment / total weight</Text>
-        </View>
-      </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>CG Envelope</Text>
-        <Text style={styles.cardSubtitle}>Enter CG min/max to visualize your loading location.</Text>
+        <Text style={styles.cgTitle}>CG envelope</Text>
+        <Text style={styles.sectionSubtitle}>
+          Enter CG min/max to visualize your loading location against a simple forward-to-aft bar.
+        </Text>
         <View style={styles.cgBar}>
-          {hasCgRange && <View style={styles.cgSafe} />}
+          {hasCgRange ? <View style={styles.cgSafe} /> : null}
           <View style={[styles.cgMarker, { left: `${cgMarkerPercent}%` }]} />
         </View>
         <View style={styles.cgLabels}>
@@ -270,57 +334,161 @@ export default function WeightBalanceScreen() {
           {cgStatus === 'aft' && 'Aft of CG range'}
           {cgStatus === 'unknown' && 'Add CG limits to evaluate range'}
         </Text>
-      </View>
+      </SectionCard>
 
-      <View style={styles.noteCard}>
-        <Text style={styles.noteTitle}>Disclaimer</Text>
+      <SectionCard title="Disclaimer">
         <Text style={styles.noteText}>
-          This calculator is for training and planning only. Always verify
-          with approved aircraft weight & balance data, POH/AFM, and current
-          loading.
+          This calculator is for training and planning only. Always verify with approved aircraft weight and balance data, POH/AFM, and current loading.
         </Text>
-      </View>
+      </SectionCard>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, paddingBottom: spacing.xl },
-  title: { ...typography.h2 },
-  subtitle: { marginTop: spacing.xs, color: colors.textMuted, marginBottom: spacing.sm },
-  card: {
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  heroPanel: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  heroIconWrap: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: '#fff',
+    marginTop: 10,
+    maxWidth: 320,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  summaryTile: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  sectionCard: {
     backgroundColor: colors.surface,
     padding: spacing.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.sm,
     ...shadow.card,
   },
-  cardRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  cardSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4, marginBottom: spacing.sm },
-  cardLabel: { fontSize: 12, color: colors.textMuted },
-  cardValue: { fontSize: 20, fontWeight: '700', color: colors.text, marginTop: spacing.xs },
-  cardHint: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
+  sectionTitle: {
+    ...typography.h2,
+  },
+  sectionSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  sectionContent: {
+    marginTop: spacing.md,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: spacing.sm,
+    marginBottom: 6,
+  },
   input: {
     backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    color: colors.text,
     marginTop: spacing.xs,
   },
-  label: { fontSize: 12, fontWeight: '600', color: colors.text, marginTop: spacing.xs },
-  hint: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
-  list: { marginBottom: spacing.sm },
+  selectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+  },
+  selectButtonText: { fontSize: 13, color: colors.text },
+  selectedTypeCard: {
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  selectedTypeTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  selectedTypeMeta: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+  modalContainer: { flex: 1, padding: spacing.md, backgroundColor: colors.background },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  modalList: { marginTop: spacing.sm },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceMuted,
@@ -330,37 +498,36 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: colors.primarySoft,
   },
-  listTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
+  listTitle: { fontSize: 14, fontWeight: '800', color: colors.text },
   listSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  selectButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  helperText: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  metricRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  metricCard: {
+    flex: 1,
     padding: spacing.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundElevated,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
   },
-  selectButtonText: { fontSize: 13, color: colors.text },
-  modalContainer: { flex: 1, padding: spacing.md, backgroundColor: colors.background },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
-  modalList: { marginTop: spacing.sm },
-  cgBar: { height: 10, borderRadius: 999, backgroundColor: colors.border, marginTop: spacing.sm, position: 'relative', overflow: 'hidden' },
+  metricLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, color: colors.textSoft, textTransform: 'uppercase' },
+  metricValue: { fontSize: 18, fontWeight: '800', color: colors.text, marginTop: 6 },
+  metricHint: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
+  metricHintDanger: { color: colors.danger },
+  cgTitle: { fontSize: 14, fontWeight: '800', color: colors.text, marginTop: spacing.lg },
+  cgBar: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.border,
+    marginTop: spacing.sm,
+    position: 'relative',
+    overflow: 'hidden',
+  },
   cgSafe: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '100%', backgroundColor: '#bbf7d0' },
   cgMarker: { position: 'absolute', top: -4, width: 2, height: 18, backgroundColor: '#0f172a' },
   cgLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.xs },
   cgLabel: { fontSize: 11, color: colors.textMuted },
   cgStatus: { fontSize: 12, marginTop: spacing.xs, color: colors.text },
-  noteCard: {
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.card,
-  },
-  noteTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
-  noteText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
+  noteText: { fontSize: 12, color: colors.textMuted, lineHeight: 18 },
 });

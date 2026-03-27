@@ -1,18 +1,54 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { format } from 'date-fns';
 import { apiEndpoints } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import { WithdrawalModal } from '../components/WithdrawalModal';
-import { format } from 'date-fns';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTile}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.sectionCard}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+      <View style={styles.sectionContent}>{children}</View>
+    </View>
+  );
+}
 
 export default function BalanceScreen({ navigation }: any) {
   const { isAuthenticated, isLoading: authLoading } = useIsAuthenticated();
   const queryClient = useQueryClient();
   const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
-  
-  const { data: balanceData, isLoading } = useQuery({
+
+  const { data: balanceData } = useQuery({
     queryKey: ['/api/user/balance'],
     queryFn: async () => {
       const response = await apiEndpoints.user.getBalance();
@@ -34,7 +70,7 @@ export default function BalanceScreen({ navigation }: any) {
     mutationFn: async ({ amount, paypalEmail }: { amount: number; paypalEmail: string }) => {
       const response = await apiEndpoints.withdrawals.create({
         amount,
-        paypalEmail
+        paypalEmail,
       });
       return response.data;
     },
@@ -58,6 +94,11 @@ export default function BalanceScreen({ navigation }: any) {
   });
 
   const balance = balanceData?.balance || 0;
+  const withdrawalList = withdrawals || [];
+  const completedCount = withdrawalList.filter((item: any) => item.status === 'completed').length;
+  const pendingCount = withdrawalList.filter((item: any) =>
+    item.status === 'pending' || item.status === 'processing'
+  ).length;
 
   const handleWithdraw = async (amount: number, paypalEmail: string) => {
     await withdrawalMutation.mutateAsync({ amount, paypalEmail });
@@ -65,91 +106,141 @@ export default function BalanceScreen({ navigation }: any) {
 
   if (!isAuthenticated && !authLoading) {
     return (
-      <View style={styles.centerContainer}>
-        <Ionicons name="lock-closed-outline" size={64} color="#9ca3af" />
-        <Text style={styles.emptyText}>Sign in to view your balance</Text>
-        <TouchableOpacity 
-          style={styles.signInButton}
-          onPress={() => navigation.navigate('Profile')}
-        >
-          <Text style={styles.signInButtonText}>Go to Profile</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.heroPanel}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroIconWrap}>
+              <Ionicons name="wallet-outline" size={34} color="#93c5fd" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.heroEyebrow}>FINANCE WORKSPACE</Text>
+              <Text style={styles.heroTitle}>Sign in to view your balance.</Text>
+              <Text style={styles.heroSubtitle}>
+                Payouts, withdrawal history, and operator earnings all live in one member workspace once you sign in.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.summaryRow}>
+            <SummaryTile label="Balance" value="Locked" />
+            <SummaryTile label="Withdrawals" value="Locked" />
+            <SummaryTile label="Status" value="Guest" />
+          </View>
+
+          <TouchableOpacity
+            style={styles.heroAction}
+            onPress={() => navigation.navigate('Profile')}
+            activeOpacity={0.92}
+          >
+            <Ionicons name="log-in-outline" size={18} color="#fff" />
+            <Text style={styles.heroActionText}>Go to profile</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.balanceCard}>
-        <Text style={styles.balanceLabel}>Available Balance</Text>
-        <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
-        
-        <TouchableOpacity 
-          style={[styles.withdrawButton, balance <= 0 && styles.withdrawButtonDisabled]}
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.heroPanel}>
+        <View style={styles.heroTopRow}>
+          <View style={styles.heroIconWrap}>
+            <Ionicons name="wallet-outline" size={34} color="#93c5fd" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroEyebrow}>FINANCE WORKSPACE</Text>
+            <Text style={styles.heroTitle}>Operator earnings and payouts.</Text>
+            <Text style={styles.heroSubtitle}>
+              Track available balance, cash-out history, and payout readiness in one secure member surface.
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.heroBalanceLabel}>Available balance</Text>
+        <Text style={styles.heroBalanceAmount}>${balance.toFixed(2)}</Text>
+
+        <View style={styles.summaryRow}>
+          <SummaryTile label="Completed" value={String(completedCount)} />
+          <SummaryTile label="Pending" value={String(pendingCount)} />
+          <SummaryTile label="History" value={String(withdrawalList.length)} />
+        </View>
+
+        <TouchableOpacity
+          style={[styles.heroAction, balance <= 0 && styles.heroActionDisabled]}
           disabled={balance <= 0}
           onPress={() => setShowWithdrawalModal(true)}
+          activeOpacity={0.92}
           data-testid="button-withdraw"
         >
-          <Ionicons name="cash-outline" size={20} color="#fff" />
-          <Text style={styles.withdrawButtonText}>Withdraw to PayPal</Text>
+          <Ionicons name="cash-outline" size={18} color="#fff" />
+          <Text style={styles.heroActionText}>Withdraw to PayPal</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.infoCard}>
-        <Ionicons name="information-circle" size={24} color="#1e40af" />
-        <View style={styles.infoText}>
-          <Text style={styles.infoTitle}>How Earnings Work</Text>
-          <Text style={styles.infoDescription}>
-            When renters book your aircraft, you receive the rental amount minus a 7.5% platform commission. The renter pays the rental amount plus an additional 7.5% service fee, so Ready Set Fly's total take is 15% (7.5% from each side).
-          </Text>
-          <Text style={styles.infoDescription}>
-            Withdrawals are processed instantly to your PayPal account.
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Withdrawal History</Text>
-        
-        {isLoadingWithdrawals ? (
-          <View style={styles.emptyState}>
-            <ActivityIndicator size="large" color="#1e40af" />
+      <SectionCard
+        title="How RSF earnings work"
+        subtitle="The payout model is designed to stay transparent for both owners and renters."
+      >
+        <View style={styles.infoCard}>
+          <Ionicons name="information-circle-outline" size={20} color={colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.infoText}>
+              When renters book your aircraft, you receive the rental amount minus a 7.5% platform commission. Renters pay the rental amount plus a separate 7.5% service fee, so Ready Set Fly’s total take is 15%.
+            </Text>
+            <Text style={styles.infoText}>
+              Withdrawals are processed instantly to your PayPal account when eligible.
+            </Text>
           </View>
-        ) : withdrawals && withdrawals.length > 0 ? (
-          <>
-            {withdrawals.map((withdrawal: any) => (
-              <View key={withdrawal.id} style={styles.withdrawalCard}>
-                <View style={styles.withdrawalHeader}>
-                  <View style={styles.withdrawalInfo}>
-                    <Text style={styles.withdrawalAmount}>${Number(withdrawal.amount).toFixed(2)}</Text>
-                    <Text style={styles.withdrawalEmail}>{withdrawal.paypalEmail}</Text>
-                  </View>
-                  <View style={[
+        </View>
+      </SectionCard>
+
+      <SectionCard
+        title="Withdrawal history"
+        subtitle="Review recent payouts, statuses, and any failed withdrawal notes."
+      >
+        {isLoadingWithdrawals ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading withdrawals...</Text>
+          </View>
+        ) : withdrawalList.length > 0 ? (
+          withdrawalList.map((withdrawal: any) => (
+            <View key={withdrawal.id} style={styles.withdrawalCard}>
+              <View style={styles.withdrawalHeader}>
+                <View style={styles.withdrawalInfo}>
+                  <Text style={styles.withdrawalAmount}>${Number(withdrawal.amount).toFixed(2)}</Text>
+                  <Text style={styles.withdrawalEmail}>{withdrawal.paypalEmail}</Text>
+                </View>
+                <View
+                  style={[
                     styles.statusBadge,
                     withdrawal.status === 'completed' && styles.statusCompleted,
                     withdrawal.status === 'processing' && styles.statusProcessing,
                     withdrawal.status === 'pending' && styles.statusPending,
                     withdrawal.status === 'failed' && styles.statusFailed,
-                  ]}>
-                    <Text style={styles.statusText}>{withdrawal.status}</Text>
-                  </View>
+                  ]}
+                >
+                  <Text style={styles.statusText}>{withdrawal.status}</Text>
                 </View>
-                <Text style={styles.withdrawalDate}>
-                  {format(new Date(withdrawal.createdAt), 'MMM d, yyyy h:mm a')}
-                </Text>
-                {withdrawal.status === 'failed' && withdrawal.failureReason && (
-                  <Text style={styles.failureReason}>{withdrawal.failureReason}</Text>
-                )}
               </View>
-            ))}
-          </>
+              <Text style={styles.withdrawalDate}>
+                {format(new Date(withdrawal.createdAt), 'MMM d, yyyy h:mm a')}
+              </Text>
+              {withdrawal.status === 'failed' && withdrawal.failureReason ? (
+                <Text style={styles.failureReason}>{withdrawal.failureReason}</Text>
+              ) : null}
+            </View>
+          ))
         ) : (
           <View style={styles.emptyState}>
-            <Ionicons name="receipt-outline" size={48} color="#9ca3af" />
-            <Text style={styles.emptyText}>No withdrawals yet</Text>
+            <Ionicons name="receipt-outline" size={30} color={colors.textSoft} />
+            <Text style={styles.emptyTitle}>No withdrawals yet</Text>
+            <Text style={styles.emptyText}>
+              Once you process your first payout, the full withdrawal history will show up here.
+            </Text>
           </View>
         )}
-      </View>
+      </SectionCard>
 
       <WithdrawalModal
         visible={showWithdrawalModal}
@@ -164,147 +255,193 @@ export default function BalanceScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
   },
-  centerContainer: {
-    flex: 1,
+  content: {
+    padding: spacing.sm,
+    paddingBottom: 120,
+  },
+  heroPanel: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  heroIconWrap: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
   },
-  balanceCard: {
-    backgroundColor: '#1e40af',
-    padding: 32,
-    margin: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  balanceLabel: {
-    fontSize: 14,
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
     color: '#93c5fd',
-    marginBottom: 8,
+    textTransform: 'uppercase',
   },
-  balanceAmount: {
-    fontSize: 48,
-    fontWeight: 'bold',
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
     color: '#fff',
-    marginBottom: 24,
+    marginTop: 10,
+    maxWidth: 320,
   },
-  withdrawButton: {
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  heroBalanceLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+    marginTop: spacing.lg,
+  },
+  heroBalanceAmount: {
+    fontSize: 44,
+    fontWeight: '800',
+    color: '#fff',
+    marginTop: 8,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  summaryTile: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  heroAction: {
+    marginTop: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#10b981',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: radius.lg,
+    paddingVertical: 15,
+    backgroundColor: colors.success,
   },
-  withdrawButtonDisabled: {
-    backgroundColor: '#6b7280',
+  heroActionDisabled: {
+    backgroundColor: '#64748b',
   },
-  withdrawButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
+  heroActionText: {
     color: '#fff',
-    marginLeft: 8,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+    ...shadow.card,
+  },
+  sectionTitle: {
+    ...typography.h2,
+  },
+  sectionSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  sectionContent: {
+    marginTop: spacing.md,
   },
   infoCard: {
     flexDirection: 'row',
-    backgroundColor: '#dbeafe',
-    padding: 16,
-    margin: 16,
-    marginTop: 0,
-    borderRadius: 12,
+    gap: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   infoText: {
-    flex: 1,
-    marginLeft: 12,
+    ...typography.body,
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
   },
-  infoTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e3a8a',
-    marginBottom: 8,
-  },
-  infoDescription: {
-    fontSize: 14,
-    color: '#1e3a8a',
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  section: {
-    backgroundColor: '#fff',
-    padding: 20,
-    margin: 16,
-    marginTop: 0,
-    borderRadius: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 16,
-  },
-  emptyState: {
+  loadingWrap: {
     alignItems: 'center',
-    paddingVertical: 40,
+    justifyContent: 'center',
+    paddingVertical: spacing.lg,
   },
-  emptyText: {
-    fontSize: 14,
-    color: '#9ca3af',
-    marginTop: 12,
-  },
-  signInButton: {
-    backgroundColor: '#1e40af',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  signInButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
+  loadingText: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
   },
   withdrawalCard: {
-    backgroundColor: '#f9fafb',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#1e40af',
+    backgroundColor: colors.backgroundElevated,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   withdrawalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    gap: spacing.sm,
   },
   withdrawalInfo: {
     flex: 1,
   },
   withdrawalAmount: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
+    fontWeight: '800',
+    color: colors.text,
     marginBottom: 4,
   },
   withdrawalEmail: {
-    fontSize: 14,
-    color: '#6b7280',
+    fontSize: 13,
+    color: colors.textMuted,
   },
   withdrawalDate: {
     fontSize: 12,
-    color: '#9ca3af',
-    marginTop: 4,
+    color: colors.textSoft,
+    marginTop: spacing.sm,
   },
   statusBadge: {
     paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
   },
   statusCompleted: {
-    backgroundColor: '#d1fae5',
+    backgroundColor: '#dcfce7',
   },
   statusProcessing: {
     backgroundColor: '#dbeafe',
@@ -316,15 +453,31 @@ const styles = StyleSheet.create({
     backgroundColor: '#fee2e2',
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '800',
     textTransform: 'capitalize',
-    color: '#1f2937',
+    color: colors.text,
   },
   failureReason: {
     fontSize: 12,
-    color: '#ef4444',
-    marginTop: 8,
+    color: colors.danger,
+    marginTop: spacing.sm,
     fontStyle: 'italic',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: spacing.sm,
+  },
+  emptyText: {
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
   },
 });

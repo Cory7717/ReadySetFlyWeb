@@ -163,9 +163,25 @@ const aircraftTypeMatchesPlan = (type: AircraftType, planAircraftType: string | 
 };
 
 const extractClientVersionStamp = (plan: FlightPlan | null | undefined) => {
-  const raw = plan?.filingRaw && typeof plan.filingRaw === "object"
-    ? plan.filingRaw as Record<string, any>
-    : null;
+  const rawValue = plan?.filingRaw;
+  let raw: Record<string, any> | null = null;
+
+  if (rawValue && typeof rawValue === "object") {
+    raw = rawValue as Record<string, any>;
+  } else if (typeof rawValue === "string") {
+    const trimmed = rawValue.trim();
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object") {
+          raw = parsed as Record<string, any>;
+        }
+      } catch {
+        raw = null;
+      }
+    }
+  }
+
   return extractFilingVersionStamp(raw);
 };
 
@@ -181,8 +197,7 @@ const canSubmitAmendForPlan = (plan: FlightPlan | null | undefined) => {
   const status = normalizedClientFilingStatus(plan);
   return Boolean(
     hasLiveProviderPlan(plan) &&
-    (rules === "VFR" ? ["filed", "activated"].includes(status) : status === "filed") &&
-    extractClientVersionStamp(plan),
+    (rules === "VFR" ? ["filed", "activated"].includes(status) : status === "filed"),
   );
 };
 
@@ -191,8 +206,7 @@ const canActivatePlan = (plan: FlightPlan | null | undefined) =>
     plan &&
     String(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" &&
     normalizedClientFilingStatus(plan) === "filed" &&
-    hasLiveProviderPlan(plan) &&
-    extractClientVersionStamp(plan),
+    hasLiveProviderPlan(plan),
   );
 
 const canClosePlan = (plan: FlightPlan | null | undefined) =>

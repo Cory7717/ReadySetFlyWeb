@@ -3,7 +3,7 @@ import * as Cesium from "cesium";
 import { apiUrl } from "@/lib/api";
 import { clearTfmsOverlay, setTfmsOverlay } from "@/map/layers/tfmsOverlayLayer";
 
-import type { PlannerPoint } from "@/components/flight-planner/PlannerMap";
+import type { PlannerPoint, PlannerTerrainHotSpot, PlannerTerrainSegment } from "@/components/flight-planner/PlannerMap";
 
 const OSM_URL = "https://a.tile.openstreetmap.org/";
 const GIBS_BASE = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best";
@@ -13,14 +13,38 @@ const NIGHT_DATE = "2012-01-01";
 const buildPositions = (points: PlannerPoint[]) =>
   points.flatMap((point) => [point.lon, point.lat]);
 
+const terrainRiskVisuals = {
+  comfortable: {
+    corridor: Cesium.Color.fromCssColorString("#22c55e").withAlpha(0.16),
+    line: Cesium.Color.fromCssColorString("#4ade80"),
+    width: 10,
+  },
+  caution: {
+    corridor: Cesium.Color.fromCssColorString("#f59e0b").withAlpha(0.2),
+    line: Cesium.Color.fromCssColorString("#fbbf24"),
+    width: 12,
+  },
+  warning: {
+    corridor: Cesium.Color.fromCssColorString("#ef4444").withAlpha(0.24),
+    line: Cesium.Color.fromCssColorString("#f87171"),
+    width: 14,
+  },
+} as const;
+
 export default function CesiumGlobe({
   points,
   heightClassName = "h-[380px]",
   tfmsOverlayEnabled = false,
+  plannedAltitudeFt,
+  terrainSegments = [],
+  terrainHotSpots = [],
 }: {
   points: PlannerPoint[];
   heightClassName?: string;
   tfmsOverlayEnabled?: boolean;
+  plannedAltitudeFt?: number;
+  terrainSegments?: PlannerTerrainSegment[];
+  terrainHotSpots?: PlannerTerrainHotSpot[];
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
@@ -361,20 +385,80 @@ export default function CesiumGlobe({
 
     const positions = buildPositions(points);
     const polylinePositions = Cesium.Cartesian3.fromDegreesArray(positions);
+    const routeAltitudeMeters =
+      plannedAltitudeFt && Number.isFinite(plannedAltitudeFt) && plannedAltitudeFt > 0
+        ? Math.max(250, plannedAltitudeFt * 0.3048)
+        : 600;
+
+    if (terrainSegments.length > 0) {
+      terrainSegments.forEach((segment) => {
+        const [[startLat, startLon], [endLat, endLon]] = segment.positions;
+        const visuals = terrainRiskVisuals[segment.risk];
+        const elevatedPositions = Cesium.Cartesian3.fromDegreesArrayHeights([
+          startLon,
+          startLat,
+          routeAltitudeMeters,
+          endLon,
+          endLat,
+          routeAltitudeMeters,
+        ]);
+
+        viewer.entities.add({
+          polyline: {
+            positions: elevatedPositions,
+            width: visuals.width + 8,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              color: visuals.corridor,
+              glowPower: 0.3,
+              taperPower: 0.8,
+            }),
+          },
+        });
+
+        viewer.entities.add({
+          wall: {
+            positions: Cesium.Cartesian3.fromDegreesArray([
+              startLon,
+              startLat,
+              endLon,
+              endLat,
+            ]),
+            maximumHeights: [routeAltitudeMeters, routeAltitudeMeters],
+            minimumHeights: [0, 0],
+            material: visuals.corridor,
+            outline: false,
+          },
+        });
+
+        viewer.entities.add({
+          polyline: {
+            positions: elevatedPositions,
+            width: visuals.width,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              color: visuals.line,
+              glowPower: 0.15,
+            }),
+          },
+          description:
+            `Terrain clearance: ${segment.clearanceFt != null ? `${Math.round(segment.clearanceFt).toLocaleString()} ft` : "Unknown"}\n` +
+            `Highest terrain: ${segment.maxElevationFt != null ? `${Math.round(segment.maxElevationFt).toLocaleString()} ft` : "Unknown"}`,
+        });
+      });
+    }
 
     viewer.entities.add({
       polyline: {
         positions: polylinePositions,
-        width: 3,
-        material: Cesium.Color.CYAN,
+        width: terrainSegments.length > 0 ? 2 : 4,
+        material: Cesium.Color.fromCssColorString("#67e8f9"),
       },
     });
 
-    points.forEach((point) => {
+    points.forEach((point, index) => {
       viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat),
+        position: Cesium.Cartesian3.fromDegrees(point.lon, point.lat, routeAltitudeMeters),
         label: {
-          text: point.icao,
+          text: index === 0 ? `${point.icao} · DEP` : index === points.length - 1 ? `${point.icao} · DEST` : point.icao,
           font: "14px sans-serif",
           fillColor: Cesium.Color.WHITE,
           outlineColor: Cesium.Color.BLACK,
@@ -384,16 +468,56 @@ export default function CesiumGlobe({
           pixelOffset: new Cesium.Cartesian2(0, -12),
         },
         point: {
-          pixelSize: 8,
-          color: Cesium.Color.CYAN,
+          pixelSize: index === 0 || index === points.length - 1 ? 10 : 8,
+          color: index === 0
+            ? Cesium.Color.fromCssColorString("#34d399")
+            : index === points.length - 1
+              ? Cesium.Color.fromCssColorString("#60a5fa")
+              : Cesium.Color.CYAN,
           outlineColor: Cesium.Color.BLACK,
           outlineWidth: 1,
         },
       });
     });
 
+    terrainHotSpots.forEach((hotSpot) => {
+      const tone =
+        hotSpot.risk === "warning"
+          ? Cesium.Color.fromCssColorString("#ef4444")
+          : hotSpot.risk === "caution"
+            ? Cesium.Color.fromCssColorString("#f59e0b")
+            : Cesium.Color.fromCssColorString("#22c55e");
+
+      viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(hotSpot.lon, hotSpot.lat, routeAltitudeMeters + 350),
+        label: {
+          text: `#${hotSpot.rank} ${hotSpot.progressLabel}`,
+          font: "13px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          showBackground: true,
+          backgroundColor: tone.withAlpha(0.9),
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -18),
+        },
+        point: {
+          pixelSize: 12,
+          color: tone,
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+        },
+        description:
+          `Terrain hot spot ${hotSpot.rank}\n` +
+          `Progress: ${hotSpot.progressLabel}\n` +
+          `Highest terrain: ${hotSpot.maxElevationFt != null ? `${Math.round(hotSpot.maxElevationFt).toLocaleString()} ft` : "Unknown"}\n` +
+          `Clearance: ${hotSpot.clearanceFt != null ? `${Math.round(hotSpot.clearanceFt).toLocaleString()} ft` : "Unknown"}`,
+      });
+    });
+
     viewer.zoomTo(viewer.entities, new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-30), 0));
-  }, [points]);
+  }, [plannedAltitudeFt, points, terrainHotSpots, terrainSegments]);
 
   return (
     <div className={heightClassName}>

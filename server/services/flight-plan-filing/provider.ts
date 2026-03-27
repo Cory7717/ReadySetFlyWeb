@@ -328,6 +328,14 @@ const parseProviderResponse = async (response: Response) => {
     return await response.json() as Record<string, unknown>;
   }
   const text = await response.text();
+  const trimmed = text.trim();
+  if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+    try {
+      return JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      // Keep the raw text fallback if the provider sends malformed JSON.
+    }
+  }
   return { text };
 };
 

@@ -211,6 +211,37 @@ const canCancelPlan = (plan: FlightPlan | null | undefined) =>
     hasLiveProviderPlan(plan),
   );
 
+const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
+  if (!plan) {
+    return "Save this plan first, then file it before trying to amend it through Leidos.";
+  }
+
+  const status = normalizedClientFilingStatus(plan);
+  const rules = String(plan.filingFlightRules || "VFR").toUpperCase();
+
+  if (!plan.filingIsLive) {
+    return "This saved plan is still local or staged. File it live with Leidos first, then amend it from the filed record.";
+  }
+
+  if (!plan.filingProviderPlanId) {
+    return "This filed record is missing the Leidos flight identifier. File it again so RSF can refresh the amend tracking.";
+  }
+
+  if (!extractClientVersionStamp(plan)) {
+    return "This filed record is missing the Leidos version stamp required for amend. Re-file the plan once more to refresh the provider tracking, then amend from that filed copy.";
+  }
+
+  if (rules === "IFR" && status !== "filed") {
+    return "IFR plans can only be amended from the filed state.";
+  }
+
+  if (rules === "VFR" && !["filed", "activated"].includes(status)) {
+    return "VFR plans can only be amended from the filed or active state.";
+  }
+
+  return "This plan is not currently in a live amendable state. Save your edits, then use File to submit the updated version.";
+};
+
 const getPlannerAircraftTypeValue = ({
   manualAircraftType,
   selectedProfile,
@@ -7282,7 +7313,7 @@ export default function FlightPlanner() {
                     if (!currentSavedPlanCanAmend) {
                       toast({
                         title: "Live amend unavailable",
-                        description: "This filed plan is missing Leidos amend tracking. Save your edits, then use File to submit the updated version.",
+                        description: getAmendAvailabilityMessage(currentSavedPlan),
                       });
                       return;
                     }
@@ -7343,7 +7374,7 @@ export default function FlightPlanner() {
               )}
               {!currentSavedPlanCanAmend && (
                 <div className="text-xs text-muted-foreground">
-                  Live Amend requires a successfully filed Leidos plan with a stored version stamp. If this is a draft, older staged copy, or filed record without version tracking, save your edits and use <span className="font-medium text-foreground">File</span> to submit the updated plan.
+                  {getAmendAvailabilityMessage(currentSavedPlan)}
                 </div>
               )}
               {currentSavedPlan && isFlightPlanCloseOverdue(currentSavedPlan.plannedArrivalAt) && normalizedClientFilingStatus(currentSavedPlan) === "activated" && (
@@ -7874,6 +7905,9 @@ export default function FlightPlanner() {
                   <CesiumGlobe
                     key={`globe-${mapRenderVersion}`}
                     points={routePoints.map((p) => ({ icao: p.icao, lat: p.lat, lon: p.lon }))}
+                    plannedAltitudeFt={plannedAltitudeValue}
+                    terrainSegments={terrainCueSegments}
+                    terrainHotSpots={terrainMapHotSpots}
                     tfmsOverlayEnabled={tfmsTier === "pro_plus" && tfmsOverlayEnabled}
                   />
                 </Suspense>

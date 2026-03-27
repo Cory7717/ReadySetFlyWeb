@@ -1,12 +1,77 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { useQuery } from '@tanstack/react-query';
+import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { apiEndpoints } from '../services/api';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 type Props = NativeStackScreenProps<RentalsStackParamList, 'Booking'>;
+
+function MetricTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.metricTile}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{value}</Text>
+    </View>
+  );
+}
+
+function InputField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  keyboardType?: 'default' | 'decimal-pad';
+}) {
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textSoft}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType}
+      />
+    </View>
+  );
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.sectionCard}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+      <View style={styles.sectionContent}>{children}</View>
+    </View>
+  );
+}
 
 export default function BookingScreen({ route, navigation }: Props) {
   const { aircraftId } = route.params;
@@ -22,46 +87,61 @@ export default function BookingScreen({ route, navigation }: Props) {
     },
   });
 
-  const calculateTotal = () => {
-    const hoursNum = parseFloat(hours);
-    if (!aircraft || !hoursNum || isNaN(hoursNum)) return 0;
-    
-    const hourlyRate = Number(aircraft.hourlyRate);
-    const baseCost = hourlyRate * hoursNum;
-    const platformFee = baseCost * 0.18; // 18% platform fee
-    const salesTax = baseCost * 0.0825; // 8.25% sales tax
-    return baseCost + platformFee + salesTax;
-  };
+  const aircraftName = useMemo(() => {
+    if (!aircraft) return 'Aircraft booking';
+    return `${aircraft.make || ''} ${aircraft.model || ''}`.trim() || aircraft.type || 'Aircraft booking';
+  }, [aircraft]);
+
+  const registration = useMemo(() => {
+    if (!aircraft) return 'Registration pending';
+    return aircraft.registration || aircraft.nNumber || 'Registration pending';
+  }, [aircraft]);
+
+  const locationLabel = useMemo(() => {
+    if (!aircraft) return 'Location pending';
+    const parts = [aircraft.airportCode, aircraft.city, aircraft.state].filter(Boolean);
+    if (parts.length) return parts.join(' • ');
+    return aircraft.location || 'Location pending';
+  }, [aircraft]);
+
+  const hoursNumber = useMemo(() => {
+    const parsed = parseFloat(hours);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [hours]);
+
+  const hourlyRate = useMemo(() => Number(aircraft?.hourlyRate || 0), [aircraft]);
+  const baseCost = useMemo(() => hourlyRate * hoursNumber, [hourlyRate, hoursNumber]);
+  const platformFee = useMemo(() => baseCost * 0.18, [baseCost]);
+  const salesTax = useMemo(() => baseCost * 0.0825, [baseCost]);
+  const total = useMemo(() => baseCost + platformFee + salesTax, [baseCost, platformFee, salesTax]);
 
   const handleBooking = () => {
-    if (!startDate || !endDate || !hours) {
-      Alert.alert('Missing Information', 'Please fill in all fields');
+    if (!startDate || !endDate || !hours || hoursNumber <= 0) {
+      Alert.alert('Missing Information', 'Enter start date, end date, and estimated hours before continuing.');
       return;
     }
 
-    const total = calculateTotal();
-    const aircraftName = `${aircraft?.make} ${aircraft?.model}`;
-    
     Alert.alert(
       'Confirm Booking',
-      `Aircraft: ${aircraftName}\nDuration: ${hours} hours\nTotal Cost: $${total.toFixed(2)}\n\nProceed to payment?`,
+      `Aircraft: ${aircraftName}\nDuration: ${hours} hours\nTotal Cost: $${total.toFixed(
+        2
+      )}\n\nProceed to payment?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Continue', 
+        {
+          text: 'Continue',
           onPress: () => {
-            // Navigate to payment screen
             navigation.navigate('RentalPayment', {
               paymentData: {
-                rentalId: 'pending-' + Date.now(), // Temporary ID, backend will create actual rental
-                aircraftId: aircraftId,
+                rentalId: `pending-${Date.now()}`,
+                aircraftId,
                 amount: total,
-                startDate: startDate,
-                endDate: endDate,
-                hours: parseFloat(hours)
-              }
+                startDate,
+                endDate,
+                hours: hoursNumber,
+              },
             });
-          }
+          },
         },
       ]
     );
@@ -70,7 +150,8 @@ export default function BookingScreen({ route, navigation }: Props) {
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#1e40af" />
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading booking details...</Text>
       </View>
     );
   }
@@ -78,91 +159,114 @@ export default function BookingScreen({ route, navigation }: Props) {
   if (error || !aircraft) {
     return (
       <View style={styles.centerContainer}>
-        <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
-        <Text style={styles.errorText}>Failed to load aircraft details</Text>
+        <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
+        <Text style={styles.errorTitle}>Unable to prepare booking.</Text>
+        <Text style={styles.errorText}>Refresh and try again. This aircraft may be temporarily unavailable.</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Aircraft Summary */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Aircraft</Text>
-        <Text style={styles.aircraftType}>{aircraft.make} {aircraft.model}</Text>
-        <Text style={styles.aircraftNumber}>{aircraft.registration}</Text>
-        <Text style={styles.rate}>${Number(aircraft.hourlyRate).toFixed(2)}/hour</Text>
-      </View>
-
-      {/* Date Selection */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Rental Period</Text>
-        
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Start Date</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="MM/DD/YYYY"
-            value={startDate}
-            onChangeText={setStartDate}
-          />
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.heroPanel}>
+        <View style={styles.heroTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroEyebrow}>BOOKING</Text>
+            <Text style={styles.heroTitle}>{aircraftName}</Text>
+            <Text style={styles.heroSubtitle}>
+              {registration} • {locationLabel}
+            </Text>
+          </View>
+          <View style={styles.heroBadge}>
+            <Text style={styles.heroBadgeText}>Draft booking</Text>
+          </View>
         </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>End Date</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="MM/DD/YYYY"
-            value={endDate}
-            onChangeText={setEndDate}
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Estimated Hours</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="0.0"
-            value={hours}
-            onChangeText={setHours}
-            keyboardType="decimal-pad"
-          />
+        <View style={styles.summaryRow}>
+          <MetricTile label="Hourly rate" value={`$${hourlyRate.toFixed(0)}/hr`} />
+          <MetricTile label="Estimated hours" value={hoursNumber > 0 ? `${hoursNumber.toFixed(1)} hrs` : 'Not set'} />
+          <MetricTile label="Estimated total" value={hoursNumber > 0 ? `$${total.toFixed(0)}` : 'Pending'} />
         </View>
       </View>
 
-      {/* Cost Breakdown */}
-      {hours && parseFloat(hours) > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Cost Breakdown</Text>
-          
-          <View style={styles.costRow}>
-            <Text style={styles.costLabel}>Base Cost ({hours} hrs × ${Number(aircraft.hourlyRate).toFixed(2)})</Text>
-            <Text style={styles.costValue}>${(Number(aircraft.hourlyRate) * parseFloat(hours)).toFixed(2)}</Text>
+      <SectionCard
+        title="Booking Window"
+        subtitle="Set the reservation window and rough flight time before moving to payment."
+      >
+        <InputField
+          label="Start Date"
+          value={startDate}
+          onChangeText={setStartDate}
+          placeholder="MM/DD/YYYY"
+        />
+        <InputField
+          label="End Date"
+          value={endDate}
+          onChangeText={setEndDate}
+          placeholder="MM/DD/YYYY"
+        />
+        <InputField
+          label="Estimated Hours"
+          value={hours}
+          onChangeText={setHours}
+          placeholder="0.0"
+          keyboardType="decimal-pad"
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Rental Snapshot"
+        subtitle="Quick review of the rental before you commit to payment."
+      >
+        <View style={styles.snapshotGrid}>
+          <View style={styles.snapshotCard}>
+            <Text style={styles.snapshotLabel}>Aircraft</Text>
+            <Text style={styles.snapshotValue}>{aircraftName}</Text>
           </View>
-
-          <View style={styles.costRow}>
-            <Text style={styles.costLabel}>Platform Fee (18%)</Text>
-            <Text style={styles.costValue}>${(Number(aircraft.hourlyRate) * parseFloat(hours) * 0.18).toFixed(2)}</Text>
+          <View style={styles.snapshotCard}>
+            <Text style={styles.snapshotLabel}>Location</Text>
+            <Text style={styles.snapshotValue}>{locationLabel}</Text>
           </View>
-
-          <View style={styles.costRow}>
-            <Text style={styles.costLabel}>Sales Tax (8.25%)</Text>
-            <Text style={styles.costValue}>${(Number(aircraft.hourlyRate) * parseFloat(hours) * 0.0825).toFixed(2)}</Text>
+          <View style={styles.snapshotCard}>
+            <Text style={styles.snapshotLabel}>Minimum time</Text>
+            <Text style={styles.snapshotValue}>{aircraft.minFlightHours || 0} hrs</Text>
           </View>
-
-          <View style={styles.divider} />
-
-          <View style={styles.costRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>${calculateTotal().toFixed(2)}</Text>
+          <View style={styles.snapshotCard}>
+            <Text style={styles.snapshotLabel}>Rate basis</Text>
+            <Text style={styles.snapshotValue}>{aircraft.wetRate ? 'Wet rate' : 'Dry rate'}</Text>
           </View>
         </View>
-      )}
+      </SectionCard>
 
-      {/* Book Button */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.bookButton} onPress={handleBooking}>
-          <Text style={styles.bookButtonText}>Continue to Payment</Text>
+      <SectionCard
+        title="Cost Breakdown"
+        subtitle="First-pass pricing estimate before the payment handoff."
+      >
+        <View style={styles.costRow}>
+          <Text style={styles.costLabel}>
+            Base cost ({hoursNumber > 0 ? hoursNumber.toFixed(1) : '0.0'} hrs × ${hourlyRate.toFixed(2)})
+          </Text>
+          <Text style={styles.costValue}>${baseCost.toFixed(2)}</Text>
+        </View>
+        <View style={styles.costRow}>
+          <Text style={styles.costLabel}>Platform fee (18%)</Text>
+          <Text style={styles.costValue}>${platformFee.toFixed(2)}</Text>
+        </View>
+        <View style={styles.costRow}>
+          <Text style={styles.costLabel}>Sales tax (8.25%)</Text>
+          <Text style={styles.costValue}>${salesTax.toFixed(2)}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.costRow}>
+          <Text style={styles.totalLabel}>Estimated total</Text>
+          <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
+        </View>
+      </SectionCard>
+
+      <View style={styles.footerActionWrap}>
+        <TouchableOpacity style={styles.footerAction} onPress={handleBooking} activeOpacity={0.92}>
+          <Text style={styles.footerActionText}>Continue to Payment</Text>
+          <Ionicons name="arrow-forward" size={18} color="#fff" />
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -172,105 +276,220 @@ export default function BookingScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
+  },
+  content: {
+    padding: spacing.sm,
+    paddingBottom: 120,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f3f4f6',
+    padding: spacing.lg,
+    backgroundColor: colors.background,
+  },
+  loadingText: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  errorTitle: {
+    ...typography.h2,
+    marginTop: spacing.md,
   },
   errorText: {
-    fontSize: 16,
-    color: '#ef4444',
-    marginTop: 12,
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    maxWidth: 320,
   },
-  section: {
-    backgroundColor: '#fff',
-    padding: 20,
-    marginBottom: 12,
+  heroPanel: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: '#fff',
+    marginTop: 10,
+    maxWidth: 290,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 320,
+  },
+  heroBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  heroBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  metricTile: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  metricLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+  },
+  metricValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+    ...shadow.card,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 12,
+    ...typography.h2,
   },
-  aircraftType: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  aircraftNumber: {
-    fontSize: 14,
-    color: '#6b7280',
+  sectionSubtitle: {
+    ...typography.muted,
     marginTop: 4,
   },
-  rate: {
-    fontSize: 16,
-    color: '#1e40af',
-    fontWeight: '600',
-    marginTop: 8,
+  sectionContent: {
+    marginTop: spacing.md,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.text,
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#fff',
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: colors.text,
+  },
+  snapshotGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  snapshotCard: {
+    width: '48%',
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  snapshotLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: colors.textSoft,
+  },
+  snapshotValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: 6,
   },
   costRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   costLabel: {
+    flex: 1,
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.textMuted,
   },
   costValue: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#1f2937',
+    fontWeight: '700',
+    color: colors.text,
   },
   divider: {
     height: 1,
-    backgroundColor: '#e5e7eb',
-    marginVertical: 8,
+    backgroundColor: colors.border,
+    marginVertical: spacing.sm,
   },
   totalLabel: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '800',
+    color: colors.text,
   },
   totalValue: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1e40af',
+    fontWeight: '800',
+    color: colors.primary,
   },
-  buttonContainer: {
-    padding: 20,
+  footerActionWrap: {
+    paddingTop: spacing.sm,
   },
-  bookButton: {
-    backgroundColor: '#1e40af',
-    paddingVertical: 16,
-    borderRadius: 12,
+  footerAction: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 16,
+    borderRadius: radius.xl,
+    backgroundColor: colors.primary,
+    ...shadow.floating,
   },
-  bookButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
+  footerActionText: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: '800',
   },
 });

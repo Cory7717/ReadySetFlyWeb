@@ -1,43 +1,81 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
 import { apiEndpoints } from '../services/api';
 import { RentalMessaging } from '../components/RentalMessaging';
 import { useIsAuthenticated } from '../utils/auth';
 import type { Rental } from '@shared/schema';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTile}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function statusLabel(status?: string) {
+  switch (status) {
+    case 'approved':
+    case 'active':
+      return 'Active rental';
+    case 'completed':
+      return 'Completed rental';
+    default:
+      return 'Rental conversation';
+  }
+}
+
+function statusTone(status?: string) {
+  switch (status) {
+    case 'approved':
+    case 'active':
+      return { background: colors.accentSoft, text: colors.accent };
+    case 'completed':
+      return { background: colors.surfaceMuted, text: colors.textMuted };
+    default:
+      return { background: colors.primarySoft, text: colors.primary };
+  }
+}
 
 export default function MessagesScreen({ navigation }: any) {
   const { isAuthenticated, user, isLoading: authLoading } = useIsAuthenticated();
   const [selectedRental, setSelectedRental] = useState<string | null>(null);
 
-  // Fetch user's rentals (active conversations)
   const { data: rentals, isLoading } = useQuery({
     queryKey: ['/api/user/rentals'],
     queryFn: async () => {
       const response = await apiEndpoints.rentals.getByUser();
-      // Filter to only approved or active rentals (can have messages)
-      return response.data.filter((r: Rental) => 
-        r.status === 'approved' || r.status === 'active' || r.status === 'completed'
+      return response.data.filter(
+        (r: Rental) => r.status === 'approved' || r.status === 'active' || r.status === 'completed'
       );
     },
     enabled: isAuthenticated,
   });
 
+  const activeCount = useMemo(
+    () => (rentals || []).filter((item) => item.status === 'approved' || item.status === 'active').length,
+    [rentals]
+  );
+  const completedCount = useMemo(
+    () => (rentals || []).filter((item) => item.status === 'completed').length,
+    [rentals]
+  );
+
   if (!isAuthenticated && !authLoading) {
     return (
-      <View style={styles.container}>
-        <View style={styles.emptyContainer}>
-          <Ionicons name="lock-closed-outline" size={64} color="#9ca3af" />
-          <Text style={styles.emptyTitle}>Sign in required</Text>
-          <Text style={styles.emptyText}>
-            Sign in to view your messages
+      <View style={styles.centerContainer}>
+        <View style={styles.lockedPanel}>
+          <Ionicons name="lock-closed-outline" size={34} color={colors.textSoft} />
+          <Text style={styles.lockedTitle}>Sign in to view conversations.</Text>
+          <Text style={styles.lockedText}>
+            Owner and renter messages live here once you have active or completed rentals.
           </Text>
-          <TouchableOpacity 
-            style={styles.signInButton}
-            onPress={() => navigation.navigate('Profile')}
-          >
-            <Text style={styles.signInButtonText}>Go to Profile</Text>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('Profile')} activeOpacity={0.92}>
+            <Text style={styles.primaryButtonText}>Go to Profile</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -47,49 +85,50 @@ export default function MessagesScreen({ navigation }: any) {
   if (isLoading || authLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#1e40af" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading conversations...</Text>
       </View>
     );
   }
 
-  // If a rental is selected, show the messaging component
   if (selectedRental && user) {
     return (
       <View style={styles.container}>
-        <View style={styles.chatHeader}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => setSelectedRental(null)}
-          >
-            <Ionicons name="arrow-back" size={24} color="#1e40af" />
-            <Text style={styles.backText}>Conversations</Text>
-          </TouchableOpacity>
+        <View style={styles.threadHeaderWrap}>
+          <View style={styles.threadHeader}>
+            <TouchableOpacity style={styles.backButton} onPress={() => setSelectedRental(null)} activeOpacity={0.92}>
+              <Ionicons name="arrow-back" size={20} color={colors.primary} />
+              <Text style={styles.backText}>Back to conversations</Text>
+            </TouchableOpacity>
+            <View style={styles.threadBadge}>
+              <Text style={styles.threadBadgeText}>Rental #{selectedRental.slice(0, 8)}</Text>
+            </View>
+          </View>
         </View>
         <RentalMessaging rentalId={selectedRental} userId={user.id} />
       </View>
     );
   }
 
-  const renderConversation = ({ item }: { item: Rental }) => (
-    <TouchableOpacity 
-      style={styles.conversationCard}
-      onPress={() => setSelectedRental(item.id)}
-    >
-      <View style={styles.conversationIcon}>
-        <Ionicons name="airplane" size={24} color="#1e40af" />
-      </View>
-      <View style={styles.conversationInfo}>
-        <Text style={styles.conversationTitle}>Rental #{item.id.slice(0, 8)}</Text>
-        <Text style={styles.conversationSubtitle}>
-          {item.status === 'approved' ? 'Active rental' : 
-           item.status === 'completed' ? 'Completed rental' : 
-           'Rental conversation'}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-    </TouchableOpacity>
-  );
+  const renderConversation = ({ item }: { item: Rental }) => {
+    const tone = statusTone(item.status);
+    return (
+      <TouchableOpacity style={styles.conversationCard} onPress={() => setSelectedRental(item.id)} activeOpacity={0.92}>
+        <View style={styles.conversationIcon}>
+          <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.primary} />
+        </View>
+        <View style={styles.conversationInfo}>
+          <Text style={styles.conversationTitle}>Rental #{item.id.slice(0, 8)}</Text>
+          <Text style={styles.conversationSubtitle}>{statusLabel(item.status)}</Text>
+        </View>
+        <View style={[styles.statusPill, { backgroundColor: tone.background }]}>
+          <Text style={[styles.statusPillText, { color: tone.text }]}>
+            {item.status === 'approved' ? 'approved' : item.status}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -98,12 +137,41 @@ export default function MessagesScreen({ navigation }: any) {
         keyExtractor={(item) => item.id}
         renderItem={renderConversation}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          <>
+            <View style={styles.heroPanel}>
+              <View style={styles.heroTopRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.heroEyebrow}>MESSAGES</Text>
+                  <Text style={styles.heroTitle}>Keep owner and renter communication in the same workflow as the booking.</Text>
+                  <Text style={styles.heroSubtitle}>
+                    Conversations stay tied to the rental so you can follow approvals, logistics, and closeout without context switching.
+                  </Text>
+                </View>
+                <View style={styles.heroBadge}>
+                  <Text style={styles.heroBadgeText}>{(rentals || []).length} threads</Text>
+                </View>
+              </View>
+
+              <View style={styles.summaryRow}>
+                <SummaryTile label="Active" value={String(activeCount)} />
+                <SummaryTile label="Completed" value={String(completedCount)} />
+                <SummaryTile label="Workspace" value="Ready" />
+              </View>
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Conversations</Text>
+              <Text style={styles.sectionSubtitle}>Open a thread to continue the conversation tied to that specific rental.</Text>
+            </View>
+          </>
+        }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubbles-outline" size={80} color="#9ca3af" />
-            <Text style={styles.emptyTitle}>No Messages Yet</Text>
+          <View style={styles.emptyState}>
+            <Ionicons name="chatbubbles-outline" size={40} color={colors.textSoft} />
+            <Text style={styles.emptyTitle}>No messages yet.</Text>
             <Text style={styles.emptyText}>
-              Messages with aircraft owners and renters will appear here once you have active rentals
+              Messages with owners and renters will appear here once you have an active or completed rental.
             </Text>
           </View>
         }
@@ -115,56 +183,199 @@ export default function MessagesScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f3f4f6',
+    padding: spacing.lg,
+    backgroundColor: colors.background,
+  },
+  lockedPanel: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
+  },
+  lockedTitle: {
+    ...typography.h2,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
+  lockedText: {
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
   },
   loadingText: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 12,
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
   },
-  chatHeader: {
-    backgroundColor: '#fff',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+  primaryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  threadHeaderWrap: {
+    padding: spacing.sm,
+    backgroundColor: colors.background,
+  },
+  threadHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    ...shadow.card,
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    flex: 1,
   },
   backText: {
-    fontSize: 16,
-    color: '#1e40af',
-    marginLeft: 8,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  threadBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+  },
+  threadBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.primary,
   },
   listContent: {
-    padding: 16,
+    padding: spacing.sm,
+    paddingBottom: 120,
+  },
+  heroPanel: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: '#fff',
+    marginTop: 10,
+    maxWidth: 300,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 330,
+  },
+  heroBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  heroBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  summaryTile: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  sectionHeader: {
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  sectionTitle: {
+    ...typography.h2,
+  },
+  sectionSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
   },
   conversationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    ...shadow.card,
   },
   conversationIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#dbeafe',
+    backgroundColor: colors.primarySoft,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -174,44 +385,41 @@ const styles = StyleSheet.create({
   },
   conversationTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: '800',
+    color: colors.text,
     marginBottom: 4,
   },
   conversationSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
+    ...typography.muted,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'capitalize',
+  },
+  emptyState: {
     alignItems: 'center',
-    padding: 40,
-    paddingTop: 100,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    ...shadow.card,
   },
   emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginTop: 20,
+    ...typography.h3,
+    marginTop: spacing.sm,
   },
   emptyText: {
-    fontSize: 14,
-    color: '#6b7280',
+    ...typography.body,
+    color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 20,
-  },
-  signInButton: {
-    backgroundColor: '#1e40af',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 20,
-  },
-  signInButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    marginTop: spacing.xs,
+    maxWidth: 280,
   },
 });

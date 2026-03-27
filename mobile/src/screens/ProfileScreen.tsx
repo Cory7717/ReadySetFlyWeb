@@ -1,12 +1,107 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking, Alert, Image, TextInput } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Linking,
+  Alert,
+  Image,
+  TextInput,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useIsAuthenticated, useLogin, useLogout } from '../utils/auth';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useIsAuthenticated, useLogout } from '../utils/auth';
 import { api } from '../services/api';
 import { ConfirmDeletionModal } from '../components/ConfirmDeletionModal';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+
 const certificationTypes = ['PPL', 'IR', 'CPL', 'Multi-Engine', 'ATP', 'CFI', 'CFII', 'MEI'];
+
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTile}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  action,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.sectionCard}>
+      <View style={styles.sectionHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+        </View>
+        {action}
+      </View>
+      <View style={styles.sectionContent}>{children}</View>
+    </View>
+  );
+}
+
+function MenuRow({
+  icon,
+  label,
+  onPress,
+  danger,
+  testID,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  danger?: boolean;
+  testID?: string;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.menuRow, danger && styles.menuRowDanger]}
+      onPress={onPress}
+      activeOpacity={0.92}
+      data-testid={testID}
+    >
+      <Ionicons name={icon} size={20} color={danger ? colors.danger : colors.primary} />
+      <Text style={[styles.menuRowText, danger && styles.menuRowTextDanger]}>{label}</Text>
+      <Ionicons name={danger ? 'open-outline' : 'chevron-forward'} size={18} color={danger ? colors.danger : colors.textSoft} />
+    </TouchableOpacity>
+  );
+}
+
+function CommandCard({
+  icon,
+  title,
+  subtitle,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.commandCard} onPress={onPress} activeOpacity={0.92}>
+      <View style={styles.commandIconWrap}>
+        <Ionicons name={icon} size={18} color={colors.primary} />
+      </View>
+      <Text style={styles.commandTitle}>{title}</Text>
+      <Text style={styles.commandSubtitle}>{subtitle}</Text>
+    </TouchableOpacity>
+  );
+}
 
 export default function ProfileScreen({ navigation }: any) {
   const { isAuthenticated, user, isLoading } = useIsAuthenticated();
@@ -17,7 +112,7 @@ export default function ProfileScreen({ navigation }: any) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
-  const [totalHours, setTotalHours] = useState('');
+  const [totalHours, setTotalHours] = useState('0');
   const [certifications, setCertifications] = useState<string[]>([]);
   const [ownerRentals, setOwnerRentals] = useState<any[]>([]);
   const [renterRentals, setRenterRentals] = useState<any[]>([]);
@@ -44,49 +139,22 @@ export default function ProfileScreen({ navigation }: any) {
     },
     onSuccess: () => {
       setShowDeleteModal(false);
-      Alert.alert(
-        'Account Deleted',
-        'Your account and all associated data have been permanently deleted.',
-        [
-          {
-            text: 'OK',
-            onPress: () => logout.mutate(undefined),
-          },
-        ]
-      );
+      Alert.alert('Account Deleted', 'Your account and all associated data have been permanently deleted.', [
+        {
+          text: 'OK',
+          onPress: () => logout.mutate(undefined),
+        },
+      ]);
     },
     onError: (error: any) => {
       setShowDeleteModal(false);
-      Alert.alert(
-        'Error',
-        error.response?.data?.error || 'Failed to delete account. Please try again.'
-      );
+      Alert.alert('Error', error.response?.data?.error || 'Failed to delete account. Please try again.');
     },
   });
 
-  const handleDeleteAccount = () => {
-    setShowDeleteModal(true);
-  };
-
-  const handleConfirmDelete = () => {
-    deleteAccountMutation.mutate();
-  };
-
-  const handleCancelDelete = () => {
-    setShowDeleteModal(false);
-  };
-
-  const handleOpenPrivacyPolicy = () => {
-    Linking.openURL('https://readysetfly.us/privacy-policy');
-  };
-
-  const handleOpenTermsOfService = () => {
-    Linking.openURL('https://readysetfly.us/terms-of-service');
-  };
-
-  const handleOpenVerification = () => {
-    Linking.openURL('https://readysetfly.us/verify-identity');
-  };
+  const handleOpenPrivacyPolicy = () => Linking.openURL('https://readysetfly.us/privacy-policy');
+  const handleOpenTermsOfService = () => Linking.openURL('https://readysetfly.us/terms-of-service');
+  const handleOpenVerification = () => Linking.openURL('https://readysetfly.us/verify-identity');
 
   useEffect(() => {
     if (!user) return;
@@ -100,6 +168,7 @@ export default function ProfileScreen({ navigation }: any) {
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
     let isMounted = true;
+
     const fetchActivity = async () => {
       try {
         setIsLoadingActivity(true);
@@ -109,8 +178,10 @@ export default function ProfileScreen({ navigation }: any) {
           api.get(`/api/reviews/user/${user.id}`),
         ]);
         if (!isMounted) return;
+
         const ownerData = Array.isArray(ownerRes.data) ? ownerRes.data : [];
         const renterData = Array.isArray(renterRes.data) ? renterRes.data : [];
+
         setOwnerRentals(ownerData);
         setRenterRentals(renterData);
         setReviews(Array.isArray(reviewsRes.data) ? reviewsRes.data : []);
@@ -118,32 +189,30 @@ export default function ProfileScreen({ navigation }: any) {
         const aircraftIds = Array.from(
           new Set([...ownerData, ...renterData].map((rental) => rental.aircraftId).filter(Boolean))
         );
+
         if (aircraftIds.length > 0) {
           const aircraftResponses = await Promise.all(
             aircraftIds.map((id) => api.get(`/api/aircraft/${id}`).then((res) => res.data).catch(() => null))
           );
           const nextMap: Record<string, any> = {};
           aircraftResponses.forEach((aircraft) => {
-            if (aircraft?.id) {
-              nextMap[aircraft.id] = aircraft;
-            }
+            if (aircraft?.id) nextMap[aircraft.id] = aircraft;
           });
           if (isMounted) setAircraftMap(nextMap);
         } else if (isMounted) {
           setAircraftMap({});
         }
-      } catch (error) {
+      } catch {
         if (!isMounted) return;
         setOwnerRentals([]);
         setRenterRentals([]);
         setReviews([]);
         setAircraftMap({});
       } finally {
-        if (isMounted) {
-          setIsLoadingActivity(false);
-        }
+        if (isMounted) setIsLoadingActivity(false);
       }
     };
+
     fetchActivity();
     return () => {
       isMounted = false;
@@ -184,271 +253,322 @@ export default function ProfileScreen({ navigation }: any) {
     },
   });
 
+  const totalRentalCount = ownerRentals.length + renterRentals.length;
+  const averageRating =
+    reviews.length > 0
+      ? (reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length).toFixed(1)
+      : '—';
+  const membershipLabel =
+    user?.membershipTier === 'pro_plus'
+      ? 'RSF Pro+'
+      : user?.membershipTier === 'pro'
+        ? 'RSF Pro'
+        : 'Free';
+
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#1e40af" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading profile...</Text>
       </View>
     );
   }
 
-  return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.avatarContainer}>
-          {user?.profileImageUrl ? (
-            <Image source={{ uri: user.profileImageUrl }} style={styles.avatarImage} />
-          ) : (
-            <Ionicons 
-              name={isAuthenticated ? 'person' : 'person-outline'} 
-              size={48} 
-              color="#1e40af" 
-            />
-          )}
+  if (!isAuthenticated) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.heroPanel}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.guestAvatar}>
+              <Ionicons name="person-outline" size={38} color="#93c5fd" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.heroEyebrow}>PROFILE</Text>
+              <Text style={styles.heroTitle}>Sign in to unlock your pilot workspace.</Text>
+              <Text style={styles.heroSubtitle}>
+                Keep planning, rentals, activity, verification, and member tools tied to one RSF account.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.summaryRow}>
+            <SummaryTile label="Workspace" value="Guest" />
+            <SummaryTile label="Profile sync" value="Locked" />
+            <SummaryTile label="Membership" value="Available" />
+          </View>
+
+          <TouchableOpacity style={styles.heroPrimaryAction} onPress={handleLogin} activeOpacity={0.92} data-testid="button-sign-in">
+            <Ionicons name="log-in-outline" size={18} color="#fff" />
+            <Text style={styles.heroPrimaryActionText}>Sign In</Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.userName}>
-          {isAuthenticated && user ? `${user.firstName} ${user.lastName}` : 'Guest User'}
-        </Text>
-        <Text style={styles.userEmail}>
-          {isAuthenticated && user ? user.email : 'Sign in to view your profile'}
-        </Text>
-        {isAuthenticated && (
-          <View style={styles.badgeRow}>
-            {verificationBadges.map((badge) => (
-              <View
-                key={badge.label}
-                style={[styles.badge, badge.ok ? styles.badgeOk : styles.badgeMuted]}
-              >
-                <Text style={[styles.badgeText, badge.ok ? styles.badgeTextOk : styles.badgeTextMuted]}>
-                  {badge.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
 
-      {isAuthenticated && (
-        <>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Profile Overview</Text>
-            <View style={styles.overviewRow}>
-              <View style={styles.overviewCard}>
-                <Text style={styles.overviewLabel}>Total Hours</Text>
-                <Text style={styles.overviewValue}>{user?.totalFlightHours || 0}</Text>
-              </View>
-              <View style={styles.overviewCard}>
-                <Text style={styles.overviewLabel}>Certifications</Text>
-                <Text style={styles.overviewValue}>{user?.certifications?.length || 0}</Text>
-              </View>
-              <View style={styles.overviewCard}>
-                <Text style={styles.overviewLabel}>Status</Text>
-                <Text style={[styles.overviewValue, user?.identityVerified ? styles.textSuccess : styles.textWarning]}>
-                  {user?.identityVerified ? 'Verified' : 'Unverified'}
-                </Text>
-              </View>
-            </View>
+        <SectionCard
+          title="What unlocks after sign in"
+          subtitle="One account keeps your pilot data and workflows connected across web and mobile."
+        >
+          <View style={styles.commandGrid}>
+            <CommandCard
+              icon="airplane-outline"
+              title="Plan & file"
+              subtitle="Keep routes, filing, and saved plans under one account."
+              onPress={handleLogin}
+            />
+            <CommandCard
+              icon="book-outline"
+              title="Log & track"
+              subtitle="Bring logbook, member tools, and activity into one workspace."
+              onPress={handleLogin}
+            />
           </View>
 
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Profile Details</Text>
-              <TouchableOpacity onPress={() => setIsEditing((prev) => !prev)}>
-                <Text style={styles.linkText}>{isEditing ? 'Cancel' : 'Edit'}</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.bulletList}>
+            <Text style={styles.bulletItem}>Save rentals, listings, and profile details in one workspace.</Text>
+            <Text style={styles.bulletItem}>Track verification, activity history, and account preferences.</Text>
+            <Text style={styles.bulletItem}>Use member features like logbook, billing, and connected planning tools.</Text>
+          </View>
+        </SectionCard>
+      </ScrollView>
+    );
+  }
 
-            {isEditing ? (
-              <View style={styles.card}>
-                <Text style={styles.inputLabel}>First Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  placeholder="First name"
-                />
-                <Text style={styles.inputLabel}>Last Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={lastName}
-                  onChangeText={setLastName}
-                  placeholder="Last name"
-                />
-                <Text style={styles.inputLabel}>Phone</Text>
-                <TextInput
-                  style={styles.input}
-                  value={phone}
-                  onChangeText={setPhone}
-                  placeholder="(555) 123-4567"
-                />
-                <Text style={styles.inputLabel}>Total Flight Hours</Text>
-                <TextInput
-                  style={styles.input}
-                  value={totalHours}
-                  onChangeText={setTotalHours}
-                  placeholder="0"
-                  keyboardType="numeric"
-                />
-                <Text style={styles.inputLabel}>Certifications</Text>
-                <View style={styles.certGrid}>
-                  {certificationTypes.map((cert) => {
-                    const selected = certifications.includes(cert);
-                    return (
-                      <TouchableOpacity
-                        key={cert}
-                        style={[styles.certChip, selected && styles.certChipActive]}
-                        onPress={() => {
-                          setCertifications((prev) =>
-                            prev.includes(cert) ? prev.filter((item) => item !== cert) : [...prev, cert]
-                          );
-                        }}
-                      >
-                        <Text style={[styles.certChipText, selected && styles.certChipTextActive]}>{cert}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <TouchableOpacity
-                  style={styles.primaryButton}
-                  onPress={() => updateProfileMutation.mutate()}
-                  disabled={updateProfileMutation.isPending}
-                >
-                  <Text style={styles.primaryButtonText}>
-                    {updateProfileMutation.isPending ? 'Saving...' : 'Save Profile'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.heroPanel}>
+        <View style={styles.heroTopRow}>
+          <View style={styles.avatarWrap}>
+            {user?.profileImageUrl ? (
+              <Image source={{ uri: user.profileImageUrl }} style={styles.avatarImage} />
             ) : (
-              <View style={styles.card}>
-                <Text style={styles.detailText}>Phone: {user?.phone || 'Not set'}</Text>
-                <Text style={styles.detailText}>Hours: {user?.totalFlightHours || 0}</Text>
-                <Text style={styles.detailText}>Certs: {(user?.certifications || []).join(', ') || 'None yet'}</Text>
+              <View style={styles.avatarFallback}>
+                <Ionicons name="person" size={34} color="#93c5fd" />
               </View>
             )}
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Verification & Documents</Text>
-            <View style={styles.card}>
-              <View style={styles.docRow}>
-                <Text style={styles.docLabel}>Pilot License</Text>
-                <Text style={styles.docValue}>{user?.pilotLicenseUrl ? 'On file' : 'Missing'}</Text>
-              </View>
-              <View style={styles.docRow}>
-                <Text style={styles.docLabel}>Insurance</Text>
-                <Text style={styles.docValue}>{user?.insuranceUrl ? 'On file' : 'Missing'}</Text>
-              </View>
-              <View style={styles.docRow}>
-                <Text style={styles.docLabel}>FAA Verification</Text>
-                <Text style={styles.docValue}>{user?.faaVerified ? 'Verified' : 'Pending'}</Text>
-              </View>
-              <TouchableOpacity style={styles.outlineButton} onPress={handleOpenVerification}>
-                <Text style={styles.outlineButtonText}>Upload/Update Documents</Text>
-              </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroEyebrow}>PROFILE</Text>
+            <Text style={styles.heroTitle}>
+              {user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'RSF Pilot' : 'RSF Pilot'}
+            </Text>
+            <Text style={styles.heroSubtitle}>{user?.email || 'Ready Set Fly account'}</Text>
+          </View>
+
+          <View style={styles.heroBadge}>
+            <Text style={styles.heroBadgeText}>
+              {user?.identityVerified ? 'Verified' : 'Needs review'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <SummaryTile label="Hours" value={String(user?.totalFlightHours || 0)} />
+          <SummaryTile label="Certs" value={String(user?.certifications?.length || 0)} />
+          <SummaryTile label="Rentals" value={String(totalRentalCount)} />
+        </View>
+
+        <View style={styles.statusStrip}>
+          <View style={styles.statusPill}>
+            <Ionicons name="card-outline" size={14} color="#bfdbfe" />
+            <Text style={styles.statusPillText}>{membershipLabel}</Text>
+          </View>
+          <View style={styles.statusPill}>
+            <Ionicons name="star-outline" size={14} color="#bfdbfe" />
+            <Text style={styles.statusPillText}>{reviews.length ? `${averageRating}/5 rating` : 'No reviews yet'}</Text>
+          </View>
+        </View>
+
+        <View style={styles.verificationBadgeRow}>
+          {verificationBadges.map((badge) => (
+            <View key={badge.label} style={[styles.verificationBadge, badge.ok ? styles.verificationBadgeOk : styles.verificationBadgeMuted]}>
+              <Text style={[styles.verificationBadgeText, badge.ok ? styles.verificationBadgeTextOk : styles.verificationBadgeTextMuted]}>
+                {badge.label}
+              </Text>
             </View>
-          </View>
+          ))}
+        </View>
+      </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Account</Text>
-            
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('Verification')}
-              data-testid="button-verification-status"
-            >
-              <Ionicons name="shield-checkmark-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Verification Status</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
+      <SectionCard
+        title="Mission Control"
+        subtitle="The fastest path into your most-used account workflows."
+      >
+        <View style={styles.commandGrid}>
+          <CommandCard
+            icon="shield-checkmark-outline"
+            title="Verification"
+            subtitle="Review identity, FAA, and document status."
+            onPress={() => navigation.navigate('Verification')}
+          />
+          <CommandCard
+            icon="airplane-outline"
+            title="My Rentals"
+            subtitle="Manage active, pending, and completed bookings."
+            onPress={() => navigation.navigate('MyRentals')}
+          />
+          <CommandCard
+            icon="list-outline"
+            title="My Listings"
+            subtitle="Track live rental or marketplace inventory."
+            onPress={() => navigation.navigate('MyListings')}
+          />
+          <CommandCard
+            icon="card-outline"
+            title="Membership"
+            subtitle="View RSF Pro status, billing, and upgrades."
+            onPress={() => navigation.navigate('LogbookPro')}
+          />
+        </View>
+      </SectionCard>
 
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('Balance')}
-              data-testid="button-balance"
-            >
-              <Ionicons name="wallet-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Balance & Withdrawals</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
-          </View>
+      <SectionCard
+        title="Pilot Identity"
+        subtitle="Keep your identity, hours, and certification baseline current."
+        action={
+          <TouchableOpacity onPress={() => setIsEditing((prev) => !prev)} activeOpacity={0.92}>
+            <Text style={styles.linkText}>{isEditing ? 'Cancel' : 'Edit'}</Text>
+          </TouchableOpacity>
+        }
+      >
+        {isEditing ? (
+          <View>
+            <Text style={styles.inputLabel}>First Name</Text>
+            <TextInput style={styles.input} value={firstName} onChangeText={setFirstName} placeholder="First name" />
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>My Activity</Text>
+            <Text style={styles.inputLabel}>Last Name</Text>
+            <TextInput style={styles.input} value={lastName} onChangeText={setLastName} placeholder="Last name" />
 
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('MyRentals')}
-              data-testid="button-my-rentals"
-            >
-              <Ionicons name="airplane-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>My Rentals</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
+            <Text style={styles.inputLabel}>Phone</Text>
+            <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="(555) 123-4567" />
 
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('Favorites')}
-              data-testid="button-favorites"
-            >
-              <Ionicons name="heart-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Favorites</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
+            <Text style={styles.inputLabel}>Total Flight Hours</Text>
+            <TextInput style={styles.input} value={totalHours} onChangeText={setTotalHours} placeholder="0" keyboardType="numeric" />
+
+            <Text style={styles.inputLabel}>Certifications</Text>
+            <View style={styles.certGrid}>
+              {certificationTypes.map((cert) => {
+                const selected = certifications.includes(cert);
+                return (
+                  <TouchableOpacity
+                    key={cert}
+                    style={[styles.certChip, selected && styles.certChipActive]}
+                    onPress={() => {
+                      setCertifications((prev) =>
+                        prev.includes(cert) ? prev.filter((item) => item !== cert) : [...prev, cert]
+                      );
+                    }}
+                    activeOpacity={0.92}
+                  >
+                    <Text style={[styles.certChipText, selected && styles.certChipTextActive]}>{cert}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
             <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('MyListings')}
-              data-testid="button-my-listings"
+              style={styles.primaryButton}
+              onPress={() => updateProfileMutation.mutate()}
+              disabled={updateProfileMutation.isPending}
+              activeOpacity={0.92}
             >
-              <Ionicons name="list-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>My Listings</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('Reviews')}
-              data-testid="button-reviews"
-            >
-              <Ionicons name="star-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Reviews</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+              <Text style={styles.primaryButtonText}>
+                {updateProfileMutation.isPending ? 'Saving...' : 'Save Profile'}
+              </Text>
             </TouchableOpacity>
           </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Aircraft Types Flown</Text>
-            <View style={styles.card}>
-              {(user?.aircraftTypesFlown || []).length > 0 ? (
-                <View style={styles.certGrid}>
-                  {user?.aircraftTypesFlown?.map((type: string) => (
-                    <View key={type} style={styles.certChip}>
-                      <Text style={styles.certChipText}>{type}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <Text style={styles.detailText}>No aircraft types added yet.</Text>
-              )}
+        ) : (
+          <View style={styles.detailGrid}>
+            <View style={styles.detailCard}>
+              <Text style={styles.detailLabel}>Phone</Text>
+              <Text style={styles.detailValue}>{user?.phone || 'Not set'}</Text>
+            </View>
+            <View style={styles.detailCard}>
+              <Text style={styles.detailLabel}>Hours</Text>
+              <Text style={styles.detailValue}>{user?.totalFlightHours || 0}</Text>
+            </View>
+            <View style={styles.detailCardFull}>
+              <Text style={styles.detailLabel}>Certifications</Text>
+              <Text style={styles.detailValue}>{(user?.certifications || []).join(', ') || 'None yet'}</Text>
             </View>
           </View>
+        )}
+      </SectionCard>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Rental History</Text>
-            <View style={styles.card}>
-              {isLoadingActivity ? (
-                <Text style={styles.detailText}>Loading rentals...</Text>
-              ) : ownerRentals.length + renterRentals.length === 0 ? (
-                <Text style={styles.detailText}>No rentals yet.</Text>
+      <SectionCard
+        title="Verification & Documents"
+        subtitle="This is the trust layer behind rentals, marketplace actions, and compliance workflows."
+      >
+        <View style={styles.detailGrid}>
+          <View style={styles.detailCard}>
+            <Text style={styles.detailLabel}>Pilot License</Text>
+            <Text style={styles.detailValue}>{user?.pilotLicenseUrl ? 'On file' : 'Missing'}</Text>
+          </View>
+          <View style={styles.detailCard}>
+            <Text style={styles.detailLabel}>Insurance</Text>
+            <Text style={styles.detailValue}>{user?.insuranceUrl ? 'On file' : 'Missing'}</Text>
+          </View>
+          <View style={styles.detailCardFull}>
+            <Text style={styles.detailLabel}>FAA Verification</Text>
+            <Text style={styles.detailValue}>{user?.faaVerified ? 'Verified' : 'Pending'}</Text>
+          </View>
+        </View>
+
+        <TouchableOpacity style={styles.outlineButton} onPress={handleOpenVerification} activeOpacity={0.92}>
+          <Text style={styles.outlineButtonText}>Upload or Update Documents</Text>
+        </TouchableOpacity>
+      </SectionCard>
+
+      <SectionCard
+        title="Workspace Links"
+        subtitle="Account, rentals, listings, reviews, and cash flow all from one hub."
+      >
+        <MenuRow icon="shield-checkmark-outline" label="Verification Status" onPress={() => navigation.navigate('Verification')} testID="button-verification-status" />
+        <MenuRow icon="wallet-outline" label="Balance & Withdrawals" onPress={() => navigation.navigate('Balance')} testID="button-balance" />
+        <MenuRow icon="airplane-outline" label="My Rentals" onPress={() => navigation.navigate('MyRentals')} testID="button-my-rentals" />
+        <MenuRow icon="heart-outline" label="Favorites" onPress={() => navigation.navigate('Favorites')} testID="button-favorites" />
+        <MenuRow icon="list-outline" label="My Listings" onPress={() => navigation.navigate('MyListings')} testID="button-my-listings" />
+        <MenuRow icon="star-outline" label="Reviews" onPress={() => navigation.navigate('Reviews')} testID="button-reviews" />
+      </SectionCard>
+
+      <SectionCard
+        title="Activity Snapshot"
+        subtitle="A quick read on your rental history, pilot reputation, and recent movement."
+      >
+        {isLoadingActivity ? (
+          <Text style={styles.placeholderText}>Loading activity...</Text>
+        ) : (
+          <>
+            <View style={styles.summaryRowLight}>
+              <SummaryTileLight label="Owner rentals" value={String(ownerRentals.length)} />
+              <SummaryTileLight label="Renter rentals" value={String(renterRentals.length)} />
+              <SummaryTileLight label="Reviews" value={String(reviews.length)} />
+            </View>
+
+            <View style={styles.activityHeadlineRow}>
+              <View style={styles.activityHeadlineCard}>
+                <Text style={styles.activityHeadlineLabel}>Average rating</Text>
+                <Text style={styles.activityHeadlineValue}>{averageRating}</Text>
+              </View>
+              <View style={styles.activityHeadlineCard}>
+                <Text style={styles.activityHeadlineLabel}>Current mode</Text>
+                <Text style={styles.activityHeadlineValue}>
+                  {ownerRentals.length > renterRentals.length ? 'Owner-led' : renterRentals.length > 0 ? 'Flying renter' : 'Building activity'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.miniSection}>
+              <Text style={styles.miniSectionTitle}>Recent rental history</Text>
+              {totalRentalCount === 0 ? (
+                <Text style={styles.placeholderText}>No rentals yet.</Text>
               ) : (
-                [...ownerRentals, ...renterRentals].slice(0, 5).map((rental: any) => {
+                [...ownerRentals, ...renterRentals].slice(0, 4).map((rental: any) => {
                   const aircraft = rental.aircraftId ? aircraftMap[rental.aircraftId] : null;
                   return (
                     <View key={rental.id} style={styles.listRow}>
                       <View style={styles.listRowMain}>
                         <Text style={styles.listRowTitle}>
-                          {aircraft ? `${aircraft.make} ${aircraft.model}` : (rental.aircraftName || rental.aircraftId || 'Rental')}
+                          {aircraft ? `${aircraft.make} ${aircraft.model}` : rental.aircraftName || rental.aircraftId || 'Rental'}
                         </Text>
                         <Text style={styles.listRowMeta}>
                           {aircraft?.category ? `${aircraft.category} · ` : ''}
@@ -461,17 +581,13 @@ export default function ProfileScreen({ navigation }: any) {
                 })
               )}
             </View>
-          </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Reviews</Text>
-            <View style={styles.card}>
-              {isLoadingActivity ? (
-                <Text style={styles.detailText}>Loading reviews...</Text>
-              ) : reviews.length === 0 ? (
-                <Text style={styles.detailText}>No reviews yet.</Text>
+            <View style={styles.miniSection}>
+              <Text style={styles.miniSectionTitle}>Recent reviews</Text>
+              {reviews.length === 0 ? (
+                <Text style={styles.placeholderText}>No reviews yet.</Text>
               ) : (
-                reviews.slice(0, 4).map((review: any) => (
+                reviews.slice(0, 3).map((review: any) => (
                   <View key={review.id} style={styles.listRow}>
                     <View style={styles.listRowMain}>
                       <Text style={styles.listRowTitle}>{review.reviewerName || 'Pilot'}</Text>
@@ -482,148 +598,70 @@ export default function ProfileScreen({ navigation }: any) {
                 ))
               )}
             </View>
-          </View>
+          </>
+        )}
+      </SectionCard>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Settings</Text>
-            
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('Notifications')}
-              data-testid="button-notifications"
-            >
-              <Ionicons name="notifications-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Notifications</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
+      <SectionCard
+        title="Settings & Support"
+        subtitle="Notifications, billing, policies, and help surfaces that support the whole account."
+      >
+        <MenuRow icon="notifications-outline" label="Notifications" onPress={() => navigation.navigate('Notifications')} testID="button-notifications" />
+        <MenuRow icon="help-circle-outline" label="Help & Support" onPress={() => navigation.navigate('HelpSupport')} testID="button-help" />
+        <MenuRow icon="chatbox-ellipses-outline" label="FAQ" onPress={() => navigation.navigate('FAQ')} testID="button-faq" />
+        <MenuRow icon="mail-outline" label="Contact Us" onPress={() => navigation.navigate('ContactUs')} testID="button-contact-us" />
+        <MenuRow icon="card-outline" label="Membership & Billing" onPress={() => navigation.navigate('LogbookPro')} testID="button-manage-subscription" />
+        <MenuRow icon="shield-outline" label="Privacy Policy" onPress={handleOpenPrivacyPolicy} testID="button-privacy-policy" />
+        <MenuRow icon="document-text-outline" label="Terms of Service" onPress={handleOpenTermsOfService} testID="button-terms-of-service" />
+      </SectionCard>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('HelpSupport')}
-              data-testid="button-help"
-            >
-              <Ionicons name="help-circle-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Help & Support</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
+      <SectionCard
+        title="Danger Zone"
+        subtitle="Destructive account actions live here and should be used carefully."
+      >
+        <MenuRow
+          icon="trash-outline"
+          label={deleteAccountMutation.isPending ? 'Deleting...' : 'Delete Account'}
+          onPress={() => setShowDeleteModal(true)}
+          danger
+          testID="button-delete-account"
+        />
+        <MenuRow
+          icon="trash-bin-outline"
+          label="Delete Account (web)"
+          onPress={() => Linking.openURL('https://readysetfly.us/delete-account')}
+          danger
+          testID="button-delete-account-web"
+        />
+      </SectionCard>
 
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('FAQ')}
-              data-testid="button-faq"
-            >
-              <Ionicons name="chatbox-ellipses-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>FAQ</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.signOutButton}
+        onPress={handleLogout}
+        disabled={logout.isPending}
+        activeOpacity={0.92}
+        data-testid="button-sign-out"
+      >
+        <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+        <Text style={styles.signOutButtonText}>{logout.isPending ? 'Signing out...' : 'Sign Out'}</Text>
+      </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('ContactUs')}
-              data-testid="button-contact-us"
-            >
-              <Ionicons name="mail-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Contact Us</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => navigation.navigate('LogbookPro')}
-              data-testid="button-manage-subscription"
-            >
-              <Ionicons name="card-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Membership & Billing</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={handleOpenPrivacyPolicy}
-              data-testid="button-privacy-policy"
-            >
-              <Ionicons name="shield-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Privacy Policy</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={handleOpenTermsOfService}
-              data-testid="button-terms-of-service"
-            >
-              <Ionicons name="document-text-outline" size={24} color="#1e40af" />
-              <Text style={styles.menuText}>Terms of Service</Text>
-              <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Danger Zone</Text>
-            
-            <TouchableOpacity 
-              style={styles.deleteAccountButton}
-              onPress={handleDeleteAccount}
-              disabled={deleteAccountMutation.isPending}
-              data-testid="button-delete-account"
-            >
-              <Ionicons name="trash-outline" size={24} color="#ef4444" />
-              <Text style={styles.deleteAccountText}>
-                {deleteAccountMutation.isPending ? 'Deleting...' : 'Delete Account'}
-              </Text>
-              <Ionicons name="chevron-forward" size={20} color="#ef4444" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.menuItem, { borderColor: '#fecaca' }]}
-              onPress={() => Linking.openURL('https://readysetfly.us/delete-account')}
-              data-testid="button-delete-account-web"
-            >
-              <Ionicons name="trash-bin-outline" size={24} color="#ef4444" />
-              <Text style={[styles.menuText, { color: '#ef4444' }]}>Delete Account (web)</Text>
-              <Ionicons name="open-outline" size={20} color="#ef4444" />
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity 
-            style={styles.signOutButton}
-            onPress={handleLogout}
-            disabled={logout.isPending}
-            data-testid="button-sign-out"
-          >
-            <Ionicons name="log-out-outline" size={20} color="#ef4444" />
-            <Text style={styles.signOutButtonText}>
-              {logout.isPending ? 'Signing out...' : 'Sign Out'}
-            </Text>
-          </TouchableOpacity>
-        </>
-      )}
-
-      {!isAuthenticated && (
-        <View style={styles.signInContainer}>
-          <Ionicons name="lock-closed-outline" size={64} color="#9ca3af" />
-          <Text style={styles.signInPrompt}>Sign in to access your profile</Text>
-          <TouchableOpacity 
-            style={styles.signInButton}
-            onPress={handleLogin}
-            data-testid="button-sign-in"
-          >
-            <Ionicons name="log-in-outline" size={20} color="#fff" />
-            <Text style={styles.signInButtonText}>
-              Sign In
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Account Deletion Confirmation Modal */}
       <ConfirmDeletionModal
         visible={showDeleteModal}
-        onConfirm={handleConfirmDelete}
-        onCancel={handleCancelDelete}
+        onConfirm={() => deleteAccountMutation.mutate()}
+        onCancel={() => setShowDeleteModal(false)}
         isLoading={deleteAccountMutation.isPending}
       />
     </ScrollView>
+  );
+}
+
+function SummaryTileLight({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTileLight}>
+      <Text style={styles.summaryTileLightLabel}>{label}</Text>
+      <Text style={styles.summaryTileLightValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -632,141 +670,285 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  content: {
+    padding: spacing.sm,
+    paddingBottom: 120,
+  },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: spacing.lg,
+    backgroundColor: colors.background,
   },
   loadingText: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginTop: 12,
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
   },
-  header: {
-    backgroundColor: colors.surface,
+  heroPanel: {
+    marginBottom: spacing.md,
     padding: spacing.lg,
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
   },
-  avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.primarySoft,
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  guestAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.md,
+  },
+  avatarWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    overflow: 'hidden',
   },
   avatarImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: '100%',
+    height: '100%',
   },
-  userName: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: colors.text,
+  avatarFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  userEmail: {
-    fontSize: 13,
-    color: colors.textMuted,
-    marginTop: 4,
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
   },
-  badgeRow: {
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: '#fff',
+    marginTop: 10,
+    maxWidth: 300,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 330,
+  },
+  heroBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  heroBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  statusStrip: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    marginTop: spacing.sm,
     gap: spacing.xs,
+    marginTop: spacing.md,
   },
-  badge: {
-    paddingVertical: 4,
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 10,
+    paddingVertical: 8,
     borderRadius: 999,
-    marginRight: spacing.xs,
-    marginTop: spacing.xs,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  badgeOk: {
-    backgroundColor: '#dcfce7',
-  },
-  badgeMuted: {
-    backgroundColor: '#e2e8f0',
-  },
-  badgeText: {
+  statusPillText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: '#dbeafe',
   },
-  badgeTextOk: {
-    color: '#166534',
+  summaryTile: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  badgeTextMuted: {
-    color: colors.textMuted,
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
   },
-  section: {
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  summaryRowLight: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  summaryTileLight: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  summaryTileLightLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: colors.textSoft,
+    textTransform: 'uppercase',
+  },
+  summaryTileLightValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: 6,
+  },
+  verificationBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  verificationBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  verificationBadgeOk: {
+    backgroundColor: 'rgba(34,197,94,0.18)',
+  },
+  verificationBadgeMuted: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  verificationBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  verificationBadgeTextOk: {
+    color: '#bbf7d0',
+  },
+  verificationBadgeTextMuted: {
+    color: '#dbe4f0',
+  },
+  heroPrimaryAction: {
     marginTop: spacing.lg,
-    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: radius.lg,
+    paddingVertical: 15,
+    backgroundColor: colors.primary,
+  },
+  heroPrimaryActionText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+    ...shadow.card,
   },
   sectionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-    marginLeft: 4,
-  },
-  overviewRow: {
-    flexDirection: 'row',
     gap: spacing.sm,
   },
-  overviewCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+  sectionTitle: {
+    ...typography.h2,
   },
-  overviewLabel: {
-    fontSize: 11,
-    color: colors.textMuted,
-  },
-  overviewValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
+  sectionSubtitle: {
+    ...typography.muted,
     marginTop: 4,
   },
-  textSuccess: {
-    color: colors.success,
+  sectionContent: {
+    marginTop: spacing.md,
   },
-  textWarning: {
-    color: colors.warning,
+  commandGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+  commandCard: {
+    width: '48%',
+    minHeight: 124,
     padding: spacing.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.backgroundElevated,
     borderWidth: 1,
     borderColor: colors.border,
-    ...shadow.card,
+  },
+  commandIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+  },
+  commandTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: spacing.sm,
+  },
+  commandSubtitle: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.textMuted,
+    marginTop: 6,
+  },
+  linkText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '800',
   },
   inputLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    color: colors.textMuted,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: 8,
     marginTop: spacing.sm,
-    marginBottom: 6,
   },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
     backgroundColor: colors.surfaceMuted,
     color: colors.text,
   },
@@ -777,8 +959,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   certChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.border,
@@ -794,53 +976,136 @@ const styles = StyleSheet.create({
   },
   certChipTextActive: {
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '800',
   },
   primaryButton: {
     marginTop: spacing.md,
     backgroundColor: colors.primary,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
     alignItems: 'center',
   },
   primaryButtonText: {
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '800',
+    fontSize: 14,
   },
-  detailText: {
-    fontSize: 13,
-    color: colors.text,
-    marginBottom: 6,
-  },
-  docRow: {
+  detailGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.xs,
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
-  docLabel: {
-    fontSize: 13,
+  detailCard: {
+    width: '48%',
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  detailCardFull: {
+    width: '100%',
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  detailLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: colors.textSoft,
+    textTransform: 'uppercase',
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '800',
     color: colors.text,
-  },
-  docValue: {
-    fontSize: 13,
-    color: colors.textMuted,
+    marginTop: 6,
   },
   outlineButton: {
     marginTop: spacing.md,
     borderWidth: 1,
     borderColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm,
+    borderRadius: radius.lg,
+    paddingVertical: 14,
     alignItems: 'center',
   },
   outlineButtonText: {
     color: colors.primary,
-    fontWeight: '600',
+    fontWeight: '800',
+    fontSize: 14,
   },
-  linkText: {
-    color: colors.primary,
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.backgroundElevated,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  menuRowDanger: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fff6f6',
+  },
+  menuRowText: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.text,
+    marginLeft: spacing.sm,
+    fontWeight: '700',
+  },
+  menuRowTextDanger: {
+    color: colors.danger,
+  },
+  miniSection: {
+    marginTop: spacing.md,
+  },
+  activityHeadlineRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  activityHeadlineCard: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  activityHeadlineLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: colors.textSoft,
+    textTransform: 'uppercase',
+  },
+  activityHeadlineValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: 6,
+  },
+  miniSectionTitle: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  placeholderText: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  bulletList: {
+    gap: spacing.sm,
+  },
+  bulletItem: {
+    ...typography.body,
+    color: colors.textMuted,
   },
   listRow: {
     flexDirection: 'row',
@@ -856,7 +1121,7 @@ const styles = StyleSheet.create({
   },
   listRowTitle: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '800',
     color: colors.text,
   },
   listRowMeta: {
@@ -866,91 +1131,23 @@ const styles = StyleSheet.create({
   },
   listRowAmount: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '800',
     color: colors.text,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadow.card,
-  },
-  menuText: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.text,
-    marginLeft: spacing.sm,
-  },
-  signInContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-    marginTop: 60,
-  },
-  signInPrompt: {
-    fontSize: 16,
-    color: colors.textMuted,
-    marginTop: spacing.md,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
-  },
-  signInButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radius.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  signInButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-    marginLeft: 8,
   },
   signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
-    marginHorizontal: spacing.md,
-    marginVertical: spacing.lg,
     padding: spacing.md,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: '#fecaca',
+    ...shadow.card,
   },
   signOutButtonText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: colors.danger,
-    marginLeft: spacing.sm,
-  },
-  deleteAccountButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    marginBottom: spacing.sm,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-  },
-  deleteAccountText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '800',
     color: colors.danger,
     marginLeft: spacing.sm,
   },

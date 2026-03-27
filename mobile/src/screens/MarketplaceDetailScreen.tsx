@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Linking } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,8 +7,36 @@ import { MarketplaceStackParamList } from '../navigation/MarketplaceStack';
 import { apiEndpoints } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import UpgradeListingModal from '../components/UpgradeListingModal';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 type Props = NativeStackScreenProps<MarketplaceStackParamList, 'MarketplaceDetail'>;
+
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTile}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function SectionCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.sectionCard}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.sectionSubtitle}>{subtitle}</Text> : null}
+      <View style={styles.sectionContent}>{children}</View>
+    </View>
+  );
+}
 
 export default function MarketplaceDetailScreen({ route }: Props) {
   const { listingId } = route.params;
@@ -26,20 +54,30 @@ export default function MarketplaceDetailScreen({ route }: Props) {
 
   const isOwner = user && listing && listing.userId === user.id;
 
+  const contactLabel = useMemo(() => {
+    if (!listing) return 'Contact';
+    if (listing.contactEmail) return 'Email Seller';
+    if (listing.contactPhone) return 'Call Seller';
+    return 'Contact';
+  }, [listing]);
+
   const handleContact = () => {
     if (listing?.contactEmail) {
-      // Create custom subject line based on category
       const categoryNames: Record<string, string> = {
         'aircraft-sale': 'Aircraft for Sale',
-        'job': 'Aviation Job',
-        'cfi': 'CFI Services',
+        job: 'Aviation Job',
+        cfi: 'CFI Services',
         'flight-school': 'Flight School',
-        'mechanic': 'Mechanic Services',
-        'charter': 'Charter Service'
+        mechanic: 'Mechanic Services',
+        charter: 'Charter Service',
       };
       const categoryName = categoryNames[listing.category] || listing.category;
-      const subject = encodeURIComponent(`Inquiry From Ready Set Fly about your ${categoryName} Listing: ${listing.title}`);
-      const body = encodeURIComponent(`Hi,\n\nI'm interested in your ${categoryName} listing: ${listing.title}\n\n`);
+      const subject = encodeURIComponent(
+        `Inquiry From Ready Set Fly about your ${categoryName} Listing: ${listing.title}`
+      );
+      const body = encodeURIComponent(
+        `Hi,\n\nI'm interested in your ${categoryName} listing: ${listing.title}\n\n`
+      );
       Linking.openURL(`mailto:${listing.contactEmail}?subject=${subject}&body=${body}`);
     } else if (listing?.contactPhone) {
       Linking.openURL(`tel:${listing.contactPhone}`);
@@ -49,7 +87,8 @@ export default function MarketplaceDetailScreen({ route }: Props) {
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#1e40af" />
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading listing details...</Text>
       </View>
     );
   }
@@ -57,105 +96,150 @@ export default function MarketplaceDetailScreen({ route }: Props) {
   if (error || !listing) {
     return (
       <View style={styles.centerContainer}>
-        <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
-        <Text style={styles.errorText}>Failed to load listing details</Text>
+        <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
+        <Text style={styles.errorTitle}>Unable to load listing.</Text>
+        <Text style={styles.errorText}>Refresh and try again. This listing may be temporarily unavailable.</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>{listing.title}</Text>
-        <View style={styles.categoryBadge}>
-          <Text style={styles.categoryText}>{listing.category}</Text>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.heroPanel}>
+        <View style={styles.heroTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroEyebrow}>LISTING DETAIL</Text>
+            <Text style={styles.heroTitle}>{listing.title}</Text>
+            <Text style={styles.heroSubtitle}>{listing.location || 'Marketplace listing'}</Text>
+          </View>
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryBadgeText}>{listing.category}</Text>
+          </View>
+        </View>
+
+        <View style={styles.summaryRow}>
+          <SummaryTile label="Price" value={listing.price ? `$${listing.price}` : 'Contact'} />
+          <SummaryTile label="Category" value={listing.category} />
+          <SummaryTile label="Tier" value={listing.tier || 'basic'} />
+        </View>
+
+        <View style={styles.actionRow}>
+          {isOwner ? (
+            listing.tier !== 'premium' ? (
+              <TouchableOpacity
+                style={styles.ownerAction}
+                onPress={() => setShowUpgradeModal(true)}
+                activeOpacity={0.92}
+                data-testid="button-upgrade-listing"
+              >
+                <Ionicons name="trending-up" size={18} color="#fff" />
+                <Text style={styles.ownerActionText}>Upgrade Listing</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.ownerBadge}>
+                <Text style={styles.ownerBadgeText}>Premium listing active</Text>
+              </View>
+            )
+          ) : (
+            <TouchableOpacity style={styles.primaryAction} onPress={handleContact} activeOpacity={0.92}>
+              <Ionicons
+                name={listing.contactEmail ? 'mail-outline' : 'call-outline'}
+                size={18}
+                color="#fff"
+              />
+              <Text style={styles.primaryActionText}>{contactLabel}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
-      {/* Price */}
-      {listing.price && (
-        <View style={styles.section}>
-          <Text style={styles.price}>${listing.price}</Text>
-        </View>
-      )}
+      {listing.description ? (
+        <SectionCard
+          title="Description"
+          subtitle="The seller’s main context for the listing."
+        >
+          <Text style={styles.bodyText}>{listing.description}</Text>
+        </SectionCard>
+      ) : null}
 
-      {/* Location */}
-      {listing.location && (
-        <View style={styles.section}>
-          <View style={styles.infoRow}>
-            <Ionicons name="location" size={20} color="#1e40af" />
-            <Text style={styles.infoValue}>{listing.location}</Text>
+      <SectionCard
+        title="Listing Snapshot"
+        subtitle="Quick reference before you reach out or manage the listing."
+      >
+        <View style={styles.snapshotGrid}>
+          <View style={styles.snapshotCard}>
+            <Text style={styles.snapshotLabel}>Category</Text>
+            <Text style={styles.snapshotValue}>{listing.category}</Text>
           </View>
-        </View>
-      )}
-
-      {/* Description */}
-      {listing.description && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Description</Text>
-          <Text style={styles.description}>{listing.description}</Text>
-        </View>
-      )}
-
-      {/* Contact Information */}
-      {(listing.contactEmail || listing.contactPhone) && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Contact</Text>
-          
-          {listing.contactEmail && (
-            <View style={styles.contactRow}>
-              <Ionicons name="mail-outline" size={20} color="#6b7280" />
-              <Text style={styles.contactText}>{listing.contactEmail}</Text>
-            </View>
-          )}
-          
-          {listing.contactPhone && (
-            <View style={styles.contactRow}>
-              <Ionicons name="call-outline" size={20} color="#6b7280" />
-              <Text style={styles.contactText}>{listing.contactPhone}</Text>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Tier Badge (for owners) */}
-      {isOwner && listing.tier && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Listing Tier</Text>
-          <View style={styles.tierBadge}>
-            <Text style={styles.tierText}>
-              {listing.tier === 'basic' ? 'Basic' : listing.tier === 'standard' ? 'Standard' : 'Premium'} Tier
+          <View style={styles.snapshotCard}>
+            <Text style={styles.snapshotLabel}>Location</Text>
+            <Text style={styles.snapshotValue}>{listing.location || 'Not listed'}</Text>
+          </View>
+          <View style={styles.snapshotCard}>
+            <Text style={styles.snapshotLabel}>Price</Text>
+            <Text style={styles.snapshotValue}>{listing.price ? `$${listing.price}` : 'Contact seller'}</Text>
+          </View>
+          <View style={styles.snapshotCard}>
+            <Text style={styles.snapshotLabel}>Tier</Text>
+            <Text style={styles.snapshotValue}>
+              {listing.tier === 'premium'
+                ? 'Premium'
+                : listing.tier === 'standard'
+                ? 'Standard'
+                : 'Basic'}
             </Text>
           </View>
         </View>
-      )}
+      </SectionCard>
 
-      {/* Action Buttons */}
-      <View style={styles.buttonContainer}>
-        {isOwner ? (
-          <>
-            {listing.tier !== 'premium' && (
-              <TouchableOpacity
-                style={styles.upgradeButton}
-                onPress={() => setShowUpgradeModal(true)}
-                data-testid="button-upgrade-listing"
-              >
-                <Ionicons name="trending-up" size={20} color="#fff" />
-                <Text style={styles.upgradeButtonText}>Upgrade Listing</Text>
-              </TouchableOpacity>
-            )}
-          </>
-        ) : (
-          <TouchableOpacity style={styles.contactButton} onPress={handleContact}>
-            <Ionicons name="chatbubble-outline" size={20} color="#fff" />
-            <Text style={styles.contactButtonText}>Contact Seller</Text>
+      {(listing.contactEmail || listing.contactPhone) ? (
+        <SectionCard
+          title="Contact"
+          subtitle="Reach the seller directly from the listing."
+        >
+          {listing.contactEmail ? (
+            <View style={styles.contactRow}>
+              <Ionicons name="mail-outline" size={18} color={colors.primary} />
+              <Text style={styles.contactText}>{listing.contactEmail}</Text>
+            </View>
+          ) : null}
+          {listing.contactPhone ? (
+            <View style={styles.contactRow}>
+              <Ionicons name="call-outline" size={18} color={colors.primary} />
+              <Text style={styles.contactText}>{listing.contactPhone}</Text>
+            </View>
+          ) : null}
+        </SectionCard>
+      ) : null}
+
+      {isOwner ? (
+        <SectionCard
+          title="Owner Controls"
+          subtitle="This is how the listing is currently positioned in the marketplace."
+        >
+          <View style={styles.ownerTierCard}>
+            <Text style={styles.ownerTierLabel}>Current tier</Text>
+            <Text style={styles.ownerTierValue}>
+              {listing.tier === 'premium'
+                ? 'Premium'
+                : listing.tier === 'standard'
+                ? 'Standard'
+                : 'Basic'}
+            </Text>
+          </View>
+        </SectionCard>
+      ) : null}
+
+      {!isOwner ? (
+        <View style={styles.footerActionWrap}>
+          <TouchableOpacity style={styles.footerAction} onPress={handleContact} activeOpacity={0.92}>
+            <Text style={styles.footerActionText}>{contactLabel}</Text>
+            <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      ) : null}
 
-      {/* Upgrade Modal */}
-      {isOwner && listing && (
+      {isOwner && listing ? (
         <UpgradeListingModal
           visible={showUpgradeModal}
           onClose={() => setShowUpgradeModal(false)}
@@ -165,7 +249,7 @@ export default function MarketplaceDetailScreen({ route }: Props) {
             queryClient.invalidateQueries({ queryKey: ['/api/marketplace'] });
           }}
         />
-      )}
+      ) : null}
     </ScrollView>
   );
 }
@@ -173,124 +257,249 @@ export default function MarketplaceDetailScreen({ route }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
+  },
+  content: {
+    padding: spacing.sm,
+    paddingBottom: 120,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f3f4f6',
+    padding: spacing.lg,
+    backgroundColor: colors.background,
+  },
+  loadingText: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  errorTitle: {
+    ...typography.h2,
+    marginTop: spacing.md,
   },
   errorText: {
-    fontSize: 16,
-    color: '#ef4444',
-    marginTop: 12,
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    maxWidth: 320,
   },
-  header: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+  heroPanel: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 12,
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: '#fff',
+    marginTop: 10,
+    maxWidth: 300,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 330,
   },
   categoryBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#dbeafe',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
   },
-  categoryText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1e40af',
+  categoryBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
   },
-  section: {
-    backgroundColor: '#fff',
-    padding: 20,
-    marginTop: 12,
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
   },
-  price: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1e40af',
+  summaryTile: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  infoRow: {
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  actionRow: {
+    marginTop: spacing.lg,
+  },
+  primaryAction: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: radius.lg,
+    paddingVertical: 15,
+    backgroundColor: colors.primary,
   },
-  infoValue: {
-    fontSize: 16,
-    color: '#1f2937',
-    marginLeft: 8,
+  primaryActionText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  ownerAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: radius.lg,
+    paddingVertical: 15,
+    backgroundColor: colors.accent,
+  },
+  ownerActionText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  ownerBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(34,197,94,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.28)',
+  },
+  ownerBadgeText: {
+    color: '#bbf7d0',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+    ...shadow.card,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 12,
+    ...typography.h2,
   },
-  description: {
-    fontSize: 16,
-    color: '#4b5563',
-    lineHeight: 24,
+  sectionSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  sectionContent: {
+    marginTop: spacing.md,
+  },
+  bodyText: {
+    ...typography.body,
+    color: colors.textMuted,
+  },
+  snapshotGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  snapshotCard: {
+    width: '48%',
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  snapshotLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: colors.textSoft,
+  },
+  snapshotValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: 6,
   },
   contactRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: spacing.sm,
   },
   contactText: {
-    fontSize: 16,
-    color: '#1f2937',
-    marginLeft: 12,
-  },
-  tierBadge: {
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-  },
-  tierText: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#4b5563',
+    color: colors.text,
+    flex: 1,
   },
-  buttonContainer: {
-    padding: 20,
+  ownerTierCard: {
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceTinted,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  contactButton: {
-    backgroundColor: '#1e40af',
-    paddingVertical: 16,
-    borderRadius: 12,
+  ownerTierLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: colors.primary,
+  },
+  ownerTierValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: 6,
+  },
+  footerActionWrap: {
+    paddingTop: spacing.sm,
+  },
+  footerAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  contactButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-    marginLeft: 8,
-  },
-  upgradeButton: {
-    backgroundColor: '#10b981',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
     paddingVertical: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: radius.xl,
+    backgroundColor: colors.primary,
+    ...shadow.floating,
   },
-  upgradeButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
+  footerActionText: {
     color: '#fff',
-    marginLeft: 8,
+    fontSize: 16,
+    fontWeight: '800',
   },
 });

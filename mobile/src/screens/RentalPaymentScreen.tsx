@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { apiEndpoints } from '../services/api';
-import { Ionicons } from '@expo/vector-icons';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 type Props = NativeStackScreenProps<RentalsStackParamList, 'RentalPayment'>;
 
@@ -17,39 +18,43 @@ interface PaymentData {
   hours: number;
 }
 
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTile}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
 export default function RentalPaymentScreen({ route, navigation }: Props) {
   const { paymentData } = route.params as { paymentData: PaymentData };
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const webViewRef = useRef<WebView>(null);
 
-  // Construct the PayPal payment URL
-  const paymentUrl = `${apiEndpoints.baseURL}/mobile-paypal-rental-payment?` +
-    `rentalId=${paymentData.rentalId}`;
+  const paymentUrl = `${apiEndpoints.baseURL}/mobile-paypal-rental-payment?rentalId=${paymentData.rentalId}`;
+
+  const bookingWindow = useMemo(() => `${paymentData.startDate} → ${paymentData.endDate}`, [paymentData]);
 
   const handleMessage = async (event: WebViewMessageEvent) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      
+
       if (data.type === 'PAYMENT_SUCCESS') {
         setIsProcessing(true);
-        
-        // Complete the rental payment on the backend
+
         try {
           await apiEndpoints.rentals.completePayment(paymentData.rentalId, {
-            orderId: data.orderID
+            orderId: data.orderID,
           });
 
-          Alert.alert(
-            'Payment Successful',
-            'Your rental has been confirmed!',
-            [
-              {
-                text: 'OK',
-                onPress: () => navigation.navigate('RentalsList')
-              }
-            ]
-          );
+          Alert.alert('Payment Successful', 'Your rental has been confirmed!', [
+            {
+              text: 'OK',
+              onPress: () => navigation.navigate('RentalsList'),
+            },
+          ]);
         } catch (error: any) {
           Alert.alert(
             'Payment Error',
@@ -62,11 +67,7 @@ export default function RentalPaymentScreen({ route, navigation }: Props) {
       } else if (data.type === 'PAYMENT_CANCELLED') {
         navigation.goBack();
       } else if (data.type === 'PAYMENT_ERROR') {
-        Alert.alert(
-          'Payment Error',
-          data.error || 'Failed to process payment',
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Payment Error', data.error || 'Failed to process payment', [{ text: 'OK' }]);
       }
     } catch (error) {
       console.error('Error handling WebView message:', error);
@@ -75,60 +76,93 @@ export default function RentalPaymentScreen({ route, navigation }: Props) {
 
   if (isProcessing) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#1e40af" />
-        <Text style={styles.processingText}>Processing your payment...</Text>
-        <Text style={styles.processingSubtext}>Please do not close this screen</Text>
+      <View style={styles.processingScreen}>
+        <View style={styles.processingCard}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.processingTitle}>Processing your payment</Text>
+          <Text style={styles.processingText}>Please keep this screen open while RSF confirms the rental.</Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {isLoading && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#1e40af" />
-          <Text style={styles.loadingText}>Loading payment form...</Text>
+      <View style={styles.topPanel}>
+        <View style={styles.topHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroEyebrow}>PAYMENT</Text>
+            <Text style={styles.heroTitle}>Secure checkout for your rental request.</Text>
+            <Text style={styles.heroSubtitle}>
+              RSF hands you into PayPal for payment, then returns to finalize the booking.
+            </Text>
+          </View>
+          <View style={styles.secureBadge}>
+            <Ionicons name="lock-closed" size={14} color="#bbf7d0" />
+            <Text style={styles.secureBadgeText}>Secure</Text>
+          </View>
         </View>
-      )}
-      
-      <WebView
-        ref={webViewRef}
-        source={{ uri: paymentUrl }}
-        onMessage={handleMessage}
-        onLoadEnd={() => setIsLoading(false)}
-        style={styles.webview}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        startInLoadingState={false}
-        scalesPageToFit={true}
-        onError={(syntheticEvent) => {
-          const { nativeEvent } = syntheticEvent;
-          console.error('WebView error:', nativeEvent);
-          Alert.alert(
-            'Connection Error',
-            'Failed to load payment form. Please check your internet connection.',
-            [
+
+        <View style={styles.summaryRow}>
+          <SummaryTile label="Amount" value={`$${paymentData.amount.toFixed(2)}`} />
+          <SummaryTile label="Hours" value={`${paymentData.hours.toFixed(1)} hrs`} />
+          <SummaryTile label="Window" value={bookingWindow} />
+        </View>
+      </View>
+
+      <View style={styles.webviewCard}>
+        {isLoading ? (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingTitle}>Loading secure payment form...</Text>
+            <Text style={styles.loadingText}>This can take a few seconds while PayPal initializes.</Text>
+          </View>
+        ) : null}
+
+        <WebView
+          ref={webViewRef}
+          source={{ uri: paymentUrl }}
+          onMessage={handleMessage}
+          onLoadEnd={() => setIsLoading(false)}
+          style={styles.webview}
+          javaScriptEnabled
+          domStorageEnabled
+          startInLoadingState={false}
+          scalesPageToFit
+          onError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('WebView error:', nativeEvent);
+            Alert.alert('Connection Error', 'Failed to load payment form. Please check your internet connection.', [
               {
                 text: 'Retry',
-                onPress: () => webViewRef.current?.reload()
+                onPress: () => webViewRef.current?.reload(),
               },
               {
                 text: 'Cancel',
                 onPress: () => navigation.goBack(),
-                style: 'cancel'
-              }
-            ]
-          );
-        }}
-      />
+                style: 'cancel',
+              },
+            ]);
+          }}
+        />
+      </View>
 
-      {isLoading && (
-        <View style={styles.secureIndicator}>
-          <Ionicons name="lock-closed" size={16} color="#10b981" />
-          <Text style={styles.secureText}>Secure Payment by PayPal</Text>
+      <View style={styles.footerBar}>
+        <View style={styles.footerBarInner}>
+          <View style={styles.footerStatus}>
+            <Ionicons name="shield-checkmark-outline" size={16} color={colors.accent} />
+            <Text style={styles.footerStatusText}>Powered by PayPal secure checkout</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.footerAction}
+            onPress={() => webViewRef.current?.reload()}
+            activeOpacity={0.92}
+          >
+            <Ionicons name="refresh" size={16} color={colors.primary} />
+            <Text style={styles.footerActionText}>Reload</Text>
+          </TouchableOpacity>
         </View>
-      )}
+      </View>
     </View>
   );
 }
@@ -136,68 +170,190 @@ export default function RentalPaymentScreen({ route, navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
+  },
+  topPanel: {
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  topHeader: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    ...shadow.floating,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    color: '#fff',
+    marginTop: 10,
+    maxWidth: 280,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 320,
+  },
+  secureBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(34,197,94,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.28)',
+  },
+  secureBadgeText: {
+    color: '#bbf7d0',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  summaryTile: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm,
+    ...shadow.card,
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: colors.textSoft,
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: 6,
+  },
+  webviewCard: {
+    flex: 1,
+    marginHorizontal: spacing.sm,
+    marginBottom: spacing.sm,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
   },
   webview: {
     flex: 1,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 20,
+    backgroundColor: colors.surface,
   },
   loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
-    zIndex: 999,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    zIndex: 2,
+    paddingHorizontal: spacing.lg,
+  },
+  loadingTitle: {
+    ...typography.h3,
+    marginTop: spacing.md,
+    textAlign: 'center',
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6b7280',
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    maxWidth: 280,
   },
-  processingText: {
-    marginTop: 16,
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  processingSubtext: {
-    marginTop: 8,
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  secureIndicator: {
-    position: 'absolute',
-    bottom: 20,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
+  processingScreen: {
+    flex: 1,
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    alignSelf: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    padding: spacing.lg,
   },
-  secureText: {
-    marginLeft: 6,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#10b981',
+  processingCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    alignItems: 'center',
+    ...shadow.floating,
+  },
+  processingTitle: {
+    ...typography.h2,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
+  processingText: {
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  footerBar: {
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  footerBarInner: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    ...shadow.card,
+  },
+  footerStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  footerStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  footerAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  footerActionText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.primary,
   },
 });

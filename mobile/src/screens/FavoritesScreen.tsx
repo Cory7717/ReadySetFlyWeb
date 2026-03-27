@@ -1,12 +1,29 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { apiEndpoints } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import { FavoriteButton } from '../components/FavoriteButton';
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 type Tab = 'aircraft' | 'marketplace';
+
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTile}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
 
 export default function FavoritesScreen({ navigation }: any) {
   const { isAuthenticated, isLoading: authLoading } = useIsAuthenticated();
@@ -21,163 +38,213 @@ export default function FavoritesScreen({ navigation }: any) {
     enabled: isAuthenticated,
   });
 
+  const aircraftFavorites = favorites?.aircraft || [];
+  const marketplaceFavorites = favorites?.marketplace || [];
+  const totalFavorites = aircraftFavorites.length + marketplaceFavorites.length;
+  const heroSubtitle = useMemo(
+    () =>
+      totalFavorites
+        ? `Keep the aircraft and listings you want close at hand so you can jump back into rentals or marketplace decisions quickly.`
+        : 'Build a shortlist of aircraft and listings you want to track across rentals and marketplace workflows.',
+    [totalFavorites]
+  );
+
   if (!isAuthenticated && !authLoading) {
     return (
-      <View style={styles.centerContainer}>
-        <Ionicons name="lock-closed-outline" size={64} color="#9ca3af" />
-        <Text style={styles.emptyTitle}>Sign in required</Text>
-        <Text style={styles.emptyText}>
-          Sign in to save your favorite aircraft and listings
-        </Text>
-        <TouchableOpacity 
-          style={styles.signInButton}
-          onPress={() => navigation.navigate('Profile')}
-        >
-          <Text style={styles.signInButtonText}>Go to Profile</Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.heroPanel}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroIconWrap}>
+              <Ionicons name="heart-outline" size={34} color="#fda4af" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.heroEyebrow}>FAVORITES</Text>
+              <Text style={styles.heroTitle}>Sign in to save your shortlist.</Text>
+              <Text style={styles.heroSubtitle}>
+                Favorites tie rentals and marketplace discovery into one member workspace so your best options are always easy to reopen.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.summaryRow}>
+            <SummaryTile label="Aircraft" value="Locked" />
+            <SummaryTile label="Listings" value="Locked" />
+            <SummaryTile label="Workspace" value="Guest" />
+          </View>
+
+          <TouchableOpacity
+            style={styles.heroAction}
+            onPress={() => navigation.navigate('Profile')}
+            activeOpacity={0.92}
+          >
+            <Ionicons name="log-in-outline" size={18} color="#fff" />
+            <Text style={styles.heroActionText}>Go to profile</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
   }
 
   if (isLoading || authLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#1e40af" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading favorites...</Text>
       </View>
     );
   }
 
-  const aircraftFavorites = favorites?.aircraft || [];
-  const marketplaceFavorites = favorites?.marketplace || [];
-
   return (
     <View style={styles.container}>
-      {/* Tab Selector */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'aircraft' && styles.activeTab]}
-          onPress={() => setActiveTab('aircraft')}
-        >
-          <Text style={[styles.tabText, activeTab === 'aircraft' && styles.activeTabText]}>
-            Aircraft ({aircraftFavorites.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'marketplace' && styles.activeTab]}
-          onPress={() => setActiveTab('marketplace')}
-        >
-          <Text style={[styles.tabText, activeTab === 'marketplace' && styles.activeTabText]}>
-            Marketplace ({marketplaceFavorites.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.heroPanel}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroIconWrap}>
+              <Ionicons name="heart-outline" size={34} color="#fda4af" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.heroEyebrow}>MEMBER WORKSPACE</Text>
+              <Text style={styles.heroTitle}>Your saved shortlist.</Text>
+              <Text style={styles.heroSubtitle}>{heroSubtitle}</Text>
+            </View>
+          </View>
 
-      <ScrollView style={styles.content}>
-        {activeTab === 'aircraft' && (
-          <>
-            {aircraftFavorites.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="heart-outline" size={64} color="#9ca3af" />
-                <Text style={styles.emptyTitle}>No favorite aircraft</Text>
-                <Text style={styles.emptyText}>
-                  Start adding aircraft to your favorites
-                </Text>
-              </View>
-            ) : (
-              aircraftFavorites.map((aircraft: any) => (
-                <TouchableOpacity
-                  key={aircraft.id}
-                  style={styles.card}
-                  onPress={() => navigation.navigate('Rentals', {
+          <View style={styles.summaryRow}>
+            <SummaryTile label="Total saved" value={String(totalFavorites)} />
+            <SummaryTile label="Aircraft" value={String(aircraftFavorites.length)} />
+            <SummaryTile label="Marketplace" value={String(marketplaceFavorites.length)} />
+          </View>
+        </View>
+
+        <View style={styles.tabShell}>
+          <TouchableOpacity
+            style={[styles.tabPill, activeTab === 'aircraft' && styles.tabPillActive]}
+            onPress={() => setActiveTab('aircraft')}
+            activeOpacity={0.92}
+          >
+            <Text style={[styles.tabPillText, activeTab === 'aircraft' && styles.tabPillTextActive]}>
+              Aircraft ({aircraftFavorites.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabPill, activeTab === 'marketplace' && styles.tabPillActive]}
+            onPress={() => setActiveTab('marketplace')}
+            activeOpacity={0.92}
+          >
+            <Text style={[styles.tabPillText, activeTab === 'marketplace' && styles.tabPillTextActive]}>
+              Marketplace ({marketplaceFavorites.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {activeTab === 'aircraft' ? (
+          aircraftFavorites.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="airplane-outline" size={28} color={colors.textSoft} />
+              <Text style={styles.emptyTitle}>No favorite aircraft yet</Text>
+              <Text style={styles.emptyText}>
+                Save aircraft from Rentals so you can compare your best options without searching from scratch.
+              </Text>
+            </View>
+          ) : (
+            aircraftFavorites.map((aircraft: any) => (
+              <TouchableOpacity
+                key={aircraft.id}
+                style={styles.card}
+                onPress={() =>
+                  navigation.navigate('Rentals', {
                     screen: 'AircraftDetail',
-                    params: { aircraftId: aircraft.id }
-                  })}
-                >
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardHeaderLeft}>
-                      <Ionicons name="airplane" size={24} color="#1e40af" />
-                      <View style={styles.cardHeaderText}>
-                        <Text style={styles.cardTitle}>{aircraft.make} {aircraft.model}</Text>
-                        <Text style={styles.cardSubtitle}>{aircraft.registration}</Text>
-                      </View>
+                    params: { aircraftId: aircraft.id },
+                  })
+                }
+                activeOpacity={0.92}
+              >
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardHeaderLeft}>
+                    <View style={styles.cardIconWrap}>
+                      <Ionicons name="airplane-outline" size={18} color={colors.primary} />
                     </View>
-                    <FavoriteButton
-                      listingType="aircraft"
-                      listingId={aircraft.id}
-                      size={28}
-                      onToggle={() => refetch()}
-                    />
-                  </View>
-                  <View style={styles.cardBody}>
-                    <View style={styles.infoRow}>
-                      <Ionicons name="location-outline" size={16} color="#6b7280" />
-                      <Text style={styles.infoText}>{aircraft.location}</Text>
-                    </View>
-                    <View style={styles.infoRow}>
-                      <Ionicons name="cash-outline" size={16} color="#6b7280" />
-                      <Text style={styles.infoText}>${aircraft.hourlyRate}/hour</Text>
+                    <View style={styles.cardHeaderText}>
+                      <Text style={styles.cardTitle}>
+                        {aircraft.make} {aircraft.model}
+                      </Text>
+                      <Text style={styles.cardSubtitle}>{aircraft.registration}</Text>
                     </View>
                   </View>
-                </TouchableOpacity>
-              ))
-            )}
-          </>
-        )}
-
-        {activeTab === 'marketplace' && (
-          <>
-            {marketplaceFavorites.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="heart-outline" size={64} color="#9ca3af" />
-                <Text style={styles.emptyTitle}>No favorite listings</Text>
-                <Text style={styles.emptyText}>
-                  Start adding marketplace listings to your favorites
-                </Text>
+                  <FavoriteButton
+                    listingType="aircraft"
+                    listingId={aircraft.id}
+                    size={28}
+                    onToggle={() => refetch()}
+                  />
+                </View>
+                <View style={styles.metricRow}>
+                  <View style={styles.metricPill}>
+                    <Ionicons name="location-outline" size={14} color={colors.textSoft} />
+                    <Text style={styles.metricPillText}>{aircraft.location}</Text>
+                  </View>
+                  <View style={styles.metricPill}>
+                    <Ionicons name="cash-outline" size={14} color={colors.textSoft} />
+                    <Text style={styles.metricPillText}>${aircraft.hourlyRate}/hr</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
+          )
+        ) : marketplaceFavorites.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Ionicons name="storefront-outline" size={28} color={colors.textSoft} />
+            <Text style={styles.emptyTitle}>No favorite listings yet</Text>
+            <Text style={styles.emptyText}>
+              Save marketplace listings you want to revisit so they stay close while you compare sellers, pricing, and locations.
+            </Text>
+          </View>
+        ) : (
+          marketplaceFavorites.map((listing: any) => (
+            <TouchableOpacity
+              key={listing.id}
+              style={styles.card}
+              onPress={() =>
+                navigation.navigate('Marketplace', {
+                  screen: 'MarketplaceDetail',
+                  params: { listingId: listing.id },
+                })
+              }
+              activeOpacity={0.92}
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.cardHeaderLeft}>
+                  <View style={[styles.cardIconWrap, styles.marketplaceIconWrap]}>
+                    <Ionicons name="storefront-outline" size={18} color="#7c3aed" />
+                  </View>
+                  <View style={styles.cardHeaderText}>
+                    <Text style={styles.cardTitle}>{listing.title}</Text>
+                    <Text style={styles.cardSubtitle}>{listing.category}</Text>
+                  </View>
+                </View>
+                <FavoriteButton
+                  listingType="marketplace"
+                  listingId={listing.id}
+                  size={28}
+                  onToggle={() => refetch()}
+                />
               </View>
-            ) : (
-              marketplaceFavorites.map((listing: any) => (
-                <TouchableOpacity
-                  key={listing.id}
-                  style={styles.card}
-                  onPress={() => navigation.navigate('Marketplace', {
-                    screen: 'MarketplaceDetail',
-                    params: { listingId: listing.id }
-                  })}
-                >
-                  <View style={styles.cardHeader}>
-                    <View style={styles.cardHeaderLeft}>
-                      <Ionicons name="storefront" size={24} color="#7c3aed" />
-                      <View style={styles.cardHeaderText}>
-                        <Text style={styles.cardTitle}>{listing.title}</Text>
-                        <Text style={styles.cardSubtitle}>{listing.category}</Text>
-                      </View>
-                    </View>
-                    <FavoriteButton
-                      listingType="marketplace"
-                      listingId={listing.id}
-                      size={28}
-                      onToggle={() => refetch()}
-                    />
+              <View style={styles.metricRow}>
+                {listing.location ? (
+                  <View style={styles.metricPill}>
+                    <Ionicons name="location-outline" size={14} color={colors.textSoft} />
+                    <Text style={styles.metricPillText}>{listing.location}</Text>
                   </View>
-                  <View style={styles.cardBody}>
-                    {listing.location && (
-                      <View style={styles.infoRow}>
-                        <Ionicons name="location-outline" size={16} color="#6b7280" />
-                        <Text style={styles.infoText}>{listing.location}</Text>
-                      </View>
-                    )}
-                    {listing.price && (
-                      <View style={styles.infoRow}>
-                        <Ionicons name="cash-outline" size={16} color="#6b7280" />
-                        <Text style={styles.infoText}>${listing.price}</Text>
-                      </View>
-                    )}
+                ) : null}
+                {listing.price ? (
+                  <View style={styles.metricPill}>
+                    <Ionicons name="cash-outline" size={14} color={colors.textSoft} />
+                    <Text style={styles.metricPillText}>${listing.price}</Text>
                   </View>
-                </TouchableOpacity>
-              ))
-            )}
-          </>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+          ))
         )}
       </ScrollView>
     </View>
@@ -187,122 +254,220 @@ export default function FavoritesScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
+  },
+  content: {
+    padding: spacing.sm,
+    paddingBottom: 120,
   },
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: spacing.lg,
+    backgroundColor: colors.background,
   },
   loadingText: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 12,
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
   },
-  tabContainer: {
+  heroPanel: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
+  },
+  heroTopRow: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 16,
+  heroIconWrap: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    justifyContent: 'center',
   },
-  activeTab: {
-    borderBottomColor: '#1e40af',
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#fecdd3',
+    textTransform: 'uppercase',
   },
-  tabText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6b7280',
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: '#fff',
+    marginTop: 10,
+    maxWidth: 320,
   },
-  activeTabText: {
-    color: '#1e40af',
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 340,
   },
-  content: {
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  summaryTile: {
     flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#fecdd3',
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  heroAction: {
+    marginTop: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: radius.lg,
+    paddingVertical: 15,
+    backgroundColor: colors.primary,
+  },
+  heroActionText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  tabShell: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  tabPill: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    ...shadow.card,
+  },
+  tabPillActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  tabPillText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textMuted,
+  },
+  tabPillTextActive: {
+    color: colors.primary,
   },
   card: {
-    backgroundColor: '#fff',
-    margin: 12,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.sm,
+    ...shadow.card,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
   },
   cardHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
     flex: 1,
   },
+  cardIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+  },
+  marketplaceIconWrap: {
+    backgroundColor: '#ede9fe',
+  },
   cardHeaderText: {
-    marginLeft: 12,
     flex: 1,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.text,
   },
   cardSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 2,
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 4,
   },
-  cardBody: {
-    padding: 16,
+  metricRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.md,
   },
-  infoRow: {
+  metricPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  infoText: {
-    fontSize: 14,
-    color: '#4b5563',
-    marginLeft: 8,
+  metricPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textMuted,
   },
-  emptyContainer: {
+  emptyCard: {
     alignItems: 'center',
-    paddingVertical: 80,
+    justifyContent: 'center',
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: spacing.sm,
   },
   emptyText: {
-    fontSize: 14,
-    color: '#6b7280',
+    ...typography.body,
+    color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 8,
-  },
-  signInButton: {
-    backgroundColor: '#1e40af',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 20,
-  },
-  signInButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    marginTop: spacing.xs,
   },
 });

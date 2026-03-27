@@ -199,6 +199,19 @@ export const apiEndpoints = {
       api.patch('/api/user/profile', data),
     getBalance: (): ApiResponse<{ balance: number }> => api.get('/api/user/balance'),
   },
+
+  membership: {
+    syncStorePurchase: (data: {
+      platform: 'ios' | 'android';
+      customerInfo: {
+        originalAppUserId?: string | null;
+        activeEntitlementIds?: string[];
+        activeProductIds?: string[];
+        latestExpirationDate?: string | null;
+        latestPurchaseDate?: string | null;
+      };
+    }): ApiResponse<User> => api.post('/api/auth/mobile-membership/sync', data),
+  },
   
   // Messages
   messages: {

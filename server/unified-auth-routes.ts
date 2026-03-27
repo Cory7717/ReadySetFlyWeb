@@ -7,7 +7,7 @@ import { generateAccessToken, generateRefreshToken, verifyAccessToken } from './
 import { getUncachableResendClient } from './resendClient';
 import { sendWelcomeEmail } from './email-templates';
 import { maybeSyncLogbookProSubscription } from './paypal-subscription-sync';
-import { getEntitlementsForUser } from './membership';
+import { getEntitlementsForUser, resolveMembershipFromStoreSignals } from './membership';
 
 const router = Router();
 
@@ -70,11 +70,28 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 });
 
+const storeMembershipSyncSchema = z.object({
+  platform: z.enum(['ios', 'android']),
+  customerInfo: z.object({
+    originalAppUserId: z.string().optional().nullable(),
+    activeEntitlementIds: z.array(z.string()).optional().nullable(),
+    activeProductIds: z.array(z.string()).optional().nullable(),
+    latestExpirationDate: z.string().optional().nullable(),
+    latestPurchaseDate: z.string().optional().nullable(),
+  }),
+});
+
 // Helper function to get refresh token expiry (7 days from now)
 function getRefreshTokenExpiry(): Date {
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + 7);
   return expiryDate;
+}
+
+function parseOptionalDate(value?: string | null): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 /**
@@ -567,6 +584,102 @@ export function registerUnifiedAuthRoutes(storage: IStorage) {
     } catch (error) {
       console.error('Get user error:', error);
       res.status(500).json({ error: 'Failed to get user' });
+    }
+  });
+
+  /**
+   * POST /api/auth/mobile-membership/sync
+   * Sync RevenueCat/App Store/Google Play membership into RSF entitlements
+   */
+  router.post('/mobile-membership/sync', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        res.status(401).json({ error: 'No token provided' });
+        return;
+      }
+
+      const token = authHeader.substring(7);
+      const payload = verifyAccessToken(token);
+      if (!payload) {
+        res.status(401).json({ error: 'Invalid token' });
+        return;
+      }
+
+      const result = storeMembershipSyncSchema.safeParse(req.body);
+      if (!result.success) {
+        res.status(400).json({
+          error: 'Validation failed',
+          details: result.error.format(),
+        });
+        return;
+      }
+
+      const user = await storage.getUser(payload.userId);
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      const { platform, customerInfo } = result.data;
+      const activeProductIds = Array.from(
+        new Set((customerInfo.activeProductIds || []).map((value) => value.trim()).filter(Boolean))
+      );
+      const activeEntitlementIds = Array.from(
+        new Set((customerInfo.activeEntitlementIds || []).map((value) => value.trim()).filter(Boolean))
+      );
+      const membershipPlan = resolveMembershipFromStoreSignals({
+        productIds: activeProductIds,
+        entitlementIds: activeEntitlementIds,
+      });
+      const expiresAt = parseOptionalDate(customerInfo.latestExpirationDate);
+      const purchaseAt = parseOptionalDate(customerInfo.latestPurchaseDate);
+      const provider = platform === 'ios' ? 'app_store' : 'google_play';
+
+      let updatedUser = user;
+      if (membershipPlan) {
+        updatedUser =
+          (await storage.updateUser(user.id, {
+            membershipTier: membershipPlan.tier,
+            membershipStatus: 'active',
+            membershipProvider: provider,
+            membershipInterval: membershipPlan.interval,
+            membershipEndsAt: expiresAt,
+            membershipTrialEndsAt: null,
+            membershipNextBillingAt: expiresAt,
+            paypalSubscriptionId: null,
+            paypalPlanId: null,
+            logbookProStatus: membershipPlan.tier === 'free' ? 'inactive' : 'active',
+            logbookProPlan: membershipPlan.interval,
+            logbookProStartedAt: purchaseAt || user.logbookProStartedAt || new Date(),
+            logbookProEndsAt: expiresAt,
+            logbookProCanceledAt: null,
+            logbookProCancelAtPeriodEnd: false,
+          })) || user;
+      } else if (user.membershipProvider === 'app_store' || user.membershipProvider === 'google_play') {
+        updatedUser =
+          (await storage.updateUser(user.id, {
+            membershipTier: 'free',
+            membershipStatus: 'inactive',
+            membershipProvider: provider,
+            membershipInterval: null,
+            membershipEndsAt: null,
+            membershipTrialEndsAt: null,
+            membershipNextBillingAt: null,
+            logbookProStatus: 'inactive',
+            logbookProPlan: null,
+            logbookProEndsAt: null,
+            logbookProCanceledAt: new Date(),
+            logbookProCancelAtPeriodEnd: false,
+          })) || user;
+      }
+
+      const entitlements = getEntitlementsForUser(updatedUser);
+      const { hashedPassword: _, passwordCreatedAt: __, ...userResponse } = updatedUser;
+      res.status(200).json({ ...userResponse, entitlements });
+    } catch (error) {
+      console.error('Mobile membership sync error:', error);
+      res.status(500).json({ error: 'Failed to sync mobile membership' });
     }
   });
 

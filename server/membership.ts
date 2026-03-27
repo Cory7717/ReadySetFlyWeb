@@ -20,10 +20,16 @@ export function isSuperAdminEmail(email?: string | null) {
 }
 
 const PLAN_ENV_MAP: Record<string, MembershipPlanInfo> = {};
+const STORE_PRODUCT_ENV_MAP: Record<string, MembershipPlanInfo> = {};
 
 function addPlan(planId: string | undefined, tier: MembershipTier, interval: BillingInterval) {
   if (!planId) return;
   PLAN_ENV_MAP[planId] = { tier, interval };
+}
+
+function addStoreProduct(productId: string | undefined, tier: MembershipTier, interval: BillingInterval) {
+  if (!productId) return;
+  STORE_PRODUCT_ENV_MAP[productId] = { tier, interval };
 }
 
 // RSF Pro plans
@@ -40,6 +46,14 @@ addPlan(process.env.PAYPAL_PLAN_PROPLUS_ANNUAL, "pro_plus", "annual");
 addPlan(process.env.PAYPAL_LOGBOOK_PLAN_MONTHLY_ID, "pro", "monthly");
 addPlan(process.env.PAYPAL_LOGBOOK_PLAN_BIANNUAL_ID, "pro", "biannual");
 addPlan(process.env.PAYPAL_LOGBOOK_PLAN_YEARLY_ID, "pro", "annual");
+
+// RevenueCat / native store products
+addStoreProduct(process.env.REVENUECAT_PRO_MONTHLY_PRODUCT_ID, "pro", "monthly");
+addStoreProduct(process.env.REVENUECAT_PRO_BIANNUAL_PRODUCT_ID, "pro", "biannual");
+addStoreProduct(process.env.REVENUECAT_PRO_ANNUAL_PRODUCT_ID, "pro", "annual");
+addStoreProduct(process.env.REVENUECAT_PROPLUS_MONTHLY_PRODUCT_ID, "pro_plus", "monthly");
+addStoreProduct(process.env.REVENUECAT_PROPLUS_BIANNUAL_PRODUCT_ID, "pro_plus", "biannual");
+addStoreProduct(process.env.REVENUECAT_PROPLUS_ANNUAL_PRODUCT_ID, "pro_plus", "annual");
 
 export function resolvePayPalPlanId(tier: "pro" | "pro_plus", interval: BillingInterval): string {
   const mapping: Record<"pro" | "pro_plus", Record<BillingInterval, string | undefined>> = {
@@ -65,6 +79,62 @@ export function resolvePayPalPlanId(tier: "pro" | "pro_plus", interval: BillingI
 export function resolveMembershipFromPlanId(planId?: string | null): MembershipPlanInfo | null {
   if (!planId) return null;
   return PLAN_ENV_MAP[planId] || null;
+}
+
+function inferMembershipFromIdentifier(identifier: string): MembershipPlanInfo | null {
+  const normalized = identifier.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const tier: MembershipTier | null = normalized.includes("pro_plus") || normalized.includes("proplus")
+    ? "pro_plus"
+    : normalized.includes("pro")
+      ? "pro"
+      : null;
+  if (!tier) return null;
+
+  const interval: BillingInterval = normalized.includes("biannual") ||
+    normalized.includes("6month") ||
+    normalized.includes("6-month") ||
+    normalized.includes("semiannual") ||
+    normalized.includes("sixmonth")
+    ? "biannual"
+    : normalized.includes("annual") || normalized.includes("year")
+      ? "annual"
+      : "monthly";
+
+  return { tier, interval };
+}
+
+export function resolveMembershipFromStoreSignals(args: {
+  productIds?: string[] | null;
+  entitlementIds?: string[] | null;
+}): MembershipPlanInfo | null {
+  const identifiers = [
+    ...(args.productIds || []),
+    ...(args.entitlementIds || []),
+  ]
+    .map((value) => value?.trim())
+    .filter((value): value is string => !!value);
+
+  for (const identifier of identifiers) {
+    const direct = STORE_PRODUCT_ENV_MAP[identifier];
+    if (direct) return direct;
+  }
+
+  let best: MembershipPlanInfo | null = null;
+  const rank = (info: MembershipPlanInfo) =>
+    (info.tier === "pro_plus" ? 10 : 0) +
+    (info.interval === "annual" ? 3 : info.interval === "biannual" ? 2 : 1);
+
+  for (const identifier of identifiers) {
+    const inferred = inferMembershipFromIdentifier(identifier);
+    if (!inferred) continue;
+    if (!best || rank(inferred) > rank(best)) {
+      best = inferred;
+    }
+  }
+
+  return best;
 }
 
 function mapLegacyStatus(status?: string | null): MembershipStatus {

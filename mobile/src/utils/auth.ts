@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiEndpoints } from '../services/api';
 import type { User } from '@shared/schema';
 import { TokenStorage } from './tokenStorage';
+import { logOutPurchasesUser, syncPurchasesUser } from '../services/purchases';
 
 /**
  * Hook to get current authenticated user
@@ -19,10 +20,12 @@ export function useAuth() {
         }
 
         const response = await apiEndpoints.mobileAuth.getMe();
+        await syncPurchasesUser((response.data as any)?.id);
         return response.data;
       } catch (error) {
         // If token is invalid or expired, clear it
         await TokenStorage.clearTokens();
+        await logOutPurchasesUser();
         return null;
       }
     },
@@ -57,6 +60,7 @@ export function useLogin() {
     onSuccess: async (data) => {
       // Store tokens in secure storage
       await TokenStorage.setTokens(data.accessToken, data.refreshToken);
+      await syncPurchasesUser((data.user as any)?.id);
       
       // Update query cache with user data
       queryClient.setQueryData(['/api/mobile/auth/me'], data.user);
@@ -67,6 +71,7 @@ export function useLogin() {
     onError: async () => {
       // Clear tokens on login error
       await TokenStorage.clearTokens();
+      await logOutPurchasesUser();
     },
   });
 }
@@ -90,6 +95,7 @@ export function useRegister() {
     onSuccess: async (data) => {
       // Store tokens in secure storage
       await TokenStorage.setTokens(data.accessToken, data.refreshToken);
+      await syncPurchasesUser((data.user as any)?.id);
       
       // Update query cache with user data
       queryClient.setQueryData(['/api/mobile/auth/me'], data.user);
@@ -100,6 +106,7 @@ export function useRegister() {
     onError: async () => {
       // Clear tokens on registration error
       await TokenStorage.clearTokens();
+      await logOutPurchasesUser();
     },
   });
 }
@@ -118,6 +125,7 @@ export function useLogout() {
       }
       // Clear tokens from secure storage
       await TokenStorage.clearTokens();
+      await logOutPurchasesUser();
       return true;
     },
     onSuccess: () => {

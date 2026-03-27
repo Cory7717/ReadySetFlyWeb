@@ -1,10 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { membershipPlanOptions, membershipTierInfo, type MembershipInterval, type MembershipTier } from '@shared/membership-plans';
+import {
+  getCurrentOfferingSafe,
+  getCustomerInfoSafe,
+  purchasePackageSafe,
+  restorePurchasesSafe,
+  selectOfferingPackage,
+} from '../services/purchases';
 
 function formatDate(value?: string | null) {
   if (!value) return '-';
@@ -16,6 +24,7 @@ function formatDate(value?: string | null) {
 }
 
 export default function LogbookProScreen({ navigation }: any) {
+  const queryClient = useQueryClient();
   const { isAuthenticated, user } = useIsAuthenticated();
   const [selectedTier, setSelectedTier] = useState<MembershipTier>('pro');
   const [selectedInterval, setSelectedInterval] = useState<MembershipInterval>('annual');
@@ -36,6 +45,9 @@ export default function LogbookProScreen({ navigation }: any) {
   });
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [offeringAvailable, setOfferingAvailable] = useState(false);
+  const [purchaseReady, setPurchaseReady] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const entitlements = (user as any)?.entitlements;
   const hasAccess = entitlements?.tier ? entitlements.tier !== 'free' : user?.logbookProStatus === 'active';
   const membershipStatus = (user as any)?.membershipStatus;
@@ -77,6 +89,34 @@ export default function LogbookProScreen({ navigation }: any) {
     loadProData();
   }, [isAuthenticated, hasAccess]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadPurchases = async () => {
+      try {
+        const [offering, customerInfo] = await Promise.all([
+          getCurrentOfferingSafe(),
+          getCustomerInfoSafe(),
+        ]);
+        if (cancelled) return;
+        const selectedPackage = selectOfferingPackage(offering, selectedTier, selectedInterval);
+        setOfferingAvailable(Boolean(offering));
+        setPurchaseReady(Boolean(selectedPackage));
+        if (!hasAccess && customerInfo?.entitlements?.active) {
+          // RevenueCat is configured and the store account already has active entitlements.
+          // The backend sync layer will still be the source of truth; this is only a UI hint.
+        }
+      } catch {
+        if (cancelled) return;
+        setOfferingAvailable(false);
+        setPurchaseReady(false);
+      }
+    };
+    loadPurchases();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedInterval, selectedTier, hasAccess]);
+
   const handleSavePrefs = async () => {
     setSavingPrefs(true);
     try {
@@ -115,6 +155,40 @@ export default function LogbookProScreen({ navigation }: any) {
   );
   const hasTrial = Boolean(selectedPlan?.trialDays);
   const selectedPlanTotal = hasTrial ? 0 : selectedPlan.price;
+
+  const handleStartInAppSubscription = async () => {
+    setLoading(true);
+    try {
+      const offering = await getCurrentOfferingSafe();
+      const selectedPackage = selectOfferingPackage(offering, selectedTier, selectedInterval);
+      if (!selectedPackage) {
+        throw new Error('No matching in-app package is configured for this plan yet.');
+      }
+      await purchasePackageSafe(selectedPackage);
+      await queryClient.invalidateQueries({ queryKey: ['/api/mobile/auth/me'] });
+      Alert.alert(
+        'Purchase submitted',
+        'Your in-app subscription was submitted and RSF is refreshing your membership access now.'
+      );
+    } catch (error: any) {
+      Alert.alert('Subscription error', error?.message || 'Unable to start the in-app subscription.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+    setRestoring(true);
+    try {
+      await restorePurchasesSafe();
+      await queryClient.invalidateQueries({ queryKey: ['/api/mobile/auth/me'] });
+      Alert.alert('Restore complete', 'Any eligible App Store or Google Play purchases were restored and synced to RSF.');
+    } catch (error: any) {
+      Alert.alert('Restore failed', error?.message || 'Unable to restore purchases right now.');
+    } finally {
+      setRestoring(false);
+    }
+  };
 
   if (isAuthenticated && hasAccess) {
     return (
@@ -268,7 +342,7 @@ export default function LogbookProScreen({ navigation }: any) {
           If you already subscribed to RSF elsewhere, sign in with the same account and your access should appear here automatically.
         </Text>
         <Text style={styles.infoBannerText}>
-          This app does not launch an external checkout flow. Billing stays managed on the platform where the membership was started.
+          In-app subscriptions are now the intended mobile billing path. Web-bought memberships should still sync after sign-in.
         </Text>
       </View>
 
@@ -356,6 +430,25 @@ export default function LogbookProScreen({ navigation }: any) {
             {!isAuthenticated ? 'Sign in to check access' : 'Return to profile'}
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.primaryButton, (!purchaseReady || !isAuthenticated || loading) && styles.primaryButtonDisabled]}
+          onPress={handleStartInAppSubscription}
+          disabled={!purchaseReady || !isAuthenticated || loading}
+        >
+          <Text style={styles.primaryButtonText}>
+            {loading ? 'Starting subscription...' : 'Subscribe in app'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={handleRestorePurchases} disabled={restoring}>
+          <Text style={styles.secondaryButtonText}>
+            {restoring ? 'Restoring...' : 'Restore purchases'}
+          </Text>
+        </TouchableOpacity>
+        {!offeringAvailable ? (
+          <Text style={styles.statusText}>RevenueCat offerings are not configured for this app build yet.</Text>
+        ) : !purchaseReady ? (
+          <Text style={styles.statusText}>No in-app package matched the selected tier/interval yet.</Text>
+        ) : null}
       </View>
 
       {membershipStatus && (
@@ -472,5 +565,6 @@ const styles = StyleSheet.create({
   },
   membershipStatusTitle: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 6 },
   membershipStatusText: { fontSize: 13, color: colors.textMuted },
+  primaryButtonDisabled: { opacity: 0.55 },
   statusText: { marginTop: spacing.sm, fontSize: 12, color: colors.textMuted },
 });

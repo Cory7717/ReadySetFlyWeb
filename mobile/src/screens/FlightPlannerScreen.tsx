@@ -57,6 +57,42 @@ type WeatherResponse = {
   taf: any;
 };
 
+type NearbyDiversionAirport = {
+  icao: string;
+  name?: string | null;
+  distanceNm: number;
+  bearingDeg: number;
+  maxRunwayFt?: number | null;
+  towered?: boolean;
+  flightCategory?: string | null;
+  scoreReasons?: string[];
+  frequencySummary?: Array<{
+    type?: string | null;
+    description?: string | null;
+    frequencyMhz?: number | null;
+  }>;
+};
+
+type NearbyDiversionResponse = {
+  airports: NearbyDiversionAirport[];
+};
+
+type RunwayBriefingResponse = {
+  runwayInUse?: string | null;
+  advisory?: {
+    runway?: string | null;
+    headwind?: number | null;
+    crosswind?: number | null;
+  } | null;
+};
+
+type RankedTrafficTarget = TrafficTarget & {
+  distanceNm: number;
+  altitudeDeltaFt: number | null;
+  threatScore: number;
+  threatLevel: 'immediate' | 'advisory' | 'monitor';
+};
+
 type WindsAloftPoint = {
   stationId: string;
   icao?: string;
@@ -170,6 +206,72 @@ function computeMobileRouteProgress(
     nextWaypoint: routePoints[best.legIndex + 1]?.icao || routePoints[routePoints.length - 1]?.icao || null,
     etaText,
   };
+}
+
+function getDistanceNmFromLatLon(
+  a: { lat: number; lon: number },
+  b: { lat: number; lon: number },
+) {
+  const R = 3440.065;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function rankTrafficTargets(
+  trafficTargets: TrafficTarget[],
+  ownship: { lat: number; lon: number; altitudeFt?: number } | null,
+): RankedTrafficTarget[] {
+  if (!ownship) return [];
+
+  return trafficTargets
+    .map((target) => {
+      const distanceNm = getDistanceNmFromLatLon(
+        { lat: ownship.lat, lon: ownship.lon },
+        { lat: target.lat, lon: target.lon }
+      );
+      const altitudeDeltaFt =
+        typeof ownship.altitudeFt === 'number' && typeof target.altitudeFt === 'number'
+          ? target.altitudeFt - ownship.altitudeFt
+          : null;
+      const verticalGap = altitudeDeltaFt === null ? 4000 : Math.abs(altitudeDeltaFt);
+      const distanceScore = distanceNm <= 2 ? 70 : distanceNm <= 5 ? 45 : distanceNm <= 10 ? 25 : 10;
+      const verticalScore = verticalGap <= 500 ? 30 : verticalGap <= 1000 ? 20 : verticalGap <= 2000 ? 10 : 0;
+      const threatScore = distanceScore + verticalScore;
+      const threatLevel: RankedTrafficTarget['threatLevel'] =
+        threatScore >= 80 ? 'immediate' : threatScore >= 45 ? 'advisory' : 'monitor';
+
+      return {
+        ...target,
+        distanceNm,
+        altitudeDeltaFt,
+        threatScore,
+        threatLevel,
+      };
+    })
+    .sort((a, b) => b.threatScore - a.threatScore || a.distanceNm - b.distanceNm);
+}
+
+function pickBestDiversionFrequency(
+  airport: NearbyDiversionAirport | null | undefined,
+) {
+  const entries = airport?.frequencySummary || [];
+  const rank = (value: NearbyDiversionAirport['frequencySummary'][number]) => {
+    const type = String(value?.type || '').toLowerCase();
+    if (type.includes('tower')) return 1;
+    if (type.includes('ctaf')) return 2;
+    if (type.includes('unicom')) return 3;
+    if (type.includes('approach')) return 4;
+    if (type.includes('ground')) return 5;
+    if (type.includes('departure')) return 6;
+    return 9;
+  };
+  return [...entries].sort((a, b) => rank(a) - rank(b))[0] || null;
 }
 
 function parseFlightCategory(metar: any): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNKNOWN' {
@@ -365,6 +467,7 @@ export default function FlightPlannerScreen() {
   const [trafficEnabled, setTrafficEnabled] = useState(false);
   const [trafficPort, setTrafficPort] = useState('4000');
   const [trafficTargets, setTrafficTargets] = useState<TrafficTarget[]>([]);
+  const [trafficFilter, setTrafficFilter] = useState<'all' | 'conflict' | 'above' | 'below'>('all');
   const [trafficStatus, setTrafficStatus] = useState<'idle' | 'listening' | 'error'>('idle');
   const [trafficError, setTrafficError] = useState<string | null>(null);
   const trafficListenerRef = useState<{ stop?: () => void }>(() => ({}))[0];
@@ -412,6 +515,12 @@ export default function FlightPlannerScreen() {
   const [suggestedStops, setSuggestedStops] = useState<string[]>([]);
   const [suggestionMeta, setSuggestionMeta] = useState<{ routeDistanceNm: number; maxLegNm: number } | null>(null);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [diversionCandidates, setDiversionCandidates] = useState<NearbyDiversionAirport[]>([]);
+  const [diversionLoading, setDiversionLoading] = useState(false);
+  const [diversionError, setDiversionError] = useState<string | null>(null);
+  const [selectedDiversionIcao, setSelectedDiversionIcao] = useState<string | null>(null);
+  const [selectedDiversionBriefing, setSelectedDiversionBriefing] = useState<RunwayBriefingResponse | null>(null);
+  const [selectedDiversionBriefingLoading, setSelectedDiversionBriefingLoading] = useState(false);
 
   const [checklist, setChecklist] = useState({
     weather: false,
@@ -426,6 +535,32 @@ export default function FlightPlannerScreen() {
   const routeProgress = useMemo(
     () => computeMobileRouteProgress(routePoints, gpsData),
     [gpsData, routePoints]
+  );
+  const rankedTrafficTargets = useMemo(
+    () => rankTrafficTargets(trafficTargets, gpsData),
+    [gpsData, trafficTargets]
+  );
+  const visibleTrafficTargets = useMemo(() => {
+    if (trafficFilter === 'all') return rankedTrafficTargets;
+    if (trafficFilter === 'conflict') {
+      return rankedTrafficTargets.filter((target) => target.threatLevel !== 'monitor');
+    }
+    if (trafficFilter === 'above') {
+      return rankedTrafficTargets.filter((target) => (target.altitudeDeltaFt ?? 0) > 0);
+    }
+    return rankedTrafficTargets.filter((target) => (target.altitudeDeltaFt ?? 0) < 0);
+  }, [rankedTrafficTargets, trafficFilter]);
+  const immediateTrafficCount = useMemo(
+    () => rankedTrafficTargets.filter((target) => target.threatLevel === 'immediate').length,
+    [rankedTrafficTargets]
+  );
+  const selectedDiversion = useMemo(
+    () => diversionCandidates.find((airport) => airport.icao === selectedDiversionIcao) || null,
+    [diversionCandidates, selectedDiversionIcao]
+  );
+  const selectedDiversionBestComm = useMemo(
+    () => pickBestDiversionFrequency(selectedDiversion),
+    [selectedDiversion]
   );
 
   useEffect(() => {
@@ -448,6 +583,71 @@ export default function FlightPlannerScreen() {
       deactivateKeepAwake();
     }
   }, [trafficEnabled, gpsEnabled]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!gpsData?.lat || !gpsData?.lon) {
+      setDiversionCandidates([]);
+      setDiversionLoading(false);
+      setDiversionError(null);
+      return;
+    }
+
+    setDiversionLoading(true);
+    setDiversionError(null);
+    api
+      .get<NearbyDiversionResponse>('/api/airports/nearby', {
+        params: {
+          lat: gpsData.lat,
+          lon: gpsData.lon,
+          radiusNm: 60,
+          limit: 5,
+        },
+      })
+      .then((res) => {
+        if (cancelled) return;
+        const airports = Array.isArray(res.data?.airports) ? res.data.airports : [];
+        setDiversionCandidates(airports);
+        setSelectedDiversionIcao((current) => current || airports[0]?.icao || null);
+        setDiversionLoading(false);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setDiversionCandidates([]);
+        setDiversionError(error?.response?.data?.error || 'Unable to load nearby diversion airports.');
+        setDiversionLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [gpsData?.lat, gpsData?.lon]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedDiversionIcao) {
+      setSelectedDiversionBriefing(null);
+      setSelectedDiversionBriefingLoading(false);
+      return;
+    }
+    setSelectedDiversionBriefingLoading(true);
+    api
+      .get<RunwayBriefingResponse>(`/api/airports/${selectedDiversionIcao}/runway-briefing`)
+      .then((res) => {
+        if (cancelled) return;
+        setSelectedDiversionBriefing(res.data || null);
+        setSelectedDiversionBriefingLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSelectedDiversionBriefing(null);
+        setSelectedDiversionBriefingLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDiversionIcao]);
 
   useEffect(() => {
     let lastAlt: { alt: number; time: number } | null = null;
@@ -1400,6 +1600,30 @@ export default function FlightPlannerScreen() {
           />
           <Text style={styles.helperText}>Default ports: 4000 / 49002</Text>
         </View>
+        <View style={styles.altitudeRow}>
+          {[
+            ['all', 'All'],
+            ['conflict', 'Conflict'],
+            ['above', 'Above'],
+            ['below', 'Below'],
+          ].map(([value, label]) => (
+            <TouchableOpacity
+              key={value}
+              style={[styles.altitudeButton, trafficFilter === value && styles.altitudeButtonActive]}
+              onPress={() => setTrafficFilter(value as 'all' | 'conflict' | 'above' | 'below')}
+            >
+              <Text style={[styles.altitudeText, trafficFilter === value && styles.altitudeTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {!!immediateTrafficCount && (
+          <View style={styles.alertCard}>
+            <Text style={styles.alertTitle}>Immediate traffic</Text>
+            <Text style={styles.alertText}>
+              {immediateTrafficCount} nearby target{immediateTrafficCount === 1 ? '' : 's'} in the conflict band.
+            </Text>
+          </View>
+        )}
         <View style={styles.trafficRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Device GPS (fallback)</Text>
@@ -1523,13 +1747,13 @@ export default function FlightPlannerScreen() {
               strokeColor="#0ea5e9"
               strokeWidth={3}
             />
-            {trafficTargets.map((target) => (
+            {visibleTrafficTargets.map((target) => (
               <Marker
                 key={target.id}
                 coordinate={{ latitude: target.lat, longitude: target.lon }}
                 title={target.callsign || 'Traffic'}
-                description={target.altitudeFt ? `${target.altitudeFt} ft` : undefined}
-                pinColor="#f97316"
+                description={`${target.distanceNm.toFixed(1)} NM${target.altitudeFt ? ` • ${target.altitudeFt} ft` : ''}`}
+                pinColor={target.threatLevel === 'immediate' ? '#dc2626' : target.threatLevel === 'advisory' ? '#f97316' : '#eab308'}
               />
             ))}
             {routePoints.map((point) => (
@@ -1638,6 +1862,114 @@ export default function FlightPlannerScreen() {
                 {routeProgress.progressPct.toFixed(0)}% complete on the current route.
               </Text>
             </>
+          )}
+          {!!rankedTrafficTargets.length && (
+            <>
+              <Text style={[styles.instrumentTitle, { marginTop: spacing.sm }]}>Traffic watch</Text>
+              {visibleTrafficTargets.slice(0, 3).map((target) => (
+                <View key={`traffic-${target.id}`} style={styles.diversionCard}>
+                  <View style={styles.diversionHeader}>
+                    <Text style={styles.diversionTitle}>{target.callsign || 'Traffic'}</Text>
+                    <Text
+                      style={[
+                        styles.diversionBadge,
+                        target.threatLevel === 'immediate'
+                          ? styles.badgeDanger
+                          : target.threatLevel === 'advisory'
+                            ? styles.badgeWarning
+                            : styles.badgeNeutral,
+                      ]}
+                    >
+                      {target.threatLevel}
+                    </Text>
+                  </View>
+                  <Text style={styles.diversionMeta}>
+                    {target.distanceNm.toFixed(1)} NM
+                    {typeof target.altitudeFt === 'number' ? ` • ${Math.round(target.altitudeFt)} ft` : ''}
+                    {typeof target.altitudeDeltaFt === 'number'
+                      ? ` • ${target.altitudeDeltaFt >= 0 ? '+' : ''}${Math.round(target.altitudeDeltaFt)} ft`
+                      : ''}
+                  </Text>
+                  <Text style={styles.helperText}>Threat score {target.threatScore}</Text>
+                </View>
+              ))}
+            </>
+          )}
+          <Text style={[styles.instrumentTitle, { marginTop: spacing.sm }]}>Diversion candidates</Text>
+          {diversionLoading ? (
+            <Text style={styles.helperText}>Loading nearby airports...</Text>
+          ) : diversionError ? (
+            <Text style={styles.errorText}>{diversionError}</Text>
+          ) : diversionCandidates.length === 0 ? (
+            <Text style={styles.helperText}>Enable GPS to score nearby diversion airports.</Text>
+          ) : (
+            <View style={styles.diversionList}>
+              {diversionCandidates.slice(0, 3).map((airport) => (
+                <TouchableOpacity
+                  key={airport.icao}
+                  style={[
+                    styles.diversionCard,
+                    selectedDiversionIcao === airport.icao && styles.diversionCardActive,
+                  ]}
+                  onPress={() => setSelectedDiversionIcao(airport.icao)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.diversionHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.diversionTitle}>
+                        {airport.icao}{airport.name ? ` · ${airport.name}` : ''}
+                      </Text>
+                      <Text style={styles.diversionMeta}>
+                        {airport.distanceNm.toFixed(1)} NM · {Math.round(airport.bearingDeg)}°
+                        {airport.maxRunwayFt ? ` · ${airport.maxRunwayFt.toLocaleString()} ft` : ''}
+                      </Text>
+                    </View>
+                    {airport.flightCategory ? (
+                      <Text style={styles.diversionBadge}>{airport.flightCategory}</Text>
+                    ) : null}
+                  </View>
+                  {selectedDiversionIcao === airport.icao ? (
+                    selectedDiversionBriefingLoading ? (
+                      <Text style={styles.helperText}>Loading runway briefing...</Text>
+                    ) : selectedDiversionBriefing?.advisory ? (
+                      <Text style={styles.helperText}>
+                        Runway {selectedDiversionBriefing.advisory.runway || '--'} ·
+                        HW {selectedDiversionBriefing.advisory.headwind ?? '--'} kt ·
+                        XW {selectedDiversionBriefing.advisory.crosswind ?? '--'} kt
+                        {selectedDiversionBriefing.runwayInUse ? ` · In use ${selectedDiversionBriefing.runwayInUse}` : ''}
+                      </Text>
+                    ) : selectedDiversionBriefing?.runwayInUse ? (
+                      <Text style={styles.helperText}>Runway in use {selectedDiversionBriefing.runwayInUse}</Text>
+                    ) : null
+                  ) : null}
+                  {airport.scoreReasons?.length ? (
+                    <Text style={styles.helperText}>{airport.scoreReasons.slice(0, 2).join(' · ')}</Text>
+                  ) : null}
+                  {selectedDiversionIcao === airport.icao && selectedDiversionBestComm ? (
+                    <Text style={styles.helperText}>
+                      Best comm: {selectedDiversionBestComm.type || selectedDiversionBestComm.description || 'Frequency'}
+                      {selectedDiversionBestComm.frequencyMhz ? ` ${selectedDiversionBestComm.frequencyMhz.toFixed(3)}` : ''}
+                    </Text>
+                  ) : null}
+                  <View style={styles.diversionActions}>
+                    <TouchableOpacity style={styles.secondaryButton} onPress={() => setAlternate(airport.icao)}>
+                      <Text style={styles.secondaryButtonText}>Use as alternate</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.secondaryButton}
+                      onPress={() => {
+                        setDestination(airport.icao);
+                        setSuggestedMode('direct');
+                        setWaypoints('');
+                        setPlannedStops('');
+                      }}
+                    >
+                      <Text style={styles.secondaryButtonText}>Use as destination</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
           )}
         </View>
       </View>
@@ -2066,6 +2398,16 @@ const styles = StyleSheet.create({
   helpLinkText: { fontSize: 12, color: colors.primary, fontWeight: '600' },
   trafficRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   portInput: { flex: 1 },
+  alertCard: {
+    marginBottom: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+  },
+  alertTitle: { fontSize: 12, fontWeight: '700', color: '#991b1b', marginBottom: 4 },
+  alertText: { fontSize: 12, color: '#7f1d1d' },
   errorText: { fontSize: 12, color: colors.danger },
   markerLabelContainer: { alignItems: 'center' },
   markerLabelText: {
@@ -2109,4 +2451,41 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: colors.primary,
   },
+  diversionList: { marginTop: spacing.sm, gap: spacing.sm },
+  diversionCard: {
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  diversionCardActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  diversionHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  diversionTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
+  diversionMeta: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  diversionBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+  },
+  badgeDanger: {
+    color: '#991b1b',
+    backgroundColor: '#fee2e2',
+  },
+  badgeWarning: {
+    color: '#9a3412',
+    backgroundColor: '#ffedd5',
+  },
+  badgeNeutral: {
+    color: '#92400e',
+    backgroundColor: '#fef3c7',
+  },
+  diversionActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
 });

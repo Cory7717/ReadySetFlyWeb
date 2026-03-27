@@ -593,7 +593,6 @@ export default function AdminDashboard() {
   const [membershipOfferTier, setMembershipOfferTier] = useState<"pro" | "pro_plus">("pro_plus");
   const [membershipOfferDurationDays, setMembershipOfferDurationDays] = useState("90");
   const [membershipOfferDescription, setMembershipOfferDescription] = useState("Exclusive Cessna Pilots Association member offer for 3 months of RSF Pro+.");
-  const [membershipOfferMemberNumbers, setMembershipOfferMemberNumbers] = useState("");
   const [membershipOfferMemberNumbersByOffer, setMembershipOfferMemberNumbersByOffer] = useState<Record<string, string>>({});
   
   // Banner ads state
@@ -1823,7 +1822,6 @@ export default function AdminDashboard() {
       setMembershipOfferTier("pro_plus");
       setMembershipOfferDurationDays("90");
       setMembershipOfferDescription("Exclusive Cessna Pilots Association member offer for 3 months of RSF Pro+.");
-      setMembershipOfferMemberNumbers("");
       toast({ title: "Partner membership offer created" });
     },
     onError: (error: Error) => {
@@ -5831,24 +5829,14 @@ export default function AdminDashboard() {
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="membership-offer-members">Member numbers</Label>
-                    <Textarea
-                      id="membership-offer-members"
-                      value={membershipOfferMemberNumbers}
-                      onChange={(e) => setMembershipOfferMemberNumbers(e.target.value)}
-                      rows={7}
-                      placeholder={"Paste one member number per line\n123456\n123457\nCPA-8821"}
-                      data-testid="textarea-membership-offer-members"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Optional initial roster. You can create the offer first and add CPA member numbers later from the configured offer card below.
-                    </p>
+                  <div className="rounded-md border bg-muted/10 p-3 text-xs text-muted-foreground">
+                    Create the public CPA offer first. After it exists, add CPA member numbers on that specific offer card below. On the public offer page, members enter their own member number before continuing to free account signup.
                   </div>
 
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
+                      className="bg-primary text-primary-foreground hover:bg-primary/90"
                       onClick={() =>
                         createMembershipPartnerOfferMutation.mutate({
                           name: membershipOfferName.trim(),
@@ -5857,7 +5845,6 @@ export default function AdminDashboard() {
                           tier: membershipOfferTier,
                           durationDays: Number(membershipOfferDurationDays || "0"),
                           description: membershipOfferDescription.trim() || undefined,
-                          memberNumbersText: membershipOfferMemberNumbers,
                         })
                       }
                       disabled={

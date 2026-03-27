@@ -9,6 +9,7 @@ import ProfileStack from './ProfileStack';
 import type { RentalsStackParamList } from './RentalsStack';
 import type { MarketplaceStackParamList } from './MarketplaceStack';
 import type { ProfileStackParamList } from './ProfileStack';
+import { colors, radius, shadow } from '../styles/theme';
 
 const Tab = createBottomTabNavigator();
 
@@ -95,7 +96,26 @@ const linking: LinkingOptions<AppTabParamList> = {
 
 export default function AppNavigator() {
   return (
-    <NavigationContainer linking={linking}>
+    <NavigationContainer
+      linking={linking}
+      theme={{
+        dark: false,
+        colors: {
+          primary: colors.primary,
+          background: colors.background,
+          card: colors.surface,
+          text: colors.text,
+          border: colors.border,
+          notification: colors.danger,
+        },
+        fonts: {
+          regular: { fontFamily: 'System', fontWeight: '400' },
+          medium: { fontFamily: 'System', fontWeight: '500' },
+          bold: { fontFamily: 'System', fontWeight: '700' },
+          heavy: { fontFamily: 'System', fontWeight: '800' },
+        },
+      }}
+    >
       <Tab.Navigator
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
@@ -115,9 +135,30 @@ export default function AppNavigator() {
 
             return <Ionicons name={iconName} size={size} color={color} />;
           },
-          tabBarActiveTintColor: '#1e40af',
-          tabBarInactiveTintColor: 'gray',
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.textSoft,
           headerShown: false,
+          tabBarStyle: {
+            position: 'absolute',
+            left: 12,
+            right: 12,
+            bottom: 10,
+            height: 72,
+            borderTopWidth: 0,
+            borderRadius: radius.xl,
+            backgroundColor: 'rgba(255,255,255,0.96)',
+            paddingTop: 10,
+            paddingBottom: 10,
+            ...shadow.floating,
+          },
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: '700',
+          },
+          tabBarItemStyle: {
+            borderRadius: radius.lg,
+            marginHorizontal: 2,
+          },
         })}
       >
         <Tab.Screen name="Home" component={HomeScreen} />

@@ -88,3 +88,55 @@ At that point, users can subscribe in-app or on the web, and RSF can reconcile t
 
 7. Only after native billing is working, reintroduce stronger in-app upgrade CTA copy
    - until then, mobile should stay informational and entitlement-aware rather than acting like a checkout surface
+
+### Current implementation status
+
+- RevenueCat SDK is wired in the mobile app.
+- Mobile sign-in now logs the RSF user into RevenueCat using the RSF user ID as the app user ID.
+- In-app purchase and restore flows now call the backend membership sync endpoint.
+- Backend membership sync writes into the same RSF membership fields already used by the web app:
+  - `membershipTier`
+  - `membershipStatus`
+  - `membershipProvider`
+  - `membershipInterval`
+  - `membershipEndsAt`
+- RevenueCat webhook support is now available at:
+  - `/api/revenuecat/webhook`
+
+### RevenueCat environment/config checklist
+
+- Mobile build env
+  - `EXPO_PUBLIC_REVENUECAT_APPLE_API_KEY`
+  - `EXPO_PUBLIC_REVENUECAT_GOOGLE_API_KEY`
+
+- Backend env for explicit product mapping
+  - `REVENUECAT_PRO_MONTHLY_PRODUCT_ID`
+  - `REVENUECAT_PRO_BIANNUAL_PRODUCT_ID`
+  - `REVENUECAT_PRO_ANNUAL_PRODUCT_ID`
+  - `REVENUECAT_PROPLUS_MONTHLY_PRODUCT_ID`
+  - `REVENUECAT_PROPLUS_BIANNUAL_PRODUCT_ID`
+  - `REVENUECAT_PROPLUS_ANNUAL_PRODUCT_ID`
+
+- Backend env for webhook auth
+  - `REVENUECAT_WEBHOOK_AUTH`
+
+### RevenueCat webhook notes
+
+- RevenueCat recommends using a configured authorization header for webhook requests and returning a fast `200` response.
+- RevenueCat retries failed webhook deliveries up to 5 times with increasing delay.
+- RevenueCat webhooks include:
+  - `app_user_id`
+  - `original_app_user_id`
+  - `aliases`
+  - `product_id`
+  - `entitlement_ids`
+  - lifecycle `type`
+- RSF should treat the webhook as the long-running source of truth for:
+  - renewals
+  - billing issues
+  - cancellations
+  - expirations
+
+Official references:
+- https://www.revenuecat.com/docs/integrations/webhooks
+- https://www.revenuecat.com/docs/integrations/webhooks/event-types-and-fields

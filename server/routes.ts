@@ -35,7 +35,7 @@ import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { getBasePrice, getUpgradeDelta, calculateTotalWithTax, isValidUpgrade, VALID_TIERS } from "@shared/config/listingPricing";
 import { paypalRequest } from "./paypal-client";
-import { getEntitlementsForUser, isSuperAdminEmail, mapPayPalStatusToMembership, resolveMembershipFromPlanId, resolvePayPalPlanId } from "./membership";
+import { getEntitlementsForUser, isSuperAdminEmail, mapPayPalStatusToMembership, resolveMembershipFromPlanId, resolveMembershipFromStoreSignals, resolvePayPalPlanId } from "./membership";
 import { maybeSyncLogbookProSubscription } from "./paypal-subscription-sync";
 import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
 import { resolveTfmsAccess } from "./lib/tier";
@@ -229,6 +229,38 @@ function parseBasicCsvRows(csvText: string): string[][] {
   }
 
   return rows;
+}
+
+const revenueCatWebhookSchema = z.object({
+  api_version: z.string().optional(),
+  event: z.object({
+    id: z.string().optional(),
+    type: z.string(),
+    app_user_id: z.string().optional().nullable(),
+    original_app_user_id: z.string().optional().nullable(),
+    aliases: z.array(z.string()).optional().nullable(),
+    product_id: z.string().optional().nullable(),
+    entitlement_id: z.string().optional().nullable(),
+    entitlement_ids: z.array(z.string()).optional().nullable(),
+    expiration_at_ms: z.number().nullable().optional(),
+    purchased_at_ms: z.number().nullable().optional(),
+    event_timestamp_ms: z.number().nullable().optional(),
+    store: z.string().optional().nullable(),
+    environment: z.string().optional().nullable(),
+  }),
+});
+
+function parseRevenueCatMs(value?: number | null): Date | null {
+  if (!value || !Number.isFinite(value)) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getRevenueCatProvider(store?: string | null): "app_store" | "google_play" | "revenuecat" {
+  const normalized = String(store || "").toUpperCase();
+  if (normalized === "APP_STORE" || normalized === "MAC_APP_STORE") return "app_store";
+  if (normalized === "PLAY_STORE") return "google_play";
+  return "revenuecat";
 }
 
 type TerrainProfilePoint = {
@@ -4865,6 +4897,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Legacy cancel error:", error);
       res.status(500).json({ error: error.message || "Failed to cancel subscription" });
+    }
+  });
+
+  // RevenueCat - Webhook (app store / play store membership sync)
+  app.post("/api/revenuecat/webhook", async (req, res) => {
+    try {
+      const configuredAuth = (process.env.REVENUECAT_WEBHOOK_AUTH || "").trim();
+      if (configuredAuth) {
+        const headerValue =
+          req.header("authorization") ||
+          req.header("Authorization") ||
+          req.header("x-revenuecat-authorization") ||
+          "";
+        if (headerValue.trim() !== configuredAuth) {
+          return res.status(401).json({ error: "Invalid RevenueCat webhook authorization" });
+        }
+      }
+
+      const result = revenueCatWebhookSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: "Invalid RevenueCat webhook payload" });
+      }
+
+      const event = result.data.event;
+      if (event.type === "TEST") {
+        return res.json({ received: true, test: true });
+      }
+
+      const candidateIds = Array.from(
+        new Set(
+          [
+            event.app_user_id,
+            event.original_app_user_id,
+            ...(event.aliases || []),
+          ]
+            .map((value) => value?.trim())
+            .filter((value): value is string => !!value)
+        )
+      );
+
+      let user = null;
+      for (const candidate of candidateIds) {
+        user = await storage.getUser(candidate);
+        if (!user && candidate.includes("@")) {
+          user = await storage.getUserByEmail(candidate);
+        }
+        if (user) break;
+      }
+
+      if (!user) {
+        console.warn("RevenueCat webhook: user not found", {
+          appUserId: event.app_user_id,
+          originalAppUserId: event.original_app_user_id,
+          aliases: event.aliases,
+          type: event.type,
+        });
+        return res.json({ received: true, ignored: "user_not_found" });
+      }
+
+      const membershipPlan = resolveMembershipFromStoreSignals({
+        productIds: event.product_id ? [event.product_id] : [],
+        entitlementIds: [
+          ...(event.entitlement_ids || []),
+          ...(event.entitlement_id ? [event.entitlement_id] : []),
+        ],
+      });
+
+      const provider = getRevenueCatProvider(event.store);
+      const expiresAt = parseRevenueCatMs(event.expiration_at_ms);
+      const purchasedAt = parseRevenueCatMs(event.purchased_at_ms) || parseRevenueCatMs(event.event_timestamp_ms);
+
+      const activeTypes = new Set([
+        "INITIAL_PURCHASE",
+        "RENEWAL",
+        "UNCANCELLATION",
+        "PRODUCT_CHANGE",
+        "SUBSCRIPTION_EXTENDED",
+        "TEMPORARY_ENTITLEMENT_GRANT",
+        "NON_RENEWING_PURCHASE",
+      ]);
+
+      const updates: Partial<typeof user> = {
+        membershipProvider: provider,
+      };
+
+      if (membershipPlan) {
+        updates.membershipTier = membershipPlan.tier;
+        updates.membershipInterval = membershipPlan.interval;
+        updates.logbookProPlan = membershipPlan.interval;
+      }
+
+      if (purchasedAt) {
+        updates.logbookProStartedAt = purchasedAt;
+      }
+
+      if (expiresAt) {
+        updates.membershipEndsAt = expiresAt;
+        updates.membershipNextBillingAt = expiresAt;
+        updates.logbookProEndsAt = expiresAt;
+      }
+
+      if (activeTypes.has(event.type)) {
+        updates.membershipStatus = "active";
+        updates.logbookProStatus = "active";
+        updates.logbookProCanceledAt = null;
+        updates.logbookProCancelAtPeriodEnd = false;
+      } else if (event.type === "BILLING_ISSUE") {
+        updates.membershipStatus = "past_due";
+        updates.logbookProStatus = "payment_failed";
+      } else if (event.type === "CANCELLATION") {
+        updates.membershipStatus = "cancelled";
+        updates.logbookProStatus = "cancelled";
+        updates.logbookProCanceledAt = parseRevenueCatMs(event.event_timestamp_ms) || new Date();
+      } else if (event.type === "EXPIRATION") {
+        updates.membershipTier = "free";
+        updates.membershipStatus = "inactive";
+        updates.membershipEndsAt = expiresAt;
+        updates.membershipNextBillingAt = null;
+        updates.membershipInterval = null;
+        updates.logbookProStatus = "inactive";
+        updates.logbookProPlan = null;
+        updates.logbookProEndsAt = expiresAt;
+        updates.logbookProCanceledAt = parseRevenueCatMs(event.event_timestamp_ms) || new Date();
+        updates.logbookProCancelAtPeriodEnd = false;
+      } else {
+        return res.json({ received: true, ignored: event.type });
+      }
+
+      await storage.updateUser(user.id, updates);
+      return res.json({ received: true });
+    } catch (error) {
+      console.error("RevenueCat webhook error:", error);
+      return res.status(500).json({ error: "Failed to process RevenueCat webhook" });
     }
   });
 

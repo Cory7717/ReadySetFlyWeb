@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PromoBanner } from '../components/PromoBanner';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
@@ -58,8 +59,19 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 }
 
 export default function MarketplaceScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        {
+          paddingTop: insets.top + spacing.sm,
+          paddingBottom: 120 + insets.bottom,
+        },
+      ]}
+    >
       <View style={styles.heroPanel}>
         <View style={styles.heroTopRow}>
           <View style={{ flex: 1 }}>
@@ -140,7 +152,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.sm,
-    paddingBottom: 120,
   },
   heroPanel: {
     marginBottom: spacing.md,

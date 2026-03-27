@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MarketplaceStackParamList } from '../navigation/MarketplaceStack';
 import { apiEndpoints } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import UpgradeListingModal from '../components/UpgradeListingModal';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import { getPrimaryImageUrl } from '../utils/objectUrl';
 
 type Props = NativeStackScreenProps<MarketplaceStackParamList, 'MarketplaceDetail'>;
 
@@ -39,6 +41,7 @@ function SectionCard({
 }
 
 export default function MarketplaceDetailScreen({ route }: Props) {
+  const insets = useSafeAreaInsets();
   const { listingId } = route.params;
   const { user } = useIsAuthenticated();
   const queryClient = useQueryClient();
@@ -104,8 +107,25 @@ export default function MarketplaceDetailScreen({ route }: Props) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        {
+          paddingTop: insets.top + spacing.sm,
+          paddingBottom: 120 + insets.bottom,
+        },
+      ]}
+    >
       <View style={styles.heroPanel}>
+        {getPrimaryImageUrl(listing.images) ? (
+          <Image
+            source={{ uri: getPrimaryImageUrl(listing.images)! }}
+            style={styles.heroImage}
+            resizeMode="cover"
+          />
+        ) : null}
+
         <View style={styles.heroTopRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.heroEyebrow}>LISTING DETAIL</Text>
@@ -261,7 +281,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.sm,
-    paddingBottom: 120,
   },
   centerContainer: {
     flex: 1,
@@ -292,6 +311,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     backgroundColor: colors.cockpit,
     ...shadow.floating,
+  },
+  heroImage: {
+    width: '100%',
+    height: 220,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surfaceTinted,
   },
   heroTopRow: {
     flexDirection: 'row',

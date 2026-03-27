@@ -1,11 +1,13 @@
-import { FlatList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MarketplaceStackParamList } from '../navigation/MarketplaceStack';
 import { apiEndpoints } from '../services/api';
 import type { MarketplaceListing } from '@shared/schema';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import { getPrimaryImageUrl } from '../utils/objectUrl';
 
 type Props = NativeStackScreenProps<MarketplaceStackParamList, 'MarketplaceCategory'>;
 
@@ -46,6 +48,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
 }
 
 export default function MarketplaceCategoryScreen({ route, navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const { category } = route.params;
   const categoryMeta = categoryLabelMap[category] || {
     title: category,
@@ -66,6 +69,14 @@ export default function MarketplaceCategoryScreen({ route, navigation }: Props) 
       onPress={() => navigation.navigate('MarketplaceDetail', { listingId: item.id })}
       activeOpacity={0.92}
     >
+      {getPrimaryImageUrl(item.images) ? (
+        <Image
+          source={{ uri: getPrimaryImageUrl(item.images)! }}
+          style={styles.listingImage}
+          resizeMode="cover"
+        />
+      ) : null}
+
       <View style={styles.cardHeader}>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{item.title}</Text>
@@ -119,7 +130,13 @@ export default function MarketplaceCategoryScreen({ route, navigation }: Props) 
         data={listings || []}
         renderItem={renderListing}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          {
+            paddingTop: insets.top + spacing.sm,
+            paddingBottom: 120 + insets.bottom,
+          },
+        ]}
         ListHeaderComponent={
           <>
             <View style={styles.heroPanel}>
@@ -189,7 +206,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: spacing.sm,
-    paddingBottom: 120,
   },
   heroPanel: {
     marginBottom: spacing.md,
@@ -283,6 +299,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     ...shadow.card,
+  },
+  listingImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surfaceTinted,
   },
   cardHeader: {
     flexDirection: 'row',

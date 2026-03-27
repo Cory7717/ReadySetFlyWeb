@@ -1,6 +1,7 @@
 import { NavigationContainer, type LinkingOptions } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import HomeScreen from '../screens/HomeScreen';
 import RentalsStack from './RentalsStack';
 import MarketplaceStack from './MarketplaceStack';
@@ -95,6 +96,8 @@ const linking: LinkingOptions<AppTabParamList> = {
 };
 
 export default function AppNavigator() {
+  const insets = useSafeAreaInsets();
+
   return (
     <NavigationContainer
       linking={linking}
@@ -142,13 +145,13 @@ export default function AppNavigator() {
             position: 'absolute',
             left: 12,
             right: 12,
-            bottom: 10,
-            height: 72,
+            bottom: Math.max(insets.bottom, 10),
+            height: 62 + Math.max(insets.bottom, 10),
             borderTopWidth: 0,
             borderRadius: radius.xl,
             backgroundColor: 'rgba(255,255,255,0.96)',
             paddingTop: 10,
-            paddingBottom: 10,
+            paddingBottom: Math.max(insets.bottom, 10),
             ...shadow.floating,
           },
           tabBarLabelStyle: {
@@ -159,6 +162,7 @@ export default function AppNavigator() {
             borderRadius: radius.lg,
             marginHorizontal: 2,
           },
+          tabBarHideOnKeyboard: true,
         })}
       >
         <Tab.Screen name="Home" component={HomeScreen} />

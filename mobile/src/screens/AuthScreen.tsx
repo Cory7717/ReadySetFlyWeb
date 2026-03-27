@@ -12,11 +12,14 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLogin, useRegister } from '../utils/auth';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
-import * as SecureStore from 'expo-secure-store';
+import { TokenStorage } from '../utils/tokenStorage';
+import { syncPurchasesUser } from '../services/purchases';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://readysetfly-api.onrender.com';
@@ -39,6 +42,7 @@ function FeaturePill({ icon, label }: FeaturePillProps) {
 
 export default function AuthScreen() {
   const navigation = useNavigation<any>();
+  const queryClient = useQueryClient();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -47,6 +51,7 @@ export default function AuthScreen() {
   const [lastName, setLastName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isOAuthLoading, setIsOAuthLoading] = useState(false);
+  const handledExchangeTokenRef = useRef<string | null>(null);
 
   const loginMutation = useLogin();
   const registerMutation = useRegister();
@@ -59,6 +64,10 @@ export default function AuthScreen() {
       const exchangeToken = params.get('token');
 
       if (exchangeToken) {
+        if (handledExchangeTokenRef.current === exchangeToken) {
+          return;
+        }
+        handledExchangeTokenRef.current = exchangeToken;
         try {
           setIsOAuthLoading(true);
           const response = await fetch(`${API_BASE_URL}/api/auth/exchange-oauth-token`, {
@@ -74,18 +83,21 @@ export default function AuthScreen() {
           }
 
           const data = await response.json();
-          await SecureStore.setItemAsync('accessToken', data.accessToken);
-          await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+          await TokenStorage.setTokens(data.accessToken, data.refreshToken);
+          await syncPurchasesUser((data.user as any)?.id);
+          queryClient.setQueryData(['/api/mobile/auth/me'], data.user);
+          await queryClient.invalidateQueries({ queryKey: ['/api/mobile/auth/me'] });
           navigation.replace('ProfileHome');
         } catch (error) {
           console.error('OAuth exchange error:', error);
+          handledExchangeTokenRef.current = null;
           Alert.alert('Error', 'Failed to complete OAuth login');
         } finally {
           setIsOAuthLoading(false);
         }
       }
     }
-  }, [navigation]);
+  }, [navigation, queryClient]);
 
   useEffect(() => {
     const subscription = Linking.addEventListener('url', handleDeepLink);

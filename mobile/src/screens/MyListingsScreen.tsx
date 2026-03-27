@@ -1,10 +1,12 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { format, isValid } from 'date-fns';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
+import { getPrimaryImageUrl } from '../utils/objectUrl';
 
 type MarketplaceListing = {
   id: string;
@@ -12,6 +14,7 @@ type MarketplaceListing = {
   category?: string | null;
   location?: string | null;
   price?: string | number | null;
+  images?: string[] | null;
   isActive?: boolean | null;
   expiresAt?: string | Date | null;
   createdAt?: string | Date | null;
@@ -179,6 +182,14 @@ export default function MyListingsScreen({ navigation }: any) {
               }
               activeOpacity={0.92}
             >
+              {getPrimaryImageUrl(listing.images) ? (
+                <Image
+                  source={{ uri: getPrimaryImageUrl(listing.images)! }}
+                  style={styles.cardImage}
+                  resizeMode="cover"
+                />
+              ) : null}
+
               <View style={styles.cardHeader}>
                 <View style={{ flex: 1, marginRight: spacing.sm }}>
                   <Text style={styles.cardTitle}>{listing.title || 'Untitled Listing'}</Text>
@@ -319,6 +330,13 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     marginBottom: spacing.sm,
     ...shadow.card,
+  },
+  cardImage: {
+    width: '100%',
+    height: 170,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
+    backgroundColor: colors.surfaceTinted,
   },
   cardHeader: {
     flexDirection: 'row',

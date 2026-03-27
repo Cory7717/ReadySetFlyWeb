@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
 import PushTokenRegistrar from './src/components/PushTokenRegistrar';
 import { initializePurchases } from './src/services/purchases';
@@ -22,9 +23,11 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppNavigator />
-      <PushTokenRegistrar />
-      <StatusBar style="auto" />
+      <SafeAreaProvider>
+        <AppNavigator />
+        <PushTokenRegistrar />
+        <StatusBar style="auto" />
+      </SafeAreaProvider>
     </QueryClientProvider>
   );
 }

@@ -1,4 +1,4 @@
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, type LinkingOptions } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
@@ -6,12 +6,96 @@ import RentalsStack from './RentalsStack';
 import MarketplaceStack from './MarketplaceStack';
 import MessagesScreen from '../screens/MessagesScreen';
 import ProfileStack from './ProfileStack';
+import type { RentalsStackParamList } from './RentalsStack';
+import type { MarketplaceStackParamList } from './MarketplaceStack';
+import type { ProfileStackParamList } from './ProfileStack';
 
 const Tab = createBottomTabNavigator();
 
+type AppTabParamList = {
+  Home: undefined;
+  Rentals: RentalsStackParamList;
+  Marketplace: MarketplaceStackParamList;
+  Messages: undefined;
+  Profile: ProfileStackParamList;
+};
+
+const linking: LinkingOptions<AppTabParamList> = {
+  prefixes: ['readysetfly://', 'https://readysetfly.us', 'https://www.readysetfly.us'],
+  config: {
+    screens: {
+      Home: '',
+      Rentals: {
+        screens: {
+          RentalsList: 'rentals',
+          AircraftDetail: 'rentals/aircraft/:aircraftId',
+          Booking: 'rentals/book/:aircraftId',
+          RentalPayment: 'rentals/payment',
+        },
+      },
+      Marketplace: {
+        screens: {
+          MarketplaceHome: 'marketplace',
+          MarketplaceCategory: 'marketplace/category/:category',
+          MarketplaceDetail: 'marketplace/listing/:listingId',
+          CreateMarketplaceListing: 'marketplace/create',
+          MarketplacePayment: 'marketplace/payment',
+        },
+      },
+      Messages: 'messages',
+      Profile: {
+        screens: {
+          ProfileHome: 'profile',
+          PilotTools: 'pilot-tools',
+          AviationWeatherHub: 'aviation-weather',
+          AirportBriefing: 'airport-briefing',
+          ApproachPlates: 'approach-plates',
+          FlightPlanner: 'flight-planner',
+          RadioCommsTrainer: 'radio-comms-trainer',
+          Logbook: 'logbook',
+          LogbookEntry: 'logbook/entry/:entryId',
+          LogbookPro: 'logbook-pro',
+          Endorsements: 'endorsements',
+          StudentHub: 'student-hub',
+          StudentWizard: 'student-wizard',
+          StudentRoadmap: 'student-roadmap',
+          StudentCost: 'student-cost',
+          StudentProgress: 'student-progress',
+          StudentWritten: 'student-written',
+          StudentSyllabi: 'student-syllabi',
+          StudentVorTrainer: 'student-vor-trainer',
+          StudentChecklists: 'student-checklists',
+          StudentWeather: 'student-weather',
+          GpsSimsHub: 'gps-sims',
+          GpsSimsUnit: 'gps-sims/:unitId',
+          IfrTools: 'ifr-tools',
+          Tfrs: 'tfr-map',
+          OwnershipCost: 'ownership-cost-calculator',
+          CrosswindCalc: 'crosswind-calculator',
+          DensityAltitude: 'density-altitude',
+          WeightBalance: 'weight-balance',
+          MyAircraft: 'my-aircraft',
+          MyRentals: 'my-rentals',
+          MyListings: 'my-listings',
+          Favorites: 'favorites',
+          Notifications: 'notifications',
+          HelpSupport: 'help-support',
+          FAQ: 'faq',
+          ContactUs: 'contact-us',
+          ReceiverHelp: 'receiver-help',
+          Verification: 'verification',
+          Balance: 'balance',
+          Reviews: 'reviews',
+          Auth: 'auth',
+        },
+      },
+    },
+  },
+};
+
 export default function AppNavigator() {
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <Tab.Navigator
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {

@@ -1,5 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { OpenInAppBanner } from "@/components/OpenInAppBanner";
 
 const receivers = [
   {
@@ -94,6 +95,13 @@ export default function AdsbReceiverHelp() {
         </AlertDescription>
       </Alert>
 
+      <OpenInAppBanner
+        title="Receiver-backed flying is best in the RSF app"
+        description="You can keep using the web version for planning and receiver testing, but the native RSF app is the better tablet experience for direct ADS-B receiver use in flight."
+        deepLink="readysetfly://receiver-help"
+        note="Open the app on your tablet for the native receiver workflow. Use bridge mode here only when you need browser-side testing."
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Receiver Bridge Mode</CardTitle>
@@ -102,6 +110,7 @@ export default function AdsbReceiverHelp() {
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <div>- Start the included bridge with `npm run receiver:bridge`.</div>
           <div>- On Windows, you can also double-click `scripts/receiver-bridge-launch.cmd` or run `npm run receiver:bridge:windows`.</div>
+          <div>- For handoff packaging, use `npm run receiver:bridge:package` and share the generated `dist/receiver-bridge.zip` bundle.</div>
           <div>- The bridge also serves a local status page at `http://127.0.0.1:3005/` so you can confirm frames are arriving before you open RSF.</div>
           <div>- In Live Flight Map, switch the source to `Receiver bridge`.</div>
           <div>- Point RSF to a local bridge URL such as `http://127.0.0.1:3005/rsf-live.json`.</div>

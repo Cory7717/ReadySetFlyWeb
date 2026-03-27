@@ -20,6 +20,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { OpenInAppBanner } from "@/components/OpenInAppBanner";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -79,12 +80,41 @@ type ReceiverBridgePayload = {
     lastOwnshipAt?: string | number | null;
     lastTrafficAt?: string | number | null;
     lastHeartbeatAt?: string | number | null;
+    lastGeometricAltitudeAt?: string | number | null;
     bridgeAgeMs?: number | null;
     lastFrameAgeMs?: number | null;
     lastOwnshipAgeMs?: number | null;
     lastTrafficAgeMs?: number | null;
     lastHeartbeatAgeMs?: number | null;
+    lastGeometricAltitudeAgeMs?: number | null;
+    lastGeometricAltitude?: {
+      rawHex?: string | null;
+      payloadLength?: number | null;
+      timestamp?: number | null;
+    } | null;
     warnings?: string[];
+    recentUnsupportedFrames?: Array<{
+      messageId?: string | null;
+      label?: string | null;
+      payloadLength?: number | null;
+      reason?: string | null;
+      rawHex?: string | null;
+      timestamp?: string | null;
+    }>;
+    recentRejectedFrames?: Array<{
+      messageId?: string | null;
+      label?: string | null;
+      payloadLength?: number | null;
+      reason?: string | null;
+      rawHex?: string | null;
+      timestamp?: string | null;
+    }>;
+    recentCrcFailures?: Array<{
+      reason?: string | null;
+      frameLength?: number | null;
+      rawHex?: string | null;
+      timestamp?: string | null;
+    }>;
     stats?: {
       datagramsReceived?: number;
       framesReceived?: number;
@@ -93,9 +123,11 @@ type ReceiverBridgePayload = {
       crcErrors?: number;
       messagesReceived?: number;
       ownshipReports?: number;
+      ownshipGeometricAltitudeReports?: number;
       trafficReports?: number;
       heartbeatReports?: number;
       unknownReports?: number;
+      rejectedReports?: number;
       trackedTraffic?: number;
     } | null;
   } | null;
@@ -1002,6 +1034,30 @@ export default function AdsbLive() {
     trackingEnabled,
   ]);
 
+  const bridgeDiagnostics = useMemo(() => {
+    const health = receiverBridgeQuery.data?.health;
+    const stats = health?.stats;
+    return {
+      validFrames: stats?.validFrames ?? 0,
+      totalFrames: stats?.framesReceived ?? 0,
+      heartbeatReports: stats?.heartbeatReports ?? 0,
+      ownshipReports: stats?.ownshipReports ?? 0,
+      ownshipGeometricAltitudeReports: stats?.ownshipGeometricAltitudeReports ?? 0,
+      trafficReports: stats?.trafficReports ?? 0,
+      rejectedReports: stats?.rejectedReports ?? 0,
+      crcErrors: stats?.crcErrors ?? 0,
+      trackedTraffic: stats?.trackedTraffic ?? 0,
+      lastHeartbeatAge: formatAge(health?.lastHeartbeatAgeMs ?? null),
+      lastOwnshipAge: formatAge(health?.lastOwnshipAgeMs ?? null),
+      lastTrafficAge: formatAge(health?.lastTrafficAgeMs ?? null),
+      lastGeometricAltitudeAge: formatAge(health?.lastGeometricAltitudeAgeMs ?? null),
+      warnings: health?.warnings ?? [],
+      recentUnsupportedFrames: health?.recentUnsupportedFrames ?? [],
+      recentRejectedFrames: health?.recentRejectedFrames ?? [],
+      recentCrcFailures: health?.recentCrcFailures ?? [],
+    };
+  }, [receiverBridgeQuery.data]);
+
   useEffect(() => {
     if (!trackingEnabled || positionSource !== "bridge") return;
     const bridgeOwnship = receiverBridgeQuery.data?.ownship;
@@ -1733,6 +1789,13 @@ export default function AdsbLive() {
             for operational decisions.
           </AlertDescription>
         </Alert>
+
+        <OpenInAppBanner
+          title="Plan on the web. Fly in the app."
+          description="Use the native RSF app on your tablet for direct ADS-B receiver traffic and cockpit-style in-flight tracking. Keep the web live map for planning, testing, and browser-based situational review."
+          deepLink="readysetfly://flight-planner"
+          note="If the RSF app is installed on this device, it should open directly to the mobile flight planner."
+        />
 
         {!trackingEnabled && (
           <Alert>
@@ -3126,6 +3189,144 @@ export default function AdsbLive() {
                       </Button>
                     </div>
                   </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Receiver bridge diagnostics</CardTitle>
+                <CardDescription>Bridge quality, frame coverage, and freshness for local GDL-90 ingest.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {positionSource !== "bridge" ? (
+                  <div className="text-sm text-muted-foreground">
+                    Switch `Position source` to `Receiver bridge` to see live bridge diagnostics here.
+                  </div>
+                ) : !trackingEnabled ? (
+                  <div className="text-sm text-muted-foreground">
+                    Start live tracking to begin polling the local bridge and collecting diagnostics.
+                  </div>
+                ) : receiverBridgeQuery.error ? (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      {receiverBridgeQuery.error instanceof Error
+                        ? receiverBridgeQuery.error.message
+                        : "Receiver bridge unavailable."}
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-lg border p-3">
+                        <div className="text-xs text-muted-foreground">Frame quality</div>
+                        <div className="font-semibold">
+                          {bridgeDiagnostics.validFrames} valid / {bridgeDiagnostics.totalFrames} frames
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {bridgeDiagnostics.crcErrors} CRC errors · {bridgeDiagnostics.rejectedReports} rejected known reports
+                        </div>
+                      </div>
+                      <div className="rounded-lg border p-3">
+                        <div className="text-xs text-muted-foreground">Tracked traffic</div>
+                        <div className="font-semibold">{bridgeDiagnostics.trackedTraffic}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {bridgeDiagnostics.trafficReports} decoded traffic reports
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                        <div className="text-xs text-muted-foreground">Freshness</div>
+                        <div className="mt-2 space-y-1 text-muted-foreground">
+                          <div>Heartbeat: <span className="font-medium text-foreground">{bridgeDiagnostics.lastHeartbeatAge}</span></div>
+                          <div>Ownship: <span className="font-medium text-foreground">{bridgeDiagnostics.lastOwnshipAge}</span></div>
+                          <div>Traffic: <span className="font-medium text-foreground">{bridgeDiagnostics.lastTrafficAge}</span></div>
+                          <div>Geom alt frame: <span className="font-medium text-foreground">{bridgeDiagnostics.lastGeometricAltitudeAge}</span></div>
+                        </div>
+                      </div>
+                      <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                        <div className="text-xs text-muted-foreground">Decoded coverage</div>
+                        <div className="mt-2 space-y-1 text-muted-foreground">
+                          <div>Heartbeat reports: <span className="font-medium text-foreground">{bridgeDiagnostics.heartbeatReports}</span></div>
+                          <div>Ownship reports: <span className="font-medium text-foreground">{bridgeDiagnostics.ownshipReports}</span></div>
+                          <div>Geom altitude reports: <span className="font-medium text-foreground">{bridgeDiagnostics.ownshipGeometricAltitudeReports}</span></div>
+                          <div>Traffic reports: <span className="font-medium text-foreground">{bridgeDiagnostics.trafficReports}</span></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3 text-sm">
+                      <div className="text-xs text-muted-foreground">Bridge status page</div>
+                      <div className="mt-1 text-muted-foreground">
+                        Open <span className="font-medium text-foreground">http://127.0.0.1:3005/</span> locally to verify the bridge before opening RSF.
+                      </div>
+                    </div>
+                    {bridgeDiagnostics.warnings.length > 0 ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                        <div className="font-medium">Current bridge warnings</div>
+                        <div className="mt-2 space-y-1">
+                          {bridgeDiagnostics.warnings.map((warning) => (
+                            <div key={warning}>- {warning}</div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {(bridgeDiagnostics.recentUnsupportedFrames.length > 0 ||
+                      bridgeDiagnostics.recentRejectedFrames.length > 0 ||
+                      bridgeDiagnostics.recentCrcFailures.length > 0) ? (
+                      <div className="rounded-lg border p-3 text-sm">
+                        <div className="font-medium">Recent bridge decode samples</div>
+                        <div className="mt-2 space-y-3 text-muted-foreground">
+                          {bridgeDiagnostics.recentUnsupportedFrames.length > 0 ? (
+                            <div>
+                              <div className="text-xs font-medium uppercase tracking-wide">Unsupported frames</div>
+                              <div className="mt-1 space-y-1">
+                                {bridgeDiagnostics.recentUnsupportedFrames.slice(0, 3).map((item, index) => (
+                                  <div key={`unsupported-${item.timestamp}-${index}`} className="rounded border bg-muted/30 px-2 py-1">
+                                    <div className="font-medium text-foreground">
+                                      {item.messageId || "--"} · {item.label || "Unknown"}
+                                    </div>
+                                    <div className="text-xs">{item.reason || "Unsupported message type."}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {bridgeDiagnostics.recentRejectedFrames.length > 0 ? (
+                            <div>
+                              <div className="text-xs font-medium uppercase tracking-wide">Rejected known frames</div>
+                              <div className="mt-1 space-y-1">
+                                {bridgeDiagnostics.recentRejectedFrames.slice(0, 3).map((item, index) => (
+                                  <div key={`rejected-${item.timestamp}-${index}`} className="rounded border bg-muted/30 px-2 py-1">
+                                    <div className="font-medium text-foreground">
+                                      {item.messageId || "--"} · {item.label || "Known message"}
+                                    </div>
+                                    <div className="text-xs">{item.reason || "Known message rejected during decode."}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          {bridgeDiagnostics.recentCrcFailures.length > 0 ? (
+                            <div>
+                              <div className="text-xs font-medium uppercase tracking-wide">CRC failures</div>
+                              <div className="mt-1 space-y-1">
+                                {bridgeDiagnostics.recentCrcFailures.slice(0, 3).map((item, index) => (
+                                  <div key={`crc-${item.timestamp}-${index}`} className="rounded border bg-muted/30 px-2 py-1">
+                                    <div className="font-medium text-foreground">
+                                      Frame {item.frameLength ?? "--"} bytes
+                                    </div>
+                                    <div className="text-xs">{item.reason || "CRC validation failed."}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
                 )}
               </CardContent>
             </Card>

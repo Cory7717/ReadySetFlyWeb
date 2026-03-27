@@ -40,6 +40,7 @@ import {
 } from "@shared/flight-plan-route";
 import { UpgradePromptDialog } from "@/components/upgrade/UpgradePromptDialog";
 import OperationalIntelligencePanel, { type TfmsTier } from "@/components/flight-planner/OperationalIntelligencePanel";
+import { OpenInAppBanner } from "@/components/OpenInAppBanner";
 import { PageShell } from "@/components/layout/PageShell";
 import PlannerMap, { type PlannerLegHealthMarker, type PlannerPoint } from "@/components/flight-planner/PlannerMap";
 import { PressDemoBanner, PressDemoSpotlight, type PressDemoStep, usePressDemo } from "@/components/press/PressDemo";
@@ -5043,6 +5044,12 @@ export default function FlightPlanner() {
           </div>
         </AlertDescription>
       </Alert>
+      <OpenInAppBanner
+        title="Use the app for native in-flight tracking"
+        description="RSF on the web is the right place to build routes, review hazards, save plans, and file with Flight Service. For tablet flying with direct ADS-B receiver traffic and native ownship tracking, open the RSF app."
+        deepLink="readysetfly://flight-planner"
+        note="Your web plan stays useful for planning and testing. Opening the app is mainly for native cockpit use."
+      />
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-5">
           <TabsTrigger value="route" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">Route</TabsTrigger>

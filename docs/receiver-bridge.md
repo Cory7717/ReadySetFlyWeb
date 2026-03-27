@@ -68,4 +68,25 @@ That creates:
 dist/receiver-bridge/
 ```
 
+and:
+
+```text
+dist/receiver-bridge.zip
+```
+
 with the bridge script, launchers, and this guide.
+
+## Share with testers
+
+For internal or partner testing, you can hand off the contents of:
+
+```text
+dist/receiver-bridge.zip
+```
+
+They will still need Node.js installed, but they do not need the rest of the RSF repo. The simplest path is:
+
+1. unzip the bundle anywhere on the machine
+2. double-click `receiver-bridge-launch.cmd`
+3. confirm the local status page loads at `http://127.0.0.1:3005/`
+4. open RSF Live Flight Map and choose `Receiver bridge`

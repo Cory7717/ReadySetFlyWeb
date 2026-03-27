@@ -9,6 +9,7 @@ const HTTP_PATH = process.env.RSF_RECEIVER_HTTP_PATH || "/rsf-live.json";
 const STALE_MS = Number(process.env.RSF_RECEIVER_STALE_MS || 45000);
 const HEALTH_PATH = process.env.RSF_RECEIVER_HEALTH_PATH || "/health.json";
 const STATUS_PAGE_PATH = process.env.RSF_RECEIVER_STATUS_PATH || "/";
+const MAX_RECENT_SAMPLE_COUNT = 8;
 
 const MESSAGE_LABELS = {
   0x00: "Heartbeat",
@@ -26,6 +27,8 @@ const state = {
   lastOwnshipAt: 0,
   lastTrafficAt: 0,
   lastHeartbeatAt: 0,
+  lastGeometricAltitudeAt: 0,
+  lastGeometricAltitude: null,
   lastHeartbeat: null,
   lastDecodeError: null,
   stats: {
@@ -36,12 +39,16 @@ const state = {
     crcErrors: 0,
     messagesReceived: 0,
     ownshipReports: 0,
+    ownshipGeometricAltitudeReports: 0,
     trafficReports: 0,
     heartbeatReports: 0,
     unknownReports: 0,
     rejectedReports: 0,
     messageCounts: {},
   },
+  recentUnsupportedFrames: [],
+  recentRejectedFrames: [],
+  recentCrcFailures: [],
 };
 
 function toIsoOrNull(timestamp) {
@@ -60,6 +67,13 @@ function escapeHtml(value) {
 function formatMessageLabel(messageId) {
   const label = MESSAGE_LABELS[messageId];
   return label || `Message 0x${Number(messageId).toString(16).padStart(2, "0").toUpperCase()}`;
+}
+
+function rememberRecentSample(collection, sample) {
+  collection.unshift(sample);
+  if (collection.length > MAX_RECENT_SAMPLE_COUNT) {
+    collection.length = MAX_RECENT_SAMPLE_COUNT;
+  }
 }
 
 function decodeSigned24(buffer, offset) {
@@ -158,6 +172,26 @@ function parseHeartbeat(payload) {
   };
 }
 
+function parseOwnshipGeometricAltitude(payload) {
+  if (payload.length < 3) return null;
+  return {
+    rawHex: payload.subarray(1).toString("hex").toUpperCase(),
+    payloadLength: payload.length,
+    timestamp: Date.now(),
+  };
+}
+
+function buildFrameSample(messageId, payload, reason) {
+  return {
+    messageId: `0x${Number(messageId).toString(16).padStart(2, "0").toUpperCase()}`,
+    label: formatMessageLabel(messageId),
+    payloadLength: payload.length,
+    reason,
+    rawHex: payload.toString("hex").toUpperCase().slice(0, 96),
+    timestamp: new Date().toISOString(),
+  };
+}
+
 function parseOwnshipReport(payload) {
   if (payload.length < 27) return null;
   const lat = decodeLatLon(payload, 5);
@@ -228,6 +262,27 @@ function handlePayload(payload) {
     } else {
       state.stats.rejectedReports += 1;
       state.lastDecodeError = "Ownship report could not be decoded.";
+      rememberRecentSample(
+        state.recentRejectedFrames,
+        buildFrameSample(messageId, payload, "Ownship report rejected during decode."),
+      );
+    }
+    return;
+  }
+
+  if (messageId === 0x0b) {
+    const geometricAltitude = parseOwnshipGeometricAltitude(payload);
+    if (geometricAltitude) {
+      state.lastGeometricAltitudeAt = now;
+      state.lastGeometricAltitude = geometricAltitude;
+      state.stats.ownshipGeometricAltitudeReports += 1;
+    } else {
+      state.stats.rejectedReports += 1;
+      state.lastDecodeError = "Ownship geometric altitude report could not be decoded.";
+      rememberRecentSample(
+        state.recentRejectedFrames,
+        buildFrameSample(messageId, payload, "Ownship geometric altitude report rejected during decode."),
+      );
     }
     return;
   }
@@ -241,11 +296,19 @@ function handlePayload(payload) {
     } else {
       state.stats.rejectedReports += 1;
       state.lastDecodeError = "Traffic report could not be decoded.";
+      rememberRecentSample(
+        state.recentRejectedFrames,
+        buildFrameSample(messageId, payload, "Traffic report rejected during decode."),
+      );
     }
     return;
   }
 
   state.stats.unknownReports += 1;
+  rememberRecentSample(
+    state.recentUnsupportedFrames,
+    buildFrameSample(messageId, payload, "Unsupported or not yet decoded message type."),
+  );
 }
 
 function handleDatagram(message) {
@@ -272,6 +335,12 @@ function handleDatagram(message) {
     if (!validateFrame(unescaped)) {
       state.stats.crcErrors += 1;
       state.lastDecodeError = "CRC validation failed.";
+      rememberRecentSample(state.recentCrcFailures, {
+        reason: "CRC validation failed.",
+        frameLength: unescaped.length,
+        rawHex: unescaped.toString("hex").toUpperCase().slice(0, 96),
+        timestamp: new Date().toISOString(),
+      });
       continue;
     }
     state.stats.validFrames += 1;
@@ -288,6 +357,7 @@ function buildHealthSummary() {
   const lastOwnshipAgeMs = state.lastOwnshipAt ? now - state.lastOwnshipAt : null;
   const lastTrafficAgeMs = state.lastTrafficAt ? now - state.lastTrafficAt : null;
   const lastHeartbeatAgeMs = state.lastHeartbeatAt ? now - state.lastHeartbeatAt : null;
+  const lastGeometricAltitudeAgeMs = state.lastGeometricAltitudeAt ? now - state.lastGeometricAltitudeAt : null;
 
   let status = "idle";
   if (state.lastFrameAt) {
@@ -314,14 +384,20 @@ function buildHealthSummary() {
     lastOwnshipAt: toIsoOrNull(state.lastOwnshipAt),
     lastTrafficAt: toIsoOrNull(state.lastTrafficAt),
     lastHeartbeatAt: toIsoOrNull(state.lastHeartbeatAt),
+    lastGeometricAltitudeAt: toIsoOrNull(state.lastGeometricAltitudeAt),
     bridgeAgeMs: now - state.bridgeStartedAt,
     lastFrameAgeMs,
     lastOwnshipAgeMs,
     lastTrafficAgeMs,
     lastHeartbeatAgeMs,
+    lastGeometricAltitudeAgeMs,
     lastMessageId: state.lastMessageId,
     lastHeartbeat: state.lastHeartbeat,
+    lastGeometricAltitude: state.lastGeometricAltitude,
     warnings,
+    recentUnsupportedFrames: state.recentUnsupportedFrames,
+    recentRejectedFrames: state.recentRejectedFrames,
+    recentCrcFailures: state.recentCrcFailures,
     stats: {
       ...state.stats,
       messageCounts: Object.fromEntries(
@@ -448,6 +524,7 @@ function buildStatusPage(payload) {
           <div class="label">Bridge timing</div>
           <div class="muted">Started ${escapeHtml(payload.health.bridgeStartedAt || "--")}</div>
           <div class="muted">Last heartbeat ${escapeHtml(payload.health.lastHeartbeatAt || "--")}</div>
+          <div class="muted">Last geometric altitude ${escapeHtml(payload.health.lastGeometricAltitudeAt || "--")}</div>
           <div class="muted">Last ownship ${escapeHtml(payload.health.lastOwnshipAt || "--")}</div>
           <div class="muted">Last traffic ${escapeHtml(payload.health.lastTrafficAt || "--")}</div>
         </div>

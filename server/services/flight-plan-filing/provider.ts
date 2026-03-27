@@ -606,7 +606,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       if (timeoutLike) {
         throw new Error(
           `Leidos ${action.toUpperCase()} request timed out before Flight Service responded. ` +
-          "The lab service is likely slow or temporarily unavailable. Please try again."
+          "Leidos is taking longer than usual to respond. Wait a few minutes, then try again."
         );
       }
 

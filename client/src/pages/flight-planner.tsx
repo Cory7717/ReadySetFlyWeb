@@ -114,11 +114,11 @@ const summarizePlannerError = (value: unknown) => {
   }
 
   if (/Leidos .* timed out before Flight Service responded/i.test(message)) {
-    return message;
+    return "Leidos is taking longer than usual to respond. Wait a few minutes, then try again.";
   }
 
   if (/connect timeout|timed out|fetch failed/i.test(message)) {
-    return "Leidos did not respond in time. The Flight Service lab is likely slow or temporarily unavailable. Please try again.";
+    return "Leidos is taking longer than usual to respond. Wait a few minutes, then try again.";
   }
 
   if (/<!doctype html|<html[\s>]|<body[\s>]|<head[\s>]/i.test(message)) {
@@ -134,6 +134,9 @@ const summarizePlannerError = (value: unknown) => {
 
   return message.length > 280 ? `${message.slice(0, 279).trimEnd()}…` : message;
 };
+
+const isLeidosTimeoutMessage = (value: unknown) =>
+  /Leidos .* timed out before Flight Service responded|connect timeout|timed out|fetch failed/i.test(String(value || ""));
 
 const roundAltitudeUp = (value: number, increment = 500) => {
   if (!Number.isFinite(value) || value <= 0) return null;
@@ -4756,7 +4759,7 @@ export default function FlightPlanner() {
     onError: (error: any) => {
       setPendingFilingActionAfterSave(null);
       toast({
-        title: "Staging failed",
+        title: isLeidosTimeoutMessage(error?.message) ? "Leidos is taking longer than usual" : "Staging failed",
         description: summarizePlannerError(error?.message),
         variant: "destructive",
       });

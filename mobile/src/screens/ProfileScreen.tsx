@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsAuthenticated, useLogout } from '../utils/auth';
 import { api } from '../services/api';
 import { ConfirmDeletionModal } from '../components/ConfirmDeletionModal';
@@ -104,6 +105,7 @@ function CommandCard({
 }
 
 export default function ProfileScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, user, isLoading } = useIsAuthenticated();
   const logout = useLogout();
   const queryClient = useQueryClient();
@@ -276,7 +278,13 @@ export default function ProfileScreen({ navigation }: any) {
 
   if (!isAuthenticated) {
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: Math.max(insets.top, spacing.sm), paddingBottom: 120 + insets.bottom },
+        ]}
+      >
         <View style={styles.heroPanel}>
           <View style={styles.heroTopRow}>
             <View style={styles.guestAvatar}>
@@ -333,7 +341,13 @@ export default function ProfileScreen({ navigation }: any) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: Math.max(insets.top, spacing.sm), paddingBottom: 120 + insets.bottom },
+      ]}
+    >
       <View style={styles.heroPanel}>
         <View style={styles.heroTopRow}>
           <View style={styles.avatarWrap}>

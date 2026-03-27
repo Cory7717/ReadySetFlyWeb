@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { apiEndpoints } from '../services/api';
 import type { AircraftListing } from '@shared/schema';
@@ -60,6 +61,7 @@ function hourlyRateLabel(item: AircraftListing) {
 }
 
 export default function RentalsScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
   const [keyword, setKeyword] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
@@ -234,7 +236,10 @@ export default function RentalsScreen({ navigation }: Props) {
         data={filteredAircraft || []}
         renderItem={renderAircraft}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[
+          styles.listContainer,
+          { paddingTop: Math.max(insets.top, spacing.sm), paddingBottom: 120 + insets.bottom },
+        ]}
         ListHeaderComponent={
           <>
             <View style={styles.heroPanel}>

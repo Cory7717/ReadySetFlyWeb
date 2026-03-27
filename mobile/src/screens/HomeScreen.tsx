@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ImageBackground, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsAuthenticated } from '../utils/auth';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
@@ -53,6 +54,7 @@ function RailCard({ icon, title, subtitle, onPress }: RailCardProps) {
 }
 
 export default function HomeScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, user, isLoading } = useIsAuthenticated();
   const entitlements = (user as any)?.entitlements;
   const membershipTier = entitlements?.tier || 'free';
@@ -64,9 +66,12 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}
+    >
       <ImageBackground source={WINGTIP_IMAGE} style={styles.hero} imageStyle={styles.heroImage}>
-        <View style={styles.heroOverlay}>
+        <View style={[styles.heroOverlay, { paddingTop: Math.max(52, insets.top + 20) }]}>
           <View style={styles.heroTopRow}>
             <View style={styles.brandRow}>
               <Image source={LOGO_IMAGE} style={styles.logo} resizeMode="contain" />

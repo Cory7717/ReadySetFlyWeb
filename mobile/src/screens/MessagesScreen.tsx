@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiEndpoints } from '../services/api';
 import { RentalMessaging } from '../components/RentalMessaging';
 import { useIsAuthenticated } from '../utils/auth';
@@ -42,6 +43,7 @@ function statusTone(status?: string) {
 }
 
 export default function MessagesScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, user, isLoading: authLoading } = useIsAuthenticated();
   const [selectedRental, setSelectedRental] = useState<string | null>(null);
 
@@ -94,7 +96,7 @@ export default function MessagesScreen({ navigation }: any) {
   if (selectedRental && user) {
     return (
       <View style={styles.container}>
-        <View style={styles.threadHeaderWrap}>
+        <View style={[styles.threadHeaderWrap, { paddingTop: Math.max(insets.top, spacing.sm) }]}>
           <View style={styles.threadHeader}>
             <TouchableOpacity style={styles.backButton} onPress={() => setSelectedRental(null)} activeOpacity={0.92}>
               <Ionicons name="arrow-back" size={20} color={colors.primary} />
@@ -136,7 +138,10 @@ export default function MessagesScreen({ navigation }: any) {
         data={rentals}
         keyExtractor={(item) => item.id}
         renderItem={renderConversation}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingTop: Math.max(insets.top, spacing.sm), paddingBottom: 120 + insets.bottom },
+        ]}
         ListHeaderComponent={
           <>
             <View style={styles.heroPanel}>

@@ -14,6 +14,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import MapView, { Callout, Marker, Polyline, UrlTile } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { activateKeepAwake, deactivateKeepAwake } from 'expo-keep-awake';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createGdl90Listener, TrafficTarget } from '../utils/gdl90';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
@@ -437,6 +438,7 @@ function isWithinHawaii(lat: number, lon: number) {
 export default function FlightPlannerScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated } = useIsAuthenticated();
   const [departure, setDeparture] = useState('KJFK');
   const [destination, setDestination] = useState('KBOS');
@@ -1032,7 +1034,7 @@ export default function FlightPlannerScreen() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [mapStyle, mapRegion, routePoints, resolvedWindsAltitude]);
+  }, [mapStyle, mapRegion, routePoints, windsAltitudeChoice, plannedAltitude]);
 
   useEffect(() => {
     if (!showClouds || showCloudsGlobal) {
@@ -1061,7 +1063,7 @@ export default function FlightPlannerScreen() {
     return () => {
       isActive = false;
     };
-  }, [showClouds, showCloudsGlobal, cloudSource]);
+  }, [mapStyle, mapRegion?.latitude, mapRegion?.longitude, mapRegion?.latitudeDelta, mapRegion?.longitudeDelta]);
 
   useEffect(() => {
     if (!showClouds || cloudFrames.length === 0) {
@@ -1086,7 +1088,7 @@ export default function FlightPlannerScreen() {
         cloudTimerRef.current = null;
       }
     };
-  }, [showClouds, cloudFrames.length]);
+  }, [mapStyle, cloudFrames.length]);
 
   const visibleWindsPoints = useMemo(() => {
     if (mapStyle !== 'winds') return [] as WindsAloftPoint[];
@@ -1311,10 +1313,16 @@ export default function FlightPlannerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [routePoints, hasPrimaryIcao, primaryIcao, resolvedWindsAltitude]);
+  }, [routePoints, departure, windsAltitudeChoice, plannedAltitude]);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: Math.max(insets.top, spacing.sm), paddingBottom: 120 + insets.bottom },
+      ]}
+    >
       <View style={styles.heroPanel}>
         <View style={styles.heroTopRow}>
           <View style={{ flex: 1 }}>

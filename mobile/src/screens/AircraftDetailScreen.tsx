@@ -51,6 +51,11 @@ function SectionCard({
 export default function AircraftDetailScreen({ route, navigation }: Props) {
   const { aircraftId } = route.params;
   const verificationNoticeKey = 'rsf-verification-renter-v1';
+  const openVerification = () => {
+    navigation.getParent()?.navigate('Profile', {
+      screen: 'Verification',
+    });
+  };
 
   useEffect(() => {
     const showNotice = async () => {
@@ -72,7 +77,7 @@ export default function AircraftDetailScreen({ route, navigation }: Props) {
             text: 'Start Verification',
             onPress: async () => {
               await markSeen();
-              navigation.navigate('Verification');
+              openVerification();
             },
           },
         ]

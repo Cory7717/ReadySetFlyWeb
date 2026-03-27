@@ -71,6 +71,34 @@ type ReceiverBridgePayload = {
   traffic?: Array<Record<string, any>>;
   source?: string | null;
   updatedAt?: string | number | null;
+  health?: {
+    status?: "idle" | "healthy" | "traffic-only" | "stale" | null;
+    staleMs?: number | null;
+    bridgeStartedAt?: string | number | null;
+    lastFrameAt?: string | number | null;
+    lastOwnshipAt?: string | number | null;
+    lastTrafficAt?: string | number | null;
+    lastHeartbeatAt?: string | number | null;
+    bridgeAgeMs?: number | null;
+    lastFrameAgeMs?: number | null;
+    lastOwnshipAgeMs?: number | null;
+    lastTrafficAgeMs?: number | null;
+    lastHeartbeatAgeMs?: number | null;
+    warnings?: string[];
+    stats?: {
+      datagramsReceived?: number;
+      framesReceived?: number;
+      validFrames?: number;
+      shortFrames?: number;
+      crcErrors?: number;
+      messagesReceived?: number;
+      ownshipReports?: number;
+      trafficReports?: number;
+      heartbeatReports?: number;
+      unknownReports?: number;
+      trackedTraffic?: number;
+    } | null;
+  } | null;
 };
 
 type SavedFlightPlan = {
@@ -417,6 +445,16 @@ const formatEtaLocal = (value: string | null) => {
   return parsed.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 };
 
+const formatAge = (ageMs: number | null | undefined) => {
+  if (ageMs == null || !Number.isFinite(ageMs) || ageMs < 0) return "--";
+  const seconds = Math.round(ageMs / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  return `${hours}h ago`;
+};
+
 const playCockpitAlertTone = () => {
   if (typeof window === "undefined") return;
   const AudioContextCtor =
@@ -715,6 +753,12 @@ export default function AdsbLive() {
     window.localStorage.setItem(RECEIVER_BRIDGE_URL_KEY, receiverBridgeUrl);
   }, [receiverBridgeUrl]);
 
+  useEffect(() => {
+    if (positionSource === "bridge") {
+      setGeoError(null);
+    }
+  }, [positionSource]);
+
   const beginTracking = useCallback(() => {
     if (positionSource === "device" && !navigator.geolocation) {
       setGeoError("Geolocation is not supported on this device/browser.");
@@ -862,17 +906,106 @@ export default function AdsbLive() {
     },
   });
 
+  const bridgeHealthSummary = useMemo(() => {
+    if (positionSource !== "bridge") {
+      return {
+        status: "idle" as const,
+        label: "Inactive",
+        badgeClass: "border-slate-200 bg-slate-50 text-slate-700",
+        toneClass: "text-muted-foreground",
+        detail: "Switch to Receiver bridge to use a local ADS-B/GDL-90 feed.",
+      };
+    }
+
+    if (!trackingEnabled) {
+      return {
+        status: "idle" as const,
+        label: "Idle",
+        badgeClass: "border-slate-200 bg-slate-50 text-slate-700",
+        toneClass: "text-muted-foreground",
+        detail: "Bridge mode is selected, but live tracking has not started yet.",
+      };
+    }
+
+    if (receiverBridgeQuery.isFetching && !receiverBridgeQuery.data) {
+      return {
+        status: "connecting" as const,
+        label: "Connecting",
+        badgeClass: "border-sky-200 bg-sky-50 text-sky-700",
+        toneClass: "text-sky-700",
+        detail: "Trying to reach the local receiver bridge.",
+      };
+    }
+
+    if (receiverBridgeQuery.error) {
+      return {
+        status: "disconnected" as const,
+        label: "Disconnected",
+        badgeClass: "border-red-200 bg-red-50 text-red-700",
+        toneClass: "text-red-700",
+        detail:
+          receiverBridgeQuery.error instanceof Error
+            ? receiverBridgeQuery.error.message
+            : "Receiver bridge unavailable.",
+      };
+    }
+
+    const health = receiverBridgeQuery.data?.health;
+    const lastFrameAge = formatAge(health?.lastFrameAgeMs ?? null);
+    const trafficCount = health?.stats?.trackedTraffic ?? receiverBridgeQuery.data?.traffic?.length ?? 0;
+    const warningText = health?.warnings?.find(Boolean);
+
+    if (health?.status === "healthy") {
+      return {
+        status: "healthy" as const,
+        label: "Healthy",
+        badgeClass: "border-emerald-200 bg-emerald-50 text-emerald-700",
+        toneClass: "text-emerald-700",
+        detail: `Fresh receiver data. Last frame ${lastFrameAge}. ${trafficCount} tracked traffic target${trafficCount === 1 ? "" : "s"}.`,
+      };
+    }
+
+    if (health?.status === "traffic-only") {
+      return {
+        status: "traffic-only" as const,
+        label: "Traffic only",
+        badgeClass: "border-amber-200 bg-amber-50 text-amber-800",
+        toneClass: "text-amber-800",
+        detail:
+          warningText ||
+          `Receiver traffic is flowing, but ownship has not updated recently. Last frame ${lastFrameAge}.`,
+      };
+    }
+
+    if (health?.status === "stale") {
+      return {
+        status: "stale" as const,
+        label: "Stale",
+        badgeClass: "border-amber-200 bg-amber-50 text-amber-800",
+        toneClass: "text-amber-800",
+        detail: warningText || `Receiver data has gone stale. Last frame ${lastFrameAge}.`,
+      };
+    }
+
+    return {
+      status: "idle" as const,
+      label: "No data yet",
+      badgeClass: "border-slate-200 bg-slate-50 text-slate-700",
+      toneClass: "text-muted-foreground",
+      detail: warningText || "Bridge is reachable, but RSF has not received a valid ownship report yet.",
+    };
+  }, [
+    positionSource,
+    receiverBridgeQuery.data,
+    receiverBridgeQuery.error,
+    receiverBridgeQuery.isFetching,
+    trackingEnabled,
+  ]);
+
   useEffect(() => {
     if (!trackingEnabled || positionSource !== "bridge") return;
     const bridgeOwnship = receiverBridgeQuery.data?.ownship;
     if (!bridgeOwnship || !Number.isFinite(Number(bridgeOwnship.lat)) || !Number.isFinite(Number(bridgeOwnship.lon))) {
-      if (receiverBridgeQuery.error) {
-        setGeoError(
-          receiverBridgeQuery.error instanceof Error
-            ? receiverBridgeQuery.error.message
-            : "Receiver bridge unavailable."
-        );
-      }
       return;
     }
     const nextOwnship: LiveOwnship = {
@@ -1620,6 +1753,22 @@ export default function AdsbLive() {
           </Alert>
         )}
 
+        {positionSource === "bridge" && trackingEnabled && (
+          <Alert
+            className={
+              bridgeHealthSummary.status === "healthy"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                : bridgeHealthSummary.status === "disconnected"
+                  ? "border-red-200 bg-red-50 text-red-950"
+                  : "border-amber-200 bg-amber-50 text-amber-950"
+            }
+          >
+            <Radio className="h-4 w-4" />
+            <AlertTitle>Receiver bridge {bridgeHealthSummary.label.toLowerCase()}</AlertTitle>
+            <AlertDescription>{bridgeHealthSummary.detail}</AlertDescription>
+          </Alert>
+        )}
+
         {trafficAlerts.length > 0 && (
           <Alert className="border-amber-300 bg-amber-50 text-amber-950">
             <ShieldAlert className="h-4 w-4" />
@@ -1849,8 +1998,11 @@ export default function AdsbLive() {
                       className="w-[280px]"
                       placeholder="http://127.0.0.1:3005/rsf-live.json"
                     />
+                    <Badge variant="outline" className={bridgeHealthSummary.badgeClass}>
+                      {bridgeHealthSummary.label}
+                    </Badge>
                     <Button type="button" variant="outline" size="sm" onClick={() => receiverBridgeQuery.refetch()}>
-                      Refresh receiver
+                      Refresh bridge
                     </Button>
                   </>
                 ) : null}
@@ -2218,6 +2370,15 @@ export default function AdsbLive() {
                   <div className="font-semibold">{trackingEnabled && ownship ? "Live" : "Idle"}</div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     {positionSource === "bridge" ? "Receiver bridge" : "Device GPS"}
+                  </div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs text-muted-foreground">Receiver bridge</div>
+                  <div className={`font-semibold ${bridgeHealthSummary.toneClass}`}>{bridgeHealthSummary.label}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {positionSource === "bridge"
+                      ? bridgeHealthSummary.detail
+                      : "Bridge health appears here when receiver mode is selected."}
                   </div>
                 </div>
                 <div className="rounded-lg border p-3">
@@ -2605,9 +2766,10 @@ export default function AdsbLive() {
                 <div className="flex items-start gap-2">
                   <Radio className="mt-0.5 h-4 w-4 text-amber-600" />
                   <div>
-                    <div className="font-medium">Receiver bridge groundwork is live</div>
+                    <div className="font-medium">Receiver bridge mode now reports health and stale data</div>
                     <div className="text-muted-foreground">
-                      RSF can now poll a local receiver bridge for ownship and traffic. Direct raw GDL-90 browser ingest is still the next step.
+                      RSF can poll a local receiver bridge for ownship and traffic and now distinguishes healthy, stale,
+                      traffic-only, and disconnected bridge states. Direct raw GDL-90 browser ingest is still the next step.
                     </div>
                   </div>
                 </div>

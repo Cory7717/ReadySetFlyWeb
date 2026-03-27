@@ -40,6 +40,22 @@ const receivers = [
 const samplePayload = `{
   "source": "local-gdl90-bridge",
   "updatedAt": "2026-03-26T18:25:00Z",
+  "health": {
+    "status": "healthy",
+    "lastFrameAt": "2026-03-26T18:25:00Z",
+    "lastOwnshipAt": "2026-03-26T18:24:59Z",
+    "lastTrafficAt": "2026-03-26T18:24:58Z",
+    "lastHeartbeatAt": "2026-03-26T18:24:57Z",
+    "lastFrameAgeMs": 1200,
+    "warnings": [],
+    "stats": {
+      "validFrames": 482,
+      "heartbeatReports": 97,
+      "ownshipReports": 91,
+      "trafficReports": 294,
+      "trackedTraffic": 5
+    }
+  },
   "ownship": {
     "lat": 30.1975,
     "lon": -97.6664,
@@ -85,9 +101,12 @@ export default function AdsbReceiverHelp() {
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <div>- Start the included bridge with `npm run receiver:bridge`.</div>
+          <div>- On Windows, you can also double-click `scripts/receiver-bridge-launch.cmd` or run `npm run receiver:bridge:windows`.</div>
+          <div>- The bridge also serves a local status page at `http://127.0.0.1:3005/` so you can confirm frames are arriving before you open RSF.</div>
           <div>- In Live Flight Map, switch the source to `Receiver bridge`.</div>
           <div>- Point RSF to a local bridge URL such as `http://127.0.0.1:3005/rsf-live.json`.</div>
-          <div>- The bridge should expose ownship and optional traffic in JSON form.</div>
+          <div>- The bridge now reports health, stale-data timing, heartbeat status, and optional traffic in JSON form.</div>
+          <div>- In RSF, `Healthy` means ownship is fresh, `Traffic only` means traffic is flowing without fresh ownship, and `Stale` means frames have stopped updating.</div>
           <pre className="overflow-x-auto rounded-md border bg-muted/30 p-3 text-xs text-foreground">
             <code>{samplePayload}</code>
           </pre>
@@ -119,6 +138,9 @@ export default function AdsbReceiverHelp() {
           <div>- Confirm your device is connected to the receiver's Wi-Fi.</div>
           <div>- Try port 4000 or 49002.</div>
           <div>- Ensure GPS lock and ADS-B reception on the receiver.</div>
+          <div>- Open `http://127.0.0.1:3005/` to see the bridge status page and confirm ownship/traffic are updating.</div>
+          <div>- If RSF shows `Traffic only`, your receiver is likely sending traffic but not a fresh ownship report yet.</div>
+          <div>- If RSF shows `Stale`, verify receiver power/Wi-Fi and confirm the bridge window is still running.</div>
         </CardContent>
       </Card>
     </div>

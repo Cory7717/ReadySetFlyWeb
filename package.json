@@ -21,6 +21,8 @@
     "test:load:aircraft": "tsx scripts/load-test-aircraft-listings.ts",
     "test:unit": "tsx --test scripts/tests/marketplace-fees.test.ts",
     "receiver:bridge": "node scripts/receiver-bridge.mjs",
+    "receiver:bridge:windows": "powershell -ExecutionPolicy Bypass -File scripts/receiver-bridge-launch.ps1",
+    "receiver:bridge:package": "powershell -ExecutionPolicy Bypass -File scripts/package-receiver-bridge.ps1",
     "seed:aircraft-types": "tsx seed_aircraft_types.ts",
     "import:aircraft-types": "tsx scripts/import-aircraft-types.ts",
     "db:push": "drizzle-kit push"

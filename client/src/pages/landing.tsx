@@ -883,7 +883,7 @@ export default function Landing() {
             {runwayBriefing?.advisory && (
               <div className="rounded-lg border p-3 text-sm">
                 <Label className="mb-2 block text-sm font-semibold">Runway Advisory</Label>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="sr-only">
                   <Badge variant="outline">Recommended: {runwayBriefing.advisory.runway}</Badge>
                   <span className="text-xs text-muted-foreground">
                     Headwind {runwayBriefing.advisory.headwind} kt - Crosswind {runwayBriefing.advisory.crosswind} kt
@@ -1563,6 +1563,14 @@ export default function Landing() {
                   </span>
                   <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#8b6500]/90">
                     - For Passengers
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-[#F0B429]/40 bg-[#F0B429]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8b6500]">
+                    Cabin Brief
+                  </span>
+                  <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#8b6500]/90">
+                    For Passengers
                   </span>
                 </div>
                 <h2 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">

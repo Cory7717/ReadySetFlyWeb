@@ -3,44 +3,69 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 import { gpsTrainerDisclaimer, gpsTrainerUnits } from '@shared/gps-sims';
 
+function highlightColor(index: number) {
+  if (index % 3 === 0) return colors.primary;
+  if (index % 3 === 1) return colors.info;
+  return colors.accent;
+}
+
 export default function GpsSimsHubScreen({ navigation }: any) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>RSF GPS Simulators</Text>
-        <Text style={styles.subtitle}>
-          Functionally accurate GPS workflows for the most common GA avionics stacks.
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>GPS TRAINERS</Text>
+        <Text style={styles.heroTitle}>Rehearse avionics flows before they matter in the airplane.</Text>
+        <Text style={styles.heroSubtitle}>
+          RSF turns common GA GPS stacks into structured training sessions with hotspots, guided tasks,
+          and scenario drills.
         </Text>
       </View>
 
-      <View style={styles.notice}>
-        <Text style={styles.noticeTitle}>Training aid only</Text>
+      <View style={styles.noticeCard}>
+        <View style={styles.noticeHeader}>
+          <Ionicons name="school-outline" size={18} color={colors.warning} />
+          <Text style={styles.noticeTitle}>Training aid only</Text>
+        </View>
         {gpsTrainerDisclaimer.map((note) => (
           <Text key={note} style={styles.noticeItem}>
-            - {note}
+            {note}
           </Text>
         ))}
       </View>
 
       <View style={styles.section}>
-        {gpsTrainerUnits.map((unit) => (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Sim Units</Text>
+          <Text style={styles.sectionSubtitle}>Choose the stack you want to build speed and confidence on.</Text>
+        </View>
+
+        {gpsTrainerUnits.map((unit, index) => (
           <TouchableOpacity
             key={unit.id}
-            style={styles.card}
+            style={styles.unitCard}
             onPress={() => navigation.navigate('GpsSimsUnit', { unitId: unit.id })}
+            activeOpacity={0.92}
           >
-            <Ionicons name="compass-outline" size={24} color="#1e40af" />
-            <View style={styles.cardText}>
-              <Text style={styles.cardTitle}>{unit.title}</Text>
-              <Text style={styles.cardSubtitle}>{unit.subtitle}</Text>
-              <Text style={styles.cardSummary}>{unit.summary}</Text>
-              <View style={styles.highlightRow}>
-                {unit.highlights.map((item) => (
-                  <View key={item} style={styles.badge}>
-                    <Text style={styles.badgeText}>{item}</Text>
-                  </View>
-                ))}
+            <View style={[styles.unitAccent, { backgroundColor: highlightColor(index) }]} />
+            <View style={styles.unitHeader}>
+              <View style={[styles.unitIconWrap, { backgroundColor: `${highlightColor(index)}18` }]}>
+                <Ionicons name="navigate-outline" size={22} color={highlightColor(index)} />
               </View>
+              <View style={styles.unitMeta}>
+                <Text style={styles.unitTitle}>{unit.title}</Text>
+                <Text style={styles.unitSubtitle}>{unit.subtitle}</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={18} color={colors.textSoft} />
+            </View>
+
+            <Text style={styles.unitSummary}>{unit.summary}</Text>
+
+            <View style={styles.tagRow}>
+              {unit.highlights.map((item) => (
+                <View key={item} style={styles.tag}>
+                  <Text style={styles.tagText}>{item}</Text>
+                </View>
+              ))}
             </View>
           </TouchableOpacity>
         ))}
@@ -51,42 +76,127 @@ export default function GpsSimsHubScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.lg },
-  header: { padding: spacing.lg, backgroundColor: colors.surface },
-  title: { ...typography.h2 },
-  subtitle: { marginTop: spacing.xs, color: colors.textMuted },
-  notice: {
-    margin: spacing.md,
-    padding: spacing.md,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  hero: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.floating,
   },
-  noticeTitle: { ...typography.h3, marginBottom: spacing.xs },
-  noticeItem: { fontSize: 12, color: colors.textMuted, marginBottom: 4 },
-  section: { padding: spacing.md },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+  },
+  heroTitle: {
+    ...typography.display,
+    color: '#fff',
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 350,
+  },
+  noticeCard: {
+    marginTop: spacing.lg,
     backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    marginBottom: spacing.sm,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
+    padding: spacing.lg,
     ...shadow.card,
   },
-  cardText: { marginLeft: spacing.sm, flex: 1 },
-  cardTitle: { ...typography.h3 },
-  cardSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  cardSummary: { fontSize: 12, color: colors.text, marginTop: spacing.xs },
-  highlightRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.xs, gap: 6 },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radius.md,
+  noticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  noticeTitle: {
+    ...typography.h3,
+  },
+  noticeItem: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  section: {
+    marginTop: spacing.lg,
+  },
+  sectionHeader: {
+    paddingHorizontal: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  sectionTitle: {
+    ...typography.h2,
+  },
+  sectionSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  unitCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    ...shadow.card,
+  },
+  unitAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 6,
+  },
+  unitHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  unitIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unitMeta: {
+    flex: 1,
+    marginLeft: spacing.sm,
+    marginRight: spacing.xs,
+  },
+  unitTitle: {
+    ...typography.h2,
+  },
+  unitSubtitle: {
+    ...typography.muted,
+    marginTop: 2,
+  },
+  unitSummary: {
+    ...typography.body,
+    marginTop: spacing.md,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  tag: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     backgroundColor: colors.primarySoft,
   },
-  badgeText: { fontSize: 10, color: colors.primary, fontWeight: '600' },
+  tagText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primaryStrong,
+  },
 });

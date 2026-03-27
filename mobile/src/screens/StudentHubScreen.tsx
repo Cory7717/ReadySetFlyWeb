@@ -2,6 +2,89 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
+const trainingDeck = [
+  {
+    title: 'Can I Become a Pilot?',
+    subtitle: 'Quick readiness wizard plus next steps.',
+    icon: 'sparkles-outline',
+    route: 'StudentWizard',
+    accent: colors.primary,
+  },
+  {
+    title: 'Training Roadmap',
+    subtitle: 'See the path from intro flight to checkride.',
+    icon: 'trail-sign-outline',
+    route: 'StudentRoadmap',
+    accent: colors.info,
+  },
+  {
+    title: 'Training Cost Estimator',
+    subtitle: 'Estimate the budget for your certificate.',
+    icon: 'calculator-outline',
+    route: 'StudentCost',
+    accent: colors.accent,
+  },
+  {
+    title: 'Progress Tracker',
+    subtitle: 'Track milestones, lessons, and study pace.',
+    icon: 'speedometer-outline',
+    route: 'StudentProgress',
+    accent: colors.primaryStrong,
+  },
+  {
+    title: 'Written Test Prep',
+    subtitle: 'FAA-aligned study modules and quick quizzes.',
+    icon: 'clipboard-outline',
+    route: 'StudentWritten',
+    accent: colors.warning,
+  },
+  {
+    title: 'Checklists & Preflight',
+    subtitle: 'Core procedures, flows, and lesson prep reminders.',
+    icon: 'list-outline',
+    route: 'StudentChecklists',
+    accent: colors.cockpitMuted,
+  },
+];
+
+const advancedDeck = [
+  {
+    title: 'VOR Trainer',
+    subtitle: 'Radials, OBS, flags, and intercept drills.',
+    icon: 'radio-outline',
+    route: 'StudentVorTrainer',
+    accent: colors.primary,
+  },
+  {
+    title: 'RSF GPS Simulators',
+    subtitle: 'IFR GPS workflows for top avionics stacks.',
+    icon: 'compass-outline',
+    route: 'GpsSimsHub',
+    accent: colors.info,
+  },
+  {
+    title: 'IFR Tools Hub',
+    subtitle: 'Plates, simulators, and IFR planning tools.',
+    icon: 'navigate-outline',
+    route: 'IfrTools',
+    accent: colors.primaryStrong,
+  },
+  {
+    title: 'Independent CFI Syllabi',
+    subtitle: 'ACS-aligned Part 61 templates.',
+    icon: 'school-outline',
+    route: 'StudentSyllabi',
+    accent: colors.accent,
+  },
+  {
+    title: 'Student Weather',
+    subtitle: 'Simplified weather view for training days.',
+    icon: 'cloud-outline',
+    route: 'StudentWeather',
+    accent: colors.radar,
+  },
+];
+
 export default function StudentHubScreen({ navigation }: any) {
   const goToFlightSchools = () => {
     navigation.navigate('Marketplace', {
@@ -10,129 +93,67 @@ export default function StudentHubScreen({ navigation }: any) {
     });
   };
 
+  const renderDeckCard = (item: any) => (
+    <TouchableOpacity
+      key={item.title}
+      style={styles.deckCard}
+      onPress={() => navigation.navigate(item.route)}
+      activeOpacity={0.92}
+    >
+      <View style={[styles.deckIconWrap, { backgroundColor: `${item.accent}18` }]}>
+        <Ionicons name={item.icon as any} size={22} color={item.accent} />
+      </View>
+      <View style={styles.deckMeta}>
+        <Text style={styles.deckTitle}>{item.title}</Text>
+        <Text style={styles.deckSubtitle}>{item.subtitle}</Text>
+      </View>
+      <Ionicons name="arrow-forward" size={18} color={colors.textSoft} />
+    </TouchableOpacity>
+  );
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Student Pilot Hub</Text>
-        <Text style={styles.subtitle}>
-          Tools and checklists to guide your training journey.
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>STUDENT PILOT HUB</Text>
+        <Text style={styles.heroTitle}>A guided training workspace, not just a folder of tools.</Text>
+        <Text style={styles.heroSubtitle}>
+          Use RSF to map the journey, study smarter, and keep training momentum between lessons.
         </Text>
       </View>
 
       <View style={styles.section}>
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentWizard')}>
-          <Ionicons name="sparkles-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Can I Become a Pilot?</Text>
-            <Text style={styles.cardSubtitle}>Quick readiness wizard + next steps.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentRoadmap')}>
-          <Ionicons name="trail-sign-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Training Roadmap</Text>
-            <Text style={styles.cardSubtitle}>Step-by-step path to the checkride.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentCost')}>
-          <Ionicons name="calculator-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Training Cost Estimator</Text>
-            <Text style={styles.cardSubtitle}>Estimate your total training cost.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentProgress')}>
-          <Ionicons name="speedometer-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Progress Tracker</Text>
-            <Text style={styles.cardSubtitle}>Track milestones and study progress.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentWritten')}>
-          <Ionicons name="clipboard-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Written Test Prep</Text>
-            <Text style={styles.cardSubtitle}>FAA-aligned study modules and quizzes.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentVorTrainer')}>
-          <Ionicons name="radio-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>VOR Trainer</Text>
-            <Text style={styles.cardSubtitle}>Radials, OBS, flags, and intercept drills.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('GpsSimsHub')}>
-          <Ionicons name="compass-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>RSF GPS Simulators</Text>
-            <Text style={styles.cardSubtitle}>IFR GPS workflows for top avionics stacks.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('IfrTools')}>
-          <Ionicons name="clipboard-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>IFR Tools Hub</Text>
-            <Text style={styles.cardSubtitle}>Plates, simulators, and IFR planning tools.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentSyllabi')}>
-          <Ionicons name="school-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Independent CFI Syllabi</Text>
-            <Text style={styles.cardSubtitle}>ACS-aligned Part 61 templates.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentChecklists')}>
-          <Ionicons name="list-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Checklists & Preflight</Text>
-            <Text style={styles.cardSubtitle}>Core procedures and lesson prep.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('StudentWeather')}>
-          <Ionicons name="cloud-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Student Weather</Text>
-            <Text style={styles.cardSubtitle}>Simplified training weather view.</Text>
-          </View>
-        </TouchableOpacity>
+        <Text style={styles.sectionTitle}>Training Foundations</Text>
+        <Text style={styles.sectionSubtitle}>Start with the basics that keep your training organized and moving.</Text>
+        {trainingDeck.map(renderDeckCard)}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Calculators</Text>
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('CrosswindCalc')}>
-          <Ionicons name="speedometer-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Crosswind Calculator</Text>
-            <Text style={styles.cardSubtitle}>Practice headwind and crosswind math.</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('DensityAltitude')}>
-          <Ionicons name="analytics-outline" size={24} color="#1e40af" />
-          <View style={styles.cardText}>
-            <Text style={styles.cardTitle}>Density Altitude</Text>
-            <Text style={styles.cardSubtitle}>Pressure + density altitude estimates.</Text>
-          </View>
-        </TouchableOpacity>
+        <Text style={styles.sectionTitle}>Nav & IFR Readiness</Text>
+        <Text style={styles.sectionSubtitle}>Move into instruments, nav trainers, and deeper proficiency tools.</Text>
+        {advancedDeck.map(renderDeckCard)}
       </View>
 
-      <View style={styles.cta}>
+      <View style={styles.quickCalcCard}>
+        <Text style={styles.sectionTitle}>Quick Calculators</Text>
+        <Text style={styles.sectionSubtitle}>Fast support tools for lesson prep and weather decisions.</Text>
+        <View style={styles.quickRow}>
+          <TouchableOpacity style={styles.quickButton} onPress={() => navigation.navigate('CrosswindCalc')} activeOpacity={0.92}>
+            <Ionicons name="speedometer-outline" size={18} color={colors.primary} />
+            <Text style={styles.quickButtonText}>Crosswind</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickButton} onPress={() => navigation.navigate('DensityAltitude')} activeOpacity={0.92}>
+            <Ionicons name="analytics-outline" size={18} color={colors.primary} />
+            <Text style={styles.quickButtonText}>Density Altitude</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.ctaCard}>
         <Text style={styles.ctaTitle}>Ready to start training?</Text>
-        <Text style={styles.ctaSubtitle}>Find a flight school near you.</Text>
-        <TouchableOpacity style={styles.primaryButton} onPress={goToFlightSchools}>
+        <Text style={styles.ctaSubtitle}>Find a flight school near you and turn the plan into action.</Text>
+        <TouchableOpacity style={styles.primaryButton} onPress={goToFlightSchools} activeOpacity={0.92}>
           <Text style={styles.primaryButtonText}>Find Flight Schools</Text>
+          <Ionicons name="arrow-forward" size={18} color="#fff" />
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -141,28 +162,133 @@ export default function StudentHubScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.lg },
-  header: { padding: spacing.lg, backgroundColor: colors.surface },
-  title: { ...typography.h2 },
-  subtitle: { marginTop: spacing.xs, color: colors.textMuted },
-  section: { padding: spacing.md },
-  card: {
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  hero: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.floating,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+  },
+  heroTitle: {
+    ...typography.display,
+    color: '#fff',
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+  },
+  section: {
+    marginTop: spacing.lg,
+  },
+  sectionTitle: {
+    ...typography.h2,
+    paddingHorizontal: spacing.xs,
+  },
+  sectionSubtitle: {
+    ...typography.muted,
+    paddingHorizontal: spacing.xs,
+    marginTop: 4,
+    marginBottom: spacing.md,
+  },
+  deckCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    marginBottom: spacing.sm,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
     ...shadow.card,
   },
-  cardText: { marginLeft: spacing.sm, flex: 1 },
-  cardTitle: { ...typography.h3 },
-  cardSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  cta: { padding: spacing.lg, backgroundColor: colors.surface, margin: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.card },
-  ctaTitle: { ...typography.h3 },
-  ctaSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  primaryButton: { marginTop: spacing.sm, backgroundColor: colors.primary, padding: spacing.sm, borderRadius: radius.md, alignItems: 'center' },
-  primaryButtonText: { color: '#fff', fontWeight: '600' },
+  deckIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deckMeta: {
+    flex: 1,
+    marginLeft: spacing.sm,
+    marginRight: spacing.sm,
+  },
+  deckTitle: {
+    ...typography.h3,
+  },
+  deckSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  quickCalcCard: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadow.card,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  quickButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: 14,
+  },
+  quickButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primaryStrong,
+  },
+  ctaCard: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadow.card,
+  },
+  ctaTitle: {
+    ...typography.h2,
+  },
+  ctaSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  primaryButton: {
+    marginTop: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: radius.lg,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    ...shadow.card,
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
 });

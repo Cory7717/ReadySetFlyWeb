@@ -228,23 +228,27 @@ export default function GpsSimsUnitScreen({ route }: any) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>GPS UNIT TRAINER</Text>
         <Text style={styles.title}>{unit.title}</Text>
-        <Text style={styles.subtitle}>{unit.summary}</Text>
+        <Text style={styles.heroSubtitle}>{unit.summary}</Text>
         <View style={styles.highlightRow}>
           {unit.highlights.map((item) => (
-            <View key={item} style={styles.badge}>
-              <Text style={styles.badgeText}>{item}</Text>
+            <View key={item} style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>{item}</Text>
             </View>
           ))}
         </View>
       </View>
 
-      <View style={styles.notice}>
-        <Text style={styles.noticeTitle}>Training aid only</Text>
+      <View style={styles.noticeCard}>
+        <View style={styles.noticeHeader}>
+          <Ionicons name="school-outline" size={18} color={colors.warning} />
+          <Text style={styles.noticeTitle}>Training aid only</Text>
+        </View>
         {gpsTrainerDisclaimer.map((note) => (
           <Text key={note} style={styles.noticeItem}>
-            - {note}
+            {note}
           </Text>
         ))}
       </View>
@@ -475,23 +479,58 @@ export default function GpsSimsUnitScreen({ route }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.lg },
-  header: { padding: spacing.lg, backgroundColor: colors.surface },
-  title: { ...typography.h2 },
-  subtitle: { marginTop: spacing.xs, color: colors.textMuted },
-  notice: {
-    margin: spacing.md,
-    padding: spacing.md,
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  hero: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.floating,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+  },
+  title: { ...typography.display, color: '#fff', marginTop: spacing.sm },
+  heroSubtitle: { ...typography.body, marginTop: spacing.sm, color: '#dbe4f0' },
+  noticeCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadow.card,
   },
-  noticeTitle: { ...typography.h3, marginBottom: spacing.xs },
-  noticeItem: { fontSize: 12, color: colors.textMuted, marginBottom: 4 },
-  section: { paddingHorizontal: spacing.md, paddingBottom: spacing.md },
+  noticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  noticeTitle: { ...typography.h3 },
+  noticeItem: { ...typography.muted, marginBottom: 4 },
+  section: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
+  },
   sectionTitle: { ...typography.h3, marginBottom: spacing.sm },
   highlightRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.xs },
+  heroBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  heroBadgeText: { fontSize: 10, color: '#eff6ff', fontWeight: '700' },
   badge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -503,13 +542,13 @@ const styles = StyleSheet.create({
   modeButton: {
     flex: 1,
     padding: spacing.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
   },
-  modeButtonActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  modeButtonActive: { backgroundColor: '#edf4ff', borderColor: colors.primary },
   modeButtonText: { fontSize: 12, fontWeight: '600', color: colors.text },
   panelContainer: {
     position: 'relative',
@@ -550,22 +589,22 @@ const styles = StyleSheet.create({
   },
   hotspotDetail: {
     marginTop: spacing.sm,
-    padding: spacing.sm,
-    borderRadius: radius.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
   },
   hotspotTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
   hotspotDescription: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   hotspotPillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
   actionBox: {
     marginTop: spacing.sm,
-    padding: spacing.sm,
-    borderRadius: radius.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
   },
   actionTitle: { fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: 4 },
   actionText: { fontSize: 12, color: colors.textMuted },
@@ -578,19 +617,20 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
   },
   hotspotPillActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   hotspotPillText: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
   hotspotPillTextActive: { color: colors.primary },
   taskButton: {
-    padding: spacing.sm,
-    borderRadius: radius.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: spacing.xs,
+    backgroundColor: colors.surfaceMuted,
   },
-  taskButtonActive: { backgroundColor: colors.primarySoft, borderColor: colors.primary },
+  taskButtonActive: { backgroundColor: '#edf4ff', borderColor: colors.primary },
   taskButtonText: { fontSize: 12, fontWeight: '600', color: colors.text },
   taskHeader: { marginBottom: spacing.xs },
   taskTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
@@ -603,6 +643,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
   },
   resetButtonText: { fontSize: 11, fontWeight: '600', color: colors.text },
   stepsList: { gap: spacing.xs },
@@ -610,11 +651,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    padding: spacing.sm,
-    borderRadius: radius.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
   },
   checkbox: {
     width: 22,
@@ -631,11 +672,11 @@ const styles = StyleSheet.create({
   helperText: { fontSize: 12, color: colors.textMuted },
   tipsBox: {
     marginTop: spacing.sm,
-    padding: spacing.sm,
-    borderRadius: radius.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
   },
   tipsTitle: { fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
   tipItem: { fontSize: 12, color: colors.textMuted, marginBottom: 4 },
@@ -644,8 +685,9 @@ const styles = StyleSheet.create({
   saveButton: {
     alignItems: 'center',
     paddingVertical: spacing.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.primary,
+    ...shadow.card,
   },
   saveButtonDisabled: { backgroundColor: colors.border },
   saveButtonText: { color: '#fff', fontWeight: '600' },

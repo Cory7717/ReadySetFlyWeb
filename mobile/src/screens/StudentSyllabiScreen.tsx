@@ -13,18 +13,22 @@ export default function StudentSyllabiScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Independent CFI Syllabi</Text>
-        <Text style={styles.subtitle}>
-          ACS-aligned Part 61 templates for instructors and student pilots.
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>CFI SYLLABI</Text>
+        <Text style={styles.heroTitle}>Use ACS-aligned templates that keep training structured.</Text>
+        <Text style={styles.heroSubtitle}>
+          Independent instructors and self-driven students can use these syllabi as a structured Part 61 reference.
         </Text>
       </View>
 
-      <View style={styles.notice}>
-        <Text style={styles.noticeTitle}>Compliance notes</Text>
+      <View style={styles.noticeCard}>
+        <View style={styles.noticeHeader}>
+          <Ionicons name="document-text-outline" size={18} color={colors.warning} />
+          <Text style={styles.noticeTitle}>Compliance notes</Text>
+        </View>
         {trainingSyllabusComplianceNotes.map((note) => (
           <Text key={note} style={styles.noticeItem}>
-            - {note}
+            {note}
           </Text>
         ))}
         <Text style={styles.noticeFootnote}>{trainingSyllabusSimulatorNote}</Text>
@@ -37,6 +41,7 @@ export default function StudentSyllabiScreen() {
             <TouchableOpacity
               onPress={() => setExpandedId(isExpanded ? null : syllabus.id)}
               style={styles.cardHeader}
+              activeOpacity={0.92}
             >
               <View style={styles.cardTitleRow}>
                 <Text style={styles.cardTitle}>{syllabus.title}</Text>
@@ -58,7 +63,7 @@ export default function StudentSyllabiScreen() {
                 <Text style={styles.sectionTitle}>Completion standards</Text>
                 {syllabus.completionStandards.map((standard) => (
                   <Text key={standard} style={styles.listItem}>
-                    - {standard}
+                    {standard}
                   </Text>
                 ))}
 
@@ -71,14 +76,14 @@ export default function StudentSyllabiScreen() {
                     <Text style={styles.listLabel}>Ground</Text>
                     {phase.ground.map((item) => (
                       <Text key={item} style={styles.listItem}>
-                        - {item}
+                        {item}
                       </Text>
                     ))}
 
                     <Text style={styles.listLabel}>Flight</Text>
                     {phase.flight.map((item) => (
                       <Text key={item} style={styles.listItem}>
-                        - {item}
+                        {item}
                       </Text>
                     ))}
 
@@ -91,7 +96,7 @@ export default function StudentSyllabiScreen() {
                 <Text style={styles.sectionTitle}>Optional simulator modules</Text>
                 {syllabus.simulatorModules.map((module) => (
                   <Text key={module} style={styles.listItem}>
-                    - {module}
+                    {module}
                   </Text>
                 ))}
                 <Text style={styles.noticeFootnote}>{trainingSyllabusSimulatorNote}</Text>
@@ -106,32 +111,58 @@ export default function StudentSyllabiScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.lg },
-  header: { padding: spacing.lg, backgroundColor: colors.surface },
-  title: { ...typography.h2 },
-  subtitle: { marginTop: spacing.xs, color: colors.textMuted },
-  notice: {
-    margin: spacing.md,
-    padding: spacing.md,
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  hero: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.floating,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+  },
+  heroTitle: {
+    ...typography.display,
+    color: '#fff',
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+  },
+  noticeCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
+    ...shadow.card,
   },
-  noticeTitle: { ...typography.h3, marginBottom: spacing.xs },
-  noticeItem: { fontSize: 12, color: colors.textMuted, marginBottom: 4 },
-  noticeFootnote: { fontSize: 11, color: colors.textMuted, marginTop: spacing.xs },
+  noticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  noticeTitle: { ...typography.h3 },
+  noticeItem: { ...typography.muted, marginBottom: 4 },
+  noticeFootnote: { fontSize: 11, color: colors.textMuted, marginTop: spacing.sm },
   card: {
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.md,
+    marginTop: spacing.lg,
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadow.card,
   },
   cardHeader: {
-    padding: spacing.md,
+    padding: spacing.lg,
   },
   cardTitleRow: {
     flexDirection: 'row',
@@ -140,32 +171,31 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   cardTitle: { ...typography.h3, flex: 1 },
-  cardSubtitle: { marginTop: 4, fontSize: 12, color: colors.textMuted },
+  cardSubtitle: { ...typography.muted, marginTop: 4 },
   badge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radius.md,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primarySoft,
   },
-  badgeText: { fontSize: 10, color: '#fff', fontWeight: '600' },
-  chevron: { marginTop: spacing.xs },
+  badgeText: { fontSize: 10, color: colors.primaryStrong, fontWeight: '700' },
+  chevron: { marginTop: spacing.sm },
   cardBody: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
   },
-  sectionTitle: { ...typography.h3, marginTop: spacing.sm },
-  listLabel: { fontSize: 11, textTransform: 'uppercase', color: colors.textMuted, marginTop: spacing.xs },
-  listItem: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  sectionTitle: { ...typography.h3, marginTop: spacing.md, marginBottom: spacing.sm },
+  listLabel: { fontSize: 11, textTransform: 'uppercase', color: colors.textMuted, marginTop: spacing.sm },
+  listItem: { ...typography.muted, marginTop: 4 },
   phaseCard: {
-    padding: spacing.sm,
-    borderRadius: radius.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surfaceMuted,
     marginTop: spacing.sm,
   },
-  phaseTitle: { fontSize: 14, fontWeight: '600', marginBottom: 2 },
-  phaseSummary: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.xs },
-  stageCheck: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
+  phaseTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+  phaseSummary: { ...typography.muted, marginTop: 2, marginBottom: spacing.xs },
+  stageCheck: { fontSize: 12, color: colors.textMuted, marginTop: spacing.sm },
 });

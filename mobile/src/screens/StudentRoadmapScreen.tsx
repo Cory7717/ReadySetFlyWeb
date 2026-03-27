@@ -17,25 +17,37 @@ const STEPS = [
 export default function StudentRoadmapScreen({ navigation }: any) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Student Pilot Roadmap</Text>
-      <Text style={styles.subtitle}>Typical path to the private pilot checkride.</Text>
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>TRAINING ROADMAP</Text>
+        <Text style={styles.heroTitle}>See the typical path from first lesson to checkride.</Text>
+        <Text style={styles.heroSubtitle}>
+          Use this as a planning guide so the timing, cost, and next milestone are always visible.
+        </Text>
+      </View>
 
       {STEPS.map((step, index) => (
         <View key={step.title} style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.stepIndex}>{index + 1}</Text>
-            <Text style={styles.stepTitle}>{step.title}</Text>
+            <View style={styles.stepBadge}>
+              <Text style={styles.stepBadgeText}>{index + 1}</Text>
+            </View>
+            <View style={styles.stepMeta}>
+              <Text style={styles.stepTitle}>{step.title}</Text>
+              <Text style={styles.stepHint}>{step.action}</Text>
+            </View>
           </View>
-          <Text style={styles.meta}>Time: {step.range}</Text>
-          <Text style={styles.meta}>Cost: {step.cost}</Text>
-          <Text style={styles.tip}>{step.action}</Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaChip}>Time: {step.range}</Text>
+            <Text style={styles.metaChip}>Cost: {step.cost}</Text>
+          </View>
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={() =>
               navigation.navigate('Marketplace', { screen: 'MarketplaceCategory', params: { category: 'Flight Schools' } })
             }
+            activeOpacity={0.92}
           >
-            <Ionicons name="school-outline" size={16} color="#1e40af" />
+            <Ionicons name="school-outline" size={16} color={colors.primaryStrong} />
             <Text style={styles.secondaryButtonText}>Find a Flight School</Text>
           </TouchableOpacity>
         </View>
@@ -46,24 +58,57 @@ export default function StudentRoadmapScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md },
-  title: { ...typography.h2 },
-  subtitle: { marginTop: spacing.xs, color: colors.textMuted, marginBottom: spacing.sm },
-  card: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepIndex: { fontSize: 14, fontWeight: '700', color: colors.primary },
-  stepTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
-  meta: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  tip: { fontSize: 12, color: colors.text, marginTop: 8 },
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  hero: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.floating,
+  },
+  heroEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: '#93c5fd' },
+  heroTitle: { ...typography.display, color: '#fff', marginTop: spacing.sm },
+  heroSubtitle: { ...typography.body, color: '#dbe4f0', marginTop: spacing.sm },
+  card: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
+  },
+  cardHeader: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  stepBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+  },
+  stepBadgeText: { fontSize: 13, fontWeight: '700', color: colors.primaryStrong },
+  stepMeta: { flex: 1 },
+  stepTitle: { ...typography.h3 },
+  stepHint: { ...typography.muted, marginTop: 4 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.md },
+  metaChip: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   secondaryButton: {
+    marginTop: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: spacing.sm,
+    justifyContent: 'center',
+    gap: 8,
     backgroundColor: colors.primarySoft,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.md,
+    paddingVertical: 12,
+    borderRadius: radius.lg,
   },
-  secondaryButtonText: { color: colors.primary, fontWeight: '600', fontSize: 12 },
+  secondaryButtonText: { color: colors.primaryStrong, fontWeight: '700', fontSize: 12 },
 });

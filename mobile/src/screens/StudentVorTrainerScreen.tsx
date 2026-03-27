@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow, spacing, typography } from '../styles/theme';
@@ -61,14 +61,17 @@ export default function StudentVorTrainerScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>VOR Trainer</Text>
-        <Text style={styles.subtitle}>Radials, OBS, flags, and intercept drills.</Text>
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>VOR TRAINER</Text>
+        <Text style={styles.heroTitle}>Make the OBS, flag, and radial picture click faster.</Text>
+        <Text style={styles.heroSubtitle}>
+          Practice the relationship between course selection and station geometry before the nav lesson.
+        </Text>
       </View>
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>OBS to Radial</Text>
-        <Text style={styles.helperText}>Enter an OBS course and pick the flag.</Text>
+        <Text style={styles.sectionSubtitle}>Enter a course and choose the flag to see what radial you are actually on.</Text>
         <View style={styles.row}>
           <TextInput
             style={styles.input}
@@ -80,14 +83,16 @@ export default function StudentVorTrainerScreen() {
           <TouchableOpacity
             style={[styles.toggle, flag === 'to' && styles.toggleActive]}
             onPress={() => setFlag('to')}
+            activeOpacity={0.92}
           >
-            <Text style={styles.toggleText}>TO</Text>
+            <Text style={[styles.toggleText, flag === 'to' && styles.toggleTextActive]}>TO</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.toggle, flag === 'from' && styles.toggleActive]}
             onPress={() => setFlag('from')}
+            activeOpacity={0.92}
           >
-            <Text style={styles.toggleText}>FROM</Text>
+            <Text style={[styles.toggleText, flag === 'from' && styles.toggleTextActive]}>FROM</Text>
           </TouchableOpacity>
         </View>
 
@@ -96,19 +101,20 @@ export default function StudentVorTrainerScreen() {
             <Text style={styles.helperText}>Enter a course between 1 and 360.</Text>
           ) : (
             <>
-              <Text style={styles.resultText}>OBS course: {courseValue}</Text>
-              <Text style={styles.resultText}>Radial (FROM station): {radialFrom}</Text>
+              <Text style={styles.resultLabel}>OBS course</Text>
+              <Text style={styles.resultValue}>{courseValue}</Text>
+              <Text style={styles.resultMeta}>Radial from station: {radialFrom}</Text>
             </>
           )}
         </View>
       </View>
 
       <View style={styles.card}>
-        <View style={styles.scoreRow}>
+        <View style={styles.quizHeader}>
           <Text style={styles.sectionTitle}>Quick Quiz</Text>
-          <Text style={styles.scoreText}>
-            {score.correct}/{score.total}
-          </Text>
+          <View style={styles.scoreBadge}>
+            <Text style={styles.scoreBadgeText}>{score.correct}/{score.total}</Text>
+          </View>
         </View>
         {QUIZ.map((question) => {
           const selected = answers[question.id];
@@ -116,30 +122,31 @@ export default function StudentVorTrainerScreen() {
           return (
             <View key={question.id} style={styles.quizCard}>
               <Text style={styles.quizPrompt}>{question.prompt}</Text>
-              <View style={styles.quizOptions}>
-                {question.options.map((option) => {
-                  const isSelected = selected === option;
-                  const isCorrect = option === question.answer;
-                  return (
-                    <TouchableOpacity
-                      key={option}
-                      style={[
-                        styles.optionButton,
-                        isSelected && styles.optionSelected,
-                        show && isCorrect && styles.optionCorrect,
-                        show && isSelected && !isCorrect && styles.optionIncorrect,
-                      ]}
-                      onPress={() => setAnswers((prev) => ({ ...prev, [question.id]: option }))}
-                    >
-                      <Text style={styles.optionText}>{option}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {question.options.map((option) => {
+                const isSelected = selected === option;
+                const isCorrect = show && option === question.answer;
+                const isIncorrect = show && isSelected && option !== question.answer;
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.option,
+                      isSelected && styles.optionSelected,
+                      isCorrect && styles.optionCorrect,
+                      isIncorrect && styles.optionIncorrect,
+                    ]}
+                    onPress={() => setAnswers((prev) => ({ ...prev, [question.id]: option }))}
+                    activeOpacity={0.92}
+                  >
+                    <Text style={styles.optionText}>{option}</Text>
+                  </TouchableOpacity>
+                );
+              })}
               <TouchableOpacity
                 style={styles.secondaryButton}
                 onPress={() => setRevealed((prev) => ({ ...prev, [question.id]: true }))}
                 disabled={!selected}
+                activeOpacity={0.92}
               >
                 <Text style={styles.secondaryButtonText}>Check answer</Text>
               </TouchableOpacity>
@@ -170,62 +177,128 @@ export default function StudentVorTrainerScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.lg },
-  header: { padding: spacing.lg, backgroundColor: colors.surface },
-  title: { ...typography.h2 },
-  subtitle: { marginTop: spacing.xs, color: colors.textMuted },
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  hero: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.floating,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+  },
+  heroTitle: {
+    ...typography.display,
+    color: '#fff',
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+  },
   card: {
-    margin: spacing.md,
+    marginTop: spacing.lg,
     backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadow.card,
+  },
+  sectionTitle: { ...typography.h2 },
+  sectionSubtitle: { ...typography.muted, marginTop: 4 },
+  row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, alignItems: 'center' },
+  input: {
+    flex: 1,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: colors.text,
+  },
+  toggle: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+  },
+  toggleActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  toggleText: { fontSize: 13, fontWeight: '700', color: colors.textMuted },
+  toggleTextActive: { color: colors.primaryStrong },
+  resultBox: {
+    marginTop: spacing.md,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  resultLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.3, textTransform: 'uppercase', color: colors.textMuted },
+  resultValue: { ...typography.metric, marginTop: spacing.xs },
+  resultMeta: { ...typography.muted, marginTop: spacing.xs },
+  helperText: { ...typography.muted, marginTop: spacing.sm },
+  quizHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  scoreBadge: {
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  scoreBadgeText: { fontSize: 12, fontWeight: '700', color: colors.primaryStrong },
+  quizCard: {
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  quizPrompt: { ...typography.h3, marginBottom: spacing.sm },
+  option: {
     padding: spacing.md,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.xs,
+  },
+  optionSelected: { borderColor: colors.primary },
+  optionCorrect: { backgroundColor: '#dcfce7', borderColor: '#16a34a' },
+  optionIncorrect: { backgroundColor: '#fee2e2', borderColor: colors.danger },
+  optionText: { fontSize: 12, color: colors.text },
+  secondaryButton: {
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    borderRadius: radius.lg,
     ...shadow.card,
   },
-  sectionTitle: { ...typography.h3, marginBottom: spacing.sm },
-  helperText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  input: {
-    flex: 1,
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  toggle: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceMuted,
-  },
-  toggleActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  toggleText: { fontSize: 12, fontWeight: '600', color: colors.text },
-  resultBox: {
+  secondaryButtonText: { color: '#fff', fontWeight: '700' },
+  tipRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'center',
     marginTop: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    backgroundColor: colors.surfaceMuted,
   },
-  resultText: { fontSize: 13, color: colors.text },
-  scoreRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  scoreText: { fontSize: 13, color: colors.textMuted },
-  quizCard: { marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
-  quizPrompt: { fontSize: 13, fontWeight: '600', color: colors.text },
-  quizOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
-  optionButton: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  optionSelected: { borderColor: colors.primary },
-  optionCorrect: { borderColor: '#10b981', backgroundColor: '#ecfdf5' },
-  optionIncorrect: { borderColor: '#ef4444', backgroundColor: '#fef2f2' },
-  optionText: { fontSize: 12, color: colors.text },
-  secondaryButton: { marginTop: spacing.sm, borderWidth: 1, borderColor: colors.primary, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center' },
-  secondaryButtonText: { color: colors.primary, fontWeight: '600' },
-  tipRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs },
-  tipText: { fontSize: 12, color: colors.text },
+  tipText: { ...typography.body, flex: 1 },
 });

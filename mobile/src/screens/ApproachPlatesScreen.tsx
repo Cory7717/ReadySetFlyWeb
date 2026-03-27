@@ -43,40 +43,55 @@ export default function ApproachPlatesScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.searchBar}>
-        <TextInput
-          style={styles.input}
-          value={icao}
-          onChangeText={setIcao}
-          autoCapitalize="characters"
-          placeholder="Enter ICAO (e.g., KJFK)"
-          maxLength={5}
-        />
-        <TouchableOpacity style={styles.searchButton} onPress={handleSearch} disabled={loading}>
-          {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="search" size={18} color="#fff" />}
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.metaRow}>
-        <Text style={styles.metaText}>Plates for {icao.toUpperCase()}</Text>
-        {fetchedAt && <Text style={styles.metaText}>Updated {new Date(fetchedAt).toLocaleString()}</Text>}
-      </View>
-
       <FlatList
         data={plates}
         keyExtractor={(item, index) => `${item.url}-${index}`}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          <>
+            <View style={styles.hero}>
+              <Text style={styles.heroEyebrow}>APPROACH PLATES</Text>
+              <Text style={styles.heroTitle}>Pull the current plate set without leaving your IFR flow.</Text>
+              <Text style={styles.heroSubtitle}>
+                Search by airport, review the current set, and open the exact plate you need.
+              </Text>
+            </View>
+
+            <View style={styles.searchCard}>
+              <Text style={styles.sectionTitle}>Search by ICAO</Text>
+              <Text style={styles.sectionSubtitle}>Enter the airport you want to brief.</Text>
+              <View style={styles.searchRow}>
+                <TextInput
+                  style={styles.input}
+                  value={icao}
+                  onChangeText={setIcao}
+                  autoCapitalize="characters"
+                  placeholder="Enter ICAO (e.g., KJFK)"
+                  maxLength={5}
+                />
+                <TouchableOpacity style={styles.searchButton} onPress={handleSearch} disabled={loading} activeOpacity={0.92}>
+                  {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="search" size={18} color="#fff" />}
+                </TouchableOpacity>
+              </View>
+              <View style={styles.metaRow}>
+                <Text style={styles.metaText}>Plates for {icao.toUpperCase()}</Text>
+                {fetchedAt && <Text style={styles.metaText}>Updated {new Date(fetchedAt).toLocaleString()}</Text>}
+              </View>
+            </View>
+          </>
+        }
         ListEmptyComponent={
           !loading ? (
             <View style={styles.emptyState}>
-              <Ionicons name="document-text-outline" size={32} color="#9ca3af" />
-              <Text style={styles.emptyText}>No plates found yet. Try another ICAO.</Text>
+              <Ionicons name="document-text-outline" size={34} color={colors.textSoft} />
+              <Text style={styles.emptyTitle}>No plates loaded yet</Text>
+              <Text style={styles.emptyText}>Search an airport to pull the latest available FAA plates.</Text>
             </View>
           ) : null
         }
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => openPlate(item.url)}>
-            <View style={styles.cardText}>
+          <TouchableOpacity style={styles.card} onPress={() => openPlate(item.url)} activeOpacity={0.92}>
+            <View style={styles.cardMeta}>
               <Text style={styles.cardTitle} numberOfLines={2} ellipsizeMode="tail">
                 {item.name}
               </Text>
@@ -86,7 +101,7 @@ export default function ApproachPlatesScreen() {
                 </Text>
               )}
             </View>
-            <Ionicons name="open-outline" size={20} color="#1e40af" />
+            <Ionicons name="open-outline" size={20} color={colors.primary} />
           </TouchableOpacity>
         )}
       />
@@ -95,41 +110,119 @@ export default function ApproachPlatesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: spacing.md },
-  searchBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  input: {
-    flex: 1,
+  container: { flex: 1, backgroundColor: colors.background },
+  listContent: { padding: spacing.sm, paddingBottom: 120 },
+  hero: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.floating,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+  },
+  heroTitle: {
+    ...typography.display,
+    color: '#fff',
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+  },
+  searchCard: {
+    marginTop: spacing.lg,
     backgroundColor: colors.surface,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    padding: spacing.lg,
+    ...shadow.card,
+  },
+  sectionTitle: {
+    ...typography.h2,
+  },
+  sectionSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: 14,
     fontSize: 16,
+    color: colors.text,
   },
   searchButton: {
     backgroundColor: colors.primary,
-    padding: spacing.sm,
-    borderRadius: radius.md,
-    marginLeft: spacing.sm,
+    width: 50,
+    height: 50,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.card,
   },
-  metaRow: { flexDirection: 'column', gap: 4, marginBottom: spacing.sm },
-  metaText: { fontSize: 12, color: colors.textMuted, flexWrap: 'wrap' },
-  listContent: { paddingBottom: 20 },
+  metaRow: {
+    marginTop: spacing.md,
+    gap: 4,
+  },
+  metaText: {
+    ...typography.muted,
+  },
+  emptyState: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    alignItems: 'center',
+    ...shadow.card,
+  },
+  emptyTitle: {
+    ...typography.h3,
+    marginTop: spacing.sm,
+  },
+  emptyText: {
+    ...typography.muted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
   card: {
+    marginTop: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    padding: spacing.md,
-    borderRadius: radius.lg,
-    marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
     ...shadow.card,
   },
-  cardText: { flex: 1, marginRight: spacing.sm },
-  cardTitle: { ...typography.h3 },
-  cardSubtitle: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  emptyState: { alignItems: 'center', marginTop: 32 },
-  emptyText: { marginTop: 8, color: colors.textMuted },
+  cardMeta: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  cardTitle: {
+    ...typography.h3,
+  },
+  cardSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
 });

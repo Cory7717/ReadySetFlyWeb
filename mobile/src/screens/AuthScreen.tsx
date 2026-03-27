@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
-  StyleSheet, 
-  KeyboardAvoidingView, 
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   ActivityIndicator,
   Alert,
-  Linking
+  Linking,
 } from 'react-native';
 import { useLogin, useRegister } from '../utils/auth';
 import { useNavigation } from '@react-navigation/native';
@@ -22,6 +22,20 @@ import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://readysetfly-api.onrender.com';
 
 WebBrowser.maybeCompleteAuthSession();
+
+type FeaturePillProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+};
+
+function FeaturePill({ icon, label }: FeaturePillProps) {
+  return (
+    <View style={styles.featurePill}>
+      <Ionicons name={icon} size={14} color="#dbeafe" />
+      <Text style={styles.featurePillText}>{label}</Text>
+    </View>
+  );
+}
 
 export default function AuthScreen() {
   const navigation = useNavigation<any>();
@@ -39,7 +53,6 @@ export default function AuthScreen() {
 
   const handleDeepLink = useCallback(async (event: { url: string }) => {
     const url = event.url;
-    console.log('Deep link received:', url);
 
     if (url.startsWith('readysetfly://oauth-callback')) {
       const params = new URLSearchParams(url.split('?')[1]);
@@ -63,8 +76,7 @@ export default function AuthScreen() {
           const data = await response.json();
           await SecureStore.setItemAsync('accessToken', data.accessToken);
           await SecureStore.setItemAsync('refreshToken', data.refreshToken);
-            // The auth state will be updated automatically by the App component
-            navigation.replace('ProfileHome');
+          navigation.replace('ProfileHome');
         } catch (error) {
           console.error('OAuth exchange error:', error);
           Alert.alert('Error', 'Failed to complete OAuth login');
@@ -73,12 +85,11 @@ export default function AuthScreen() {
         }
       }
     }
-  }, []);
+  }, [navigation]);
 
   useEffect(() => {
-
     const subscription = Linking.addEventListener('url', handleDeepLink);
-    
+
     Linking.getInitialURL().then((url) => {
       if (url) {
         handleDeepLink({ url });
@@ -100,8 +111,6 @@ export default function AuthScreen() {
         await handleDeepLink({ url: result.url });
       } else if (result.type === 'cancel') {
         Alert.alert('Cancelled', 'OAuth login was cancelled');
-      } else if (result.type === 'dismiss') {
-        console.log('OAuth browser dismissed');
       }
     } catch (error) {
       console.error('OAuth error:', error);
@@ -112,7 +121,6 @@ export default function AuthScreen() {
   };
 
   const handleSubmit = async () => {
-    // Basic validation
     if (!email || !password) {
       Alert.alert('Error', 'Please fill in all required fields');
       return;
@@ -142,7 +150,6 @@ export default function AuthScreen() {
         });
         navigation.replace('ProfileHome');
       }
-      // Navigation handled by auth state change
     } catch (error: any) {
       const message = error.response?.data?.error || error.message || 'Authentication failed';
       Alert.alert('Error', message);
@@ -152,56 +159,91 @@ export default function AuthScreen() {
   const isLoading = loginMutation.isPending || registerMutation.isPending || isOAuthLoading;
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView 
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Ionicons name="airplane" size={60} color="#1e40af" />
-          <Text style={styles.title}>Ready Set Fly</Text>
-          <Text style={styles.subtitle}>
-            {isLogin ? 'Welcome back!' : 'Create your account'}
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <View style={styles.hero}>
+          <View style={styles.heroBadge}>
+            <Ionicons name="navigate" size={14} color="#bfdbfe" />
+            <Text style={styles.heroBadgeText}>RSF ACCOUNT</Text>
+          </View>
+          <Text style={styles.heroTitle}>Plan on the web. Fly in the app.</Text>
+          <Text style={styles.heroSubtitle}>
+            Sign in to sync your routes, logbook, rentals, alerts, and cockpit workflow across every RSF surface.
           </Text>
+          <View style={styles.featureRow}>
+            <FeaturePill icon="map-outline" label="Flight plans" />
+            <FeaturePill icon="book-outline" label="Logbook sync" />
+            <FeaturePill icon="airplane-outline" label="Live cockpit tools" />
+          </View>
         </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          {!isLogin && (
-            <>
-              <View style={styles.row}>
-                <View style={[styles.inputContainer, styles.halfWidth]}>
-                  <Text style={styles.label}>First Name</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={firstName}
-                    onChangeText={setFirstName}
-                    placeholder="John"
-                    autoCapitalize="words"
-                    testID="input-firstname"
-                  />
-                </View>
+        <View style={styles.authCard}>
+          <View style={styles.modeRow}>
+            <TouchableOpacity
+              style={[styles.modeButton, isLogin && styles.modeButtonActive]}
+              onPress={() => {
+                setIsLogin(true);
+                setPassword('');
+                setConfirmPassword('');
+              }}
+              activeOpacity={0.92}
+            >
+              <Text style={[styles.modeButtonText, isLogin && styles.modeButtonTextActive]}>Sign In</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeButton, !isLogin && styles.modeButtonActive]}
+              onPress={() => {
+                setIsLogin(false);
+                setPassword('');
+                setConfirmPassword('');
+              }}
+              activeOpacity={0.92}
+            >
+              <Text style={[styles.modeButtonText, !isLogin && styles.modeButtonTextActive]}>Create Account</Text>
+            </TouchableOpacity>
+          </View>
 
-                <View style={[styles.inputContainer, styles.halfWidth]}>
-                  <Text style={styles.label}>Last Name</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={lastName}
-                    onChangeText={setLastName}
-                    placeholder="Doe"
-                    autoCapitalize="words"
-                    testID="input-lastname"
-                  />
-                </View>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>{isLogin ? 'Welcome back' : 'Create your RSF account'}</Text>
+            <Text style={styles.cardSubtitle}>
+              {isLogin
+                ? 'Pick up where you left off with synced plans, tools, and pilot workspace data.'
+                : 'A free account unlocks saved planning, rental access, and member-only workflow continuity.'}
+            </Text>
+          </View>
+
+          {!isLogin && (
+            <View style={styles.row}>
+              <View style={[styles.inputGroup, styles.halfWidth]}>
+                <Text style={styles.label}>First name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  placeholder="John"
+                  autoCapitalize="words"
+                  testID="input-firstname"
+                />
               </View>
-            </>
+
+              <View style={[styles.inputGroup, styles.halfWidth]}>
+                <Text style={styles.label}>Last name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={lastName}
+                  onChangeText={setLastName}
+                  placeholder="Doe"
+                  autoCapitalize="words"
+                  testID="input-lastname"
+                />
+              </View>
+            </View>
           )}
 
-          <View style={styles.inputContainer}>
+          <View style={styles.inputGroup}>
             <Text style={styles.label}>Email</Text>
             <TextInput
               style={styles.input}
@@ -215,14 +257,14 @@ export default function AuthScreen() {
             />
           </View>
 
-          <View style={styles.inputContainer}>
+          <View style={styles.inputGroup}>
             <Text style={styles.label}>Password</Text>
             <View style={styles.passwordContainer}>
               <TextInput
                 style={styles.passwordInput}
                 value={password}
                 onChangeText={setPassword}
-                placeholder="••••••••"
+                placeholder="........"
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -235,23 +277,23 @@ export default function AuthScreen() {
                 onPress={() => setShowPassword(!showPassword)}
                 testID="button-toggle-password"
               >
-                <Ionicons 
-                  name={showPassword ? "eye-off" : "eye"} 
-                  size={24} 
-                  color="#6b7280" 
+                <Ionicons
+                  name={showPassword ? 'eye-off' : 'eye'}
+                  size={20}
+                  color={colors.textSoft}
                 />
               </TouchableOpacity>
             </View>
           </View>
 
           {!isLogin && (
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Confirm Password</Text>
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Confirm password</Text>
               <TextInput
                 style={styles.input}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
-                placeholder="••••••••"
+                placeholder="........"
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -262,52 +304,51 @@ export default function AuthScreen() {
             </View>
           )}
 
-          {/* Submit Button */}
           <TouchableOpacity
             style={[styles.submitButton, isLoading && styles.submitButtonDisabled]}
             onPress={handleSubmit}
             disabled={isLoading}
+            activeOpacity={0.92}
             testID="button-submit"
           >
-            {(loginMutation.isPending || registerMutation.isPending) ? (
-              <ActivityIndicator color="#ffffff" />
+            {loginMutation.isPending || registerMutation.isPending ? (
+              <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.submitButtonText}>
-                {isLogin ? 'Sign In' : 'Create Account'}
-              </Text>
+              <>
+                <Text style={styles.submitButtonText}>{isLogin ? 'Sign In' : 'Create Account'}</Text>
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
+              </>
             )}
           </TouchableOpacity>
 
-          {/* Divider */}
           <View style={styles.dividerContainer}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or continue with</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Google OAuth Button */}
           <TouchableOpacity
             style={styles.googleButton}
             onPress={handleGoogleLogin}
             disabled={isLoading}
+            activeOpacity={0.92}
             testID="button-google-oauth"
           >
             {isOAuthLoading ? (
-              <ActivityIndicator color="#1e40af" />
+              <ActivityIndicator color={colors.primary} />
             ) : (
               <>
-                <Ionicons name="logo-google" size={20} color="#1e40af" />
-                <Text style={styles.googleButtonText}>Google</Text>
+                <Ionicons name="logo-google" size={18} color={colors.primary} />
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
               </>
             )}
           </TouchableOpacity>
 
-          {/* Toggle between login and register */}
-          <View style={styles.toggleContainer}>
-            <Text style={styles.toggleText}>
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>
+              {isLogin ? "Don't have an account?" : 'Already have an account?'}
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 setIsLogin(!isLogin);
                 setPassword('');
@@ -315,9 +356,7 @@ export default function AuthScreen() {
               }}
               testID="button-toggle-mode"
             >
-              <Text style={styles.toggleLink}>
-                {isLogin ? 'Sign Up' : 'Sign In'}
-              </Text>
+              <Text style={styles.footerLink}>{isLogin ? 'Create one' : 'Sign in'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -333,129 +372,222 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.xl,
+    padding: spacing.sm,
+    paddingBottom: 120,
   },
-  header: {
+  hero: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.floating,
+  },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.xl,
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(147,197,253,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(147,197,253,0.22)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: colors.primary,
+  heroBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    color: '#bfdbfe',
+  },
+  heroTitle: {
+    ...typography.display,
+    color: '#fff',
+    marginTop: spacing.md,
+    maxWidth: 320,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 350,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
     marginTop: spacing.md,
   },
-  subtitle: {
-    fontSize: 15,
-    color: colors.textMuted,
-    marginTop: spacing.sm,
+  featurePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
-  form: {
-    width: '100%',
+  featurePillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#eff6ff',
+  },
+  authCard: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadow.card,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.lg,
+    padding: 4,
+  },
+  modeButton: {
+    flex: 1,
+    borderRadius: radius.md,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modeButtonActive: {
+    backgroundColor: colors.surface,
+    ...shadow.card,
+  },
+  modeButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  modeButtonTextActive: {
+    color: colors.primaryStrong,
+  },
+  cardHeader: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  cardTitle: {
+    ...typography.h1,
+  },
+  cardSubtitle: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.sm,
   },
   halfWidth: {
     flex: 1,
   },
-  inputContainer: {
-    marginBottom: 20,
+  inputGroup: {
+    marginBottom: spacing.md,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
     color: colors.text,
     marginBottom: spacing.xs,
   },
   input: {
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    borderRadius: radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     fontSize: 16,
-    backgroundColor: colors.surface,
+    color: colors.text,
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
   },
   passwordInput: {
     flex: 1,
-    padding: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
   },
   eyeIcon: {
-    padding: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   submitButton: {
+    marginTop: spacing.xs,
     backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    padding: spacing.md,
+    borderRadius: radius.lg,
+    paddingVertical: 15,
     alignItems: 'center',
-    marginTop: spacing.sm,
-    ...shadow.card,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    ...shadow.floating,
   },
   submitButtonDisabled: {
-    backgroundColor: '#94a3b8',
+    backgroundColor: '#8aa2bb',
   },
   submitButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: spacing.lg,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: colors.border,
   },
   dividerText: {
-    color: colors.textMuted,
-    fontSize: 13,
     marginHorizontal: spacing.md,
+    fontSize: 12,
+    color: colors.textMuted,
   },
   googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.sm,
+    borderRadius: radius.lg,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
     ...shadow.card,
   },
   googleButtonText: {
-    color: colors.primary,
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primaryStrong,
   },
-  toggleContainer: {
+  footerRow: {
+    marginTop: spacing.lg,
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 24,
+    alignItems: 'center',
+    gap: 4,
   },
-  toggleText: {
+  footerText: {
     fontSize: 13,
     color: colors.textMuted,
   },
-  toggleLink: {
+  footerLink: {
     fontSize: 13,
+    fontWeight: '700',
     color: colors.primary,
-    fontWeight: '600',
   },
 });

@@ -50,56 +50,71 @@ export default function TfrsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={styles.title}>TFR Map (List)</Text>
-        <Text style={styles.subtitle}>Temporary Flight Restrictions powered by FAA SWIM (US-only).</Text>
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>TFR WATCH</Text>
+        <Text style={styles.heroTitle}>Check temporary restrictions before the route locks in.</Text>
+        <Text style={styles.heroSubtitle}>
+          Search by airport and scan active FAA SWIM restrictions without leaving the RSF workflow.
+        </Text>
       </View>
 
-      <View style={styles.searchRow}>
-        <TextInput
-          style={styles.input}
-          value={icao}
-          onChangeText={setIcao}
-          onSubmitEditing={handleSearch}
-          autoCapitalize="characters"
-          placeholder="ICAO (e.g., KAUS)"
-        />
-        <TouchableOpacity style={styles.primaryButton} onPress={handleSearch}>
-          <Ionicons name="search" size={16} color="#fff" />
-          <Text style={styles.primaryButtonText}>Search</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => refetch()}>
-          <Ionicons name="refresh" size={16} color="#1e40af" />
-        </TouchableOpacity>
+      <View style={styles.searchCard}>
+        <Text style={styles.sectionTitle}>Search by ICAO</Text>
+        <Text style={styles.sectionSubtitle}>Filter the active list around a specific airport.</Text>
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.input}
+            value={icao}
+            onChangeText={setIcao}
+            onSubmitEditing={handleSearch}
+            autoCapitalize="characters"
+            placeholder="ICAO (e.g., KAUS)"
+          />
+          <TouchableOpacity style={styles.primaryButton} onPress={handleSearch} activeOpacity={0.92}>
+            <Ionicons name="search" size={16} color="#fff" />
+            <Text style={styles.primaryButtonText}>Search</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => refetch()} activeOpacity={0.92}>
+            <Ionicons name="refresh" size={16} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <View style={styles.card}>
+      <View style={styles.resultsCard}>
         <Text style={styles.sectionTitle}>Active TFRs</Text>
+        <Text style={styles.sectionSubtitle}>
+          Verify with official FAA sources before flight.
+        </Text>
         {isLoading ? (
-          <ActivityIndicator color="#1e40af" />
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
         ) : features.length ? (
           features.slice(0, 12).map((feature, index) => {
             const props = feature.properties || {};
             return (
               <View key={`${props.notamId || 'tfr'}-${index}`} style={styles.tfrCard}>
-                <Text style={styles.tfrTitle}>{props.notamId || 'TFR'}</Text>
+                <View style={styles.tfrHeader}>
+                  <Text style={styles.tfrTitle}>{props.notamId || 'TFR'}</Text>
+                  {!!props.tfrType && <Text style={styles.tfrBadge}>{props.tfrType}</Text>}
+                </View>
                 {!!props.location && <Text style={styles.tfrMeta}>{props.location}</Text>}
                 {!!props.reason && <Text style={styles.tfrMeta}>Reason: {props.reason}</Text>}
-                {!!props.tfrType && <Text style={styles.tfrMeta}>Type: {props.tfrType}</Text>}
                 {!!props.altitude && <Text style={styles.tfrMeta}>Altitude: {props.altitude}</Text>}
                 {(props.effectiveAt || props.expiresAt) && (
                   <Text style={styles.tfrMeta}>
                     {props.effectiveAt ? `Effective ${props.effectiveAt}` : ''}
-                    {props.expiresAt ? ` · Expires ${props.expiresAt}` : ''}
+                    {props.expiresAt ? ` | Expires ${props.expiresAt}` : ''}
                   </Text>
                 )}
               </View>
             );
           })
         ) : (
-          <Text style={styles.helperText}>No TFRs available yet.</Text>
+          <View style={styles.emptyState}>
+            <Ionicons name="warning-outline" size={32} color={colors.textSoft} />
+            <Text style={styles.emptyTitle}>No TFRs loaded</Text>
+            <Text style={styles.emptyText}>No active restrictions are available for this search yet.</Text>
+          </View>
         )}
-        <Text style={styles.helperText}>Verify with official sources before flight.</Text>
       </View>
     </ScrollView>
   );
@@ -107,29 +122,70 @@ export default function TfrsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.lg },
-  header: {
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  hero: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
     padding: spacing.lg,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    ...shadow.floating,
   },
-  title: { ...typography.h2 },
-  subtitle: { marginTop: spacing.xs, fontSize: 14, color: colors.textMuted },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+  },
+  heroTitle: {
+    ...typography.display,
+    color: '#fff',
+    marginTop: spacing.sm,
+    maxWidth: 340,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+  },
+  searchCard: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadow.card,
+  },
+  resultsCard: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    ...shadow.card,
+  },
+  sectionTitle: {
+    ...typography.h2,
+  },
+  sectionSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
   searchRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    padding: spacing.lg,
+    marginTop: spacing.md,
     alignItems: 'center',
   },
   input: {
     flex: 1,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    backgroundColor: colors.surfaceMuted,
+    color: colors.text,
   },
   primaryButton: {
     flexDirection: 'row',
@@ -137,38 +193,59 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+    ...shadow.card,
   },
-  primaryButtonText: { color: '#fff', fontWeight: '600' },
+  primaryButtonText: { color: '#fff', fontWeight: '700' },
   secondaryButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
   },
-  card: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
+  loading: {
+    marginTop: spacing.lg,
+  },
+  tfrCard: {
     padding: spacing.md,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.surface,
-    ...shadow.card,
+    backgroundColor: colors.surfaceMuted,
+    marginTop: spacing.sm,
   },
-  sectionTitle: { ...typography.h3, marginBottom: spacing.sm },
-  helperText: { fontSize: 12, color: colors.textMuted },
-  tfrCard: {
-    padding: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    marginBottom: spacing.xs,
+  tfrHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  tfrTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
-  tfrMeta: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  tfrTitle: { fontSize: 13, fontWeight: '700', color: colors.text, flex: 1 },
+  tfrBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.primaryStrong,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  tfrMeta: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
+  emptyState: {
+    marginTop: spacing.lg,
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+  },
+  emptyTitle: {
+    ...typography.h3,
+    marginTop: spacing.sm,
+  },
+  emptyText: {
+    ...typography.muted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
 });

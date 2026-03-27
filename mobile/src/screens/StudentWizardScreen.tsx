@@ -82,6 +82,7 @@ export default function StudentWizardScreen({ navigation }: any) {
         <TouchableOpacity
           style={styles.primaryButton}
           onPress={() => navigation.navigate('Marketplace', { screen: 'MarketplaceCategory', params: { category: 'Flight Schools' } })}
+          activeOpacity={0.92}
         >
           <Text style={styles.primaryButtonText}>Find Flight Schools</Text>
         </TouchableOpacity>
@@ -91,24 +92,28 @@ export default function StudentWizardScreen({ navigation }: any) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Pilot Readiness Wizard</Text>
-      <Text style={styles.subtitle}>Step {Math.min(step + 1, STEPS.length)} of {STEPS.length}</Text>
-
-      <View style={styles.card}>
-        <Text style={styles.stepTitle}>{step < STEPS.length ? STEPS[step] : 'Summary'}</Text>
-        {renderStep()}
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>READINESS WIZARD</Text>
+        <Text style={styles.heroTitle}>Get a first-pass answer to whether the path fits you.</Text>
+        <Text style={styles.heroSubtitle}>
+          Work through your goals, budget, time, medical picture, and location to frame the right next step.
+        </Text>
       </View>
+
+      <View style={styles.progressCard}>
+        <Text style={styles.progressLabel}>Step {Math.min(step + 1, STEPS.length)} of {STEPS.length}</Text>
+        <Text style={styles.sectionTitle}>{step < STEPS.length ? STEPS[step] : 'Summary'}</Text>
+      </View>
+
+      <View style={styles.card}>{renderStep()}</View>
 
       <View style={styles.actions}>
         {step > 0 && (
-          <TouchableOpacity style={styles.secondaryButton} onPress={back}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={back} activeOpacity={0.92}>
             <Text style={styles.secondaryButtonText}>Back</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={next}
-        >
+        <TouchableOpacity style={styles.primaryButton} onPress={next} activeOpacity={0.92}>
           <Text style={styles.primaryButtonText}>{step >= STEPS.length ? 'Done' : 'Next'}</Text>
         </TouchableOpacity>
       </View>
@@ -118,24 +123,21 @@ export default function StudentWizardScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md },
-  title: { ...typography.h2 },
-  subtitle: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
-  card: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
-  stepTitle: { ...typography.h3, marginBottom: spacing.sm },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surfaceMuted,
-  },
-  actions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md, gap: 8 },
-  primaryButton: { backgroundColor: colors.primary, padding: spacing.sm, borderRadius: radius.md, alignItems: 'center', flex: 1 },
-  primaryButtonText: { color: '#fff', fontWeight: '600' },
-  secondaryButton: { backgroundColor: '#e2e8f0', padding: spacing.sm, borderRadius: radius.md, alignItems: 'center', flex: 1 },
-  secondaryButtonText: { color: '#111827', fontWeight: '600' },
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  hero: { backgroundColor: colors.cockpit, borderRadius: radius.xl, padding: spacing.lg, ...shadow.floating },
+  heroEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: '#93c5fd' },
+  heroTitle: { ...typography.display, color: '#fff', marginTop: spacing.sm },
+  heroSubtitle: { ...typography.body, color: '#dbe4f0', marginTop: spacing.sm },
+  progressCard: { marginTop: spacing.lg, backgroundColor: colors.surface, padding: spacing.lg, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  progressLabel: { fontSize: 11, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase' },
+  sectionTitle: { ...typography.h2, marginTop: spacing.xs },
+  card: { marginTop: spacing.lg, backgroundColor: colors.surface, padding: spacing.lg, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, paddingHorizontal: spacing.md, paddingVertical: 14, backgroundColor: colors.surfaceMuted },
+  actions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.lg, gap: 8 },
+  primaryButton: { backgroundColor: colors.primary, paddingVertical: 14, borderRadius: radius.lg, alignItems: 'center', flex: 1, ...shadow.card },
+  primaryButtonText: { color: '#fff', fontWeight: '700' },
+  secondaryButton: { backgroundColor: colors.surfaceMuted, paddingVertical: 14, borderRadius: radius.lg, alignItems: 'center', flex: 1, borderWidth: 1, borderColor: colors.border },
+  secondaryButtonText: { color: colors.text, fontWeight: '700' },
   summary: { gap: 8 },
   summaryTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
   summaryText: { fontSize: 13, color: colors.text },

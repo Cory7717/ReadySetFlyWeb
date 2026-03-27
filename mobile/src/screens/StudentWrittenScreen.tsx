@@ -38,10 +38,18 @@ export default function StudentWrittenScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Written Test Prep</Text>
-      <Text style={styles.subtitle}>FAA-aligned mini modules and quick quizzes.</Text>
+      <View style={styles.hero}>
+        <Text style={styles.heroEyebrow}>WRITTEN TEST PREP</Text>
+        <Text style={styles.heroTitle}>Review the concepts that most often stall momentum.</Text>
+        <Text style={styles.heroSubtitle}>
+          Use quick topic drills to stay current between lessons and build stronger test recall.
+        </Text>
+      </View>
 
       <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Study Topics</Text>
+        <Text style={styles.sectionSubtitle}>Choose a subject and run a fast knowledge check.</Text>
+
         {TOPICS.map((item) => (
           <TouchableOpacity
             key={item.id}
@@ -51,6 +59,7 @@ export default function StudentWrittenScreen() {
               setChoice(null);
               setShowResult(false);
             }}
+            activeOpacity={0.92}
           >
             <Text style={styles.topicTitle}>{item.title}</Text>
             <Text style={styles.topicSummary}>{item.summary}</Text>
@@ -60,6 +69,7 @@ export default function StudentWrittenScreen() {
 
       {topic && (
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{topic.title}</Text>
           <Text style={styles.questionTitle}>{topic.question}</Text>
           {topic.choices.map((option, index) => {
             const isSelected = choice === index;
@@ -75,6 +85,7 @@ export default function StudentWrittenScreen() {
                   isIncorrect && styles.choiceIncorrect,
                 ]}
                 onPress={() => setChoice(index)}
+                activeOpacity={0.92}
               >
                 <Text style={styles.choiceText}>{option}</Text>
               </TouchableOpacity>
@@ -84,12 +95,13 @@ export default function StudentWrittenScreen() {
             style={styles.primaryButton}
             onPress={() => setShowResult(true)}
             disabled={choice === null}
+            activeOpacity={0.92}
           >
             <Text style={styles.primaryButtonText}>Check Answer</Text>
           </TouchableOpacity>
           {showResult && (
             <Text style={styles.resultText}>
-              {choice === topic.answer ? 'Correct!' : `Correct answer: ${topic.choices[topic.answer]}`}
+              {choice === topic.answer ? 'Correct.' : `Correct answer: ${topic.choices[topic.answer]}`}
             </Text>
           )}
         </View>
@@ -100,21 +112,72 @@ export default function StudentWrittenScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md },
-  title: { ...typography.h2 },
-  subtitle: { marginTop: spacing.xs, color: colors.textMuted, marginBottom: spacing.sm },
-  card: { backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, ...shadow.card },
-  topicItem: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  topicItemActive: { backgroundColor: colors.primarySoft },
-  topicTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
-  topicSummary: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
-  questionTitle: { fontSize: 14, fontWeight: '600', marginBottom: spacing.sm, color: colors.text },
-  choice: { padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.xs },
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  hero: {
+    backgroundColor: colors.cockpit,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    ...shadow.floating,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+  },
+  heroTitle: {
+    ...typography.display,
+    color: '#fff',
+    marginTop: spacing.sm,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+  },
+  card: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
+  },
+  sectionTitle: { ...typography.h2 },
+  sectionSubtitle: { ...typography.muted, marginTop: 4, marginBottom: spacing.md },
+  topicItem: {
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    marginBottom: spacing.sm,
+  },
+  topicItemActive: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  topicTitle: { ...typography.h3 },
+  topicSummary: { ...typography.muted, marginTop: 4 },
+  questionTitle: { ...typography.h3, marginBottom: spacing.md },
+  choice: {
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.xs,
+    backgroundColor: colors.surfaceMuted,
+  },
   choiceSelected: { borderColor: colors.primary },
   choiceCorrect: { backgroundColor: '#dcfce7', borderColor: '#16a34a' },
   choiceIncorrect: { backgroundColor: '#fee2e2', borderColor: colors.danger },
   choiceText: { fontSize: 12, color: colors.text },
-  primaryButton: { backgroundColor: colors.primary, padding: spacing.sm, borderRadius: radius.md, alignItems: 'center', marginTop: spacing.xs },
-  primaryButtonText: { color: '#fff', fontWeight: '600' },
-  resultText: { marginTop: spacing.xs, color: colors.text, fontSize: 12 },
+  primaryButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    ...shadow.card,
+  },
+  primaryButtonText: { color: '#fff', fontWeight: '700' },
+  resultText: { marginTop: spacing.sm, color: colors.text, fontSize: 12, fontWeight: '600' },
 });

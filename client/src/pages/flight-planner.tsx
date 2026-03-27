@@ -1156,6 +1156,11 @@ export default function FlightPlanner() {
   const [guestFlightPlanFiles, setGuestFlightPlanFiles] = useState(() => getAnonFlightPlanFileCount());
   const [activeTab, setActiveTab] = useState<FlightPlannerTab>("route");
   const [returnToFileAfterSave, setReturnToFileAfterSave] = useState(false);
+  const [amendWorkflowPlanId, setAmendWorkflowPlanId] = useState<string | null>(null);
+  const [pendingFilingActionAfterSave, setPendingFilingActionAfterSave] = useState<{
+    planId: string;
+    action: "amend";
+  } | null>(null);
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
   const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string } | null>(null);
@@ -4084,6 +4089,8 @@ export default function FlightPlanner() {
       window.localStorage.removeItem(FLIGHT_PLANNER_DRAFT_KEY);
     }
     setReturnToFileAfterSave(false);
+    setPendingFilingActionAfterSave(null);
+    setAmendWorkflowPlanId(null);
     setEditingPlan(null);
       setForm({
         title: "",
@@ -4396,8 +4403,10 @@ export default function FlightPlanner() {
     const canSubmitLiveAmend = canSubmitAmendForPlan(plan);
     setEditingPlan(plan);
     setReturnToFileAfterSave(false);
+    setPendingFilingActionAfterSave(null);
 
     if (!canSubmitLiveAmend) {
+      setAmendWorkflowPlanId(null);
       setActiveTab("route");
       toast({
         title: "Plan loaded to edit and refile",
@@ -4406,10 +4415,11 @@ export default function FlightPlanner() {
       return;
     }
 
-    setActiveTab("file");
+    setAmendWorkflowPlanId(plan.id);
+    setActiveTab("route");
     toast({
       title: "Filed plan loaded for amendment",
-      description: "Make any needed changes, then use Save and continue to filing before you submit the live Amend action.",
+      description: "Make your changes, then click Amend again in File & Save to save the updates and submit the amended plan to Leidos.",
     });
   };
 
@@ -4453,6 +4463,10 @@ export default function FlightPlanner() {
     onSuccess: (savedPlan: FlightPlan) => {
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       setEditingPlan(savedPlan);
+      setPendingFilingActionAfterSave(null);
+      if (!savedPlan.filingIsLive || String(savedPlan.filingStatus || "").toLowerCase() !== "filed") {
+        setAmendWorkflowPlanId(null);
+      }
       if (returnToFileAfterSave) {
         setActiveTab("file");
         setReturnToFileAfterSave(false);
@@ -4469,6 +4483,7 @@ export default function FlightPlanner() {
       });
     },
     onError: (error: any) => {
+      setPendingFilingActionAfterSave(null);
       setReturnToFileAfterSave(false);
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
     },
@@ -4516,6 +4531,17 @@ export default function FlightPlanner() {
       if (updatedPlan) {
         setEditingPlan(updatedPlan);
       }
+      if (pendingFilingActionAfterSave && updatedPlan) {
+        setActiveTab("file");
+        setReturnToFileAfterSave(false);
+        toast({
+          title: "Flight plan updated",
+          description: "Submitting the amended plan to Leidos.",
+        });
+        filingActionMutation.mutate({ planId: updatedPlan.id, action: pendingFilingActionAfterSave.action });
+        setPendingFilingActionAfterSave(null);
+        return;
+      }
       if (returnToFileAfterSave && updatedPlan) {
         setActiveTab("file");
         setReturnToFileAfterSave(false);
@@ -4532,6 +4558,7 @@ export default function FlightPlanner() {
       });
     },
     onError: (error: any) => {
+      setPendingFilingActionAfterSave(null);
       setReturnToFileAfterSave(false);
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
     },
@@ -4634,6 +4661,11 @@ export default function FlightPlanner() {
   const currentSavedPlanStatus = filingStatusLabel(currentSavedPlan?.filingStatus);
   const currentSavedPlanCanAmend = canSubmitAmendForPlan(currentSavedPlan);
   const hasCurrentSavedPlan = Boolean(currentSavedPlan?.id);
+  const currentPlanAmendWorkflowActive = Boolean(
+    currentSavedPlan?.id &&
+    amendWorkflowPlanId &&
+    currentSavedPlan.id === amendWorkflowPlanId,
+  );
 
   const filingActionMutation = useMutation({
     mutationFn: async ({ planId, action }: { planId: string; action: "file" | "amend" | "activate" | "cancel" | "close" }) => {
@@ -4642,12 +4674,19 @@ export default function FlightPlanner() {
     },
     onSuccess: (result: any, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      if (result?.plan) {
+        setEditingPlan(result.plan);
+      }
+      if (variables.action === "amend" || variables.action === "file" || variables.action === "cancel" || variables.action === "close" || variables.action === "activate") {
+        setAmendWorkflowPlanId(null);
+      }
       toast({
         title: `${variables.action[0].toUpperCase()}${variables.action.slice(1)} ${result?.live ? "submitted" : "staged"}`,
         description: result?.message || "The provider handoff was recorded.",
       });
     },
     onError: (error: any) => {
+      setPendingFilingActionAfterSave(null);
       toast({
         title: "Staging failed",
         description: summarizePlannerError(error?.message),
@@ -4981,7 +5020,11 @@ export default function FlightPlanner() {
                 <button
                   key={`recent-${plan.id}`}
                   type="button"
-                  onClick={() => setEditingPlan(plan)}
+                  onClick={() => {
+                    setAmendWorkflowPlanId(null);
+                    setPendingFilingActionAfterSave(null);
+                    setEditingPlan(plan);
+                  }}
                   className="min-w-[230px] rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-left transition-colors hover:bg-slate-200"
                 >
                   <div className="truncate text-sm font-semibold text-slate-900">{plan.title || `${plan.departure} to ${plan.destination}`}</div>
@@ -7172,11 +7215,19 @@ export default function FlightPlanner() {
                       });
                       return;
                     }
-                    filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "amend" });
+                    if (!currentPlanAmendWorkflowActive) {
+                      beginAmendWorkflow(currentSavedPlan!);
+                      return;
+                    }
+                    setActiveTab("file");
+                    setPendingFilingActionAfterSave({ planId: currentSavedPlan!.id, action: "amend" });
+                    updatePlanMutation.mutate(currentSavedPlan!.id);
                   }}
-                  disabled={filingActionMutation.isPending}
+                  disabled={filingActionMutation.isPending || updatePlanMutation.isPending}
                 >
-                  {currentSavedPlanCanAmend ? "Amend" : "Refile instead of amend"}
+                  {currentSavedPlanCanAmend
+                    ? (currentPlanAmendWorkflowActive ? "Submit Amend" : "Amend")
+                    : "Refile instead of amend"}
                 </Button>
                 {currentSavedPlanFlightRules === "VFR" && (
                   <>
@@ -7214,6 +7265,11 @@ export default function FlightPlanner() {
                   Download filing summary
                 </Button>
               </div>
+              {currentPlanAmendWorkflowActive && currentSavedPlanCanAmend && (
+                <div className="text-xs text-muted-foreground">
+                  Amend mode is active for this filed plan. Make your changes anywhere in the planner, then click <span className="font-medium text-foreground">Submit Amend</span> here to save the updates and send the amended plan to Leidos.
+                </div>
+              )}
               {!currentSavedPlanCanAmend && (
                 <div className="text-xs text-muted-foreground">
                   Live Amend requires a successfully filed Leidos plan with a stored version stamp. If this is a draft, older staged copy, or filed record without version tracking, save your edits and use File to submit the updated plan.
@@ -7398,7 +7454,15 @@ export default function FlightPlanner() {
                     {plan.filingPendingAction && (
                       <Badge variant="secondary">Pending {plan.filingPendingAction}</Badge>
                     )}
-                    <Button size="sm" variant="outline" onClick={() => setEditingPlan(plan)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setAmendWorkflowPlanId(null);
+                        setPendingFilingActionAfterSave(null);
+                        setEditingPlan(plan);
+                      }}
+                    >
                       Edit
                     </Button>
                     <Button size="sm" variant="destructive" onClick={() => deleteMutation.mutate(plan.id)}>

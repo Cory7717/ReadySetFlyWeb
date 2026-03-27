@@ -805,6 +805,19 @@ export default function FlightPlannerScreen() {
     () => profiles.find((p) => p.id === selectedProfileId) || null,
     [profiles, selectedProfileId]
   );
+  const activeAircraftLabel = useMemo(() => {
+    if (effectiveProfile?.name) return effectiveProfile.name;
+    if (selectedType) return `${selectedType.make} ${selectedType.model}`;
+    return 'Custom aircraft';
+  }, [effectiveProfile?.name, selectedType]);
+  const routeHeadline = useMemo(() => {
+    const dep = departure.trim().toUpperCase();
+    const dest = destination.trim().toUpperCase();
+    if (ICAO_REGEX.test(dep) && ICAO_REGEX.test(dest)) {
+      return `${dep} to ${dest}`;
+    }
+    return 'Build your next route';
+  }, [departure, destination]);
 
   useEffect(() => {
     if (effectiveProfile) {
@@ -1302,17 +1315,66 @@ export default function FlightPlannerScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Flight Planner</Text>
-        <Text style={styles.sectionSubtitle}>Build a route, estimate time and fuel, then save with RSF Pro.</Text>
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>RSF Pro</Text>
-          <Text style={styles.helperText}>Saved plans, per-leg breakdowns, and export tools follow your existing RSF membership.</Text>
+      <View style={styles.heroPanel}>
+        <View style={styles.heroTopRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroEyebrow}>RSF FLIGHT PLANNER</Text>
+            <Text style={styles.heroTitle}>{routeHeadline}</Text>
+            <Text style={styles.heroSubtitle}>
+              Map-first planning with live weather, receiver-aware cockpit context, and filing-ready route review.
+            </Text>
+          </View>
+          <View style={styles.heroBadge}>
+            <Text style={styles.heroBadgeText}>Mobile flagship</Text>
+          </View>
+        </View>
+
+        <View style={styles.heroMetricRow}>
+          <View style={styles.heroMetricCard}>
+            <Text style={styles.heroMetricLabel}>Aircraft</Text>
+            <Text style={styles.heroMetricValue}>{activeAircraftLabel}</Text>
+          </View>
+          <View style={styles.heroMetricCard}>
+            <Text style={styles.heroMetricLabel}>Route</Text>
+            <Text style={styles.heroMetricValue}>
+              {routeSummary ? `${routeSummary.totalNm.toFixed(0)} NM` : 'Not built'}
+            </Text>
+          </View>
+          <View style={styles.heroMetricCard}>
+            <Text style={styles.heroMetricLabel}>Live status</Text>
+            <Text style={styles.heroMetricValue}>
+              {gpsEnabled || trafficEnabled ? 'Cockpit on' : 'Preflight'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.heroMetricRow}>
+          <View style={styles.heroMetricCard}>
+            <Text style={styles.heroMetricLabel}>Weather watch</Text>
+            <Text style={styles.heroMetricValue}>{routeRiskLabel}</Text>
+          </View>
+          <View style={styles.heroMetricCard}>
+            <Text style={styles.heroMetricLabel}>ETA / ETE</Text>
+            <Text style={styles.heroMetricValue}>
+              {routeProgress?.etaText || routeSummary ? 'Active' : 'Pending'}
+            </Text>
+          </View>
+          <View style={styles.heroMetricCard}>
+            <Text style={styles.heroMetricLabel}>Hazard flags</Text>
+            <Text style={styles.heroMetricValue}>
+              {routeVariationNotes.length > 0 ? `${routeVariationNotes.length} notes` : 'Clear'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.heroActionRow}>
+          <TouchableOpacity style={styles.heroPrimaryAction} onPress={buildRoute} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.heroPrimaryActionText}>Build route</Text>}
+          </TouchableOpacity>
           <TouchableOpacity
-            style={styles.secondaryButton}
+            style={styles.heroSecondaryAction}
             onPress={() => navigation?.navigate?.('LogbookPro')}
           >
-            <Text style={styles.secondaryButtonText}>View membership details</Text>
+            <Text style={styles.heroSecondaryActionText}>Membership</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -2295,10 +2357,122 @@ export default function FlightPlannerScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingBottom: spacing.lg },
-  section: { padding: spacing.md, backgroundColor: colors.surface, marginBottom: spacing.sm, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  content: { padding: spacing.sm, paddingBottom: 120 },
+  heroPanel: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: '#ffffff',
+    marginTop: 10,
+  },
+  heroSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 320,
+  },
+  heroBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  heroBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  heroMetricRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  heroMetricCard: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  heroMetricLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+  },
+  heroMetricValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginTop: 6,
+  },
+  heroActionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  heroPrimaryAction: {
+    flex: 1,
+    borderRadius: radius.lg,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+  },
+  heroPrimaryActionText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  heroSecondaryAction: {
+    borderRadius: radius.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+  heroSecondaryActionText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  section: {
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.sm,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
+  },
   sectionTitle: { ...typography.h3, marginBottom: spacing.sm },
-  sectionSubtitle: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.sm },
+  sectionSubtitle: { fontSize: 12, color: colors.textMuted, marginBottom: spacing.sm, lineHeight: 18 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.text, marginTop: spacing.xs },
   fieldHelper: { fontSize: 11, color: colors.textMuted, marginBottom: spacing.xs },
   input: {
@@ -2312,18 +2486,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   primaryButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryStrong,
     borderRadius: radius.md,
-    padding: spacing.sm,
+    paddingVertical: 13,
     alignItems: 'center',
   },
-  primaryButtonText: { color: '#fff', fontWeight: '600' },
+  primaryButtonText: { color: '#fff', fontWeight: '700' },
   secondaryButton: {
     backgroundColor: colors.primarySoft,
     borderRadius: radius.md,
-    padding: spacing.sm,
+    paddingVertical: 13,
     alignItems: 'center',
     marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   secondaryButtonText: { color: colors.primary, fontWeight: '600' },
   list: { marginBottom: spacing.sm },
@@ -2355,7 +2531,7 @@ const styles = StyleSheet.create({
   autoCalcText: { fontSize: 12, color: colors.primary, fontWeight: '600' },
   legRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
   legText: { fontSize: 13, color: colors.textMuted },
-  suggestionBox: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
+  suggestionBox: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.sm, marginBottom: spacing.sm, backgroundColor: colors.surfaceMuted },
   suggestionTitle: { fontSize: 13, fontWeight: '600', color: colors.text },
   suggestionText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
   suggestionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
@@ -2433,7 +2609,7 @@ const styles = StyleSheet.create({
   },
   windMarker: { alignItems: 'center', justifyContent: 'center' },
   calloutText: { fontSize: 12, color: colors.text },
-  instrumentPanel: { marginTop: spacing.sm, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
+  instrumentPanel: { marginTop: spacing.sm, padding: spacing.sm, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceMuted },
   instrumentTitle: { fontSize: 12, fontWeight: '700', color: colors.text, marginBottom: spacing.xs },
   instrumentRow: { flexDirection: 'row', gap: spacing.sm },
   instrumentBox: { flex: 1, padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface },

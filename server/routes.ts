@@ -8656,9 +8656,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const membershipPartnerOfferRedeemSchema = z.object({
+    slug: z.string().min(2).optional(),
+    memberNumber: z.string().min(1).optional(),
+    claimToken: z.string().min(12).optional(),
+  });
+
+  const membershipPartnerOfferValidateSchema = z.object({
     slug: z.string().min(2),
     memberNumber: z.string().min(1),
   });
+
+  const signMembershipPartnerClaimToken = (payload: {
+    offerId: string;
+    slug: string;
+    memberId: string;
+    normalizedMemberNumber: string;
+  }) =>
+    jwt.sign(
+      {
+        type: "membership_partner_offer_claim",
+        ...payload,
+      },
+      marketingSecret,
+      { expiresIn: "7d" }
+    );
+
+  const verifyMembershipPartnerClaimToken = (token: string) => {
+    try {
+      return jwt.verify(token, marketingSecret) as {
+        type?: string;
+        offerId: string;
+        slug: string;
+        memberId: string;
+        normalizedMemberNumber: string;
+      };
+    } catch {
+      return null;
+    }
+  };
 
   const parseMembershipPartnerMembers = (raw: string | undefined) => {
     const seen = new Set<string>();
@@ -8715,14 +8750,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/membership-partner-offers/redeem", isAuthenticated, async (req: any, res) => {
+  app.post("/api/membership-partner-offers/validate-member", async (req, res) => {
     try {
-      const userId = getRequestUserId(req);
-      if (!userId) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      const parsed = membershipPartnerOfferRedeemSchema.safeParse(req.body);
+      const parsed = membershipPartnerOfferValidateSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.format() });
       }
@@ -8741,6 +8771,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const member = await storage.getMembershipPartnerOfferMemberByNumber(offer.id, normalizedMemberNumber);
       if (!member) {
         return res.status(400).json({ error: "Member number not recognized for this offer" });
+      }
+
+      if (member.redeemedAt) {
+        return res.status(409).json({ error: "That member number has already been redeemed" });
+      }
+
+      const claimToken = signMembershipPartnerClaimToken({
+        offerId: offer.id,
+        slug: offer.slug,
+        memberId: member.id,
+        normalizedMemberNumber,
+      });
+
+      res.json({
+        success: true,
+        claimToken,
+        offer: {
+          id: offer.id,
+          name: offer.name,
+          partnerName: offer.partnerName,
+          slug: offer.slug,
+          tier: offer.tier,
+          durationDays: offer.durationDays,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to validate membership partner offer member:", error);
+      res.status(500).json({ error: "Failed to validate member number" });
+    }
+  });
+
+  app.post("/api/membership-partner-offers/redeem", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getRequestUserId(req);
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const parsed = membershipPartnerOfferRedeemSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.format() });
+      }
+
+      let slug = "";
+      let normalizedMemberNumber = "";
+      let tokenMemberId = "";
+      if (parsed.data.claimToken) {
+        const claim = verifyMembershipPartnerClaimToken(parsed.data.claimToken);
+        if (!claim || claim.type !== "membership_partner_offer_claim") {
+          return res.status(400).json({ error: "This partner offer claim is invalid or expired" });
+        }
+        slug = normalizeMembershipOfferSlug(claim.slug);
+        normalizedMemberNumber = claim.normalizedMemberNumber;
+        tokenMemberId = claim.memberId;
+      } else {
+        slug = normalizeMembershipOfferSlug(parsed.data.slug || "");
+        normalizedMemberNumber = normalizePartnerMemberNumber(parsed.data.memberNumber || "");
+      }
+
+      if (!slug || !normalizedMemberNumber) {
+        return res.status(400).json({ error: "Offer and member number are required" });
+      }
+
+      const offer = await storage.getMembershipPartnerOfferBySlug(slug);
+      if (!offer || !offer.isActive) {
+        return res.status(404).json({ error: "Offer not found" });
+      }
+
+      const member = await storage.getMembershipPartnerOfferMemberByNumber(offer.id, normalizedMemberNumber);
+      if (!member) {
+        return res.status(400).json({ error: "Member number not recognized for this offer" });
+      }
+      if (tokenMemberId && member.id !== tokenMemberId) {
+        return res.status(400).json({ error: "This partner offer claim does not match the member record" });
       }
 
       if (member.redeemedByUserId && member.redeemedByUserId !== userId) {
@@ -12550,9 +12654,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const members = parseMembershipPartnerMembers(result.data.memberNumbersText);
-      if (!members.length) {
-        return res.status(400).json({ error: "Add at least one member number for this offer" });
-      }
 
       const normalizedSlug = normalizeMembershipOfferSlug(result.data.slug);
       if (!normalizedSlug) {
@@ -12565,7 +12666,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         slug: normalizedSlug,
         createdBy: adminId || undefined,
       });
-      await storage.addMembershipPartnerOfferMembers(created.id, members);
+      if (members.length) {
+        await storage.addMembershipPartnerOfferMembers(created.id, members);
+      }
       res.status(201).json(await getMembershipPartnerOfferSummary(created));
     } catch (error: any) {
       if (error.code === "23505") {

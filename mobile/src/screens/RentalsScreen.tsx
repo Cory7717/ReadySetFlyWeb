@@ -1,89 +1,206 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, ImageBackground, TextInput, Modal, ScrollView } from 'react-native';
+import { useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RentalsStackParamList } from '../navigation/RentalsStack';
 import { apiEndpoints } from '../services/api';
 import type { AircraftListing } from '@shared/schema';
-
-const WINGTIP_IMAGE = require('../../assets/wingtip.jpg');
+import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 type Props = NativeStackScreenProps<RentalsStackParamList, 'RentalsList'>;
+
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTile}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function FilterChip({
+  label,
+  value,
+  onClear,
+}: {
+  label: string;
+  value: string;
+  onClear: () => void;
+}) {
+  return (
+    <TouchableOpacity style={styles.filterChip} onPress={onClear} activeOpacity={0.92}>
+      <Text style={styles.filterChipText}>
+        {label}: {value}
+      </Text>
+      <Ionicons name="close" size={14} color={colors.primary} />
+    </TouchableOpacity>
+  );
+}
+
+function aircraftLocation(item: AircraftListing) {
+  const parts = [item.airportCode, item.city, item.state].filter(Boolean);
+  if (parts.length > 0) return parts.join(' • ');
+  return item.location || 'Location pending';
+}
+
+function hourlyRateLabel(item: AircraftListing) {
+  const numericRate = Number(item.hourlyRate || 0);
+  return `$${numericRate.toFixed(0)}/hr`;
+}
 
 export default function RentalsScreen({ navigation }: Props) {
   const [keyword, setKeyword] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
-  const [radius, setRadius] = useState('100');
+  const [radiusValue, setRadiusValue] = useState('100');
   const [showFilterModal, setShowFilterModal] = useState(false);
 
   const { data: aircraft, isLoading, error, refetch } = useQuery({
     queryKey: ['/api/aircraft'],
     queryFn: async () => {
       const response = await apiEndpoints.aircraft.getAll();
-      return response.data;
+      return response.data as AircraftListing[];
     },
   });
 
-  // Filter aircraft based on search criteria
-  const filteredAircraft = aircraft?.filter((item) => {
-    if (keyword) {
-      const searchText = `${item.make} ${item.model} ${item.registration}`.toLowerCase();
-      if (!searchText.includes(keyword.toLowerCase())) {
-        return false;
+  const filteredAircraft = useMemo(() => {
+    const allAircraft = aircraft || [];
+
+    return allAircraft.filter((item) => {
+      if (keyword.trim()) {
+        const searchText = [
+          item.make,
+          item.model,
+          item.registration,
+          item.category,
+          item.airportCode,
+          item.city,
+          item.state,
+          item.location,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        if (!searchText.includes(keyword.trim().toLowerCase())) {
+          return false;
+        }
       }
-    }
-    if (city && item.location) {
-      if (!item.location.toLowerCase().includes(city.toLowerCase())) {
-        return false;
+
+      if (city.trim()) {
+        const cityText = `${item.city || ''} ${item.location || ''}`.toLowerCase();
+        if (!cityText.includes(city.trim().toLowerCase())) {
+          return false;
+        }
       }
-    }
-    if (state && item.location) {
-      if (!item.location.toLowerCase().includes(state.toLowerCase())) {
-        return false;
+
+      if (state.trim()) {
+        const stateText = `${item.state || ''} ${item.location || ''}`.toLowerCase();
+        if (!stateText.includes(state.trim().toLowerCase())) {
+          return false;
+        }
       }
-    }
-    // Note: Radius filtering would require geocoding/distance calculation
-    // For now, we just filter by keyword, city, and state
-    return true;
-  });
+
+      return true;
+    });
+  }, [aircraft, city, keyword, state]);
+
+  const featuredCount = useMemo(
+    () => (filteredAircraft || []).filter((item) => item.isFeatured).length,
+    [filteredAircraft]
+  );
+
+  const avgRate = useMemo(() => {
+    if (!filteredAircraft?.length) return 0;
+    const total = filteredAircraft.reduce((sum, item) => sum + Number(item.hourlyRate || 0), 0);
+    return total / filteredAircraft.length;
+  }, [filteredAircraft]);
+
+  const filtersActive = Boolean(keyword || city || state || radiusValue !== '100');
 
   const renderAircraft = ({ item }: { item: AircraftListing }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.aircraftCard}
       onPress={() => navigation.navigate('AircraftDetail', { aircraftId: item.id })}
+      activeOpacity={0.92}
     >
-      <View style={styles.cardHeader}>
-        <Ionicons name="airplane" size={24} color="#1e40af" />
-        <View style={styles.cardHeaderText}>
-          <Text style={styles.aircraftType}>{item.make} {item.model}</Text>
-          <Text style={styles.aircraftNumber}>{item.registration}</Text>
+      <View style={styles.cardTopRow}>
+        <View style={styles.cardTitleBlock}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.aircraftTitle}>
+              {item.make} {item.model}
+            </Text>
+            {item.isFeatured ? (
+              <View style={styles.featuredChip}>
+                <Text style={styles.featuredChipText}>Featured</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={styles.registrationText}>{item.registration}</Text>
+        </View>
+        <View style={styles.pricePill}>
+          <Text style={styles.pricePillValue}>{hourlyRateLabel(item)}</Text>
+          <Text style={styles.pricePillMeta}>{item.wetRate ? 'Wet rate' : 'Dry rate'}</Text>
         </View>
       </View>
-      
-      <View style={styles.cardBody}>
-        <View style={styles.infoRow}>
-          <Ionicons name="location-outline" size={16} color="#6b7280" />
-          <Text style={styles.infoText}>{item.location}</Text>
+
+      <View style={styles.metaRow}>
+        <View style={styles.metaPill}>
+          <Ionicons name="navigate-outline" size={14} color={colors.primary} />
+          <Text style={styles.metaPillText}>{aircraftLocation(item)}</Text>
         </View>
-        
-        <View style={styles.infoRow}>
-          <Ionicons name="cash-outline" size={16} color="#6b7280" />
-          <Text style={styles.infoText}>${item.hourlyRate}/hour</Text>
+        <View style={styles.metaPill}>
+          <Ionicons name="speedometer-outline" size={14} color={colors.primary} />
+          <Text style={styles.metaPillText}>{item.category}</Text>
         </View>
-        
-        {item.description && (
-          <Text style={styles.description} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
       </View>
-      
+
+      <View style={styles.detailRow}>
+        <View style={styles.detailMetric}>
+          <Text style={styles.detailMetricLabel}>Minimum time</Text>
+          <Text style={styles.detailMetricValue}>{item.minFlightHours || 0} hrs</Text>
+        </View>
+        <View style={styles.detailMetric}>
+          <Text style={styles.detailMetricLabel}>Engine</Text>
+          <Text style={styles.detailMetricValue}>{item.engineType || item.engine || 'Standard'}</Text>
+        </View>
+        <View style={styles.detailMetric}>
+          <Text style={styles.detailMetricLabel}>Seats</Text>
+          <Text style={styles.detailMetricValue}>{item.seatingCapacity || 'N/A'}</Text>
+        </View>
+      </View>
+
+      {item.description ? (
+        <Text style={styles.description} numberOfLines={2}>
+          {item.description}
+        </Text>
+      ) : null}
+
       <View style={styles.cardFooter}>
+        <View style={styles.footerStatusRow}>
+          {item.insuranceIncluded ? (
+            <View style={styles.statusChip}>
+              <Text style={styles.statusChipText}>Insurance included</Text>
+            </View>
+          ) : null}
+          <View style={styles.statusChipMuted}>
+            <Text style={styles.statusChipMutedText}>{item.responseTime || 24}h response</Text>
+          </View>
+        </View>
         <View style={styles.viewDetailsButton}>
-          <Text style={styles.viewDetailsText}>View Details</Text>
-          <Ionicons name="chevron-forward" size={20} color="#1e40af" />
+          <Text style={styles.viewDetailsText}>Open Aircraft</Text>
+          <Ionicons name="arrow-forward" size={18} color={colors.primary} />
         </View>
       </View>
     </TouchableOpacity>
@@ -92,8 +209,8 @@ export default function RentalsScreen({ navigation }: Props) {
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#1e40af" />
-        <Text style={styles.loadingText}>Loading aircraft...</Text>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading rental aircraft...</Text>
       </View>
     );
   }
@@ -101,10 +218,11 @@ export default function RentalsScreen({ navigation }: Props) {
   if (error) {
     return (
       <View style={styles.centerContainer}>
-        <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
-        <Text style={styles.errorText}>Failed to load aircraft listings</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-          <Text style={styles.retryButtonText}>Try Again</Text>
+        <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
+        <Text style={styles.errorTitle}>Unable to load rentals.</Text>
+        <Text style={styles.errorText}>Refresh and try again. The aircraft feed may be temporarily unavailable.</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()} activeOpacity={0.92}>
+          <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </View>
     );
@@ -112,40 +230,88 @@ export default function RentalsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <ImageBackground 
-        source={WINGTIP_IMAGE}
-        style={styles.header}
-        imageStyle={styles.headerImage}
-      >
-        <View style={styles.headerOverlay}>
-          <Ionicons name="airplane" size={40} color="#fff" />
-          <Text style={styles.headerTitle}>Browse Aircraft</Text>
-          <Text style={styles.headerSubtitle}>Find your perfect aircraft rental</Text>
-        </View>
-      </ImageBackground>
-      
-      {/* Search and Filter Bar */}
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <Ionicons name="search" size={20} color="#6b7280" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search aircraft (e.g., Cessna 172)"
-            value={keyword}
-            onChangeText={setKeyword}
-            testID="input-search-aircraft"
-          />
-        </View>
-        <TouchableOpacity 
-          style={styles.filterButton}
-          onPress={() => setShowFilterModal(true)}
-          testID="button-show-filters"
-        >
-          <Ionicons name="options-outline" size={24} color="#1e40af" />
-        </TouchableOpacity>
-      </View>
+      <FlatList
+        data={filteredAircraft || []}
+        renderItem={renderAircraft}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
+        ListHeaderComponent={
+          <>
+            <View style={styles.heroPanel}>
+              <View style={styles.heroTopRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.heroEyebrow}>RENTALS</Text>
+                  <Text style={styles.heroTitle}>Browse aircraft with a cleaner mission-ready rental workflow.</Text>
+                  <Text style={styles.heroSubtitle}>
+                    Search by aircraft, region, and training fit, then move from browse to booking without losing context.
+                  </Text>
+                </View>
+                <View style={styles.heroBadge}>
+                  <Text style={styles.heroBadgeText}>Browse</Text>
+                </View>
+              </View>
 
-      {/* Filter Modal */}
+              <View style={styles.summaryRow}>
+                <SummaryTile label="Available now" value={String(filteredAircraft.length)} />
+                <SummaryTile label="Featured" value={String(featuredCount)} />
+                <SummaryTile label="Avg rate" value={avgRate ? `$${avgRate.toFixed(0)}/hr` : 'N/A'} />
+              </View>
+            </View>
+
+            <View style={styles.searchPanel}>
+              <View style={styles.searchInputContainer}>
+                <Ionicons name="search" size={18} color={colors.textSoft} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search C172, Archer, N12345, Houston..."
+                  placeholderTextColor={colors.textSoft}
+                  value={keyword}
+                  onChangeText={setKeyword}
+                  testID="input-search-aircraft"
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.filterButton}
+                onPress={() => setShowFilterModal(true)}
+                activeOpacity={0.92}
+                testID="button-show-filters"
+              >
+                <Ionicons name="options-outline" size={20} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
+
+            {filtersActive ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterChipRow}
+              >
+                {keyword ? <FilterChip label="Search" value={keyword} onClear={() => setKeyword('')} /> : null}
+                {city ? <FilterChip label="City" value={city} onClear={() => setCity('')} /> : null}
+                {state ? <FilterChip label="State" value={state} onClear={() => setState('')} /> : null}
+                {radiusValue !== '100' ? (
+                  <FilterChip label="Radius" value={`${radiusValue} mi`} onClear={() => setRadiusValue('100')} />
+                ) : null}
+              </ScrollView>
+            ) : null}
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Available Aircraft</Text>
+              <Text style={styles.sectionSubtitle}>
+                Tap an aircraft to review requirements, pricing, owner credibility, and booking flow.
+              </Text>
+            </View>
+          </>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="airplane-outline" size={44} color={colors.textSoft} />
+            <Text style={styles.emptyTitle}>No aircraft match this search.</Text>
+            <Text style={styles.emptyText}>Adjust the search or clear filters to widen the rental pool.</Text>
+          </View>
+        }
+      />
+
       <Modal
         visible={showFilterModal}
         animationType="slide"
@@ -154,25 +320,25 @@ export default function RentalsScreen({ navigation }: Props) {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Filters</Text>
-            <TouchableOpacity 
-              onPress={() => setShowFilterModal(false)}
-              testID="button-close-filters"
-            >
-              <Ionicons name="close" size={28} color="#1f2937" />
+            <View>
+              <Text style={styles.modalEyebrow}>FILTERS</Text>
+              <Text style={styles.modalTitle}>Refine the rental search</Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowFilterModal(false)} activeOpacity={0.92}>
+              <Ionicons name="close" size={26} color={colors.text} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalContent}>
-            {/* Location Filters */}
-            <View style={styles.filterSection}>
-              <Text style={styles.filterSectionTitle}>Location</Text>
-              
+          <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalContentInner}>
+            <View style={styles.modalSection}>
+              <Text style={styles.modalSectionTitle}>Location</Text>
+
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>City</Text>
                 <TextInput
                   style={styles.filterInput}
-                  placeholder="Enter city"
+                  placeholder="Austin"
+                  placeholderTextColor={colors.textSoft}
                   value={city}
                   onChangeText={setCity}
                   testID="input-filter-city"
@@ -183,7 +349,8 @@ export default function RentalsScreen({ navigation }: Props) {
                 <Text style={styles.inputLabel}>State</Text>
                 <TextInput
                   style={styles.filterInput}
-                  placeholder="e.g., CA, TX, FL"
+                  placeholder="TX"
+                  placeholderTextColor={colors.textSoft}
                   value={state}
                   onChangeText={setState}
                   maxLength={2}
@@ -193,22 +360,22 @@ export default function RentalsScreen({ navigation }: Props) {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Radius</Text>
+                <Text style={styles.inputLabel}>Planning radius</Text>
                 <View style={styles.radiusOptions}>
                   {['25', '50', '100', '200', '500'].map((option) => (
                     <TouchableOpacity
                       key={option}
-                      style={[
-                        styles.radiusOption,
-                        radius === option && styles.radiusOptionActive
-                      ]}
-                      onPress={() => setRadius(option)}
+                      style={[styles.radiusOption, radiusValue === option && styles.radiusOptionActive]}
+                      onPress={() => setRadiusValue(option)}
+                      activeOpacity={0.92}
                       testID={`button-radius-${option}`}
                     >
-                      <Text style={[
-                        styles.radiusOptionText,
-                        radius === option && styles.radiusOptionTextActive
-                      ]}>
+                      <Text
+                        style={[
+                          styles.radiusOptionText,
+                          radiusValue === option && styles.radiusOptionTextActive,
+                        ]}
+                      >
                         {option} mi
                       </Text>
                     </TouchableOpacity>
@@ -217,26 +384,26 @@ export default function RentalsScreen({ navigation }: Props) {
               </View>
             </View>
 
-            {/* Clear Filters Button */}
             <TouchableOpacity
               style={styles.clearButton}
               onPress={() => {
                 setKeyword('');
                 setCity('');
                 setState('');
-                setRadius('100');
+                setRadiusValue('100');
               }}
+              activeOpacity={0.92}
               testID="button-clear-filters"
             >
-              <Text style={styles.clearButtonText}>Clear All Filters</Text>
+              <Text style={styles.clearButtonText}>Clear all filters</Text>
             </TouchableOpacity>
           </ScrollView>
 
-          {/* Apply Button */}
           <View style={styles.modalFooter}>
             <TouchableOpacity
               style={styles.applyButton}
               onPress={() => setShowFilterModal(false)}
+              activeOpacity={0.92}
               testID="button-apply-filters"
             >
               <Text style={styles.applyButtonText}>Apply Filters</Text>
@@ -244,20 +411,6 @@ export default function RentalsScreen({ navigation }: Props) {
           </View>
         </View>
       </Modal>
-
-      <FlatList
-        data={filteredAircraft || []}
-        renderItem={renderAircraft}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="airplane-outline" size={64} color="#9ca3af" />
-            <Text style={styles.emptyText}>No aircraft found</Text>
-            <Text style={styles.emptySubtext}>Try adjusting your filters</Text>
-          </View>
-        }
-      />
     </View>
   );
 }
@@ -265,303 +418,487 @@ export default function RentalsScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
   },
-  header: {
-    height: 180,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerImage: {
-    opacity: 0.9,
-  },
-  headerOverlay: {
-    flex: 1,
-    width: '100%',
-    backgroundColor: 'rgba(30, 64, 175, 0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 12,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#fff',
-    marginTop: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+  listContainer: {
+    padding: spacing.sm,
+    paddingBottom: 120,
   },
   centerContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  listContainer: {
-    padding: 16,
-  },
-  aircraftCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  cardHeaderText: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  aircraftType: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  aircraftNumber: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  availableBadge: {
-    backgroundColor: '#10b981',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  availableText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  cardBody: {
-    padding: 16,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#4b5563',
-    marginLeft: 8,
-  },
-  description: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 8,
-    lineHeight: 20,
-  },
-  cardFooter: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-  },
-  viewDetailsButton: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  viewDetailsText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e40af',
-    marginRight: 4,
+    padding: spacing.lg,
+    backgroundColor: colors.background,
   },
   loadingText: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginTop: 12,
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  errorTitle: {
+    ...typography.h2,
+    marginTop: spacing.md,
   },
   errorText: {
-    fontSize: 16,
-    color: '#ef4444',
-    marginTop: 12,
+    ...typography.body,
     textAlign: 'center',
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+    maxWidth: 320,
   },
   retryButton: {
-    marginTop: 20,
-    backgroundColor: '#1e40af',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    marginTop: spacing.lg,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
   },
   retryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
     color: '#fff',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#4b5563',
-    marginTop: 16,
-  },
-  emptySubtext: {
     fontSize: 14,
-    color: '#9ca3af',
-    marginTop: 8,
+    fontWeight: '800',
   },
-  searchContainer: {
+  heroPanel: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.cockpit,
+    ...shadow.floating,
+  },
+  heroTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    gap: 12,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  heroEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#93c5fd',
+    textTransform: 'uppercase',
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: '#fff',
+    marginTop: 10,
+    maxWidth: 310,
+  },
+  heroSubtitle: {
+    ...typography.body,
+    color: '#dbe4f0',
+    marginTop: spacing.sm,
+    maxWidth: 330,
+  },
+  heroBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
+  heroBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  summaryTile: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: '#bfdbfe',
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    marginTop: 6,
+  },
+  searchPanel: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
   },
   searchInputContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    ...shadow.card,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: spacing.xs,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: '#1f2937',
+    paddingVertical: 14,
+    fontSize: 15,
+    color: colors.text,
   },
   filterButton: {
-    padding: 8,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
+    width: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
+  },
+  filterChipRow: {
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: '#bfd7ff',
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  sectionHeader: {
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  sectionTitle: {
+    ...typography.h2,
+  },
+  sectionSubtitle: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  aircraftCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    ...shadow.card,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  cardTitleBlock: {
+    flex: 1,
+  },
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  aircraftTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  featuredChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.accentSoft,
+  },
+  featuredChipText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.accent,
+  },
+  registrationText: {
+    ...typography.muted,
+    marginTop: 4,
+  },
+  pricePill: {
+    alignItems: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceTinted,
+    borderWidth: 1,
+    borderColor: '#cfe0ff',
+  },
+  pricePillValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  pricePillMeta: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+    marginTop: spacing.sm,
+  },
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceMuted,
+  },
+  metaPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  detailMetric: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.backgroundElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  detailMetricLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: colors.textSoft,
+  },
+  detailMetricValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.text,
+    marginTop: 6,
+  },
+  description: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginTop: spacing.md,
+  },
+  cardFooter: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  footerStatusRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  statusChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.accentSoft,
+  },
+  statusChipText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.accent,
+  },
+  statusChipMuted: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceMuted,
+  },
+  statusChipMutedText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.textMuted,
+  },
+  viewDetailsButton: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    backgroundColor: colors.primarySoft,
+  },
+  viewDetailsText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+    ...shadow.card,
+  },
+  emptyTitle: {
+    ...typography.h3,
+    marginTop: spacing.sm,
+  },
+  emptyText: {
+    ...typography.body,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    maxWidth: 280,
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.backgroundElevated,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border,
+  },
+  modalEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: colors.primary,
+    textTransform: 'uppercase',
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1f2937',
+    ...typography.h2,
+    marginTop: 6,
   },
   modalContent: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
   },
-  filterSection: {
-    marginBottom: 24,
+  modalContentInner: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xl,
   },
-  filterSectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1f2937',
-    marginBottom: 16,
+  modalSection: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadow.card,
+  },
+  modalSectionTitle: {
+    ...typography.h3,
+    marginBottom: spacing.md,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4b5563',
+    fontSize: 12,
+    fontWeight: '800',
+    color: colors.text,
     marginBottom: 8,
   },
   filterInput: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: '#1f2937',
-    backgroundColor: '#fff',
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: colors.text,
   },
   radiusOptions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   radiusOption: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
   },
   radiusOptionActive: {
-    backgroundColor: '#1e40af',
-    borderColor: '#1e40af',
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
   },
   radiusOptionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4b5563',
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.textMuted,
   },
   radiusOptionTextActive: {
     color: '#fff',
   },
   clearButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    marginTop: spacing.lg,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
     alignItems: 'center',
-    marginTop: 8,
+    paddingVertical: 14,
   },
   clearButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.textMuted,
   },
   modalFooter: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    padding: spacing.lg,
+    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: colors.border,
   },
   applyButton: {
-    backgroundColor: '#1e40af',
-    paddingVertical: 14,
-    borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    borderRadius: radius.lg,
+    backgroundColor: colors.primary,
   },
   applyButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
     color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
   },
 });

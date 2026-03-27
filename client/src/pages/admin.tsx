@@ -594,6 +594,7 @@ export default function AdminDashboard() {
   const [membershipOfferDurationDays, setMembershipOfferDurationDays] = useState("90");
   const [membershipOfferDescription, setMembershipOfferDescription] = useState("Exclusive Cessna Pilots Association member offer for 3 months of RSF Pro+.");
   const [membershipOfferMemberNumbers, setMembershipOfferMemberNumbers] = useState("");
+  const [membershipOfferMemberNumbersByOffer, setMembershipOfferMemberNumbersByOffer] = useState<Record<string, string>>({});
   
   // Banner ads state
   const [bannerDialogOpen, setBannerDialogOpen] = useState(false);
@@ -1810,7 +1811,7 @@ export default function AdminDashboard() {
       tier: "pro" | "pro_plus";
       durationDays: number;
       description?: string;
-      memberNumbersText: string;
+      memberNumbersText?: string;
     }) => {
       return await apiRequest("POST", "/api/admin/membership-partner-offers", payload);
     },
@@ -5841,7 +5842,7 @@ export default function AdminDashboard() {
                       data-testid="textarea-membership-offer-members"
                     />
                     <p className="text-xs text-muted-foreground">
-                      One member number per line. RSF normalizes spacing and punctuation so pilots can type their number naturally during redemption.
+                      Optional initial roster. You can create the offer first and add CPA member numbers later from the configured offer card below.
                     </p>
                   </div>
 
@@ -5863,8 +5864,7 @@ export default function AdminDashboard() {
                         createMembershipPartnerOfferMutation.isPending ||
                         !membershipOfferName.trim() ||
                         !membershipOfferPartnerName.trim() ||
-                        !membershipOfferSlug.trim() ||
-                        !membershipOfferMemberNumbers.trim()
+                        !membershipOfferSlug.trim()
                       }
                       data-testid="button-create-membership-offer"
                     >
@@ -5950,6 +5950,46 @@ export default function AdminDashboard() {
 
                           <div className="mt-3 break-all rounded-md border bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
                             {offer.shareUrl}
+                          </div>
+
+                          <div className="mt-4 space-y-2 rounded-md border bg-muted/10 p-3">
+                            <div className="text-sm font-medium">Add member numbers</div>
+                            <Textarea
+                              value={membershipOfferMemberNumbersByOffer[offer.id] || ""}
+                              onChange={(e) =>
+                                setMembershipOfferMemberNumbersByOffer((current) => ({
+                                  ...current,
+                                  [offer.id]: e.target.value,
+                                }))
+                              }
+                              rows={4}
+                              placeholder={"Paste one member number per line\n123456\nCPA-8821"}
+                              data-testid={`textarea-membership-offer-members-${offer.id}`}
+                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() =>
+                                  updateMembershipPartnerOfferMutation.mutate({
+                                    id: offer.id,
+                                    data: {
+                                      memberNumbersText: membershipOfferMemberNumbersByOffer[offer.id] || "",
+                                    },
+                                  })
+                                }
+                                disabled={
+                                  updateMembershipPartnerOfferMutation.isPending ||
+                                  !(membershipOfferMemberNumbersByOffer[offer.id] || "").trim()
+                                }
+                                data-testid={`button-add-membership-offer-members-${offer.id}`}
+                              >
+                                Add member numbers
+                              </Button>
+                              <div className="text-xs text-muted-foreground">
+                                Create the public offer first, then load the CPA roster here as it becomes available.
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))

@@ -37,6 +37,10 @@ export default function LogbookProPage() {
     if (typeof window === "undefined") return "";
     return new URLSearchParams(window.location.search).get("offer")?.trim().toLowerCase() || "";
   }, []);
+  const claimToken = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("claim")?.trim() || "";
+  }, []);
   const [partnerMemberNumber, setPartnerMemberNumber] = useState("");
 
   const {
@@ -47,11 +51,45 @@ export default function LogbookProPage() {
     enabled: !!offerSlug,
   });
 
-  const redeemPartnerOfferMutation = useMutation({
+  const clearClaimFromUrl = () => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("claim");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  };
+
+  const validatePartnerOfferMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/membership-partner-offers/redeem", {
+      const res = await apiRequest("POST", "/api/membership-partner-offers/validate-member", {
         slug: offerSlug,
         memberNumber: partnerMemberNumber,
+      });
+      return res.json();
+    },
+    onSuccess: async (data) => {
+      const returnTarget = `/logbook/pro?offer=${encodeURIComponent(offerSlug)}&claim=${encodeURIComponent(
+        data.claimToken
+      )}`;
+      window.location.href = withReturnTo("/register", returnTarget);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not validate member number",
+        description: error.message || "Check the member number and try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const redeemPartnerOfferMutation = useMutation({
+    mutationFn: async (payload?: { claimToken?: string; memberNumber?: string }) => {
+      const res = await apiRequest("POST", "/api/membership-partner-offers/redeem", {
+        ...(payload?.claimToken
+          ? { claimToken: payload.claimToken }
+          : {
+              slug: offerSlug,
+              memberNumber: payload?.memberNumber ?? partnerMemberNumber,
+            }),
       });
       return res.json();
     },
@@ -62,6 +100,7 @@ export default function LogbookProPage() {
         description: `${data.offer?.partnerName || "Partner"} unlocked ${data.offer?.tier === "pro_plus" ? "RSF Pro+" : "RSF Pro"} on this account.`,
       });
       setPartnerMemberNumber("");
+      clearClaimFromUrl();
     },
     onError: (error: Error) => {
       toast({
@@ -69,6 +108,7 @@ export default function LogbookProPage() {
         description: error.message || "Check the member number and try again.",
         variant: "destructive",
       });
+      clearClaimFromUrl();
     },
   });
 
@@ -77,7 +117,13 @@ export default function LogbookProPage() {
     trackEvent("subscription_offer_viewed", { page: "/logbook/pro", source_page: sourcePage });
   }, [sourcePage]);
 
-  if (!isAuthenticated) {
+  useEffect(() => {
+    if (!isAuthenticated || !offerSlug || !claimToken || redeemPartnerOfferMutation.isPending) return;
+    if (redeemPartnerOfferMutation.isSuccess) return;
+    redeemPartnerOfferMutation.mutate({ claimToken });
+  }, [claimToken, isAuthenticated, offerSlug]);
+
+  if (!isAuthenticated && !offerSlug) {
     const returnTarget = offerSlug ? `/logbook/pro?offer=${encodeURIComponent(offerSlug)}` : "/logbook/pro";
     return (
       <div className="container mx-auto px-4 py-10">
@@ -327,18 +373,45 @@ export default function LogbookProPage() {
                         onChange={(event) => setPartnerMemberNumber(event.target.value)}
                         placeholder="Enter your CPA member number"
                         data-testid="input-partner-member-number"
+                        disabled={Boolean(claimToken) || redeemPartnerOfferMutation.isPending}
                       />
                     </div>
 
                     <div className="flex flex-wrap gap-3">
-                      <Button
-                        onClick={() => redeemPartnerOfferMutation.mutate()}
-                        disabled={redeemPartnerOfferMutation.isPending || !partnerMemberNumber.trim()}
-                        data-testid="button-redeem-partner-offer"
-                      >
-                        {redeemPartnerOfferMutation.isPending ? "Redeeming..." : "Redeem partner offer"}
-                      </Button>
-                      <Badge variant="outline">This applies a temporary RSF grant and does not start recurring billing.</Badge>
+                      {!isAuthenticated ? (
+                        <>
+                          <Button
+                            onClick={() => validatePartnerOfferMutation.mutate()}
+                            disabled={validatePartnerOfferMutation.isPending || !partnerMemberNumber.trim()}
+                            data-testid="button-redeem-partner-offer"
+                          >
+                            {validatePartnerOfferMutation.isPending ? "Checking..." : "Continue to free signup"}
+                          </Button>
+                          <Button asChild variant="outline">
+                            <a
+                              href={withReturnTo(
+                                "/login",
+                                `/logbook/pro?offer=${encodeURIComponent(offerSlug)}`
+                              )}
+                            >
+                              I already have an account
+                            </a>
+                          </Button>
+                        </>
+                      ) : claimToken ? (
+                        <Badge variant="outline">Finishing your partner offer on this RSF account...</Badge>
+                      ) : (
+                        <Button
+                          onClick={() => redeemPartnerOfferMutation.mutate({ memberNumber: partnerMemberNumber })}
+                          disabled={redeemPartnerOfferMutation.isPending || !partnerMemberNumber.trim()}
+                          data-testid="button-redeem-partner-offer"
+                        >
+                          {redeemPartnerOfferMutation.isPending ? "Redeeming..." : "Apply partner offer"}
+                        </Button>
+                      )}
+                      <Badge variant="outline">
+                        This applies a temporary RSF grant and does not start recurring billing.
+                      </Badge>
                     </div>
                   </div>
                 ) : (

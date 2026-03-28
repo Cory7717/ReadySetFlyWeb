@@ -432,7 +432,8 @@ function pickBestDiversionFrequency(
   airport: NearbyDiversionAirport | null | undefined,
 ) {
   const entries = airport?.frequencySummary || [];
-  const rank = (value: NearbyDiversionAirport['frequencySummary'][number]) => {
+  type FrequencyEntry = NonNullable<NearbyDiversionAirport['frequencySummary']>[number];
+  const rank = (value: FrequencyEntry) => {
     const type = String(value?.type || '').toLowerCase();
     if (type.includes('tower')) return 1;
     if (type.includes('ctaf')) return 2;
@@ -790,6 +791,18 @@ export default function FlightPlannerScreen() {
     () => pickBestDiversionFrequency(selectedDiversion),
     [selectedDiversion]
   );
+  const selectedDiversionPoint = useMemo(() => {
+    if (!selectedDiversion) return null;
+    if (typeof selectedDiversion.lat === 'number' && typeof selectedDiversion.lon === 'number') {
+      return { latitude: selectedDiversion.lat, longitude: selectedDiversion.lon };
+    }
+    if (!activeOwnship) return null;
+    const bearingRad = toRad(selectedDiversion.bearingDeg);
+    const northNm = Math.cos(bearingRad) * selectedDiversion.distanceNm;
+    const eastNm = Math.sin(bearingRad) * selectedDiversion.distanceNm;
+    const estimate = offsetLatLonByNm(activeOwnship.lat, activeOwnship.lon, northNm, eastNm);
+    return { latitude: estimate.lat, longitude: estimate.lon };
+  }, [activeOwnship, selectedDiversion]);
   const topTrafficTarget = visibleTrafficTargets[0] || null;
   const selectedTrafficTarget = useMemo(
     () => visibleTrafficTargets.find((target) => target.id === selectedTrafficId) || topTrafficTarget || null,
@@ -961,15 +974,18 @@ export default function FlightPlannerScreen() {
         detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft`,
       };
     }
-    if (routeRiskLabel !== 'Normal') {
-      return {
-        severity: 'advisory' as const,
-        title: 'Route advisory',
-        detail: routeRiskLabel,
-      };
-    }
     return null;
-  }, [routeRiskLabel, selectedDiversion, selectedDiversionBriefing?.advisory?.crosswind, selectedTrafficTarget]);
+  }, [
+    obstacleAlertThresholds.closingFast,
+    obstacleClearanceFt,
+    obstacleRisk,
+    selectedDiversion,
+    selectedDiversionBriefing?.advisory?.crosswind,
+    selectedTrafficTarget,
+    terrainAlertThresholds.closingFast,
+    terrainClearanceFt,
+    terrainRisk,
+  ]);
   const visionGuidance = useMemo(() => {
     if (selectedTrafficTarget?.threatLevel === 'immediate') {
       return `Traffic ${selectedTrafficTarget.callsign || 'target'} ahead`;
@@ -1178,7 +1194,44 @@ export default function FlightPlannerScreen() {
     }
     return 'Continue current route and monitor traffic.';
   }, [obstacleRisk, selectedDiversion, selectedTrafficTarget, terrainEscapeGuidance, terrainRisk, visionRouteGuidance?.offRouteNm, visionTrafficCue?.sector]);
+  const trafficConflictGuidance = useMemo(() => {
+    if (selectedTrafficTarget?.threatLevel !== 'immediate') return null;
+    const sector = visionTrafficCue?.sector || 'ahead';
+    const altitudeDelta = selectedTrafficTarget.altitudeDeltaFt ?? 0;
+    if (sector.includes('left')) {
+      return {
+        lateralOffsetPct: 12,
+        verticalOffsetPct: altitudeDelta < 0 ? -6 : 0,
+        turnCommand: 'Avoid traffic - bias right',
+        verticalCommand: altitudeDelta < 0 ? 'Consider climb for separation' : 'Hold altitude',
+        mode: 'traffic' as const,
+      };
+    }
+    if (sector.includes('right')) {
+      return {
+        lateralOffsetPct: -12,
+        verticalOffsetPct: altitudeDelta < 0 ? -6 : 0,
+        turnCommand: 'Avoid traffic - bias left',
+        verticalCommand: altitudeDelta < 0 ? 'Consider climb for separation' : 'Hold altitude',
+        mode: 'traffic' as const,
+      };
+    }
+    return {
+      lateralOffsetPct: altitudeDelta >= 0 ? -8 : 8,
+      verticalOffsetPct: altitudeDelta < 0 ? -8 : 4,
+      turnCommand: 'Traffic ahead - offset and monitor',
+      verticalCommand: altitudeDelta < 0 ? 'Climb if needed for separation' : 'Hold altitude / monitor descent',
+      mode: 'traffic' as const,
+    };
+  }, [selectedTrafficTarget, visionTrafficCue?.sector]);
   const visionDirectorCue = useMemo(() => {
+    if (trafficConflictGuidance) {
+      return {
+        ...trafficConflictGuidance,
+        lateralCaptured: false,
+        verticalCaptured: false,
+      };
+    }
     const currentAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
     const headingDelta = visionRouteGuidance?.headingDelta ?? 0;
     const targetAltitude =
@@ -1211,7 +1264,25 @@ export default function FlightPlannerScreen() {
         : altitudeErrorFt > 0 ? `Climb to ${Math.round(targetAltitude)} ft`
         : `Descend to ${Math.round(targetAltitude)} ft`,
     };
-  }, [activeOwnship?.altitudeFt, obstacleRisk, simulationAltitudeFt, terrainEscapeTargetFt, terrainRisk, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
+  }, [activeOwnship?.altitudeFt, obstacleRisk, simulationAltitudeFt, terrainEscapeTargetFt, terrainRisk, trafficConflictGuidance, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
+  const mapTacticalSummary = useMemo(() => {
+    const modeLabel =
+      visionDirectorCue.mode === 'traffic'
+        ? 'Traffic'
+        : visionDirectorCue.mode === 'escape'
+        ? 'Escape'
+        : visionDirectorCue.mode === 'intercept'
+          ? 'Intercept'
+          : visionDirectorCue.mode === 'capture'
+            ? 'Capture'
+            : 'Track';
+    return {
+      modeLabel,
+      heading: visionDirectorCue.turnCommand,
+      vertical: visionDirectorCue.verticalCommand,
+      recommendation: visionManeuverRecommendation,
+    };
+  }, [visionDirectorCue.mode, visionDirectorCue.turnCommand, visionDirectorCue.verticalCommand, visionManeuverRecommendation]);
   const focusMapOnPoint = (
     latitude: number,
     longitude: number,
@@ -2517,6 +2588,28 @@ export default function FlightPlannerScreen() {
                 strokeColor={colors.flightAccent}
                 strokeWidth={4}
               />
+              {activeOwnship && selectedTrafficTarget ? (
+                <Polyline
+                  coordinates={[
+                    { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+                    { latitude: selectedTrafficTarget.lat, longitude: selectedTrafficTarget.lon },
+                  ]}
+                  strokeColor={selectedTrafficTarget.threatLevel === 'immediate' ? colors.flightWarning : colors.flightCaution}
+                  strokeWidth={2}
+                  lineDashPattern={[6, 6]}
+                />
+              ) : null}
+              {activeOwnship && selectedDiversionPoint ? (
+                <Polyline
+                  coordinates={[
+                    { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+                    selectedDiversionPoint,
+                  ]}
+                  strokeColor={colors.flightAdvisory}
+                  strokeWidth={2}
+                  lineDashPattern={[10, 8]}
+                />
+              ) : null}
               {diversionCandidates.slice(0, 4).map((airport) => {
                 if (typeof airport.lat !== 'number' || typeof airport.lon !== 'number') return null;
                 const active = selectedDiversionIcao === airport.icao;
@@ -2630,6 +2723,17 @@ export default function FlightPlannerScreen() {
             >
               <Text style={styles.flightDeckAlertTitle}>{activeFlightAlert.title}</Text>
               <Text style={styles.flightDeckAlertText}>{activeFlightAlert.detail}</Text>
+            </View>
+          ) : null}
+          {flightDeckView === 'map' ? (
+            <View style={styles.flightDeckMapActionCard}>
+              <View style={styles.flightDeckMapActionHeader}>
+                <Text style={styles.flightDeckMapActionLabel}>Director</Text>
+                <Text style={styles.flightDeckMapActionMode}>{mapTacticalSummary.modeLabel}</Text>
+              </View>
+              <Text style={styles.flightDeckMapActionText}>{mapTacticalSummary.heading}</Text>
+              <Text style={styles.flightDeckMapActionSubtext}>{mapTacticalSummary.vertical}</Text>
+              <Text style={styles.flightDeckMapActionRecommendation}>{mapTacticalSummary.recommendation}</Text>
             </View>
           ) : null}
 
@@ -2775,10 +2879,24 @@ export default function FlightPlannerScreen() {
             <View style={styles.flightDeckPanel}>
               <Text style={styles.flightDeckPanelTitle}>Route Progress</Text>
               <Text style={styles.flightDeckPanelText}>
+                Corridor {visionRouteGuidance?.corridorSeverity || 'nominal'} / Cross-track {routeProgress.crossTrackNm.toFixed(1)} NM
+              </Text>
+              <Text style={styles.flightDeckPanelText}>
                 Remaining {routeProgress.remainingRouteNm.toFixed(1)} NM · Next {routeProgress.nextWaypoint || '--'} · Off route {routeProgress.offRouteNm.toFixed(1)} NM
               </Text>
             </View>
           ) : null}
+
+          {flightDeckPanel === 'status' && (
+            <View style={styles.flightDeckPanel}>
+              <Text style={styles.flightDeckPanelTitle}>Director State</Text>
+              <Text style={styles.flightDeckPanelText}>
+                Mode {mapTacticalSummary.modeLabel} / {visionDirectorCue.turnCommand}
+              </Text>
+              <Text style={styles.flightDeckPanelText}>{visionDirectorCue.verticalCommand}</Text>
+              <Text style={styles.flightDeckPanelText}>{mapTacticalSummary.recommendation}</Text>
+            </View>
+          )}
 
           {flightDeckPanel === 'status' && (
             <View style={styles.flightDeckPanel}>
@@ -4672,6 +4790,55 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginTop: 3,
+  },
+  flightDeckMapActionCard: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    top: 128,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(10,14,20,0.86)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+    padding: spacing.sm,
+    ...shadow.flightGlass,
+  },
+  flightDeckMapActionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  flightDeckMapActionLabel: {
+    color: colors.flightTextMuted,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '700',
+  },
+  flightDeckMapActionMode: {
+    color: colors.flightAccent,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  flightDeckMapActionText: {
+    color: colors.flightText,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 6,
+    fontWeight: '600',
+  },
+  flightDeckMapActionSubtext: {
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 3,
+    fontWeight: '600',
+  },
+  flightDeckMapActionRecommendation: {
+    color: colors.flightText,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 8,
   },
   flightTrafficMarkerWrap: {
     alignItems: 'center',

@@ -94,6 +94,14 @@ type RankedTrafficTarget = TrafficTarget & {
   threatLevel: 'immediate' | 'advisory' | 'monitor';
 };
 
+type OwnshipData = {
+  lat: number;
+  lon: number;
+  altitudeFt?: number;
+  speedKts?: number;
+  heading?: number;
+};
+
 type WindsAloftPoint = {
   stationId: string;
   icao?: string;
@@ -222,6 +230,102 @@ function getDistanceNmFromLatLon(
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function bearingBetweenPoints(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number },
+) {
+  const lat1 = toRad(from.latitude);
+  const lat2 = toRad(to.latitude);
+  const dLon = toRad(to.longitude - from.longitude);
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function offsetLatLonByNm(lat: number, lon: number, northNm: number, eastNm: number) {
+  const dLat = northNm / 60;
+  const dLon = eastNm / (60 * Math.max(0.2, Math.cos(toRad(lat))));
+  return {
+    lat: lat + dLat,
+    lon: lon + dLon,
+  };
+}
+
+function interpolateRouteOwnship(
+  routePoints: AirportMeta[],
+  progressPct: number,
+  cruiseKts: number,
+  plannedAltitudeFt: number,
+): { ownship: OwnshipData; verticalSpeedFpm: number } | null {
+  if (routePoints.length < 2) return null;
+  const clampedProgress = Math.min(1, Math.max(0, progressPct));
+  const legLengths = routePoints.slice(1).map((point, index) => greatCircleNm(routePoints[index], point));
+  const totalRouteNm = legLengths.reduce((sum, value) => sum + value, 0);
+  if (!totalRouteNm || !Number.isFinite(totalRouteNm)) return null;
+
+  let remainingNm = totalRouteNm * clampedProgress;
+  let legIndex = 0;
+  while (legIndex < legLengths.length - 1 && remainingNm > legLengths[legIndex]) {
+    remainingNm -= legLengths[legIndex];
+    legIndex += 1;
+  }
+
+  const start = routePoints[legIndex];
+  const end = routePoints[legIndex + 1] || routePoints[routePoints.length - 1];
+  const legNm = Math.max(legLengths[legIndex] || 1, 1);
+  const legProgress = Math.min(1, Math.max(0, remainingNm / legNm));
+  const latitude = start.latitude + (end.latitude - start.latitude) * legProgress;
+  const longitude = start.longitude + (end.longitude - start.longitude) * legProgress;
+  const heading = bearingBetweenPoints(start, end);
+
+  let altitudeFt = plannedAltitudeFt;
+  let verticalSpeedFpm = 0;
+  if (clampedProgress < 0.12) {
+    const climbPct = clampedProgress / 0.12;
+    altitudeFt = Math.max(900, plannedAltitudeFt * climbPct);
+    verticalSpeedFpm = 700;
+  } else if (clampedProgress > 0.88) {
+    const descentPct = (clampedProgress - 0.88) / 0.12;
+    altitudeFt = Math.max(1200, plannedAltitudeFt * (1 - descentPct));
+    verticalSpeedFpm = -500;
+  }
+
+  return {
+    ownship: {
+      lat: latitude,
+      lon: longitude,
+      altitudeFt,
+      speedKts: cruiseKts,
+      heading,
+    },
+    verticalSpeedFpm,
+  };
+}
+
+function buildSimulatedTrafficTargets(ownship: OwnshipData | null): TrafficTarget[] {
+  if (!ownship) return [];
+  const lead = offsetLatLonByNm(ownship.lat, ownship.lon, 1.5, 1.2);
+  const high = offsetLatLonByNm(ownship.lat, ownship.lon, -2.1, 2.8);
+  return [
+    {
+      id: 'sim-traffic-1',
+      callsign: 'RSF201',
+      lat: lead.lat,
+      lon: lead.lon,
+      altitudeFt: Math.round((ownship.altitudeFt || 6500) + 300),
+      updatedAt: Date.now(),
+    },
+    {
+      id: 'sim-traffic-2',
+      callsign: 'RSF402',
+      lat: high.lat,
+      lon: high.lon,
+      altitudeFt: Math.round((ownship.altitudeFt || 6500) - 800),
+      updatedAt: Date.now(),
+    },
+  ];
 }
 
 function rankTrafficTargets(
@@ -439,7 +543,7 @@ export default function FlightPlannerScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated } = useIsAuthenticated();
+  const { isAuthenticated, user } = useIsAuthenticated();
   const [departure, setDeparture] = useState('KJFK');
   const [destination, setDestination] = useState('KBOS');
   const [waypoints, setWaypoints] = useState('');
@@ -478,6 +582,12 @@ export default function FlightPlannerScreen() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsData, setGpsData] = useState<{ lat: number; lon: number; altitudeFt?: number; speedKts?: number; heading?: number } | null>(null);
   const [verticalSpeedFpm, setVerticalSpeedFpm] = useState<number | null>(null);
+  const [simulationEnabled, setSimulationEnabled] = useState(false);
+  const [simulationRunning, setSimulationRunning] = useState(false);
+  const [simulationProgress, setSimulationProgress] = useState(0);
+  const [simulationSpeed, setSimulationSpeed] = useState<'1x' | '4x' | '8x'>('4x');
+  const [simulatedGpsData, setSimulatedGpsData] = useState<OwnshipData | null>(null);
+  const [simulatedVerticalSpeedFpm, setSimulatedVerticalSpeedFpm] = useState<number | null>(null);
   const locationSubRef = useState<{ remove?: () => void }>(() => ({}))[0];
   const mapRef = useRef<MapView | null>(null);
 
@@ -534,13 +644,24 @@ export default function FlightPlannerScreen() {
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
     []
   );
+  const isSuperAdmin = Boolean((user as any)?.isSuperAdmin);
+  const simulationMultiplier = simulationSpeed === '8x' ? 8 : simulationSpeed === '4x' ? 4 : 1;
+  const simulationCruiseKts = Math.max(60, Number(cruiseKtas) || 110);
+  const simulationAltitudeFt = Math.max(2500, Number(plannedAltitude) || 6500);
+  const simulatedTrafficTargets = useMemo(
+    () => buildSimulatedTrafficTargets(simulatedGpsData),
+    [simulatedGpsData]
+  );
+  const activeOwnship = simulationEnabled && simulatedGpsData ? simulatedGpsData : gpsData;
+  const activeVerticalSpeedFpm = simulationEnabled ? simulatedVerticalSpeedFpm : verticalSpeedFpm;
+  const activeTrafficTargets = simulationEnabled ? simulatedTrafficTargets : trafficTargets;
   const routeProgress = useMemo(
-    () => computeMobileRouteProgress(routePoints, gpsData),
-    [gpsData, routePoints]
+    () => computeMobileRouteProgress(routePoints, activeOwnship),
+    [activeOwnship, routePoints]
   );
   const rankedTrafficTargets = useMemo(
-    () => rankTrafficTargets(trafficTargets, gpsData),
-    [gpsData, trafficTargets]
+    () => rankTrafficTargets(activeTrafficTargets, activeOwnship),
+    [activeOwnship, activeTrafficTargets]
   );
   const visibleTrafficTargets = useMemo(() => {
     if (trafficFilter === 'all') return rankedTrafficTargets;
@@ -579,16 +700,16 @@ export default function FlightPlannerScreen() {
   }, [route.params]);
 
   useEffect(() => {
-    if (trafficEnabled || gpsEnabled) {
+    if (trafficEnabled || gpsEnabled || simulationEnabled) {
       activateKeepAwake();
     } else {
       deactivateKeepAwake();
     }
-  }, [trafficEnabled, gpsEnabled]);
+  }, [trafficEnabled, gpsEnabled, simulationEnabled]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!gpsData?.lat || !gpsData?.lon) {
+    if (!activeOwnship?.lat || !activeOwnship?.lon) {
       setDiversionCandidates([]);
       setDiversionLoading(false);
       setDiversionError(null);
@@ -600,8 +721,8 @@ export default function FlightPlannerScreen() {
     api
       .get<NearbyDiversionResponse>('/api/airports/nearby', {
         params: {
-          lat: gpsData.lat,
-          lon: gpsData.lon,
+          lat: activeOwnship.lat,
+          lon: activeOwnship.lon,
           radiusNm: 60,
           limit: 5,
         },
@@ -623,7 +744,50 @@ export default function FlightPlannerScreen() {
     return () => {
       cancelled = true;
     };
-  }, [gpsData?.lat, gpsData?.lon]);
+  }, [activeOwnship?.lat, activeOwnship?.lon]);
+
+  useEffect(() => {
+    if (!simulationEnabled) {
+      setSimulationRunning(false);
+      setSimulationProgress(0);
+      setSimulatedGpsData(null);
+      setSimulatedVerticalSpeedFpm(null);
+      return;
+    }
+    if (routePoints.length < 2) {
+      setSimulationEnabled(false);
+      Alert.alert('Build a route first', 'Simulation needs a built route with at least a departure and destination.');
+      return;
+    }
+    const initial = interpolateRouteOwnship(routePoints, 0, simulationCruiseKts, simulationAltitudeFt);
+    setSimulationProgress(0);
+    setSimulationRunning(true);
+    setSimulatedGpsData(initial?.ownship || null);
+    setSimulatedVerticalSpeedFpm(initial?.verticalSpeedFpm ?? null);
+  }, [simulationEnabled, routePoints, simulationCruiseKts, simulationAltitudeFt]);
+
+  useEffect(() => {
+    if (!simulationEnabled || !simulationRunning || routePoints.length < 2) return;
+    const legLengths = routePoints.slice(1).map((point, index) => greatCircleNm(routePoints[index], point));
+    const totalRouteNm = legLengths.reduce((sum, value) => sum + value, 0);
+    if (!totalRouteNm || !Number.isFinite(totalRouteNm)) return;
+
+    const timer = setInterval(() => {
+      setSimulationProgress((current) => {
+        const nmPerSecond = (simulationCruiseKts * simulationMultiplier) / 3600;
+        const next = Math.min(1, current + nmPerSecond / totalRouteNm);
+        const frame = interpolateRouteOwnship(routePoints, next, simulationCruiseKts, simulationAltitudeFt);
+        setSimulatedGpsData(frame?.ownship || null);
+        setSimulatedVerticalSpeedFpm(frame?.verticalSpeedFpm ?? null);
+        if (next >= 1) {
+          setSimulationRunning(false);
+        }
+        return next;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [simulationEnabled, simulationRunning, routePoints, simulationCruiseKts, simulationMultiplier, simulationAltitudeFt]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1351,7 +1515,7 @@ export default function FlightPlannerScreen() {
           <View style={styles.heroMetricCard}>
             <Text style={styles.heroMetricLabel}>Live status</Text>
             <Text style={styles.heroMetricValue}>
-              {gpsEnabled || trafficEnabled ? 'Cockpit on' : 'Preflight'}
+              {simulationEnabled ? 'Simulating' : gpsEnabled || trafficEnabled ? 'Cockpit on' : 'Preflight'}
             </Text>
           </View>
         </View>
@@ -1702,10 +1866,71 @@ export default function FlightPlannerScreen() {
           <TouchableOpacity
             style={[styles.mapToggleButton, gpsEnabled && styles.mapToggleActive]}
             onPress={() => setGpsEnabled((prev) => !prev)}
+            disabled={simulationEnabled}
           >
             <Text style={styles.mapToggleText}>{gpsEnabled ? 'On' : 'Off'}</Text>
           </TouchableOpacity>
         </View>
+        {isSuperAdmin && (
+          <View style={styles.simCard}>
+            <View style={styles.trafficRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Flight Simulation</Text>
+                <Text style={styles.helperText}>Super Admin test mode for route progress, diversions, and cockpit UI.</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.mapToggleButton, simulationEnabled && styles.mapToggleActive]}
+                onPress={() => {
+                  if (!simulationEnabled && routePoints.length < 2) {
+                    Alert.alert('Build a route first', 'Simulation needs a built route before it can run.');
+                    return;
+                  }
+                  setSimulationEnabled((prev) => !prev);
+                }}
+              >
+                <Text style={styles.mapToggleText}>{simulationEnabled ? 'On' : 'Off'}</Text>
+              </TouchableOpacity>
+            </View>
+            {simulationEnabled ? (
+              <>
+                <View style={styles.altitudeRow}>
+                  {(['1x', '4x', '8x'] as const).map((value) => (
+                    <TouchableOpacity
+                      key={`sim-${value}`}
+                      style={[styles.altitudeButton, simulationSpeed === value && styles.altitudeButtonActive]}
+                      onPress={() => setSimulationSpeed(value)}
+                    >
+                      <Text style={[styles.altitudeText, simulationSpeed === value && styles.altitudeTextActive]}>{value}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={styles.simActionRow}>
+                  <TouchableOpacity
+                    style={styles.secondaryButton}
+                    onPress={() => setSimulationRunning((prev) => !prev)}
+                  >
+                    <Text style={styles.secondaryButtonText}>{simulationRunning ? 'Pause sim' : 'Resume sim'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.secondaryButton}
+                    onPress={() => {
+                      const frame = interpolateRouteOwnship(routePoints, 0, simulationCruiseKts, simulationAltitudeFt);
+                      setSimulationProgress(0);
+                      setSimulationRunning(true);
+                      setSimulatedGpsData(frame?.ownship || null);
+                      setSimulatedVerticalSpeedFpm(frame?.verticalSpeedFpm ?? null);
+                    }}
+                  >
+                    <Text style={styles.secondaryButtonText}>Reset sim</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.helperText}>
+                  {Math.round(simulationProgress * 100)}% complete · {simulationSpeed} playback
+                </Text>
+              </>
+            ) : null}
+          </View>
+        )}
         {gpsStatus === 'error' && gpsError && (
           <Text style={styles.errorText}>GPS error: {gpsError}</Text>
         )}
@@ -1826,6 +2051,23 @@ export default function FlightPlannerScreen() {
                 pinColor={target.threatLevel === 'immediate' ? '#dc2626' : target.threatLevel === 'advisory' ? '#f97316' : '#eab308'}
               />
             ))}
+            {activeOwnship ? (
+              <Marker
+                coordinate={{ latitude: activeOwnship.lat, longitude: activeOwnship.lon }}
+                anchor={{ x: 0.5, y: 0.5 }}
+                title={simulationEnabled ? 'Simulated ownship' : 'Ownship'}
+                description={`${activeOwnship.speedKts ? `${Math.round(activeOwnship.speedKts)} kt` : 'Speed --'}${activeOwnship.altitudeFt ? ` · ${Math.round(activeOwnship.altitudeFt)} ft` : ''}`}
+              >
+                <View
+                  style={[
+                    styles.ownshipMarker,
+                    activeOwnship.heading ? { transform: [{ rotate: `${activeOwnship.heading}deg` }] } : null,
+                  ]}
+                >
+                  <Ionicons name="navigate" size={18} color="#ffffff" />
+                </View>
+              </Marker>
+            ) : null}
             {routePoints.map((point) => (
               <Marker
                 key={point.icao}
@@ -1885,21 +2127,21 @@ export default function FlightPlannerScreen() {
           <View style={styles.instrumentRow}>
             <View style={styles.instrumentBox}>
               <Text style={styles.instrumentLabel}>Altitude</Text>
-              <Text style={styles.instrumentValue}>{gpsData?.altitudeFt ? `${gpsData.altitudeFt.toFixed(0)} ft` : '-'}</Text>
+              <Text style={styles.instrumentValue}>{activeOwnship?.altitudeFt ? `${activeOwnship.altitudeFt.toFixed(0)} ft` : '-'}</Text>
             </View>
             <View style={styles.instrumentBox}>
               <Text style={styles.instrumentLabel}>Groundspeed</Text>
-              <Text style={styles.instrumentValue}>{gpsData?.speedKts ? `${gpsData.speedKts.toFixed(0)} kt` : '-'}</Text>
+              <Text style={styles.instrumentValue}>{activeOwnship?.speedKts ? `${activeOwnship.speedKts.toFixed(0)} kt` : '-'}</Text>
             </View>
           </View>
           <View style={styles.instrumentRow}>
             <View style={styles.instrumentBox}>
               <Text style={styles.instrumentLabel}>Track</Text>
-              <Text style={styles.instrumentValue}>{gpsData?.heading ? `${gpsData.heading.toFixed(0)}°` : '-'}</Text>
+              <Text style={styles.instrumentValue}>{activeOwnship?.heading ? `${activeOwnship.heading.toFixed(0)}°` : '-'}</Text>
             </View>
             <View style={styles.instrumentBox}>
               <Text style={styles.instrumentLabel}>Vert Speed</Text>
-              <Text style={styles.instrumentValue}>{verticalSpeedFpm ? `${verticalSpeedFpm.toFixed(0)} fpm` : '-'}</Text>
+              <Text style={styles.instrumentValue}>{activeVerticalSpeedFpm ? `${activeVerticalSpeedFpm.toFixed(0)} fpm` : '-'}</Text>
             </View>
           </View>
           {routeProgress && (
@@ -2581,6 +2823,15 @@ const styles = StyleSheet.create({
   helpLink: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.sm },
   helpLinkText: { fontSize: 12, color: colors.primary, fontWeight: '600' },
   trafficRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  simCard: {
+    marginBottom: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+  },
+  simActionRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xs },
   portInput: { flex: 1 },
   alertCard: {
     marginBottom: spacing.sm,
@@ -2614,6 +2865,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderWidth: 1,
     borderColor: '#fff',
+  },
+  ownshipMarker: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: '#ffffff',
+    ...shadow.card,
   },
   windMarker: { alignItems: 'center', justifyContent: 'center' },
   calloutText: { fontSize: 12, color: colors.text },

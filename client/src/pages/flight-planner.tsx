@@ -4369,6 +4369,12 @@ export default function FlightPlanner() {
       .cell .label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #71869d; margin-bottom: 5px; }
       .cell .value { font-size: 15px; font-weight: 600; color: var(--ink); word-break: break-word; }
       .route { font-family: "Courier New", monospace; font-size: 13px; white-space: pre-wrap; line-height: 1.5; }
+      .clearance-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .clearance-card { border: 1px dashed #c9d7e6; border-radius: 12px; padding: 12px 14px; background: #fbfdff; }
+      .clearance-card .label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #71869d; margin-bottom: 8px; }
+      .write-line { height: 22px; border-bottom: 1px solid #cfd9e4; margin-bottom: 8px; }
+      .write-line:last-child { margin-bottom: 0; }
+      .clearance-prompts { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; line-height: 1.55; }
       .history-entry { border-top: 1px solid #e7edf4; padding-top: 12px; margin-top: 12px; break-inside: avoid; page-break-inside: avoid; }
       .history-entry:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
       .history-head { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; margin-bottom: 6px; }
@@ -4436,6 +4442,34 @@ export default function FlightPlanner() {
             <div class="cell"><div class="label">Estimated Enroute Time</div><div class="value">${escapeHtml(plan.filingEstimatedEnrouteMinutes ? formatMinutesLabel(Number(plan.filingEstimatedEnrouteMinutes)) : "—")}</div></div>
             <div class="cell"><div class="label">Total Fuel Required</div><div class="value">${escapeHtml(plan.fuelRequired ? `${plan.fuelRequired} gal` : "—")}</div></div>
             <div class="cell"><div class="label">Fuel On Board</div><div class="value">${escapeHtml(plan.fuelOnBoard ? `${plan.fuelOnBoard} gal` : "—")}</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Clearance / Readback Notes</h2>
+          <div class="muted">Use this space for ATC clearance notes and route changes after filing.</div>
+          <ul class="clearance-prompts">
+            <li>Cleared to __ via __</li>
+            <li>Expect FL__/__ altitude __ minutes after departure</li>
+            <li>Departure frequency __</li>
+            <li>Squawk __</li>
+          </ul>
+          <div class="clearance-grid" style="margin-top:14px;">
+            <div class="clearance-card">
+              <div class="label">Primary Readback Notes</div>
+              <div class="write-line"></div>
+              <div class="write-line"></div>
+              <div class="write-line"></div>
+              <div class="write-line"></div>
+              <div class="write-line"></div>
+            </div>
+            <div class="clearance-card">
+              <div class="label">Route Change / New Waypoint</div>
+              <div class="write-line"></div>
+              <div class="write-line"></div>
+              <div class="write-line"></div>
+              <div class="write-line"></div>
+              <div class="write-line"></div>
+            </div>
           </div>
         </div>
         <div class="panel">

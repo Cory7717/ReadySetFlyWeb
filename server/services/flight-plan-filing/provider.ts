@@ -371,6 +371,39 @@ const parseProviderResponse = async (response: Response) => {
   return { text };
 };
 
+const retrieveLeidosPlanMetadata = async (
+  plan: FlightPlan,
+  config: LeidosFlightServiceConfig,
+): Promise<Record<string, unknown> | null> => {
+  const providerPlanId = String(plan.filingProviderPlanId || '').trim();
+  if (!providerPlanId || !config.username || !config.password) return null;
+
+  const baseUrl = config.baseUrl.endsWith('/') ? config.baseUrl : `${config.baseUrl}/`;
+  const url = new URL(`FP/${encodeURIComponent(providerPlanId)}/retrieve`, baseUrl);
+  url.searchParams.set('versionRequested', '20240801');
+
+  const basic = Buffer.from(`${config.username}:${config.password}`).toString('base64');
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        Authorization: `Basic ${basic}`,
+        Accept: 'application/json, text/plain, */*',
+        'User-Agent': config.userAgent,
+      },
+    });
+  } catch {
+    return null;
+  }
+
+  const parsedResponse = await parseProviderResponse(response);
+  if (!response.ok || typeof parsedResponse.text === 'string') {
+    return null;
+  }
+  return parsedResponse;
+};
+
 export const searchLeidosRoute = async ({
   departure,
   destination,
@@ -608,7 +641,24 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       );
     }
 
-    if ((action === "amend" || action === "activate") && !extractVersionStamp(plan)) {
+    let effectivePlan = plan;
+    if ((action === "amend" || action === "activate") && !extractVersionStamp(effectivePlan)) {
+      const retrievedMetadata = await retrieveLeidosPlanMetadata(plan, config);
+      const retrievedVersionStamp = extractFilingVersionStamp(retrievedMetadata);
+      if (retrievedMetadata && retrievedVersionStamp) {
+        effectivePlan = {
+          ...plan,
+          filingRaw: {
+            retrievedAt: new Date().toISOString(),
+            providerPlanId: plan.filingProviderPlanId,
+            versionStamp: retrievedVersionStamp,
+            response: retrievedMetadata,
+          },
+        } as FlightPlan;
+      }
+    }
+
+    if ((action === "amend" || action === "activate") && !extractVersionStamp(effectivePlan)) {
       return buildStagedFallbackResult(
         plan,
         action,
@@ -617,8 +667,8 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       );
     }
 
-    const requestUrl = resolveActionPath(config.baseUrl, actionPath, plan);
-    const requestBody = buildLeidosActionPayload(plan, action, config);
+    const requestUrl = resolveActionPath(config.baseUrl, actionPath, effectivePlan);
+    const requestBody = buildLeidosActionPayload(effectivePlan, action, config);
     const basic = Buffer.from(`${config.username}:${config.password}`).toString("base64");
     let response: Response;
     try {

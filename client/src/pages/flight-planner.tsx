@@ -1869,6 +1869,23 @@ export default function FlightPlanner() {
     enabled: isAuthenticated,
   });
 
+  const mergePlanIntoList = useCallback((plans: FlightPlan[], nextPlan: FlightPlan | null | undefined) => {
+    if (!nextPlan?.id) return plans;
+    let replaced = false;
+    const merged = plans.map((plan) => {
+      if (plan.id !== nextPlan.id) return plan;
+      replaced = true;
+      return { ...plan, ...nextPlan };
+    });
+    if (replaced) return merged;
+    return [nextPlan, ...plans];
+  }, []);
+
+  const savedPlansView = useMemo(
+    () => mergePlanIntoList(savedPlans, editingPlan),
+    [editingPlan, mergePlanIntoList, savedPlans]
+  );
+
   const { data: savedProfiles = [] } = useQuery<AircraftProfile[]>({
     queryKey: ["/api/aircraft/profiles"],
     enabled: isAuthenticated,
@@ -3806,7 +3823,7 @@ export default function FlightPlanner() {
     const keys: (keyof typeof autoChecklist)[] = ["weather", "fuel", "currency", "notams", "tfr", "fuelSufficient"];
     return keys.filter((key) => checklist[key] || autoChecklist[key]).length;
   }, [autoChecklist, checklist]);
-  const recentPlans = useMemo(() => savedPlans.slice(0, 8), [savedPlans]);
+  const recentPlans = useMemo(() => savedPlansView.slice(0, 8), [savedPlansView]);
 
   const isIfrFlight = hasIfrWeather || plannedAltitudeFt >= 18000;
   const isVfrFlight = !isIfrFlight;
@@ -4604,6 +4621,9 @@ export default function FlightPlanner() {
       return res.json();
     },
     onSuccess: (savedPlan: FlightPlan) => {
+      queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
+        mergePlanIntoList(current, savedPlan)
+      );
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       setEditingPlan(savedPlan);
       setPendingFilingActionAfterSave(null);
@@ -4667,6 +4687,11 @@ export default function FlightPlanner() {
       return res.json();
     },
     onSuccess: (updatedPlan: FlightPlan | null) => {
+      if (updatedPlan) {
+        queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
+          mergePlanIntoList(current, updatedPlan)
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       if (updatedPlan) {
         setEditingPlan(updatedPlan);
@@ -4709,8 +4734,14 @@ export default function FlightPlanner() {
       const res = await apiRequest("DELETE", `/api/flight-plans/${id}`);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_result, deletedId) => {
+      queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
+        current.filter((plan) => plan.id !== deletedId)
+      );
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      if (editingPlanRef.current?.id === deletedId) {
+        setEditingPlan(null);
+      }
       toast({ title: "Flight plan deleted" });
     },
     onError: (error: any) => {
@@ -4811,10 +4842,13 @@ export default function FlightPlanner() {
       return res.json();
     },
     onSuccess: (result: any, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       if (result?.plan) {
+        queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
+          mergePlanIntoList(current, result.plan)
+        );
         setEditingPlan(result.plan);
       }
+      queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       toast({
         title: `${variables.action[0].toUpperCase()}${variables.action.slice(1)} ${result?.live ? "submitted" : "staged"}`,
         description: result?.message || "The provider handoff was recorded.",
@@ -7568,7 +7602,7 @@ export default function FlightPlanner() {
                   </Button>
                 )}
               </div>
-              {savedPlans.map((plan) => (
+              {savedPlansView.map((plan) => (
               <div key={plan.id} className="rounded-lg border p-4 space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
@@ -7641,8 +7675,20 @@ export default function FlightPlanner() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => beginAmendWorkflow(plan)}
-                    disabled={filingActionMutation.isPending}
+                    onClick={() => {
+                      const isCurrentEditingPlan = editingPlanRef.current?.id === plan.id;
+                      const canSubmitLiveAmend = canSubmitAmendForPlan(plan);
+
+                      if (isCurrentEditingPlan && canSubmitLiveAmend) {
+                        setActiveTab("file");
+                        setPendingFilingActionAfterSave({ planId: plan.id, action: "amend" });
+                        updatePlanMutation.mutate(plan.id);
+                        return;
+                      }
+
+                      beginAmendWorkflow(plan);
+                    }}
+                    disabled={filingActionMutation.isPending || updatePlanMutation.isPending}
                   >
                     {canSubmitAmendForPlan(plan) ? "Amend" : "Review amend requirements"}
                   </Button>

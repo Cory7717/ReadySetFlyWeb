@@ -1115,7 +1115,7 @@ export default function FlightPlannerScreen() {
     if (terrainRisk === 'nominal' && obstacleRisk === 'nominal') return null;
     const terrainSafeAltitude = terrainProfile?.maxElevationFt != null ? Math.ceil((terrainProfile.maxElevationFt + 2000) / 100) * 100 : null;
     const obstacleSafeAltitude = highestObstacleHeightFt != null ? Math.ceil((highestObstacleHeightFt + 1500) / 100) * 100 : null;
-    const safeAltitudeFt = Math.max(terrainSafeAltitude ?? 0, obstacleSafeAltitude ?? 0, simulationAltitudeFt || 0);
+    const safeAltitudeFt = Math.max(terrainSafeAltitude ?? 0, obstacleSafeAltitude ?? 0, simulationAltitudeFt);
     if (terrainRisk === 'warning' || obstacleRisk === 'warning') {
       return selectedDiversion
         ? `Climb toward ${safeAltitudeFt.toFixed(0)} ft or divert ${selectedDiversion.icao}`
@@ -1202,7 +1202,7 @@ export default function FlightPlannerScreen() {
     const targetAltitude =
       terrainRisk === 'warning' || obstacleRisk === 'warning'
         ? Math.max(terrainEscapeTargetFt ?? 0, flightDeckTargetAltitudeFt ?? 0, currentAltitude)
-        : flightDeckTargetAltitudeFt ?? simulationAltitudeFt || currentAltitude;
+        : flightDeckTargetAltitudeFt ?? simulationAltitudeFt;
     const altitudeErrorFt = targetAltitude - currentAltitude;
     const lateralCaptured = Boolean(visionRouteGuidance?.lateralCaptured);
     const verticalCaptured = Math.abs(altitudeErrorFt) < 150;

@@ -20589,6 +20589,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         message: providerResult.message,
         warnings: providerResult.warnings,
         validation,
+        providerPlanId: providerResult.providerPlanId,
+        raw: providerResult.raw,
       };
 
       const statusTimestamps: Record<string, Date> = {};

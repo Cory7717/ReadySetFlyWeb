@@ -191,9 +191,41 @@ const appendLeidosAltitudeFields = (params: URLSearchParams, altitudeFt?: number
   params.append("altitudeTypeA", String(roundedAltitude));
 };
 
+const parseJsonLikeRecord = (value: unknown) => {
+  if (value && typeof value === "object") return value as Record<string, unknown>;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (
+    !(trimmed.startsWith("{") && trimmed.endsWith("}")) &&
+    !(trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+};
+
 const extractVersionStamp = (plan: FlightPlan) => {
-  const raw = (plan.filingRaw && typeof plan.filingRaw === "object") ? plan.filingRaw as Record<string, any> : null;
-  return extractFilingVersionStamp(raw);
+  const raw = parseJsonLikeRecord(plan.filingRaw);
+  const rawVersionStamp = extractFilingVersionStamp(raw);
+  if (rawVersionStamp) return rawVersionStamp;
+
+  const history = Array.isArray(plan.filingActionHistory) ? [...plan.filingActionHistory].reverse() : [];
+  for (const entry of history) {
+    const versionStamp =
+      extractFilingVersionStamp(entry) ||
+      extractFilingVersionStamp(parseJsonLikeRecord((entry as Record<string, unknown>)?.raw)) ||
+      extractFilingVersionStamp(parseJsonLikeRecord((entry as Record<string, unknown>)?.providerRaw)) ||
+      extractFilingVersionStamp(parseJsonLikeRecord((entry as Record<string, unknown>)?.response));
+    if (versionStamp) return versionStamp;
+  }
+
+  return null;
 };
 
 const formatDepartureInstant = (value?: Date | string | null) => {

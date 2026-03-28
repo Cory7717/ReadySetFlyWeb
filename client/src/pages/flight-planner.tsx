@@ -284,6 +284,24 @@ const getPlannerAircraftTypeValue = ({
   return manual || null;
 };
 
+const extractIntermediateAirportTokensForAppliedRoute = ({
+  route,
+  departure,
+  destination,
+}: {
+  route: string;
+  departure: string;
+  destination: string;
+}) => {
+  const normalizedDeparture = departure.trim().toUpperCase();
+  const normalizedDestination = destination.trim().toUpperCase();
+  const analysis = analyzeFiledRoute(normalizeRouteText(route));
+  return analysis.airportTokens.filter((icao) => {
+    const normalized = icao.trim().toUpperCase();
+    return normalized !== normalizedDeparture && normalized !== normalizedDestination;
+  });
+};
+
 const normalizeDegrees = (value: number) => ((value % 360) + 360) % 360;
 const toRadians = (value: number) => (value * Math.PI) / 180;
 const toDegrees = (value: number) => (value * 180) / Math.PI;
@@ -4454,7 +4472,8 @@ export default function FlightPlanner() {
             <div class="cell"><div class="label">Planned Arrival</div><div class="value">${escapeHtml(formatDateTime(plan.plannedArrivalAt))}</div></div>
             <div class="cell"><div class="label">Aircraft / Tail</div><div class="value">${escapeHtml(plan.tailNumber || "—")}</div></div>
             <div class="cell"><div class="label">Aircraft Type</div><div class="value">${escapeHtml(plan.aircraftType || "—")}</div></div>
-            <div class="cell"><div class="label">Cruise / Altitude</div><div class="value">${escapeHtml(`${plan.filingTrueAirspeedKtas || "—"} KTAS at ${plan.filingPlannedAltitudeFt || "—"} ft`)}</div></div>
+            <div class="cell"><div class="label">Expected Flight Altitude</div><div class="value">${escapeHtml(plan.filingPlannedAltitudeFt ? `${plan.filingPlannedAltitudeFt.toLocaleString()} ft` : "—")}</div></div>
+            <div class="cell"><div class="label">True Airspeed</div><div class="value">${escapeHtml(plan.filingTrueAirspeedKtas ? `${plan.filingTrueAirspeedKtas} KTAS` : "—")}</div></div>
             <div class="cell"><div class="label">Endurance / Souls</div><div class="value">${escapeHtml(`${formatMinutesLabel(Number(plan.filingEnduranceMinutes || 0))} / ${plan.filingSoulsOnBoard || "—"} onboard`)}</div></div>
             <div class="cell"><div class="label">Estimated Enroute Time</div><div class="value">${escapeHtml(plan.filingEstimatedEnrouteMinutes ? formatMinutesLabel(Number(plan.filingEstimatedEnrouteMinutes)) : "—")}</div></div>
             <div class="cell"><div class="label">Total Fuel Required</div><div class="value">${escapeHtml(plan.fuelRequired ? `${plan.fuelRequired} gal` : "—")}</div></div>
@@ -4581,6 +4600,19 @@ export default function FlightPlanner() {
       title: "Filed plan loaded for amendment",
       description: "Make your changes anywhere in the planner, then return to File & Save and click Amend to submit the updated plan to Leidos.",
     });
+  };
+
+  const applyFiledRouteToPlanner = (route: string) => {
+    const nextRoute = route.trim().toUpperCase();
+    const intermediateAirports = extractIntermediateAirportTokensForAppliedRoute({
+      route: nextRoute,
+      departure: departureResolved || form.departure || "",
+      destination: destinationResolved || form.destination || "",
+    });
+
+    setForm((current) => ({ ...current, route: nextRoute }));
+    setWaypointsInput(intermediateAirports.join(" "));
+    setPlannedStopsInput("");
   };
 
   const createPlanMutation = useMutation({
@@ -5971,7 +6003,7 @@ export default function FlightPlanner() {
                           <Button
                             type="button"
                             size="sm"
-                            onClick={() => setForm((current) => ({ ...current, route: leidosRouteQuery.data?.route || "" }))}
+                            onClick={() => applyFiledRouteToPlanner(leidosRouteQuery.data?.route || "")}
                           >
                             Use recommended route
                           </Button>
@@ -5994,7 +6026,7 @@ export default function FlightPlanner() {
                                   type="button"
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => setForm((current) => ({ ...current, route }))}
+                                  onClick={() => applyFiledRouteToPlanner(route)}
                                 >
                                   Use route
                                 </Button>

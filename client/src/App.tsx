@@ -196,6 +196,7 @@ function Router() {
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/faq" component={FaqPage} />
       <Route path="/synthetic-vision" component={SyntheticVisionPage} />
+      <Route path="/flight-demo" component={SyntheticVisionPage} />
       <Route path="/logbook/pro" component={LogbookPro} />
       <Route path="/flight-planner" component={FlightPlanner} />
       <Route path="/pilot-tools" component={() => <PaidToolAccess component={PilotTools} />} />

@@ -153,11 +153,11 @@ export const RSF_TOOLS: ToolRegistryItem[] = [
   {
     id: "synthetic-vision",
     title: "Synthetic Vision",
-    description: "RSF synthetic-vision lab module.",
+    description: "Web preview of the mobile FlightDeck map/vision simulation.",
     path: "/synthetic-vision",
     group: "advanced",
-    status: "coming_soon",
-    keywords: ["synthetic vision", "svt", "terrain view", "pfd"],
+    status: "beta",
+    keywords: ["synthetic vision", "svt", "terrain view", "pfd", "flight demo", "flightdeck"],
   },
   {
     id: "gps-sims",

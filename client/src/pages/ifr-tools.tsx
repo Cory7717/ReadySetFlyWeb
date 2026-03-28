@@ -67,8 +67,7 @@ const tools: IfrTool[] = [
     title: "Synthetic Vision Lab",
     description: "RSF Pro synthetic attitude/terrain trainer with compact live traffic panel.",
     href: "/synthetic-vision",
-    cta: "Coming soon",
-    comingSoon: true,
+    cta: "Open demo",
   },
   {
     title: "NOTAMs & Active Runway",
@@ -174,9 +173,9 @@ export default function IfrTools() {
           </Alert>
         ) : (
           <Alert className="border-dashed">
-            <AlertTitle>Coming soon</AlertTitle>
+            <AlertTitle>Roadmap preview</AlertTitle>
             <AlertDescription>
-              GPS trainers, Synthetic Vision, and Live Traffic stay visible here, but they are still being finished before wider release.
+              GPS trainers and Live Traffic stay visible here for roadmap clarity. Synthetic Vision is now available as a browser demo of the new FlightDeck experience.
             </AlertDescription>
           </Alert>
         )}

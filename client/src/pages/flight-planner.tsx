@@ -7836,9 +7836,13 @@ export default function FlightPlanner() {
               >
                 How to connect your ADS-B receiver
               </a>
-              <span className="text-slate-600">
-                RSF Synthetic Vision Lab <span className="font-medium">(coming soon)</span>
-              </span>
+              <Link
+                href="/flight-demo"
+                className="text-blue-700 hover:underline"
+                onClick={() => trackEvent("planner_flight_demo_click", { target: "/flight-demo" })}
+              >
+                Open RSF Flight Demo
+              </Link>
             </div>
             <div className="mb-3 rounded-lg border border-slate-300 bg-slate-100 p-2">
               <div className="flex flex-wrap items-center gap-2">

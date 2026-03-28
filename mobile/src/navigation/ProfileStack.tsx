@@ -10,6 +10,7 @@ import AirportBriefingScreen from '../screens/AirportBriefingScreen';
 import AviationWeatherHubScreen from '../screens/AviationWeatherHubScreen';
 import ApproachPlatesScreen from '../screens/ApproachPlatesScreen';
 import FlightPlannerScreen from '../screens/FlightPlannerScreen';
+import FlightDeckScreen from '../screens/FlightDeckScreen';
 import RadioCommsTrainerScreen from '../screens/RadioCommsTrainerScreen';
 import LogbookScreen from '../screens/LogbookScreen';
 import LogbookEntryScreen from '../screens/LogbookEntryScreen';
@@ -53,13 +54,24 @@ export type ProfileStackParamList = {
   AviationWeatherHub: undefined;
   AirportBriefing: undefined;
   ApproachPlates: undefined;
-  FlightPlanner: undefined;
+  FlightPlanner:
+    | {
+        departure?: string;
+        destination?: string;
+        waypoints?: string;
+        plannedStops?: string;
+        plannedAltitude?: string;
+        cruiseKtas?: string;
+      }
+    | undefined;
   FlightDeck:
     | {
         departure?: string;
         destination?: string;
         waypoints?: string;
         plannedStops?: string;
+        plannedAltitude?: string;
+        cruiseKtas?: string;
         mode?: 'flight';
       }
     | undefined;
@@ -158,7 +170,7 @@ export default function ProfileStack() {
       />
       <Stack.Screen
         name="FlightDeck"
-        component={FlightPlannerScreen}
+        component={FlightDeckScreen}
         options={{ title: 'Flight Deck' }}
       />
       <Stack.Screen 

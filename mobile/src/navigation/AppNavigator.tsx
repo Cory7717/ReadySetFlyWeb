@@ -1,4 +1,4 @@
-import { NavigationContainer, type LinkingOptions } from '@react-navigation/native';
+import { NavigationContainer, getFocusedRouteNameFromRoute, type LinkingOptions } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -53,6 +53,7 @@ const linking: LinkingOptions<AppTabParamList> = {
           AirportBriefing: 'airport-briefing',
           ApproachPlates: 'approach-plates',
           FlightPlanner: 'flight-planner',
+          FlightDeck: 'flight-deck',
           RadioCommsTrainer: 'radio-comms-trainer',
           Logbook: 'logbook',
           LogbookEntry: 'logbook/entry/:entryId',
@@ -121,7 +122,11 @@ export default function AppNavigator() {
       }}
     >
       <Tab.Navigator
-        screenOptions={({ route }) => ({
+        screenOptions={({ route }) => {
+          const focusedNestedRoute = getFocusedRouteNameFromRoute(route) ?? '';
+          const hideTabBarForFlightDeck = route.name === 'Profile' && focusedNestedRoute === 'FlightDeck';
+
+          return {
           tabBarIcon: ({ focused, color, size }) => {
             let iconName: any;
 
@@ -143,6 +148,7 @@ export default function AppNavigator() {
           tabBarInactiveTintColor: colors.textSoft,
           headerShown: false,
           tabBarStyle: {
+            display: hideTabBarForFlightDeck ? 'none' : 'flex',
             position: 'absolute',
             left: 12,
             right: 12,
@@ -164,7 +170,8 @@ export default function AppNavigator() {
             marginHorizontal: 2,
           },
           tabBarHideOnKeyboard: true,
-        })}
+        };
+        }}
       >
         <Tab.Screen name="Home" component={HomeScreen} />
         <Tab.Screen name="Rentals" component={RentalsStack} options={{ headerShown: false }} />

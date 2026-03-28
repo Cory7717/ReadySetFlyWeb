@@ -61,6 +61,8 @@ type WeatherResponse = {
 type NearbyDiversionAirport = {
   icao: string;
   name?: string | null;
+  lat?: number | null;
+  lon?: number | null;
   distanceNm: number;
   bearingDeg: number;
   maxRunwayFt?: number | null;
@@ -87,11 +89,49 @@ type RunwayBriefingResponse = {
   } | null;
 };
 
+type TerrainProfileResponse = {
+  source: string;
+  sampledPointCount: number;
+  maxElevationFt: number | null;
+  samples: Array<{
+    lat: number;
+    lon: number;
+    elevationFt: number | null;
+  }>;
+};
+
+type NearbyObstacle = {
+  id: string;
+  lat: number;
+  lon: number;
+  amslFt: number | null;
+  aglFt: number | null;
+  city: string | null;
+  state: string | null;
+  kind: string | null;
+  lighting: string | null;
+  distanceNm: number;
+};
+
+type NearbyObstacleResponse = {
+  source: string;
+  radiusNm: number;
+  count: number;
+  highestObstacle: NearbyObstacle | null;
+  obstacles: NearbyObstacle[];
+};
+
 type RankedTrafficTarget = TrafficTarget & {
   distanceNm: number;
   altitudeDeltaFt: number | null;
   threatScore: number;
   threatLevel: 'immediate' | 'advisory' | 'monitor';
+};
+
+type TrafficTrend = {
+  distanceRateNmPerMin: number | null;
+  bearingRateDegPerMin: number | null;
+  closureText: string;
 };
 
 type OwnshipData = {
@@ -145,6 +185,9 @@ type MobileRouteProgressSummary = {
   remainingRouteNm: number;
   progressPct: number;
   offRouteNm: number;
+  crossTrackNm: number;
+  legIndex: number;
+  desiredTrackDeg: number | null;
   nextWaypoint: string | null;
   etaText: string | null;
 };
@@ -165,7 +208,9 @@ function computeMobileRouteProgress(
     | {
         legIndex: number;
         offRouteNm: number;
+        crossTrackNm: number;
         traveledNm: number;
+        desiredTrackDeg: number | null;
       }
     | null = null;
 
@@ -186,11 +231,14 @@ function computeMobileRouteProgress(
     const nearestX = startNm.x + dx * t;
     const nearestY = startNm.y + dy * t;
     const offRouteNm = Math.hypot(ownshipPoint.x - nearestX, ownshipPoint.y - nearestY);
+    const crossZ = dx * (ownshipPoint.y - startNm.y) - dy * (ownshipPoint.x - startNm.x);
+    const crossTrackNm = offRouteNm === 0 ? 0 : offRouteNm * (crossZ >= 0 ? 1 : -1);
     const legLengthNm = legLengths[index] ?? 0;
     const traveledNm = traveledBeforeLeg + legLengthNm * t;
+    const desiredTrackDeg = bearingBetweenPoints(start, end);
 
     if (!best || offRouteNm < best.offRouteNm) {
-      best = { legIndex: index, offRouteNm, traveledNm };
+      best = { legIndex: index, offRouteNm, crossTrackNm, traveledNm, desiredTrackDeg };
     }
     traveledBeforeLeg += legLengthNm;
   }
@@ -212,6 +260,9 @@ function computeMobileRouteProgress(
     remainingRouteNm,
     progressPct: Math.min(100, Math.max(0, (best.traveledNm / totalRouteNm) * 100)),
     offRouteNm: best.offRouteNm,
+    crossTrackNm: best.crossTrackNm,
+    legIndex: best.legIndex,
+    desiredTrackDeg: best.desiredTrackDeg,
     nextWaypoint: routePoints[best.legIndex + 1]?.icao || routePoints[routePoints.length - 1]?.icao || null,
     etaText,
   };
@@ -304,11 +355,14 @@ function interpolateRouteOwnship(
   };
 }
 
-function buildSimulatedTrafficTargets(ownship: OwnshipData | null): TrafficTarget[] {
+function buildSimulatedTrafficTargets(
+  ownship: OwnshipData | null,
+  options?: { injectConflict?: boolean },
+): TrafficTarget[] {
   if (!ownship) return [];
   const lead = offsetLatLonByNm(ownship.lat, ownship.lon, 1.5, 1.2);
   const high = offsetLatLonByNm(ownship.lat, ownship.lon, -2.1, 2.8);
-  return [
+  const targets: TrafficTarget[] = [
     {
       id: 'sim-traffic-1',
       callsign: 'RSF201',
@@ -326,6 +380,18 @@ function buildSimulatedTrafficTargets(ownship: OwnshipData | null): TrafficTarge
       updatedAt: Date.now(),
     },
   ];
+  if (options?.injectConflict) {
+    const close = offsetLatLonByNm(ownship.lat, ownship.lon, 0.35, 0.18);
+    targets.unshift({
+      id: 'sim-traffic-conflict',
+      callsign: 'TA101',
+      lat: close.lat,
+      lon: close.lon,
+      altitudeFt: Math.round((ownship.altitudeFt || 6500) + 100),
+      updatedAt: Date.now(),
+    });
+  }
+  return targets;
 }
 
 function rankTrafficTargets(
@@ -377,6 +443,27 @@ function pickBestDiversionFrequency(
     return 9;
   };
   return [...entries].sort((a, b) => rank(a) - rank(b))[0] || null;
+}
+
+function formatAltitudeDelta(altitudeDeltaFt: number | null | undefined) {
+  if (typeof altitudeDeltaFt !== 'number' || !Number.isFinite(altitudeDeltaFt)) return 'alt unknown';
+  return `${altitudeDeltaFt >= 0 ? '+' : ''}${Math.round(altitudeDeltaFt)} ft`;
+}
+
+function normalizeHeadingDelta(delta: number) {
+  let normalized = ((delta + 180) % 360 + 360) % 360 - 180;
+  if (normalized === -180) normalized = 180;
+  return normalized;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function relativeClockPosition(bearingDelta: number) {
+  const normalized = ((bearingDelta % 360) + 360) % 360;
+  const hours = Math.round(normalized / 30) || 12;
+  return `${hours} o'clock`;
 }
 
 function parseFlightCategory(metar: any): 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNKNOWN' {
@@ -544,6 +631,7 @@ export default function FlightPlannerScreen() {
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, user } = useIsAuthenticated();
+  const isFlightDeck = route.name === 'FlightDeck' || route.params?.mode === 'flight';
   const [departure, setDeparture] = useState('KJFK');
   const [destination, setDestination] = useState('KBOS');
   const [waypoints, setWaypoints] = useState('');
@@ -586,6 +674,11 @@ export default function FlightPlannerScreen() {
   const [simulationRunning, setSimulationRunning] = useState(false);
   const [simulationProgress, setSimulationProgress] = useState(0);
   const [simulationSpeed, setSimulationSpeed] = useState<'1x' | '4x' | '8x'>('4x');
+  const [flightDeckPanel, setFlightDeckPanel] = useState<'status' | 'layers' | 'traffic' | 'diversions'>('status');
+  const [flightDeckView, setFlightDeckView] = useState<'map' | 'vision'>('map');
+  const [flightDeckHudExpanded, setFlightDeckHudExpanded] = useState(false);
+  const [selectedTrafficId, setSelectedTrafficId] = useState<string | null>(null);
+  const [simulationConflictEnabled, setSimulationConflictEnabled] = useState(false);
   const [simulatedGpsData, setSimulatedGpsData] = useState<OwnshipData | null>(null);
   const [simulatedVerticalSpeedFpm, setSimulatedVerticalSpeedFpm] = useState<number | null>(null);
   const locationSubRef = useState<{ remove?: () => void }>(() => ({}))[0];
@@ -633,6 +726,12 @@ export default function FlightPlannerScreen() {
   const [selectedDiversionIcao, setSelectedDiversionIcao] = useState<string | null>(null);
   const [selectedDiversionBriefing, setSelectedDiversionBriefing] = useState<RunwayBriefingResponse | null>(null);
   const [selectedDiversionBriefingLoading, setSelectedDiversionBriefingLoading] = useState(false);
+  const [terrainProfile, setTerrainProfile] = useState<TerrainProfileResponse | null>(null);
+  const [terrainProfileLoading, setTerrainProfileLoading] = useState(false);
+  const [obstacleScan, setObstacleScan] = useState<NearbyObstacleResponse | null>(null);
+  const [obstacleScanLoading, setObstacleScanLoading] = useState(false);
+  const [trafficTrendMap, setTrafficTrendMap] = useState<Record<string, TrafficTrend>>({});
+  const trafficSnapshotRef = useRef<Record<string, { distanceNm: number; bearingDelta: number; at: number }>>({});
 
   const [checklist, setChecklist] = useState({
     weather: false,
@@ -649,8 +748,8 @@ export default function FlightPlannerScreen() {
   const simulationCruiseKts = Math.max(60, Number(cruiseKtas) || 110);
   const simulationAltitudeFt = Math.max(2500, Number(plannedAltitude) || 6500);
   const simulatedTrafficTargets = useMemo(
-    () => buildSimulatedTrafficTargets(simulatedGpsData),
-    [simulatedGpsData]
+    () => buildSimulatedTrafficTargets(simulatedGpsData, { injectConflict: simulationConflictEnabled }),
+    [simulatedGpsData, simulationConflictEnabled]
   );
   const activeOwnship = simulationEnabled && simulatedGpsData ? simulatedGpsData : gpsData;
   const activeVerticalSpeedFpm = simulationEnabled ? simulatedVerticalSpeedFpm : verticalSpeedFpm;
@@ -659,6 +758,12 @@ export default function FlightPlannerScreen() {
     () => computeMobileRouteProgress(routePoints, activeOwnship),
     [activeOwnship, routePoints]
   );
+  const flightPhase = useMemo<'ground' | 'departure' | 'enroute' | 'arrival'>(() => {
+    if (!routeProgress) return activeOwnship ? 'departure' : 'ground';
+    if (routeProgress.progressPct < 18) return 'departure';
+    if (routeProgress.progressPct > 78 || routeProgress.remainingRouteNm < 35) return 'arrival';
+    return 'enroute';
+  }, [activeOwnship, routeProgress]);
   const rankedTrafficTargets = useMemo(
     () => rankTrafficTargets(activeTrafficTargets, activeOwnship),
     [activeOwnship, activeTrafficTargets]
@@ -685,6 +790,486 @@ export default function FlightPlannerScreen() {
     () => pickBestDiversionFrequency(selectedDiversion),
     [selectedDiversion]
   );
+  const topTrafficTarget = visibleTrafficTargets[0] || null;
+  const selectedTrafficTarget = useMemo(
+    () => visibleTrafficTargets.find((target) => target.id === selectedTrafficId) || topTrafficTarget || null,
+    [selectedTrafficId, topTrafficTarget, visibleTrafficTargets]
+  );
+  useEffect(() => {
+    if (!activeOwnship || !rankedTrafficTargets.length) {
+      setTrafficTrendMap({});
+      trafficSnapshotRef.current = {};
+      return;
+    }
+
+    const nextSnapshots: Record<string, { distanceNm: number; bearingDelta: number; at: number }> = {};
+    const nextTrends: Record<string, TrafficTrend> = {};
+    const now = Date.now();
+
+    rankedTrafficTargets.forEach((target) => {
+      const bearingToTraffic = bearingBetweenPoints(
+        { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+        { latitude: target.lat, longitude: target.lon },
+      );
+      const bearingDelta = normalizeHeadingDelta(bearingToTraffic - (activeOwnship.heading ?? 0));
+      const previous = trafficSnapshotRef.current[target.id];
+      let distanceRateNmPerMin: number | null = null;
+      let bearingRateDegPerMin: number | null = null;
+      if (previous) {
+        const elapsedMinutes = Math.max((now - previous.at) / 60000, 0.016);
+        distanceRateNmPerMin = (target.distanceNm - previous.distanceNm) / elapsedMinutes;
+        bearingRateDegPerMin = normalizeHeadingDelta(bearingDelta - previous.bearingDelta) / elapsedMinutes;
+      }
+      const closureText =
+        distanceRateNmPerMin == null
+          ? 'Monitor'
+          : distanceRateNmPerMin <= -1
+            ? 'Closing fast'
+            : distanceRateNmPerMin <= -0.25
+              ? 'Converging'
+              : distanceRateNmPerMin >= 0.35
+                ? 'Opening'
+                : 'Stable';
+      nextTrends[target.id] = {
+        distanceRateNmPerMin,
+        bearingRateDegPerMin,
+        closureText,
+      };
+      nextSnapshots[target.id] = {
+        distanceNm: target.distanceNm,
+        bearingDelta,
+        at: now,
+      };
+    });
+
+    trafficSnapshotRef.current = nextSnapshots;
+    setTrafficTrendMap(nextTrends);
+  }, [activeOwnship, rankedTrafficTargets]);
+  const terrainPathParam = useMemo(
+    () =>
+      routePoints.length >= 2
+        ? routePoints.map((point) => `${point.latitude},${point.longitude}`).join(';')
+        : '',
+    [routePoints]
+  );
+  const nextWaypointMeta = useMemo(() => {
+    if (!routeProgress?.nextWaypoint) return null;
+    const normalized = routeProgress.nextWaypoint.toUpperCase();
+    return routePoints.find((point) => point.icao.toUpperCase() === normalized) || routePoints[1] || null;
+  }, [routePoints, routeProgress?.nextWaypoint]);
+  const terrainTrendFt = useMemo(() => {
+    const samples = terrainProfile?.samples ?? [];
+    if (samples.length < 3) return 0;
+    const near = samples.slice(0, Math.min(samples.length, 6)).map((sample) => sample.elevationFt ?? 0);
+    return Math.max(...near) - (near[0] ?? 0);
+  }, [terrainProfile?.samples]);
+  const terrainAlertThresholds = useMemo(() => {
+    const baseWarning = flightPhase === 'departure' || flightPhase === 'arrival' ? 1500 : 1000;
+    const baseCaution = flightPhase === 'departure' || flightPhase === 'arrival' ? 2500 : 2000;
+    const riseBuffer = terrainTrendFt > 1200 ? 500 : terrainTrendFt > 600 ? 250 : 0;
+    return {
+      warningFt: baseWarning + riseBuffer,
+      cautionFt: baseCaution + riseBuffer,
+      closingFast: terrainTrendFt > 1200,
+    };
+  }, [flightPhase, terrainTrendFt]);
+  const terrainClearanceFt = useMemo(() => {
+    if (!terrainProfile?.maxElevationFt || !Number.isFinite(simulationAltitudeFt)) return null;
+    return simulationAltitudeFt - terrainProfile.maxElevationFt;
+  }, [simulationAltitudeFt, terrainProfile?.maxElevationFt]);
+  const terrainRisk = useMemo<'nominal' | 'caution' | 'warning' | 'unknown'>(() => {
+    if (terrainClearanceFt == null) return 'unknown';
+    if (terrainClearanceFt < terrainAlertThresholds.warningFt) return 'warning';
+    if (terrainClearanceFt < terrainAlertThresholds.cautionFt) return 'caution';
+    return 'nominal';
+  }, [terrainAlertThresholds.cautionFt, terrainAlertThresholds.warningFt, terrainClearanceFt]);
+  const highestObstacleHeightFt = obstacleScan?.highestObstacle?.amslFt ?? obstacleScan?.highestObstacle?.aglFt ?? null;
+  const closestObstacleDistanceNm = useMemo(() => {
+    const obstacles = obstacleScan?.obstacles ?? [];
+    if (!obstacles.length) return null;
+    return obstacles.reduce((min, obstacle) => Math.min(min, obstacle.distanceNm), Number.POSITIVE_INFINITY);
+  }, [obstacleScan?.obstacles]);
+  const obstacleTimeMinutes = useMemo(() => {
+    if (!closestObstacleDistanceNm || !activeOwnship?.speedKts || activeOwnship.speedKts < 40) return null;
+    return (closestObstacleDistanceNm / activeOwnship.speedKts) * 60;
+  }, [activeOwnship?.speedKts, closestObstacleDistanceNm]);
+  const obstacleAlertThresholds = useMemo(() => {
+    const baseWarning = flightPhase === 'departure' || flightPhase === 'arrival' ? 1000 : 700;
+    const baseCaution = flightPhase === 'departure' || flightPhase === 'arrival' ? 1800 : 1500;
+    const closureBuffer = obstacleTimeMinutes != null && obstacleTimeMinutes <= 4
+      ? 300
+      : obstacleTimeMinutes != null && obstacleTimeMinutes <= 8
+        ? 150
+        : 0;
+    return {
+      warningFt: baseWarning + closureBuffer,
+      cautionFt: baseCaution + closureBuffer,
+      closingFast: obstacleTimeMinutes != null && obstacleTimeMinutes <= 4,
+    };
+  }, [flightPhase, obstacleTimeMinutes]);
+  const obstacleClearanceFt = useMemo(() => {
+    if (highestObstacleHeightFt == null) return null;
+    const referenceAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
+    return referenceAltitude - highestObstacleHeightFt;
+  }, [activeOwnship?.altitudeFt, highestObstacleHeightFt, simulationAltitudeFt]);
+  const obstacleRisk = useMemo<'nominal' | 'caution' | 'warning' | 'unknown'>(() => {
+    if (obstacleClearanceFt == null) return 'unknown';
+    if (obstacleClearanceFt < obstacleAlertThresholds.warningFt) return 'warning';
+    if (obstacleClearanceFt < obstacleAlertThresholds.cautionFt) return 'caution';
+    return 'nominal';
+  }, [obstacleAlertThresholds.cautionFt, obstacleAlertThresholds.warningFt, obstacleClearanceFt]);
+  const activeFlightAlert = useMemo(() => {
+    if (selectedTrafficTarget?.threatLevel === 'immediate') {
+      return {
+        severity: 'warning' as const,
+        title: 'Immediate traffic',
+        detail: `${selectedTrafficTarget.callsign || 'Traffic'} ${selectedTrafficTarget.distanceNm.toFixed(1)} NM · ${formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}`,
+      };
+    }
+    if (
+      selectedDiversion &&
+      (
+        selectedDiversion.flightCategory === 'IFR' ||
+        selectedDiversion.flightCategory === 'LIFR' ||
+        (selectedDiversionBriefing?.advisory?.crosswind ?? 0) >= 15
+      )
+    ) {
+      return {
+        severity: 'caution' as const,
+        title: 'Diversion caution',
+        detail: `${selectedDiversion.icao} ${selectedDiversion.flightCategory || 'WX'}${selectedDiversionBriefing?.advisory?.crosswind ? ` · XW ${selectedDiversionBriefing.advisory.crosswind} kt` : ''}`,
+      };
+    }
+    if (terrainRisk === 'warning') {
+      return {
+        severity: 'warning' as const,
+        title: 'Terrain warning',
+        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft${terrainAlertThresholds.closingFast ? ' - terrain rising quickly' : ''}`,
+      };
+    }
+    if (obstacleRisk === 'warning') {
+      return {
+        severity: 'warning' as const,
+        title: 'Obstacle warning',
+        detail: `Nearby obstacle clearance ${Math.round(obstacleClearanceFt || 0)} ft${obstacleAlertThresholds.closingFast ? ' - closure increasing' : ''}`,
+      };
+    }
+    if (terrainRisk === 'caution') {
+      return {
+        severity: 'caution' as const,
+        title: 'Terrain caution',
+        detail: `Route terrain clearance ${Math.round(terrainClearanceFt || 0)} ft`,
+      };
+    }
+    if (routeRiskLabel !== 'Normal') {
+      return {
+        severity: 'advisory' as const,
+        title: 'Route advisory',
+        detail: routeRiskLabel,
+      };
+    }
+    return null;
+  }, [routeRiskLabel, selectedDiversion, selectedDiversionBriefing?.advisory?.crosswind, selectedTrafficTarget]);
+  const visionGuidance = useMemo(() => {
+    if (selectedTrafficTarget?.threatLevel === 'immediate') {
+      return `Traffic ${selectedTrafficTarget.callsign || 'target'} ahead`;
+    }
+    if (terrainRisk === 'warning') {
+      return terrainAlertThresholds.closingFast ? 'Terrain rising rapidly' : 'Terrain margin low';
+    }
+    if (terrainRisk === 'caution') {
+      return 'Terrain rising ahead';
+    }
+    if (selectedDiversion) {
+      return `Nearest escape ${selectedDiversion.icao}`;
+    }
+    if (routeProgress?.nextWaypoint) {
+      return `Track to ${routeProgress.nextWaypoint}`;
+    }
+    return 'Hold current route';
+  }, [routeProgress?.nextWaypoint, selectedDiversion, selectedTrafficTarget, terrainRisk]);
+  const visionTerrainColumns = useMemo(() => {
+    const samples = terrainProfile?.samples ?? [];
+    const ownshipAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
+    if (!samples.length || !Number.isFinite(ownshipAltitude)) return [];
+    const maxElevation = Math.max(...samples.map((sample) => sample.elevationFt ?? 0), 1);
+    return samples.slice(0, 14).map((sample, index, arr) => {
+      const elevation = sample.elevationFt ?? 0;
+      const ratio = Math.max(0.08, Math.min(0.92, elevation / Math.max(maxElevation, ownshipAltitude)));
+      const danger = ownshipAltitude - elevation;
+      return {
+        key: `terrain-column-${index}`,
+        leftPct: arr.length <= 1 ? 50 : (index / (arr.length - 1)) * 100,
+        heightPct: Math.max(10, Math.min(60, ratio * 68)),
+        risk:
+          danger < 1000 ? 'warning' : danger < 2000 ? 'caution' : 'nominal',
+      };
+    });
+  }, [activeOwnship?.altitudeFt, simulationAltitudeFt, terrainProfile?.samples]);
+  const visionObstacleCues = useMemo(() => {
+    const obstacles = obstacleScan?.obstacles ?? [];
+    if (!obstacles.length || !activeOwnship) return [];
+    return obstacles.slice(0, 3).map((obstacle, index) => {
+      const bearingToObstacle = bearingBetweenPoints(
+        { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+        { latitude: obstacle.lat, longitude: obstacle.lon },
+      );
+      const bearingDelta = normalizeHeadingDelta(bearingToObstacle - (activeOwnship.heading ?? 0));
+      const xPct = Math.max(14, Math.min(86, 50 + bearingDelta / 2.2));
+      const obstacleAltitude = obstacle.amslFt ?? obstacle.aglFt ?? 0;
+      const altitudeDelta = obstacleAltitude - (activeOwnship.altitudeFt ?? simulationAltitudeFt);
+      const yPct = Math.max(26, Math.min(76, 54 + altitudeDelta / 180));
+      return {
+        key: `vision-obstacle-${obstacle.id}-${index}`,
+        xPct,
+        yPct,
+        risk: altitudeDelta > -700 ? 'warning' : altitudeDelta > -1500 ? 'caution' : 'nominal',
+      };
+    });
+  }, [activeOwnship, obstacleScan?.obstacles, simulationAltitudeFt]);
+  const visionTrafficCue = useMemo(() => {
+    if (!selectedTrafficTarget || !activeOwnship) return null;
+    const bearingToTraffic = bearingBetweenPoints(
+      { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+      { latitude: selectedTrafficTarget.lat, longitude: selectedTrafficTarget.lon },
+    );
+    const bearingDelta = normalizeHeadingDelta(bearingToTraffic - (activeOwnship.heading ?? 0));
+    const absBearingDelta = Math.abs(bearingDelta);
+    const sector =
+      absBearingDelta <= 20
+        ? 'ahead'
+        : absBearingDelta <= 70
+          ? bearingDelta < 0
+            ? 'left crossing'
+            : 'right crossing'
+          : absBearingDelta >= 135
+            ? 'aft sector'
+            : bearingDelta < 0
+              ? 'left'
+              : 'right';
+    const trend = trafficTrendMap[selectedTrafficTarget.id];
+    const vectorDxPct = clamp((trend?.bearingRateDegPerMin ?? 0) / 8, -8, 8);
+    const vectorDyPct =
+      trend?.distanceRateNmPerMin == null
+        ? 0
+        : trend.distanceRateNmPerMin < 0
+          ? 8
+          : trend.distanceRateNmPerMin > 0
+            ? -8
+            : 0;
+    return {
+      xPct: clamp(50 + bearingDelta / 1.8, 18, 82),
+      yPct: clamp(48 - (selectedTrafficTarget.altitudeDeltaFt ?? 0) / 220, 18, 72),
+      threat: selectedTrafficTarget.threatLevel,
+      sector,
+      clock: relativeClockPosition(bearingDelta),
+      closureText:
+        trend?.closureText ||
+        (selectedTrafficTarget.distanceNm <= 2 && absBearingDelta <= 35
+          ? 'Converging'
+          : selectedTrafficTarget.distanceNm <= 4
+            ? 'Near sector'
+            : 'Monitor'),
+      vectorDxPct,
+      vectorDyPct,
+    };
+  }, [activeOwnship, selectedTrafficTarget, trafficTrendMap]);
+  const visionRouteGuidance = useMemo(() => {
+    if (!activeOwnship || !nextWaypointMeta || !routeProgress) return null;
+    const desiredTrack = routeProgress.desiredTrackDeg ?? bearingBetweenPoints(
+      { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+      { latitude: nextWaypointMeta.latitude, longitude: nextWaypointMeta.longitude },
+    );
+    const headingDelta = normalizeHeadingDelta(desiredTrack - (activeOwnship.heading ?? desiredTrack));
+    const centerShiftPct = clamp(headingDelta / 2.6 + routeProgress.crossTrackNm * 5.2, -18, 18);
+    const gates = [0, 1, 2, 3].map((index) => {
+      const width = 58 - index * 11;
+      const height = 14 - index * 2;
+      const top = 62 - index * 12;
+      const center = 50 + centerShiftPct * (1 - index * 0.18);
+      return {
+        key: `vision-gate-${index}`,
+        leftPct: center - width / 2,
+        widthPct: width,
+        topPct: top,
+        heightPct: height,
+      };
+    });
+    const tunnelBands = gates.slice(0, 3).map((gate, index) => ({
+      key: `vision-band-${index}`,
+      leftPct: gate.leftPct + 3.5,
+      widthPct: Math.max(12, gate.widthPct - 7),
+      topPct: gate.topPct + 1.5,
+      heightPct: Math.max(5, gate.heightPct - 3),
+    }));
+    const lateralCaptured = Math.abs(routeProgress.crossTrackNm) < 0.25 && Math.abs(headingDelta) < 5;
+    const corridorSeverity =
+      routeProgress.offRouteNm > 2.5 || Math.abs(headingDelta) > 25
+        ? 'warning'
+        : routeProgress.offRouteNm > 1.5 || Math.abs(headingDelta) > 12
+          ? 'caution'
+          : 'nominal';
+    return {
+      desiredTrack,
+      headingDelta,
+      offRouteNm: routeProgress.offRouteNm,
+      crossTrackNm: routeProgress.crossTrackNm,
+      centerlineLeftPct: 49.5 + clamp(centerShiftPct * 0.45, -10, 10),
+      gates,
+      tunnelBands,
+      lateralCaptured,
+      corridorSeverity,
+      lateralCue:
+        routeProgress.offRouteNm > 1.5
+          ? routeProgress.crossTrackNm >= 0
+            ? 'Correct right to rejoin'
+            : 'Correct left to rejoin'
+          : Math.abs(headingDelta) > 8
+            ? headingDelta >= 0
+              ? 'Ease right on course'
+              : 'Ease left on course'
+            : 'Centered on route',
+    };
+  }, [activeOwnship, nextWaypointMeta, routeProgress]);
+  const terrainEscapeGuidance = useMemo(() => {
+    if (terrainRisk === 'nominal' && obstacleRisk === 'nominal') return null;
+    const terrainSafeAltitude = terrainProfile?.maxElevationFt != null ? Math.ceil((terrainProfile.maxElevationFt + 2000) / 100) * 100 : null;
+    const obstacleSafeAltitude = highestObstacleHeightFt != null ? Math.ceil((highestObstacleHeightFt + 1500) / 100) * 100 : null;
+    const safeAltitudeFt = Math.max(terrainSafeAltitude ?? 0, obstacleSafeAltitude ?? 0, simulationAltitudeFt || 0);
+    if (terrainRisk === 'warning' || obstacleRisk === 'warning') {
+      return selectedDiversion
+        ? `Climb toward ${safeAltitudeFt.toFixed(0)} ft or divert ${selectedDiversion.icao}`
+        : `Climb toward ${safeAltitudeFt.toFixed(0)} ft immediately`;
+    }
+    if (terrainRisk === 'caution' || obstacleRisk === 'caution') {
+      return selectedDiversion
+        ? `Monitor climb margin. ${selectedDiversion.icao} is the nearest escape.`
+        : `Monitor climb margin. Terrain funnel tightening ahead.`;
+    }
+    return null;
+  }, [highestObstacleHeightFt, obstacleRisk, selectedDiversion, simulationAltitudeFt, terrainProfile?.maxElevationFt, terrainRisk]);
+  const terrainEscapeTargetFt = useMemo(() => {
+    const terrainSafeAltitude = terrainProfile?.maxElevationFt != null ? Math.ceil((terrainProfile.maxElevationFt + 2000) / 100) * 100 : null;
+    const obstacleSafeAltitude = highestObstacleHeightFt != null ? Math.ceil((highestObstacleHeightFt + 1500) / 100) * 100 : null;
+    const best = Math.max(terrainSafeAltitude ?? 0, obstacleSafeAltitude ?? 0);
+    return best > 0 ? best : null;
+  }, [highestObstacleHeightFt, terrainProfile?.maxElevationFt]);
+  const visionManeuverRecommendation = useMemo(() => {
+    if (selectedTrafficTarget?.threatLevel === 'immediate') {
+      const sector = visionTrafficCue?.sector || 'ahead';
+      const altitudeDelta = selectedTrafficTarget.altitudeDeltaFt ?? 0;
+      const closure = visionTrafficCue?.closureText || 'Monitor';
+      if (sector.includes('left')) {
+        return altitudeDelta >= 0 ? `${closure}: traffic left/high. Turn right and hold altitude.` : `${closure}: traffic left/low. Turn right and consider climb.`;
+      }
+      if (sector.includes('right')) {
+        return altitudeDelta >= 0 ? `${closure}: traffic right/high. Turn left and hold altitude.` : `${closure}: traffic right/low. Turn left and consider climb.`;
+      }
+      return altitudeDelta >= 0 ? `${closure}: traffic ahead/high. Offset right and monitor descent.` : `${closure}: traffic ahead/low. Hold course and climb if needed.`;
+    }
+    if (terrainRisk === 'warning' || obstacleRisk === 'warning') {
+      return terrainEscapeGuidance || 'Immediate escape action recommended.';
+    }
+    if (terrainRisk === 'caution' || obstacleRisk === 'caution') {
+      return selectedDiversion ? `Keep ${selectedDiversion.icao} available as an escape.` : 'Maintain climb margin and stay centered in the corridor.';
+    }
+    if (visionRouteGuidance?.offRouteNm && visionRouteGuidance.offRouteNm > 1.5) {
+      return 'Rejoin the route corridor before the next waypoint.';
+    }
+    return 'Continue current route and monitor traffic.';
+  }, [obstacleRisk, selectedDiversion, selectedTrafficTarget, terrainEscapeGuidance, terrainRisk, visionRouteGuidance?.offRouteNm, visionTrafficCue?.sector]);
+  const visionDirectorCue = useMemo(() => {
+    const currentAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
+    const headingDelta = visionRouteGuidance?.headingDelta ?? 0;
+    const targetAltitude =
+      terrainRisk === 'warning' || obstacleRisk === 'warning'
+        ? terrainEscapeTargetFt ?? currentAltitude
+        : simulationAltitudeFt || currentAltitude;
+    const altitudeErrorFt = targetAltitude - currentAltitude;
+    const lateralCaptured = Boolean(visionRouteGuidance?.lateralCaptured);
+    const verticalCaptured = Math.abs(altitudeErrorFt) < 150;
+    const mode =
+      terrainRisk === 'warning' || obstacleRisk === 'warning'
+        ? 'escape'
+        : !lateralCaptured || Math.abs(headingDelta) > 12
+          ? 'intercept'
+          : !verticalCaptured
+            ? 'capture'
+            : 'track';
+    return {
+      lateralOffsetPct: clamp(headingDelta * 0.32, -16, 16),
+      verticalOffsetPct: clamp(-altitudeErrorFt / 90, -18, 18),
+      lateralCaptured,
+      verticalCaptured,
+      mode,
+      turnCommand:
+        Math.abs(headingDelta) < 6 ? 'Track centered'
+        : headingDelta > 0 ? `Turn right ${Math.round(Math.abs(headingDelta))}°`
+        : `Turn left ${Math.round(Math.abs(headingDelta))}°`,
+      verticalCommand:
+        Math.abs(altitudeErrorFt) < 150 ? 'Hold altitude'
+        : altitudeErrorFt > 0 ? `Climb to ${Math.round(targetAltitude)} ft`
+        : `Descend to ${Math.round(targetAltitude)} ft`,
+    };
+  }, [activeOwnship?.altitudeFt, obstacleRisk, simulationAltitudeFt, terrainEscapeTargetFt, terrainRisk, visionRouteGuidance?.headingDelta, visionRouteGuidance?.lateralCaptured]);
+  const focusMapOnPoint = (
+    latitude: number,
+    longitude: number,
+    deltas: { latitudeDelta?: number; longitudeDelta?: number } = {},
+  ) => {
+    mapRef.current?.animateToRegion(
+      {
+        latitude,
+        longitude,
+        latitudeDelta: deltas.latitudeDelta ?? 0.65,
+        longitudeDelta: deltas.longitudeDelta ?? 0.65,
+      },
+      450,
+    );
+  };
+  const focusTrafficTarget = (target: RankedTrafficTarget) => {
+    setSelectedTrafficId(target.id);
+    setFlightDeckPanel('traffic');
+    setFlightDeckView('map');
+    focusMapOnPoint(target.lat, target.lon, { latitudeDelta: 0.32, longitudeDelta: 0.32 });
+  };
+  const focusDiversionAirport = (airport: NearbyDiversionAirport) => {
+    setSelectedDiversionIcao(airport.icao);
+    setFlightDeckPanel('diversions');
+    setFlightDeckView('map');
+    if (typeof airport.lat === 'number' && typeof airport.lon === 'number') {
+      focusMapOnPoint(airport.lat, airport.lon, { latitudeDelta: 0.36, longitudeDelta: 0.36 });
+    } else if (activeOwnship) {
+      const bearingRad = toRad(airport.bearingDeg);
+      const northNm = Math.cos(bearingRad) * airport.distanceNm;
+      const eastNm = Math.sin(bearingRad) * airport.distanceNm;
+      const estimate = offsetLatLonByNm(activeOwnship.lat, activeOwnship.lon, northNm, eastNm);
+      focusMapOnPoint(estimate.lat, estimate.lon, { latitudeDelta: 0.42, longitudeDelta: 0.42 });
+    }
+  };
+  const engageDirectToDiversion = (airport: NearbyDiversionAirport) => {
+    setSelectedDiversionIcao(airport.icao);
+    setFlightDeckPanel('status');
+    setFlightDeckView('map');
+    setDestination(airport.icao);
+    setSuggestedMode('direct');
+    setWaypoints('');
+    setPlannedStops('');
+    if (simulationEnabled) {
+      setSimulationRunning(false);
+      if (typeof airport.lat === 'number' && typeof airport.lon === 'number') {
+        setSimulatedGpsData({
+          lat: airport.lat,
+          lon: airport.lon,
+          altitudeFt: Math.max(1500, (activeOwnship?.altitudeFt || simulationAltitudeFt) - 800),
+          speedKts: Math.max(90, activeOwnship?.speedKts || simulationCruiseKts),
+          heading: activeOwnship?.heading || airport.bearingDeg,
+        });
+        setSimulatedVerticalSpeedFpm(-350);
+      }
+    }
+    focusDiversionAirport(airport);
+  };
 
   useEffect(() => {
     const routeParams = route.params || {};
@@ -698,6 +1283,29 @@ export default function FlightPlannerScreen() {
     if (nextWaypoints) setWaypoints(nextWaypoints);
     if (nextPlannedStops) setPlannedStops(nextPlannedStops);
   }, [route.params]);
+
+  useEffect(() => {
+    if (!isFlightDeck) {
+      setFlightDeckView('map');
+      setFlightDeckHudExpanded(false);
+      return;
+    }
+    if (flightDeckView === 'vision' && !activeOwnship) {
+      setFlightDeckView('map');
+    }
+  }, [activeOwnship, flightDeckView, isFlightDeck]);
+
+  useEffect(() => {
+    if (!visibleTrafficTargets.length) {
+      setSelectedTrafficId(null);
+      return;
+    }
+    setSelectedTrafficId((current) =>
+      current && visibleTrafficTargets.some((target) => target.id === current)
+        ? current
+        : visibleTrafficTargets[0]?.id || null
+    );
+  }, [visibleTrafficTargets]);
 
   useEffect(() => {
     if (trafficEnabled || gpsEnabled || simulationEnabled) {
@@ -814,6 +1422,67 @@ export default function FlightPlannerScreen() {
       cancelled = true;
     };
   }, [selectedDiversionIcao]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!terrainPathParam) {
+      setTerrainProfile(null);
+      setTerrainProfileLoading(false);
+      return;
+    }
+    setTerrainProfileLoading(true);
+    api
+      .get<TerrainProfileResponse>('/api/aviation/terrain-profile', {
+        params: { path: terrainPathParam, samples: 18 },
+      })
+      .then((res) => {
+        if (cancelled) return;
+        setTerrainProfile(res.data || null);
+        setTerrainProfileLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTerrainProfile(null);
+        setTerrainProfileLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [terrainPathParam]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeOwnship?.lat || !activeOwnship?.lon) {
+      setObstacleScan(null);
+      setObstacleScanLoading(false);
+      return;
+    }
+    setObstacleScanLoading(true);
+    api
+      .get<NearbyObstacleResponse>('/api/aviation/obstacles/nearby', {
+        params: {
+          lat: activeOwnship.lat,
+          lon: activeOwnship.lon,
+          radiusNm: 18,
+          limit: 15,
+        },
+      })
+      .then((res) => {
+        if (cancelled) return;
+        setObstacleScan(res.data || null);
+        setObstacleScanLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setObstacleScan(null);
+        setObstacleScanLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeOwnship?.lat, activeOwnship?.lon]);
 
   useEffect(() => {
     let lastAlt: { alt: number; time: number } | null = null;
@@ -1479,6 +2148,876 @@ export default function FlightPlannerScreen() {
     };
   }, [routePoints, departure, windsAltitudeChoice, plannedAltitude]);
 
+  if (isFlightDeck) {
+    return (
+      <View style={styles.flightDeckContainer}>
+        <View style={[styles.flightDeckHeader, { paddingTop: Math.max(insets.top, spacing.sm) }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.flightDeckEyebrow}>RSF FLIGHT DECK</Text>
+            <Text style={styles.flightDeckTitle}>{routeHeadline}</Text>
+            <Text style={styles.flightDeckSubtitle}>
+              {flightDeckView === 'vision'
+                ? 'Vision shell active.'
+                : simulationEnabled
+                  ? 'Simulation active.'
+                  : gpsEnabled || trafficEnabled
+                    ? 'Live cockpit mode.'
+                    : 'Map-first flight mode.'}
+            </Text>
+          </View>
+          <View style={styles.flightDeckHeaderActions}>
+            <TouchableOpacity
+              style={[styles.flightDeckExitButton, flightDeckView === 'vision' && styles.flightDeckExitButtonActive]}
+              onPress={() => setFlightDeckView((current) => (current === 'map' ? 'vision' : 'map'))}
+            >
+              <Text style={styles.flightDeckExitText}>{flightDeckView === 'vision' ? 'Map' : 'Vision'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.flightDeckExitButton}
+              onPress={() => navigation.navigate('FlightPlanner', { departure, destination, waypoints, plannedStops })}
+            >
+              <Text style={styles.flightDeckExitText}>Planner</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.flightDeckMapShell}>
+          {flightDeckView === 'vision' ? (
+            <View style={styles.flightDeckVisionShell}>
+              <View style={styles.flightDeckVisionSky} />
+              <View
+                style={[
+                  styles.flightDeckVisionGround,
+                  terrainRisk === 'warning'
+                    ? styles.flightDeckVisionGroundWarning
+                    : terrainRisk === 'caution'
+                      ? styles.flightDeckVisionGroundCaution
+                      : null,
+                ]}
+              />
+              <View
+                style={[
+                  styles.flightDeckVisionHorizon,
+                  terrainRisk === 'warning'
+                    ? styles.flightDeckVisionHorizonWarning
+                    : terrainRisk === 'caution'
+                      ? styles.flightDeckVisionHorizonCaution
+                    : null,
+                ]}
+              />
+              {visionRouteGuidance ? (
+                <View
+                  style={[
+                    styles.flightDeckVisionCenterline,
+                    { left: `${visionRouteGuidance.centerlineLeftPct}%` },
+                  ]}
+                />
+              ) : null}
+              {visionRouteGuidance?.gates.map((gate) => (
+                <View
+                  key={gate.key}
+                  style={[
+                    styles.flightDeckVisionRouteGate,
+                    {
+                      left: `${gate.leftPct}%`,
+                      top: `${gate.topPct}%`,
+                      width: `${gate.widthPct}%`,
+                      height: `${gate.heightPct}%`,
+                    },
+                    routeProgress?.offRouteNm && routeProgress.offRouteNm > 1.5
+                      ? styles.flightDeckVisionRouteGateCaution
+                      : null,
+                  ]}
+                />
+              ))}
+              {visionRouteGuidance?.tunnelBands.map((band) => (
+                <View
+                  key={band.key}
+                  style={[
+                    styles.flightDeckVisionTunnelBand,
+                    {
+                      left: `${band.leftPct}%`,
+                      top: `${band.topPct}%`,
+                      width: `${band.widthPct}%`,
+                      height: `${band.heightPct}%`,
+                    },
+                    visionRouteGuidance.corridorSeverity === 'warning'
+                      ? styles.flightDeckVisionTunnelBandWarning
+                      : visionRouteGuidance.corridorSeverity === 'caution'
+                        ? styles.flightDeckVisionTunnelBandCaution
+                        : null,
+                  ]}
+                />
+              ))}
+              <View style={styles.flightDeckVisionTerrainBand}>
+                {visionTerrainColumns.map((column) => (
+                  <View
+                    key={column.key}
+                    style={[
+                      styles.flightDeckVisionTerrainColumn,
+                      {
+                        left: `${column.leftPct}%`,
+                        height: `${column.heightPct}%`,
+                      },
+                      column.risk === 'warning'
+                        ? styles.flightDeckVisionTerrainColumnWarning
+                        : column.risk === 'caution'
+                          ? styles.flightDeckVisionTerrainColumnCaution
+                          : styles.flightDeckVisionTerrainColumnNominal,
+                    ]}
+                  />
+                ))}
+              </View>
+              <View style={styles.flightDeckVisionFlightPathMarker}>
+                <View style={styles.flightDeckVisionFlightPathInner} />
+              </View>
+              <View
+                style={[
+                  styles.flightDeckVisionDirectorHorizontal,
+                  visionDirectorCue.mode === 'escape'
+                    ? styles.flightDeckVisionDirectorWarning
+                    : visionDirectorCue.mode === 'intercept'
+                      ? styles.flightDeckVisionDirectorCaution
+                      : visionDirectorCue.lateralCaptured
+                        ? styles.flightDeckVisionDirectorCaptured
+                        : null,
+                  { transform: [{ translateX: visionDirectorCue.lateralOffsetPct * 3.2 }] },
+                ]}
+              />
+              <View
+                style={[
+                  styles.flightDeckVisionDirectorVertical,
+                  visionDirectorCue.mode === 'escape'
+                    ? styles.flightDeckVisionDirectorWarning
+                    : !visionDirectorCue.verticalCaptured
+                      ? styles.flightDeckVisionDirectorCaution
+                      : styles.flightDeckVisionDirectorCaptured,
+                  { transform: [{ translateY: visionDirectorCue.verticalOffsetPct * 2.1 }] },
+                ]}
+              />
+              <View style={styles.flightDeckVisionReadoutLeft}>
+                <Text style={styles.flightDeckVisionLabel}>ALT</Text>
+                <Text style={styles.flightDeckVisionValue}>
+                  {activeOwnship?.altitudeFt ? `${Math.round(activeOwnship.altitudeFt)}` : '--'}
+                </Text>
+              </View>
+              <View style={styles.flightDeckVisionReadoutRight}>
+                <Text style={styles.flightDeckVisionLabel}>HDG</Text>
+                <Text style={styles.flightDeckVisionValue}>
+                  {activeOwnship?.heading ? `${Math.round(activeOwnship.heading)}` : '--'}
+                </Text>
+              </View>
+              <View style={styles.flightDeckVisionBanner}>
+                <Text style={styles.flightDeckVisionBannerTitle}>Vision Guidance</Text>
+                <Text style={styles.flightDeckVisionBannerText}>
+                  {visionRouteGuidance?.lateralCue || visionGuidance}
+                </Text>
+                <Text style={styles.flightDeckVisionBannerSupport}>{visionDirectorCue.turnCommand}</Text>
+                <Text style={styles.flightDeckVisionBannerSupportMuted}>{visionDirectorCue.verticalCommand}</Text>
+                {terrainEscapeGuidance ? (
+                  <Text style={styles.flightDeckVisionBannerAlert}>{terrainEscapeGuidance}</Text>
+                ) : null}
+              </View>
+              {[-10, -5, 0, 5, 10].map((value) => (
+                <View
+                  key={`vision-ladder-${value}`}
+                  style={[
+                    styles.flightDeckVisionPitchLine,
+                    { top: `${50 - value * 2.2}%`, width: value === 0 ? 170 : 120 },
+                  ]}
+                >
+                  <Text style={styles.flightDeckVisionPitchLabel}>{value > 0 ? `+${value}` : `${value}`}</Text>
+                </View>
+              ))}
+              <View style={styles.flightDeckVisionGuidanceChip}>
+                <Text style={styles.flightDeckVisionGuidanceText}>{visionGuidance}</Text>
+              </View>
+              {visionTrafficCue ? (
+                <View
+                  style={{
+                    position: 'absolute',
+                    left: `${visionTrafficCue.xPct}%`,
+                    top: `${visionTrafficCue.yPct}%`,
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.flightDeckVisionTrafficVector,
+                      {
+                        transform: [
+                          { translateX: visionTrafficCue.vectorDxPct },
+                          { translateY: visionTrafficCue.vectorDyPct },
+                        ],
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.flightDeckVisionTrafficSymbol,
+                      visionTrafficCue.threat === 'immediate'
+                        ? styles.flightDeckVisionTrafficSymbolWarning
+                        : visionTrafficCue.threat === 'advisory'
+                          ? styles.flightDeckVisionTrafficSymbolCaution
+                          : null,
+                    ]}
+                  >
+                    <Ionicons name="diamond" size={14} color={colors.flightText} />
+                  </View>
+                </View>
+              ) : null}
+              {visionObstacleCues.map((cue) => (
+                <View
+                  key={cue.key}
+                  style={[
+                    styles.flightDeckVisionObstacleCue,
+                    {
+                      left: `${cue.xPct}%`,
+                      top: `${cue.yPct}%`,
+                    },
+                    cue.risk === 'warning'
+                      ? styles.flightDeckVisionObstacleCueWarning
+                      : cue.risk === 'caution'
+                        ? styles.flightDeckVisionObstacleCueCaution
+                        : null,
+                  ]}
+                />
+              ))}
+              <View style={styles.flightDeckVisionTelemetryLeft}>
+                <Text style={styles.flightDeckVisionTelemetryLabel}>Terrain</Text>
+                <Text
+                  style={[
+                    styles.flightDeckVisionTelemetryValue,
+                    terrainRisk === 'warning'
+                      ? styles.flightDeckVisionTelemetryValueWarning
+                      : terrainRisk === 'caution'
+                        ? styles.flightDeckVisionTelemetryValueCaution
+                        : null,
+                  ]}
+                >
+                  {terrainClearanceFt != null ? `${Math.round(terrainClearanceFt)} ft clr` : terrainProfileLoading ? 'loading' : '--'}
+                </Text>
+              </View>
+              <View style={styles.flightDeckVisionTelemetryRight}>
+                <Text style={styles.flightDeckVisionTelemetryLabel}>Obstacle</Text>
+                <Text
+                  style={[
+                    styles.flightDeckVisionTelemetryValue,
+                    obstacleRisk === 'warning'
+                      ? styles.flightDeckVisionTelemetryValueWarning
+                      : obstacleRisk === 'caution'
+                        ? styles.flightDeckVisionTelemetryValueCaution
+                        : null,
+                  ]}
+                >
+                  {obstacleClearanceFt != null ? `${Math.round(obstacleClearanceFt)} ft clr` : obstacleScanLoading ? 'loading' : '--'}
+                </Text>
+              </View>
+              {selectedTrafficTarget ? (
+                <View style={styles.flightDeckVisionTrafficCue}>
+                  <Text style={styles.flightDeckVisionTrafficCueTitle}>Traffic</Text>
+                  <Text style={styles.flightDeckVisionTrafficCueText}>
+                    {selectedTrafficTarget.callsign || 'target'} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
+                  </Text>
+                  <Text style={styles.flightDeckVisionTrafficCueMeta}>
+                    {visionTrafficCue?.closureText || 'Monitor'} - {visionTrafficCue?.sector || 'sector'} - {visionTrafficCue?.clock || '--'}
+                  </Text>
+                </View>
+              ) : null}
+              <View style={styles.flightDeckVisionManeuverCard}>
+                <Text style={styles.flightDeckVisionManeuverTitle}>Recommended action</Text>
+                <Text style={styles.flightDeckVisionManeuverText}>{visionManeuverRecommendation}</Text>
+              </View>
+            </View>
+          ) : routePoints.length > 0 || activeOwnship ? (
+            <MapView
+              style={styles.flightDeckMap}
+              ref={mapRef}
+              mapType="standard"
+              initialRegion={{
+                latitude: routePoints[0]?.latitude || activeOwnship?.lat || 39.5,
+                longitude: routePoints[0]?.longitude || activeOwnship?.lon || -98.35,
+                latitudeDelta: 3,
+                longitudeDelta: 3,
+              }}
+              onRegionChangeComplete={(region) => setMapRegion(region)}
+            >
+              {mapStyle === 'sectional' && (
+                <UrlTile
+                  urlTemplate="https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}"
+                  maximumZ={12}
+                  minimumZ={6}
+                  tileSize={256}
+                  opacity={0.85}
+                  zIndex={600}
+                />
+              )}
+              {mapStyle === 'terrain' && (
+                <UrlTile
+                  urlTemplate="https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}"
+                  maximumZ={15}
+                  minimumZ={4}
+                  tileSize={256}
+                  opacity={0.85}
+                  zIndex={600}
+                />
+              )}
+              {mapStyle === 'radar' && (
+                <UrlTile
+                  urlTemplate="https://nowcoast.noaa.gov/arcgis/rest/services/nowcoast/radar_meteo_imagery_nexrad_time/MapServer/tile/{z}/{y}/{x}"
+                  maximumZ={11}
+                  minimumZ={4}
+                  tileSize={256}
+                  opacity={0.75}
+                  zIndex={600}
+                />
+              )}
+              {mapStyle === 'clouds' && showCloudsGlobal && (
+                <UrlTile
+                  urlTemplate={`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`}
+                  maximumZ={9}
+                  minimumZ={2}
+                  tileSize={256}
+                  opacity={0.75}
+                  zIndex={600}
+                />
+              )}
+              {mapStyle === 'clouds' && !showCloudsGlobal && cloudTileUrl && (
+                <UrlTile
+                  key={`clouds-flight-${cloudFrameIndex}`}
+                  urlTemplate={cloudTileUrl}
+                  maximumZ={8}
+                  minimumZ={3}
+                  tileSize={256}
+                  opacity={0.75}
+                  zIndex={600}
+                />
+              )}
+              {mapStyle === 'winds' && (
+                <>
+                  {visibleWindsPoints.map((point, index) => {
+                    if (point.windDir === null || point.windSpeed === null) return null;
+                    const size = Math.min(24, Math.max(14, Math.round(point.windSpeed / 3) + 10));
+                    const rotation = (point.windDir + 180) % 360;
+                    return (
+                      <Marker
+                        key={`flight-wind-${point.stationId}-${index}`}
+                        coordinate={{ latitude: point.lat, longitude: point.lon }}
+                        anchor={{ x: 0.5, y: 0.5 }}
+                      >
+                        <View style={[styles.windMarker, { transform: [{ rotate: `${rotation}deg` }] }]}>
+                          <Ionicons name="arrow-up" size={size} color={colors.flightAdvisory} />
+                        </View>
+                      </Marker>
+                    );
+                  })}
+                </>
+              )}
+              <Polyline
+                coordinates={routePoints.map((point) => ({ latitude: point.latitude, longitude: point.longitude }))}
+                strokeColor={colors.flightAccent}
+                strokeWidth={4}
+              />
+              {diversionCandidates.slice(0, 4).map((airport) => {
+                if (typeof airport.lat !== 'number' || typeof airport.lon !== 'number') return null;
+                const active = selectedDiversionIcao === airport.icao;
+                return (
+                  <Marker
+                    key={`flight-diversion-${airport.icao}`}
+                    coordinate={{ latitude: airport.lat, longitude: airport.lon }}
+                    onPress={() => setSelectedDiversionIcao(airport.icao)}
+                  >
+                    <View style={[styles.flightDeckDiversionMarker, active && styles.flightDeckDiversionMarkerActive]}>
+                      <Ionicons name="business" size={14} color={active ? colors.flightBackground : colors.flightText} />
+                    </View>
+                  </Marker>
+                );
+              })}
+              {visibleTrafficTargets.map((target) => (
+                <Marker
+                  key={`flight-traffic-${target.id}`}
+                  coordinate={{ latitude: target.lat, longitude: target.lon }}
+                  onPress={() => setSelectedTrafficId(target.id)}
+                  description={`${target.distanceNm.toFixed(1)} NM${target.altitudeFt ? ` · ${target.altitudeFt} ft` : ''}`}
+                >
+                  <View style={styles.flightTrafficMarkerWrap}>
+                    {(selectedTrafficTarget?.id === target.id || target.threatLevel === 'immediate') ? (
+                      <View
+                        style={[
+                          styles.flightTrafficAttentionRing,
+                          target.threatLevel === 'immediate' && styles.flightTrafficAttentionRingImmediate,
+                        ]}
+                      />
+                    ) : null}
+                    <View
+                      style={[
+                        styles.flightTrafficMarker,
+                        target.threatLevel === 'immediate'
+                          ? styles.flightTrafficMarkerImmediate
+                          : target.threatLevel === 'advisory'
+                            ? styles.flightTrafficMarkerAdvisory
+                            : styles.flightTrafficMarkerMonitor,
+                        selectedTrafficTarget?.id === target.id && styles.flightTrafficMarkerSelected,
+                      ]}
+                    >
+                      <Ionicons
+                        name="diamond"
+                        size={14}
+                        color={target.threatLevel === 'monitor' ? colors.flightText : colors.flightBackground}
+                      />
+                    </View>
+                  </View>
+                </Marker>
+              ))}
+              {activeOwnship ? (
+                <Marker
+                  coordinate={{ latitude: activeOwnship.lat, longitude: activeOwnship.lon }}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  title={simulationEnabled ? 'Simulated ownship' : 'Ownship'}
+                >
+                  <View
+                    style={[
+                      styles.flightOwnshipMarker,
+                      activeOwnship.heading ? { transform: [{ rotate: `${activeOwnship.heading}deg` }] } : null,
+                    ]}
+                  >
+                    <Ionicons name="navigate" size={20} color={colors.flightBackground} />
+                  </View>
+                </Marker>
+              ) : null}
+            </MapView>
+          ) : (
+            <View style={styles.flightDeckEmptyMap}>
+              <Text style={styles.flightDeckEmptyTitle}>Build a route in planner first</Text>
+              <Text style={styles.flightDeckEmptyText}>Flight Deck uses the active route from the planner.</Text>
+            </View>
+          )}
+
+          <View style={styles.flightDeckTopChips}>
+            {(['map', 'vision'] as const).map((value) => (
+              <TouchableOpacity
+                key={`flight-view-${value}`}
+                style={[styles.flightDeckChip, flightDeckView === value && styles.flightDeckChipActive]}
+                onPress={() => setFlightDeckView(value)}
+              >
+                <Text style={[styles.flightDeckChipText, flightDeckView === value && styles.flightDeckChipTextActive]}>
+                  {value === 'map' ? 'Map' : 'Vision'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            {(['standard', 'sectional', 'terrain', 'radar', 'winds', 'clouds'] as const).map((value) => (
+              <TouchableOpacity
+                key={`flight-style-${value}`}
+                style={[styles.flightDeckChip, mapStyle === value && styles.flightDeckChipActive]}
+                onPress={() => setMapStyle(value)}
+                disabled={flightDeckView === 'vision'}
+              >
+                <Text style={[styles.flightDeckChipText, mapStyle === value && styles.flightDeckChipTextActive]}>
+                  {value === 'standard' ? 'Map' : value === 'sectional' ? 'VFR' : value === 'terrain' ? 'Terrain' : value === 'radar' ? 'Radar' : value === 'winds' ? 'Winds' : 'Clouds'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {activeFlightAlert ? (
+            <View
+              style={[
+                styles.flightDeckAlertStrip,
+                activeFlightAlert.severity === 'warning'
+                  ? styles.flightDeckAlertStripWarning
+                  : activeFlightAlert.severity === 'caution'
+                    ? styles.flightDeckAlertStripCaution
+                    : styles.flightDeckAlertStripAdvisory,
+              ]}
+            >
+              <Text style={styles.flightDeckAlertTitle}>{activeFlightAlert.title}</Text>
+              <Text style={styles.flightDeckAlertText}>{activeFlightAlert.detail}</Text>
+            </View>
+          ) : null}
+
+          {flightDeckHudExpanded ? (
+            <View style={styles.flightDeckHudExpandedCard}>
+              <View style={styles.flightDeckHudExpandedRow}>
+                <View style={styles.flightDeckHudExpandedMetric}>
+                  <Text style={styles.flightDeckHudExpandedLabel}>Next</Text>
+                  <Text style={styles.flightDeckHudExpandedValue}>{routeProgress?.nextWaypoint || '--'}</Text>
+                </View>
+                <View style={styles.flightDeckHudExpandedMetric}>
+                  <Text style={styles.flightDeckHudExpandedLabel}>Remain</Text>
+                  <Text style={styles.flightDeckHudExpandedValue}>
+                    {routeProgress ? `${routeProgress.remainingRouteNm.toFixed(1)} NM` : '--'}
+                  </Text>
+                </View>
+                <View style={styles.flightDeckHudExpandedMetric}>
+                  <Text style={styles.flightDeckHudExpandedLabel}>Traffic</Text>
+                  <Text style={styles.flightDeckHudExpandedValue}>{immediateTrafficCount || visibleTrafficTargets.length || '--'}</Text>
+                </View>
+              </View>
+              <View style={styles.flightDeckHudExpandedRow}>
+                <View style={styles.flightDeckHudExpandedMetric}>
+                  <Text style={styles.flightDeckHudExpandedLabel}>Diversion</Text>
+                  <Text style={styles.flightDeckHudExpandedValue}>{selectedDiversion?.icao || '--'}</Text>
+                </View>
+                <View style={styles.flightDeckHudExpandedMetric}>
+                  <Text style={styles.flightDeckHudExpandedLabel}>Comms</Text>
+                  <Text style={styles.flightDeckHudExpandedValue}>
+                    {selectedDiversionBestComm?.frequencyMhz ? selectedDiversionBestComm.frequencyMhz.toFixed(3) : '--'}
+                  </Text>
+                </View>
+                <View style={styles.flightDeckHudExpandedMetric}>
+                  <Text style={styles.flightDeckHudExpandedLabel}>WX</Text>
+                  <Text style={styles.flightDeckHudExpandedValue}>{routeRiskLabel}</Text>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
+          <TouchableOpacity style={styles.flightDeckHud} activeOpacity={0.92} onPress={() => setFlightDeckHudExpanded((prev) => !prev)}>
+            <View style={styles.flightDeckHudCell}>
+              <Text style={styles.flightDeckHudLabel}>IAS</Text>
+              <Text style={styles.flightDeckHudValue}>{activeOwnship?.speedKts ? `${activeOwnship.speedKts.toFixed(0)}` : '--'}</Text>
+            </View>
+            <View style={styles.flightDeckHudDivider} />
+            <View style={styles.flightDeckHudCell}>
+              <Text style={styles.flightDeckHudLabel}>ALT</Text>
+              <Text style={styles.flightDeckHudValue}>{activeOwnship?.altitudeFt ? `${activeOwnship.altitudeFt.toFixed(0)}` : '--'}</Text>
+            </View>
+            <View style={styles.flightDeckHudDivider} />
+            <View style={styles.flightDeckHudCell}>
+              <Text style={styles.flightDeckHudLabel}>VSI</Text>
+              <Text style={styles.flightDeckHudValue}>{activeVerticalSpeedFpm ? `${activeVerticalSpeedFpm.toFixed(0)}` : '--'}</Text>
+            </View>
+            <View style={styles.flightDeckHudDivider} />
+            <View style={styles.flightDeckHudCell}>
+              <Text style={styles.flightDeckHudLabel}>HDG</Text>
+              <Text style={styles.flightDeckHudValue}>{activeOwnship?.heading ? `${activeOwnship.heading.toFixed(0)}` : '--'}</Text>
+            </View>
+            <View style={styles.flightDeckHudDivider} />
+            <View style={styles.flightDeckHudCell}>
+              <Text style={styles.flightDeckHudLabel}>ETE</Text>
+              <Text style={styles.flightDeckHudValue}>{routeProgress?.etaText || '--'}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          style={styles.flightDeckSheet}
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 24, 36) }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.flightDeckPanelTabs}>
+            {([
+              ['status', 'Status'],
+              ['layers', 'Layers'],
+              ['traffic', 'Traffic'],
+              ['diversions', 'Diversions'],
+            ] as const).map(([value, label]) => (
+              <TouchableOpacity
+                key={`deck-tab-${value}`}
+                style={[styles.flightDeckTab, flightDeckPanel === value && styles.flightDeckTabActive]}
+                onPress={() => setFlightDeckPanel(value)}
+              >
+                <Text style={[styles.flightDeckTabText, flightDeckPanel === value && styles.flightDeckTabTextActive]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {flightDeckPanel === 'status' && (
+          <View style={styles.flightDeckPanel}>
+            <View style={styles.flightDeckPanelRow}>
+              <View>
+                <Text style={styles.flightDeckPanelTitle}>Flight Controls</Text>
+                <Text style={styles.flightDeckPanelText}>Receiver, GPS fallback, and sim controls.</Text>
+              </View>
+              <Text style={styles.flightDeckBadge}>
+                {simulationEnabled ? 'SIM' : gpsEnabled || trafficEnabled ? 'LIVE' : 'PREFLIGHT'}
+              </Text>
+            </View>
+            <View style={styles.flightDeckControlRow}>
+              <TouchableOpacity style={[styles.flightDeckChip, trafficEnabled && styles.flightDeckChipActive]} onPress={() => setTrafficEnabled((prev) => !prev)}>
+                <Text style={[styles.flightDeckChipText, trafficEnabled && styles.flightDeckChipTextActive]}>Traffic</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.flightDeckChip, gpsEnabled && styles.flightDeckChipActive]} onPress={() => setGpsEnabled((prev) => !prev)} disabled={simulationEnabled}>
+                <Text style={[styles.flightDeckChipText, gpsEnabled && styles.flightDeckChipTextActive]}>GPS</Text>
+              </TouchableOpacity>
+              {isSuperAdmin ? (
+                <TouchableOpacity style={[styles.flightDeckChip, simulationEnabled && styles.flightDeckChipActive]} onPress={() => setSimulationEnabled((prev) => !prev)}>
+                  <Text style={[styles.flightDeckChipText, simulationEnabled && styles.flightDeckChipTextActive]}>Sim</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {isSuperAdmin && simulationEnabled ? (
+              <Text style={styles.flightDeckPanelText}>
+                {Math.round(simulationProgress * 100)}% complete at {simulationSpeed}.
+              </Text>
+            ) : null}
+            <View style={styles.flightDeckControlRow}>
+              <TouchableOpacity
+                style={[styles.flightDeckChip, flightDeckHudExpanded && styles.flightDeckChipActive]}
+                onPress={() => setFlightDeckHudExpanded((prev) => !prev)}
+              >
+                <Text style={[styles.flightDeckChipText, flightDeckHudExpanded && styles.flightDeckChipTextActive]}>
+                  {flightDeckHudExpanded ? 'Collapse HUD' : 'Expand HUD'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.flightDeckChip, flightDeckView === 'vision' && styles.flightDeckChipActive]}
+                onPress={() => setFlightDeckView((current) => (current === 'map' ? 'vision' : 'map'))}
+              >
+                <Text style={[styles.flightDeckChipText, flightDeckView === 'vision' && styles.flightDeckChipTextActive]}>
+                  {flightDeckView === 'vision' ? 'Return to map' : 'Open vision'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          )}
+
+          {flightDeckPanel === 'status' && routeProgress ? (
+            <View style={styles.flightDeckPanel}>
+              <Text style={styles.flightDeckPanelTitle}>Route Progress</Text>
+              <Text style={styles.flightDeckPanelText}>
+                Remaining {routeProgress.remainingRouteNm.toFixed(1)} NM · Next {routeProgress.nextWaypoint || '--'} · Off route {routeProgress.offRouteNm.toFixed(1)} NM
+              </Text>
+            </View>
+          ) : null}
+
+          {flightDeckPanel === 'status' && (
+            <View style={styles.flightDeckPanel}>
+              <Text style={styles.flightDeckPanelTitle}>Operational Snapshot</Text>
+              <Text style={styles.flightDeckPanelText}>Route risk {routeRiskLabel}.</Text>
+              <Text style={styles.flightDeckPanelText}>
+                Weather counts: winds {summaryCounts.winds} · NOTAMs {summaryCounts.notams} · PIREPs {summaryCounts.pireps}
+              </Text>
+              {selectedDiversion ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Best diversion {selectedDiversion.icao} · {selectedDiversion.distanceNm.toFixed(1)} NM
+                  {selectedDiversionBestComm?.frequencyMhz ? ` · ${selectedDiversionBestComm.frequencyMhz.toFixed(3)}` : ''}
+                </Text>
+              ) : null}
+              {topTrafficTarget ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Highest traffic target {topTrafficTarget.callsign || 'Traffic'} · {topTrafficTarget.distanceNm.toFixed(1)} NM · score {topTrafficTarget.threatScore}
+                </Text>
+              ) : null}
+            </View>
+          )}
+
+          {flightDeckPanel === 'status' && (
+            <View style={styles.flightDeckPanel}>
+              <Text style={styles.flightDeckPanelTitle}>Quick Actions</Text>
+              {selectedTrafficTarget ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Selected traffic {selectedTrafficTarget.callsign || 'Traffic'} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
+                </Text>
+              ) : null}
+              {selectedDiversion ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Ready diversion {selectedDiversion.icao} - {selectedDiversion.distanceNm.toFixed(1)} NM
+                </Text>
+              ) : null}
+              <View style={styles.flightDeckControlRow}>
+                {selectedTrafficTarget ? (
+                  <TouchableOpacity style={styles.flightDeckChip} onPress={() => focusTrafficTarget(selectedTrafficTarget)}>
+                    <Text style={styles.flightDeckChipText}>Focus traffic</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {selectedDiversion ? (
+                  <TouchableOpacity
+                    style={[styles.flightDeckChip, styles.flightDeckChipActive]}
+                    onPress={() => engageDirectToDiversion(selectedDiversion)}
+                  >
+                    <Text style={[styles.flightDeckChipText, styles.flightDeckChipTextActive]}>Direct-to diversion</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </View>
+          )}
+
+          {flightDeckPanel === 'status' && (
+            <View style={styles.flightDeckPanel}>
+              <Text style={styles.flightDeckPanelTitle}>Terrain & Obstacles</Text>
+              <Text style={styles.flightDeckPanelText}>
+                Terrain {terrainClearanceFt != null ? `${Math.round(terrainClearanceFt)} ft clearance` : terrainProfileLoading ? 'loading terrain profile' : 'not available'}.
+              </Text>
+              <Text style={styles.flightDeckPanelText}>
+                Obstacle {obstacleClearanceFt != null ? `${Math.round(obstacleClearanceFt)} ft clearance` : obstacleScanLoading ? 'scanning nearby obstacles' : 'not available'}.
+              </Text>
+              {terrainProfile?.maxElevationFt != null ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Highest terrain on route {Math.round(terrainProfile.maxElevationFt).toLocaleString()} ft.
+                </Text>
+              ) : null}
+              {obstacleScan?.highestObstacle ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Highest nearby obstacle {(obstacleScan.highestObstacle.amslFt ?? obstacleScan.highestObstacle.aglFt ?? 0).toLocaleString()} ft {obstacleScan.highestObstacle.kind ? `- ${obstacleScan.highestObstacle.kind}` : ''}.
+                </Text>
+              ) : null}
+            </View>
+          )}
+
+          {flightDeckPanel === 'layers' && (
+            <View style={styles.flightDeckPanel}>
+              <Text style={styles.flightDeckPanelTitle}>Layer Controls</Text>
+              <View style={styles.flightDeckControlRow}>
+                {(['standard', 'sectional', 'terrain', 'radar', 'winds', 'clouds'] as const).map((value) => (
+                  <TouchableOpacity
+                    key={`deck-layer-${value}`}
+                    style={[styles.flightDeckChip, mapStyle === value && styles.flightDeckChipActive]}
+                    onPress={() => setMapStyle(value)}
+                  >
+                    <Text style={[styles.flightDeckChipText, mapStyle === value && styles.flightDeckChipTextActive]}>
+                      {value === 'standard' ? 'Map' : value === 'sectional' ? 'VFR' : value === 'terrain' ? 'Terrain' : value === 'radar' ? 'Radar' : value === 'winds' ? 'Winds' : 'Clouds'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.flightDeckControlRow}>
+                {(['all', 'conflict', 'above', 'below'] as const).map((value) => (
+                  <TouchableOpacity
+                    key={`deck-filter-${value}`}
+                    style={[styles.flightDeckChip, trafficFilter === value && styles.flightDeckChipActive]}
+                    onPress={() => setTrafficFilter(value)}
+                  >
+                    <Text style={[styles.flightDeckChipText, trafficFilter === value && styles.flightDeckChipTextActive]}>
+                      {value === 'all' ? 'All traffic' : value === 'conflict' ? 'Conflict' : value === 'above' ? 'Above' : 'Below'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              {isSuperAdmin && simulationEnabled ? (
+                <>
+                  <View style={styles.flightDeckControlRow}>
+                    {(['1x', '4x', '8x'] as const).map((value) => (
+                      <TouchableOpacity
+                        key={`deck-speed-${value}`}
+                        style={[styles.flightDeckChip, simulationSpeed === value && styles.flightDeckChipActive]}
+                        onPress={() => setSimulationSpeed(value)}
+                      >
+                        <Text style={[styles.flightDeckChipText, simulationSpeed === value && styles.flightDeckChipTextActive]}>{value}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={styles.flightDeckControlRow}>
+                    <TouchableOpacity
+                      style={[styles.flightDeckChip, simulationConflictEnabled && styles.flightDeckChipActive]}
+                      onPress={() => setSimulationConflictEnabled((prev) => !prev)}
+                    >
+                      <Text style={[styles.flightDeckChipText, simulationConflictEnabled && styles.flightDeckChipTextActive]}>
+                        {simulationConflictEnabled ? 'Conflict injected' : 'Inject conflict'}
+                      </Text>
+                    </TouchableOpacity>
+                    {selectedDiversion ? (
+                      <TouchableOpacity style={styles.flightDeckChip} onPress={() => engageDirectToDiversion(selectedDiversion)}>
+                        <Text style={styles.flightDeckChipText}>Jump to diversion</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </>
+              ) : null}
+            </View>
+          )}
+
+          {flightDeckPanel === 'traffic' ? (
+            <View style={styles.flightDeckPanel}>
+              <Text style={styles.flightDeckPanelTitle}>Traffic Watch</Text>
+              {visibleTrafficTargets.length === 0 ? (
+                <Text style={styles.flightDeckPanelText}>No traffic targets in the current filter band.</Text>
+              ) : visibleTrafficTargets.slice(0, 5).map((target) => (
+                <TouchableOpacity
+                  key={`deck-traffic-${target.id}`}
+                  style={[styles.flightDeckListCard, selectedTrafficTarget?.id === target.id && styles.flightDeckListCardActive]}
+                  onPress={() => focusTrafficTarget(target)}
+                  activeOpacity={0.92}
+                >
+                  <Text style={styles.flightDeckListTitle}>{target.callsign || 'Traffic target'}</Text>
+                  <Text style={styles.flightDeckPanelText}>
+                  {target.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(target.altitudeDeltaFt)}
+                  {typeof target.altitudeFt === 'number' ? ` - ${Math.round(target.altitudeFt)} ft` : ''}
+                </Text>
+                  <View style={styles.flightDeckControlRow}>
+                    <TouchableOpacity style={styles.flightDeckChip} onPress={() => focusTrafficTarget(target)}>
+                      <Text style={styles.flightDeckChipText}>Focus on map</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.flightDeckChip, selectedTrafficTarget?.id === target.id && styles.flightDeckChipActive]}
+                      onPress={() => setSelectedTrafficId(target.id)}
+                    >
+                      <Text style={[styles.flightDeckChipText, selectedTrafficTarget?.id === target.id && styles.flightDeckChipTextActive]}>
+                        {selectedTrafficTarget?.id === target.id ? 'Selected' : 'Select'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+
+          {flightDeckPanel === 'diversions' && (
+          <View style={styles.flightDeckPanel}>
+            <Text style={styles.flightDeckPanelTitle}>Diversions</Text>
+            {diversionCandidates.length === 0 ? (
+              <Text style={styles.flightDeckPanelText}>Enable GPS or sim to score nearby diversion airports.</Text>
+            ) : (
+              diversionCandidates.slice(0, 4).map((airport) => (
+                <TouchableOpacity
+                  key={`deck-diversion-${airport.icao}`}
+                  style={[styles.flightDeckListCard, selectedDiversion?.icao === airport.icao && styles.flightDeckListCardActive]}
+                  onPress={() => {
+                    setSelectedDiversionIcao(airport.icao);
+                    focusDiversionAirport(airport);
+                  }}
+                  activeOpacity={0.92}
+                >
+                  <Text style={styles.flightDeckListTitle}>
+                    {airport.icao}{airport.name ? ` - ${airport.name}` : ''}
+                  </Text>
+                  <Text style={styles.flightDeckPanelText}>
+                  {airport.distanceNm.toFixed(1)} NM - {Math.round(airport.bearingDeg)} deg - {airport.flightCategory || 'WX --'}
+                  {airport.maxRunwayFt ? ` - ${airport.maxRunwayFt.toLocaleString()} ft` : ''}
+                  {selectedDiversion?.icao === airport.icao && selectedDiversionBestComm?.frequencyMhz
+                    ? ` - ${selectedDiversionBestComm.frequencyMhz.toFixed(3)}`
+                    : ''}
+                </Text>
+                  {selectedDiversion?.icao === airport.icao ? (
+                    selectedDiversionBriefingLoading ? (
+                      <Text style={styles.flightDeckPanelText}>Loading runway briefing...</Text>
+                    ) : selectedDiversionBriefing?.advisory ? (
+                      <Text style={styles.flightDeckPanelText}>
+                        Runway {selectedDiversionBriefing.advisory.runway || '--'} - HW {selectedDiversionBriefing.advisory.headwind ?? '--'} kt - XW {selectedDiversionBriefing.advisory.crosswind ?? '--'} kt
+                        {selectedDiversionBriefing.runwayInUse ? ` - In use ${selectedDiversionBriefing.runwayInUse}` : ''}
+                      </Text>
+                    ) : selectedDiversionBriefing?.runwayInUse ? (
+                      <Text style={styles.flightDeckPanelText}>Runway in use {selectedDiversionBriefing.runwayInUse}</Text>
+                    ) : null
+                  ) : null}
+                  {airport.scoreReasons?.length ? (
+                    <Text style={styles.flightDeckPanelText}>{airport.scoreReasons.slice(0, 3).join(' - ')}</Text>
+                  ) : null}
+                  {selectedDiversion?.icao === airport.icao ? (
+                    <View style={styles.flightDeckControlRow}>
+                      <TouchableOpacity style={styles.flightDeckChip} onPress={() => focusDiversionAirport(airport)}>
+                        <Text style={styles.flightDeckChipText}>Focus</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.flightDeckChip, styles.flightDeckChipActive]}
+                        onPress={() => engageDirectToDiversion(airport)}
+                      >
+                        <Text style={[styles.flightDeckChipText, styles.flightDeckChipTextActive]}>Direct-to</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.flightDeckChip} onPress={() => setAlternate(airport.icao)}>
+                        <Text style={styles.flightDeckChipText}>Alternate</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+          )}
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
     <ScrollView
       style={styles.container}
@@ -1544,9 +3083,15 @@ export default function FlightPlannerScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.heroSecondaryAction}
-            onPress={() => navigation?.navigate?.('LogbookPro')}
+            onPress={() => navigation?.navigate?.('FlightDeck', {
+              departure,
+              destination,
+              waypoints,
+              plannedStops,
+              mode: 'flight',
+            })}
           >
-            <Text style={styles.heroSecondaryActionText}>Membership</Text>
+            <Text style={styles.heroSecondaryActionText}>Flight Deck</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -2607,6 +4152,760 @@ export default function FlightPlannerScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  flightDeckContainer: { flex: 1, backgroundColor: colors.flightBackground },
+  flightDeckHeader: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  flightDeckEyebrow: {
+    fontSize: 10,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    color: colors.flightTextMuted,
+    fontWeight: '700',
+  },
+  flightDeckTitle: {
+    marginTop: 6,
+    fontSize: 30,
+    lineHeight: 34,
+    color: colors.flightText,
+    fontWeight: '700',
+  },
+  flightDeckSubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.flightTextMuted,
+  },
+  flightDeckHeaderActions: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  flightDeckExitButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: colors.flightSurfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightDeckExitButtonActive: {
+    borderColor: colors.flightAccent,
+  },
+  flightDeckExitText: {
+    color: colors.flightText,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  flightDeckMapShell: {
+    marginHorizontal: spacing.sm,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    backgroundColor: colors.flightSurface,
+    ...shadow.flightGlass,
+  },
+  flightDeckMap: { width: '100%', height: 460, backgroundColor: colors.flightBackground },
+  flightDeckVisionShell: {
+    width: '100%',
+    height: 460,
+    overflow: 'hidden',
+    backgroundColor: '#07111E',
+  },
+  flightDeckVisionSky: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '58%',
+    backgroundColor: '#132846',
+  },
+  flightDeckVisionGround: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '42%',
+    backgroundColor: '#4D4028',
+  },
+  flightDeckVisionHorizon: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '56%',
+    height: 2,
+    backgroundColor: colors.flightText,
+    opacity: 0.9,
+  },
+  flightDeckVisionCenterline: {
+    position: 'absolute',
+    top: '16%',
+    bottom: '14%',
+    width: 2,
+    marginLeft: -1,
+    backgroundColor: 'rgba(200, 146, 42, 0.42)',
+  },
+  flightDeckVisionRouteGate: {
+    position: 'absolute',
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: 'rgba(200, 146, 42, 0.78)',
+    backgroundColor: 'rgba(200, 146, 42, 0.08)',
+  },
+  flightDeckVisionRouteGateCaution: {
+    borderColor: 'rgba(245, 166, 35, 0.82)',
+    backgroundColor: 'rgba(245, 166, 35, 0.12)',
+  },
+  flightDeckVisionTunnelBand: {
+    position: 'absolute',
+    borderRadius: 16,
+    backgroundColor: 'rgba(200, 146, 42, 0.09)',
+  },
+  flightDeckVisionTunnelBandCaution: {
+    backgroundColor: 'rgba(245, 166, 35, 0.12)',
+  },
+  flightDeckVisionTunnelBandWarning: {
+    backgroundColor: 'rgba(232, 69, 60, 0.12)',
+  },
+  flightDeckVisionFlightPathMarker: {
+    position: 'absolute',
+    top: '47%',
+    alignSelf: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: colors.flightAccent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flightDeckVisionFlightPathInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.flightAccent,
+  },
+  flightDeckVisionDirectorHorizontal: {
+    position: 'absolute',
+    top: '47.5%',
+    alignSelf: 'center',
+    width: 120,
+    height: 10,
+    marginTop: -5,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: 'rgba(232, 237, 244, 0.78)',
+    backgroundColor: 'rgba(232, 237, 244, 0.12)',
+  },
+  flightDeckVisionDirectorVertical: {
+    position: 'absolute',
+    top: '41%',
+    alignSelf: 'center',
+    width: 10,
+    height: 120,
+    marginLeft: -5,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: 'rgba(232, 237, 244, 0.78)',
+    backgroundColor: 'rgba(232, 237, 244, 0.1)',
+  },
+  flightDeckVisionDirectorCaptured: {
+    borderColor: 'rgba(0, 212, 160, 0.78)',
+    backgroundColor: 'rgba(0, 212, 160, 0.12)',
+  },
+  flightDeckVisionDirectorCaution: {
+    borderColor: 'rgba(245, 166, 35, 0.82)',
+    backgroundColor: 'rgba(245, 166, 35, 0.16)',
+  },
+  flightDeckVisionDirectorWarning: {
+    borderColor: 'rgba(232, 69, 60, 0.9)',
+    backgroundColor: 'rgba(232, 69, 60, 0.18)',
+  },
+  flightDeckVisionReadoutLeft: {
+    position: 'absolute',
+    top: spacing.lg,
+    left: spacing.lg,
+  },
+  flightDeckVisionReadoutRight: {
+    position: 'absolute',
+    top: spacing.lg,
+    right: spacing.lg,
+    alignItems: 'flex-end',
+  },
+  flightDeckVisionLabel: {
+    color: colors.flightTextMuted,
+    fontSize: 10,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  flightDeckVisionValue: {
+    color: colors.flightAccent,
+    fontSize: 28,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  flightDeckVisionBanner: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(10,14,20,0.82)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightDeckVisionBannerTitle: {
+    color: colors.flightText,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  flightDeckVisionBannerText: {
+    color: colors.flightTextMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 6,
+  },
+  flightDeckVisionBannerSupport: {
+    color: colors.flightAccent,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 8,
+    fontWeight: '600',
+  },
+  flightDeckVisionBannerSupportMuted: {
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  flightDeckVisionBannerAlert: {
+    color: colors.flightWarning,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 8,
+    fontWeight: '700',
+  },
+  flightDeckVisionPitchLine: {
+    position: 'absolute',
+    alignSelf: 'center',
+    borderTopWidth: 1.5,
+    borderTopColor: 'rgba(232,237,244,0.75)',
+    alignItems: 'center',
+  },
+  flightDeckVisionPitchLabel: {
+    position: 'absolute',
+    top: -10,
+    right: -28,
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  flightDeckVisionGuidanceChip: {
+    position: 'absolute',
+    top: spacing.lg,
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(10,14,20,0.82)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightDeckVisionGuidanceText: {
+    color: colors.flightAccent,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  flightDeckVisionGroundCaution: {
+    backgroundColor: '#5D4628',
+  },
+  flightDeckVisionGroundWarning: {
+    backgroundColor: '#6A2B24',
+  },
+  flightDeckVisionHorizonCaution: {
+    backgroundColor: colors.flightCaution,
+  },
+  flightDeckVisionHorizonWarning: {
+    backgroundColor: colors.flightWarning,
+  },
+  flightDeckVisionTerrainBand: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '48%',
+  },
+  flightDeckVisionTerrainColumn: {
+    position: 'absolute',
+    bottom: 0,
+    width: 26,
+    marginLeft: -13,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    opacity: 0.92,
+  },
+  flightDeckVisionTerrainColumnNominal: {
+    backgroundColor: 'rgba(0,212,160,0.28)',
+  },
+  flightDeckVisionTerrainColumnCaution: {
+    backgroundColor: 'rgba(245,166,35,0.46)',
+  },
+  flightDeckVisionTerrainColumnWarning: {
+    backgroundColor: 'rgba(232,69,60,0.52)',
+  },
+  flightDeckVisionTrafficSymbol: {
+    position: 'absolute',
+    width: 26,
+    height: 26,
+    marginLeft: -13,
+    marginTop: -13,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: colors.flightText,
+    backgroundColor: colors.flightAdvisory,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flightDeckVisionTrafficVector: {
+    position: 'absolute',
+    width: 2,
+    height: 18,
+    left: -1,
+    top: -20,
+    backgroundColor: 'rgba(232,237,244,0.72)',
+    borderRadius: 999,
+  },
+  flightDeckVisionTrafficSymbolCaution: {
+    backgroundColor: colors.flightCaution,
+  },
+  flightDeckVisionTrafficSymbolWarning: {
+    backgroundColor: colors.flightWarning,
+  },
+  flightDeckVisionObstacleCue: {
+    position: 'absolute',
+    width: 10,
+    height: 26,
+    marginLeft: -5,
+    marginTop: -13,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,212,160,0.72)',
+  },
+  flightDeckVisionObstacleCueCaution: {
+    backgroundColor: 'rgba(245,166,35,0.86)',
+  },
+  flightDeckVisionObstacleCueWarning: {
+    backgroundColor: 'rgba(232,69,60,0.92)',
+  },
+  flightDeckVisionTelemetryLeft: {
+    position: 'absolute',
+    left: spacing.md,
+    bottom: 104,
+  },
+  flightDeckVisionTelemetryRight: {
+    position: 'absolute',
+    right: spacing.md,
+    bottom: 104,
+    alignItems: 'flex-end',
+  },
+  flightDeckVisionTelemetryLabel: {
+    color: colors.flightTextMuted,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '700',
+  },
+  flightDeckVisionTelemetryValue: {
+    color: colors.flightText,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  flightDeckVisionTelemetryValueCaution: {
+    color: colors.flightCaution,
+  },
+  flightDeckVisionTelemetryValueWarning: {
+    color: colors.flightWarning,
+  },
+  flightDeckVisionTrafficCue: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: 148,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 10,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(10,14,20,0.82)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightDeckVisionTrafficCueTitle: {
+    color: colors.flightTextMuted,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '700',
+  },
+  flightDeckVisionTrafficCueText: {
+    color: colors.flightText,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  flightDeckVisionTrafficCueMeta: {
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 4,
+  },
+  flightDeckVisionManeuverCard: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    top: spacing.xl + 84,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(10,14,20,0.8)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightDeckVisionManeuverTitle: {
+    color: colors.flightTextMuted,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '700',
+  },
+  flightDeckVisionManeuverText: {
+    color: colors.flightText,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  flightDeckEmptyMap: {
+    height: 320,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.flightSurface,
+    padding: spacing.lg,
+  },
+  flightDeckEmptyTitle: {
+    color: colors.flightText,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  flightDeckEmptyText: {
+    color: colors.flightTextMuted,
+    fontSize: 13,
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  flightDeckTopChips: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    right: spacing.sm,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  flightDeckChip: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(17,24,32,0.92)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flightDeckChipActive: {
+    backgroundColor: colors.flightSurfaceElevated,
+    borderColor: colors.flightAccent,
+  },
+  flightDeckChipText: {
+    color: colors.flightTextMuted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  flightDeckChipTextActive: {
+    color: colors.flightText,
+  },
+  flightDeckAlertStrip: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    top: 72,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 10,
+    borderWidth: 1,
+  },
+  flightDeckAlertStripAdvisory: {
+    backgroundColor: 'rgba(74,159,212,0.18)',
+    borderColor: 'rgba(74,159,212,0.45)',
+  },
+  flightDeckAlertStripCaution: {
+    backgroundColor: 'rgba(245,166,35,0.18)',
+    borderColor: 'rgba(245,166,35,0.45)',
+  },
+  flightDeckAlertStripWarning: {
+    backgroundColor: 'rgba(232,69,60,0.18)',
+    borderColor: 'rgba(232,69,60,0.45)',
+  },
+  flightDeckAlertTitle: {
+    color: colors.flightText,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  flightDeckAlertText: {
+    color: colors.flightTextMuted,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  flightTrafficMarkerWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flightTrafficAttentionRing: {
+    position: 'absolute',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: 'rgba(245,166,35,0.75)',
+  },
+  flightTrafficAttentionRingImmediate: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderColor: 'rgba(232,69,60,0.8)',
+  },
+  flightTrafficMarker: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flightTrafficMarkerImmediate: {
+    backgroundColor: colors.flightWarning,
+    borderColor: colors.flightText,
+  },
+  flightTrafficMarkerAdvisory: {
+    backgroundColor: colors.flightCaution,
+    borderColor: colors.flightText,
+  },
+  flightTrafficMarkerMonitor: {
+    backgroundColor: colors.flightSurfaceElevated,
+    borderColor: colors.flightTextMuted,
+  },
+  flightTrafficMarkerSelected: {
+    transform: [{ scale: 1.12 }],
+    borderColor: colors.flightAccent,
+  },
+  flightDeckDiversionMarker: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.flightSurfaceElevated,
+    borderWidth: 1.5,
+    borderColor: colors.flightTextMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flightDeckDiversionMarkerActive: {
+    backgroundColor: colors.flightAccent,
+    borderColor: colors.flightText,
+  },
+  flightDeckHud: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: spacing.md,
+    minHeight: 84,
+    borderRadius: 999,
+    backgroundColor: 'rgba(10,14,20,0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(74,159,212,0.2)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    ...shadow.flightGlass,
+  },
+  flightDeckHudExpandedCard: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: 112,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(10,14,20,0.92)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+    padding: spacing.sm,
+    ...shadow.flightGlass,
+  },
+  flightDeckHudExpandedRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  flightDeckHudExpandedMetric: {
+    flex: 1,
+    padding: spacing.xs,
+    borderRadius: radius.md,
+    backgroundColor: colors.flightSurface,
+  },
+  flightDeckHudExpandedLabel: {
+    color: colors.flightTextMuted,
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  flightDeckHudExpandedValue: {
+    color: colors.flightText,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  flightDeckHudCell: { flex: 1, alignItems: 'center' },
+  flightDeckHudLabel: {
+    color: colors.flightTextMuted,
+    fontSize: 9,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  flightDeckHudValue: {
+    color: colors.flightText,
+    fontSize: 22,
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  flightDeckHudDivider: {
+    width: 1,
+    height: 34,
+    backgroundColor: colors.flightBorder,
+  },
+  flightOwnshipMarker: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.flightAccent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.flightText,
+  },
+  flightDeckSheet: {
+    flex: 1,
+    marginTop: spacing.sm,
+    marginHorizontal: spacing.sm,
+  },
+  flightDeckPanelTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  flightDeckTab: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: colors.flightSurface,
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightDeckTabActive: {
+    backgroundColor: colors.flightSurfaceElevated,
+    borderColor: colors.flightAccent,
+  },
+  flightDeckTabText: {
+    color: colors.flightTextMuted,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  flightDeckTabTextActive: {
+    color: colors.flightText,
+  },
+  flightDeckPanel: {
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.flightSurface,
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightDeckPanelRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  flightDeckPanelTitle: {
+    color: colors.flightText,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  flightDeckPanelText: {
+    color: colors.flightTextMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  flightDeckBadge: {
+    color: colors.flightAccent,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  flightDeckBadgeAdvisory: {
+    color: colors.flightAdvisory,
+  },
+  flightDeckBadgeCaution: {
+    color: colors.flightCaution,
+  },
+  flightDeckBadgeWarning: {
+    color: colors.flightWarning,
+  },
+  flightDeckControlRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  flightDeckListCard: {
+    marginTop: spacing.xs,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+    backgroundColor: colors.flightSurfaceElevated,
+  },
+  flightDeckListCardActive: {
+    borderColor: colors.flightAccent,
+  },
+  flightDeckListTitle: {
+    color: colors.flightText,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   content: { padding: spacing.sm, paddingBottom: 120 },
   heroPanel: {
     marginBottom: spacing.md,

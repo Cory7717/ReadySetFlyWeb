@@ -54,6 +54,15 @@ export type ProfileStackParamList = {
   AirportBriefing: undefined;
   ApproachPlates: undefined;
   FlightPlanner: undefined;
+  FlightDeck:
+    | {
+        departure?: string;
+        destination?: string;
+        waypoints?: string;
+        plannedStops?: string;
+        mode?: 'flight';
+      }
+    | undefined;
   RadioCommsTrainer: undefined;
   Logbook: undefined;
   LogbookEntry: { entryId?: string } | undefined;
@@ -146,6 +155,11 @@ export default function ProfileStack() {
         name="FlightPlanner" 
         component={FlightPlannerScreen}
         options={{ title: 'Flight Planner' }}
+      />
+      <Stack.Screen
+        name="FlightDeck"
+        component={FlightPlannerScreen}
+        options={{ title: 'Flight Deck' }}
       />
       <Stack.Screen 
         name="RadioCommsTrainer" 

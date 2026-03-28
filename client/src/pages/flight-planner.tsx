@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
@@ -1232,6 +1233,7 @@ export default function FlightPlanner() {
   const { user, isAuthenticated } = useAuth();
   const { profile: studentProfile } = useStudentProfile();
   const [plannerLocation] = useLocation();
+  const isMobile = useIsMobile();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const pressDemo = usePressDemo(FLIGHT_PLANNER_PRESS_STEPS);
@@ -5140,7 +5142,10 @@ export default function FlightPlanner() {
         )
       }
       canopyClassName="hidden"
-      contentClassName="max-w-[1400px] space-y-6"
+      contentClassName={cn(
+        "max-w-[1400px] space-y-6",
+        isMobile && "space-y-4 rounded-[28px] bg-[#0A0E14] p-3 text-slate-100 shadow-[0_20px_80px_rgba(10,14,20,0.35)]"
+      )}
     >
       <UpgradePromptDialog
         open={showUpgradePrompt}
@@ -5302,12 +5307,17 @@ export default function FlightPlanner() {
         note="Your web plan stays useful for planning and testing. Opening the app is mainly for native cockpit use."
       />
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as FlightPlannerTab)} className="min-w-0 space-y-4">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-5">
-          <TabsTrigger value="route" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">Route</TabsTrigger>
-          <TabsTrigger value="weather" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">Weather</TabsTrigger>
-          <TabsTrigger value="navlog" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">Nav Log</TabsTrigger>
-          <TabsTrigger value="analysis" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">Analysis</TabsTrigger>
-          <TabsTrigger value="file" className="h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700">File &amp; Save</TabsTrigger>
+        <TabsList
+          className={cn(
+            "grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-slate-300 bg-white p-1 md:grid-cols-5",
+            isMobile && "border-[#1E2D42] bg-[#111820] p-1.5"
+          )}
+        >
+          <TabsTrigger value="route" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Route</TabsTrigger>
+          <TabsTrigger value="weather" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Weather</TabsTrigger>
+          <TabsTrigger value="navlog" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Nav Log</TabsTrigger>
+          <TabsTrigger value="analysis" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>Analysis</TabsTrigger>
+          <TabsTrigger value="file" className={cn("h-10 data-[state=active]:bg-blue-600 data-[state=active]:text-white text-slate-700", isMobile && "text-[#7A9BB8] data-[state=active]:bg-[#1A2332] data-[state=active]:text-[#E8EDF4]")}>File &amp; Save</TabsTrigger>
         </TabsList>
         <TabsContent value="route" className="space-y-6">
       <PressDemoSpotlight

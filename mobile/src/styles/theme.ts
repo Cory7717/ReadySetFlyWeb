@@ -24,6 +24,18 @@ export const colors = {
   terrainSafe: '#22c55e',
   terrainCaution: '#f59e0b',
   terrainDanger: '#ef4444',
+  flightBackground: '#0A0E14',
+  flightSurface: '#111820',
+  flightSurfaceElevated: '#1A2332',
+  flightBorder: '#1E2D42',
+  flightText: '#E8EDF4',
+  flightTextMuted: '#7A9BB8',
+  flightTextSoft: '#3D5A78',
+  flightNominal: '#00D4A0',
+  flightAdvisory: '#4A9FD4',
+  flightCaution: '#F5A623',
+  flightWarning: '#E8453C',
+  flightAccent: '#C8922A',
 };
 
 export const spacing = {
@@ -55,6 +67,13 @@ export const shadow = {
     shadowOpacity: 0.16,
     shadowRadius: 20,
     elevation: 6,
+  },
+  flightGlass: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    elevation: 8,
   },
 };
 

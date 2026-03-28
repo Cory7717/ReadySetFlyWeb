@@ -160,7 +160,7 @@ export default function HomeScreen({ navigation }: any) {
             title="Fly"
             subtitle="Receiver-backed traffic, live map, and diversions."
             accent={colors.cockpit}
-            onPress={() => navigation.navigate('Profile', { screen: 'FlightPlanner' })}
+            onPress={() => navigation.navigate('Profile', { screen: 'FlightDeck', params: { mode: 'flight' } })}
           />
           <ShortcutCard
             icon="airplane-outline"

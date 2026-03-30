@@ -2418,16 +2418,19 @@ export default function FlightPlannerScreen() {
   useEffect(() => {
     if (!isFlightDeck || flightDeckView !== 'map' || !activeOwnship || !mapRef.current) return;
     const speedKts = activeOwnship.speedKts ?? simulationCruiseKts;
-    const latitudeDelta = speedKts >= 160 ? 0.28 : speedKts >= 110 ? 0.22 : 0.16;
-    const longitudeDelta = speedKts >= 160 ? 0.22 : speedKts >= 110 ? 0.18 : 0.14;
-    mapRef.current.animateToRegion(
+    const heading = typeof activeOwnship.heading === 'number' && speedKts >= 25 ? activeOwnship.heading : 0;
+    const zoom = speedKts >= 170 ? 10.8 : speedKts >= 125 ? 11.4 : speedKts >= 85 ? 12.1 : 12.9;
+    mapRef.current.animateCamera(
       {
-        latitude: activeOwnship.lat,
-        longitude: activeOwnship.lon,
-        latitudeDelta,
-        longitudeDelta,
+        center: {
+          latitude: activeOwnship.lat,
+          longitude: activeOwnship.lon,
+        },
+        heading,
+        pitch: 0,
+        zoom,
       },
-      450,
+      { duration: 450 },
     );
   }, [activeOwnship?.heading, activeOwnship?.lat, activeOwnship?.lon, activeOwnship?.speedKts, flightDeckView, isFlightDeck, simulationCruiseKts]);
 

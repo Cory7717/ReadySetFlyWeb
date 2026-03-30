@@ -411,6 +411,10 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
             style={styles.flightDeckMap}
             ref={mapRef}
             mapType="standard"
+            rotateEnabled
+            pitchEnabled={false}
+            showsCompass={false}
+            toolbarEnabled={false}
             initialRegion={{
               latitude: routePoints[0]?.latitude || activeOwnship?.lat || 39.5,
               longitude: routePoints[0]?.longitude || activeOwnship?.lon || -98.35,

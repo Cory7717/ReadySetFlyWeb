@@ -2257,6 +2257,10 @@ let runwayCache: { data: Map<string, RunwayMeta[]>; expiresAt: number } | null =
 const AIRPORT_FREQUENCIES_CACHE_URL = "https://ourairports.com/data/airport-frequencies.csv";
 const AIRPORT_FREQUENCIES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let airportFrequencyCache: { data: Map<string, AirportFrequencyMeta[]>; expiresAt: number } | null = null;
+const NEARBY_AIRPORT_CACHE_TTL_MS = 45 * 1000;
+const NEARBY_AIRPORT_CACHE_MAX = 200;
+const nearbyAirportCache = new Map<string, { data: any; expiresAt: number }>();
+const nearbyAirportInFlight = new Map<string, Promise<any>>();
 const NOTAM_CACHE_TTL_MS = 2 * 60 * 1000;
 const notamCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -14326,240 +14330,269 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (lat === null || lon === null) {
         return res.status(400).json({ error: "lat and lon are required" });
       }
-
-      const [stations, runwayMap, frequencyMap] = await Promise.all([
-        loadStationCache(),
-        loadRunwayCache().catch(() => null),
-        loadAirportFrequencyCache().catch(() => null),
-      ]);
-
-      const deduped = new Map<string, AirportSearchResult>();
-      for (const station of stations) {
-        const icao = normalizeIcao(station.icao);
-        if (!icao || deduped.has(icao)) continue;
-        deduped.set(icao, station);
+      const cacheKey = getNearbyAirportCacheKey(lat, lon, radiusNm, limit);
+      const cachedPayload = getCachedNearbyAirportPayload<any>(cacheKey);
+      if (cachedPayload) {
+        return res.json(cachedPayload);
       }
 
-      const provisional: Array<{
-        station: AirportSearchResult;
-        distanceNm: number;
-        bearingDeg: number;
-        maxRunwayFt: number | null;
-        surfaces: string[];
-        frequencySummary: Array<{
-          type: string | null;
-          description: string | null;
-          frequencyMhz: number | null;
-        }>;
-        towered: boolean;
-      }> = [];
-      for (const station of Array.from(deduped.values())) {
-        const distanceNm = distanceNmBetween(lat, lon, station.lat, station.lon);
-        if (!Number.isFinite(distanceNm) || distanceNm > radiusNm) continue;
+      const buildPayload = async () => {
+        const [stations, runwayMap, frequencyMap] = await Promise.all([
+          loadStationCache(),
+          loadRunwayCache().catch(() => null),
+          loadAirportFrequencyCache().catch(() => null),
+        ]);
 
-        const runwayCandidates = runwayMap ? buildIcaoCandidates(station.icao).flatMap((candidate) => runwayMap.get(candidate) || []) : [];
-        if (runwayMap && runwayCandidates.length === 0) continue;
-
-        const maxRunwayFt = runwayCandidates
-          .map((runway) => runway.lengthFt)
-          .filter((value): value is number => Number.isFinite(value ?? NaN))
-          .reduce<number | null>((best, value) => (best === null || value > best ? value : best), null);
-        const surfaces = Array.from(
-          new Set(
-            runwayCandidates
-              .map((runway) => String(runway.surface || "").trim().toUpperCase())
-              .filter(Boolean)
-          )
-        ).slice(0, 3);
-
-        const frequencies = frequencyMap
-          ? buildIcaoCandidates(station.icao).flatMap((candidate) => frequencyMap.get(candidate) || [])
-          : [];
-        const frequencySummary = Array.from(
-          new Map(
-            frequencies.map((item) => [
-              `${item.type || ""}|${item.description || ""}|${item.frequencyMhz || ""}`,
-              item,
-            ])
-          ).values()
-        )
-          .sort((a, b) => {
-            const byPriority = airportFrequencyPriority(a.type) - airportFrequencyPriority(b.type);
-            if (byPriority !== 0) return byPriority;
-            return String(a.type || "").localeCompare(String(b.type || ""));
-          })
-          .slice(0, 3)
-          .map((item) => ({
-            type: item.type,
-            description: item.description,
-            frequencyMhz: item.frequencyMhz,
-          }));
-        const towered = frequencies.some((item) => isToweredFrequencyType(item.type, item.description));
-
-        provisional.push({
-          station,
-          distanceNm: Number(distanceNm.toFixed(1)),
-          bearingDeg: Math.round(bearingBetween(lat, lon, station.lat, station.lon)),
-          maxRunwayFt,
-          surfaces,
-          frequencySummary,
-          towered,
-        });
-      }
-
-      provisional.sort((a, b) => {
-        const runwayDelta = (b.maxRunwayFt ?? 0) - (a.maxRunwayFt ?? 0);
-        if (Math.abs(a.distanceNm - b.distanceNm) <= 3 && runwayDelta !== 0) {
-          return runwayDelta;
+        const deduped = new Map<string, AirportSearchResult>();
+        for (const station of stations) {
+          const icao = normalizeIcao(station.icao);
+          if (!icao || deduped.has(icao)) continue;
+          deduped.set(icao, station);
         }
-        return a.distanceNm - b.distanceNm;
-      });
 
-      const enrichedCandidates = await Promise.all(
-        provisional.slice(0, Math.max(limit + 4, 8)).map(async (candidate) => {
-          let metar: any | null = null;
-          for (const icaoCandidate of buildIcaoCandidates(candidate.station.icao)) {
-            const cached = weatherCache.get(icaoCandidate);
-            if (cached?.data?.metar) {
-              metar = cached.data.metar;
-              break;
-            }
+        const provisional: Array<{
+          station: AirportSearchResult;
+          distanceNm: number;
+          bearingDeg: number;
+          maxRunwayFt: number | null;
+          surfaces: string[];
+          frequencySummary: Array<{
+            type: string | null;
+            description: string | null;
+            frequencyMhz: number | null;
+          }>;
+          towered: boolean;
+        }> = [];
+        for (const station of Array.from(deduped.values())) {
+          const distanceNm = distanceNmBetween(lat, lon, station.lat, station.lon);
+          if (!Number.isFinite(distanceNm) || distanceNm > radiusNm) continue;
+
+          const runwayCandidates = runwayMap ? buildIcaoCandidates(station.icao).flatMap((candidate) => runwayMap.get(candidate) || []) : [];
+          if (runwayMap && runwayCandidates.length === 0) continue;
+
+          const maxRunwayFt = runwayCandidates
+            .map((runway) => runway.lengthFt)
+            .filter((value): value is number => Number.isFinite(value ?? NaN))
+            .reduce<number | null>((best, value) => (best === null || value > best ? value : best), null);
+          const surfaces = Array.from(
+            new Set(
+              runwayCandidates
+                .map((runway) => String(runway.surface || "").trim().toUpperCase())
+                .filter(Boolean)
+            )
+          ).slice(0, 3);
+
+          const frequencies = frequencyMap
+            ? buildIcaoCandidates(station.icao).flatMap((candidate) => frequencyMap.get(candidate) || [])
+            : [];
+          const frequencySummary = Array.from(
+            new Map(
+              frequencies.map((item) => [
+                `${item.type || ""}|${item.description || ""}|${item.frequencyMhz || ""}`,
+                item,
+              ])
+            ).values()
+          )
+            .sort((a, b) => {
+              const byPriority = airportFrequencyPriority(a.type) - airportFrequencyPriority(b.type);
+              if (byPriority !== 0) return byPriority;
+              return String(a.type || "").localeCompare(String(b.type || ""));
+            })
+            .slice(0, 3)
+            .map((item) => ({
+              type: item.type,
+              description: item.description,
+              frequencyMhz: item.frequencyMhz,
+            }));
+          const towered = frequencies.some((item) => isToweredFrequencyType(item.type, item.description));
+
+          provisional.push({
+            station,
+            distanceNm: Number(distanceNm.toFixed(1)),
+            bearingDeg: Math.round(bearingBetween(lat, lon, station.lat, station.lon)),
+            maxRunwayFt,
+            surfaces,
+            frequencySummary,
+            towered,
+          });
+        }
+
+        provisional.sort((a, b) => {
+          const runwayDelta = (b.maxRunwayFt ?? 0) - (a.maxRunwayFt ?? 0);
+          if (Math.abs(a.distanceNm - b.distanceNm) <= 3 && runwayDelta !== 0) {
+            return runwayDelta;
           }
+          return a.distanceNm - b.distanceNm;
+        });
 
-          if (!metar) {
+        const enrichedCandidates = await Promise.all(
+          provisional.slice(0, Math.max(limit + 4, 8)).map(async (candidate) => {
+            let metar: any | null = null;
             for (const icaoCandidate of buildIcaoCandidates(candidate.station.icao)) {
-              const metarRes = await fetchWithTimeout(
-                `https://aviationweather.gov/api/data/metar?ids=${icaoCandidate}&format=json`,
-                { headers: { "User-Agent": "ReadySetFly/1.0" } },
-                2500
-              ).catch(() => null);
-              if (!metarRes || !metarRes.ok) continue;
-              const body = await metarRes.text().catch(() => "");
-              const trimmed = body.trim();
-              if (!trimmed || trimmed.startsWith("<")) continue;
-              try {
-                const metarData = JSON.parse(trimmed);
-                metar = Array.isArray(metarData) && metarData.length > 0 ? metarData[0] : null;
-                if (metar) {
-                  weatherCache.set(icaoCandidate, {
-                    data: { metar, taf: null, cached: false },
-                    timestamp: Date.now(),
-                  });
-                  break;
-                }
-              } catch {
-                // Ignore malformed METAR payloads for diversion enrichment.
+              const cached = weatherCache.get(icaoCandidate);
+              if (cached?.data?.metar) {
+                metar = cached.data.metar;
+                break;
               }
             }
-          }
 
-          const runwayCandidates = runwayMap
-            ? buildIcaoCandidates(candidate.station.icao).flatMap((icaoCandidate) => runwayMap.get(icaoCandidate) || [])
-            : [];
-          const wind = metar ? parseMetarWind(metar) : { direction: null, speed: null, gust: null };
-          const advisory =
-            metar &&
-            wind.direction !== null &&
-            wind.speed !== null &&
-            runwayCandidates.length > 0
-              ? computeRunwayAdvisory(runwayCandidates, wind.direction, wind.speed)
-              : null;
-          const flightCategory = metar ? computeFlightCategory(metar) : null;
-
-          let score = 100 - candidate.distanceNm;
-          const scoreReasons: string[] = [];
-          const immediateReasons: string[] = [];
-
-          if (candidate.maxRunwayFt !== null) {
-            if (candidate.maxRunwayFt >= 5000) {
-              score += 18;
-              scoreReasons.push("long runway");
-            } else if (candidate.maxRunwayFt >= 3500) {
-              score += 10;
-              scoreReasons.push("usable runway");
-            }
-            if (candidate.maxRunwayFt >= 3500) {
-              immediateReasons.push("runway length");
-            }
-          }
-
-          if (candidate.towered) {
-            score += 10;
-            scoreReasons.push("towered field");
-            immediateReasons.push("tower support");
-          }
-
-          if (flightCategory === "VFR") {
-            score += 8;
-            scoreReasons.push("VFR weather");
-            immediateReasons.push("VFR weather");
-          } else if (flightCategory === "MVFR") {
-            score += 3;
-            scoreReasons.push("MVFR weather");
-            immediateReasons.push("MVFR weather");
-          } else if (flightCategory === "IFR") {
-            score -= 8;
-          } else if (flightCategory === "LIFR") {
-            score -= 16;
-          }
-
-          if (advisory) {
-            score += Math.max(-8, Math.min(8, advisory.headwind * 0.6 - advisory.crosswind * 0.5));
-            if (advisory.crosswind <= 8) {
-              scoreReasons.push("better wind alignment");
-              immediateReasons.push("lower crosswind");
-            }
-          }
-
-          if (candidate.distanceNm <= 20) {
-            immediateReasons.push("very close");
-          } else if (candidate.distanceNm <= 35) {
-            immediateReasons.push("close");
-          }
-
-          const immediateReady =
-            candidate.distanceNm <= 35 &&
-            (candidate.maxRunwayFt ?? 0) >= 3000 &&
-            (flightCategory === null || flightCategory === "VFR" || flightCategory === "MVFR") &&
-            (!advisory || advisory.crosswind <= 15);
-
-          return {
-            ...candidate.station,
-            distanceNm: candidate.distanceNm,
-            bearingDeg: candidate.bearingDeg,
-            maxRunwayFt: candidate.maxRunwayFt,
-            surfaces: candidate.surfaces,
-            towered: candidate.towered,
-            score: Number(score.toFixed(1)),
-            scoreReasons: scoreReasons.slice(0, 3),
-            immediateReady,
-            immediateReasons: Array.from(new Set(immediateReasons)).slice(0, 4),
-            flightCategory,
-            runwayAdvisory: advisory
-              ? {
-                  runway: advisory.runway,
-                  headwindKt: Number(advisory.headwind.toFixed(1)),
-                  crosswindKt: Number(advisory.crosswind.toFixed(1)),
+            if (!metar) {
+              for (const icaoCandidate of buildIcaoCandidates(candidate.station.icao)) {
+                const metarRes = await fetchWithTimeout(
+                  `https://aviationweather.gov/api/data/metar?ids=${icaoCandidate}&format=json`,
+                  { headers: { "User-Agent": "ReadySetFly/1.0" } },
+                  2500
+                ).catch(() => null);
+                if (!metarRes || !metarRes.ok) continue;
+                const body = await metarRes.text().catch(() => "");
+                const trimmed = body.trim();
+                if (!trimmed || trimmed.startsWith("<")) continue;
+                try {
+                  const metarData = JSON.parse(trimmed);
+                  metar = Array.isArray(metarData) && metarData.length > 0 ? metarData[0] : null;
+                  if (metar) {
+                    weatherCache.set(icaoCandidate, {
+                      data: { metar, taf: null, cached: false },
+                      timestamp: Date.now(),
+                    });
+                    break;
+                  }
+                } catch {
+                  // Ignore malformed METAR payloads for diversion enrichment.
                 }
-              : null,
-            frequencySummary: candidate.frequencySummary,
-          } satisfies NearbyAirportResult;
-        })
-      );
+              }
+            }
 
-      const candidates = enrichedCandidates.sort((a, b) => {
-        const byScore = b.score - a.score;
-        if (Math.abs(byScore) > 0.25) return byScore;
-        return a.distanceNm - b.distanceNm;
-      });
+            const runwayCandidates = runwayMap
+              ? buildIcaoCandidates(candidate.station.icao).flatMap((icaoCandidate) => runwayMap.get(icaoCandidate) || [])
+              : [];
+            const wind = metar ? parseMetarWind(metar) : { direction: null, speed: null, gust: null };
+            const advisory =
+              metar &&
+              wind.direction !== null &&
+              wind.speed !== null &&
+              runwayCandidates.length > 0
+                ? computeRunwayAdvisory(runwayCandidates, wind.direction, wind.speed)
+                : null;
+            const flightCategory = metar ? computeFlightCategory(metar) : null;
 
-      return res.json({
-        lat,
-        lon,
-        radiusNm,
-        airports: candidates.slice(0, limit),
-      });
+            let score = 100 - candidate.distanceNm;
+            const scoreReasons: string[] = [];
+            const immediateReasons: string[] = [];
+
+            if (candidate.maxRunwayFt !== null) {
+              if (candidate.maxRunwayFt >= 5000) {
+                score += 18;
+                scoreReasons.push("long runway");
+              } else if (candidate.maxRunwayFt >= 3500) {
+                score += 10;
+                scoreReasons.push("usable runway");
+              }
+              if (candidate.maxRunwayFt >= 3500) {
+                immediateReasons.push("runway length");
+              }
+            }
+
+            if (candidate.towered) {
+              score += 10;
+              scoreReasons.push("towered field");
+              immediateReasons.push("tower support");
+            }
+
+            if (flightCategory === "VFR") {
+              score += 8;
+              scoreReasons.push("VFR weather");
+              immediateReasons.push("VFR weather");
+            } else if (flightCategory === "MVFR") {
+              score += 3;
+              scoreReasons.push("MVFR weather");
+              immediateReasons.push("MVFR weather");
+            } else if (flightCategory === "IFR") {
+              score -= 8;
+            } else if (flightCategory === "LIFR") {
+              score -= 16;
+            }
+
+            if (advisory) {
+              score += Math.max(-8, Math.min(8, advisory.headwind * 0.6 - advisory.crosswind * 0.5));
+              if (advisory.crosswind <= 8) {
+                scoreReasons.push("better wind alignment");
+                immediateReasons.push("lower crosswind");
+              }
+            }
+
+            if (candidate.distanceNm <= 20) {
+              immediateReasons.push("very close");
+            } else if (candidate.distanceNm <= 35) {
+              immediateReasons.push("close");
+            }
+
+            const immediateReady =
+              candidate.distanceNm <= 35 &&
+              (candidate.maxRunwayFt ?? 0) >= 3000 &&
+              (flightCategory === null || flightCategory === "VFR" || flightCategory === "MVFR") &&
+              (!advisory || advisory.crosswind <= 15);
+
+            return {
+              ...candidate.station,
+              distanceNm: candidate.distanceNm,
+              bearingDeg: candidate.bearingDeg,
+              maxRunwayFt: candidate.maxRunwayFt,
+              surfaces: candidate.surfaces,
+              towered: candidate.towered,
+              score: Number(score.toFixed(1)),
+              scoreReasons: scoreReasons.slice(0, 3),
+              immediateReady,
+              immediateReasons: Array.from(new Set(immediateReasons)).slice(0, 4),
+              flightCategory,
+              runwayAdvisory: advisory
+                ? {
+                    runway: advisory.runway,
+                    headwindKt: Number(advisory.headwind.toFixed(1)),
+                    crosswindKt: Number(advisory.crosswind.toFixed(1)),
+                  }
+                : null,
+              frequencySummary: candidate.frequencySummary,
+            } satisfies NearbyAirportResult;
+          })
+        );
+
+        const candidates = enrichedCandidates.sort((a, b) => {
+          const byScore = b.score - a.score;
+          if (Math.abs(byScore) > 0.25) return byScore;
+          return a.distanceNm - b.distanceNm;
+        });
+
+        return {
+          lat,
+          lon,
+          radiusNm,
+          airports: candidates.slice(0, limit),
+        };
+      };
+
+      const inFlight = nearbyAirportInFlight.get(cacheKey);
+      if (inFlight) {
+        const payload = await inFlight;
+        return res.json(payload);
+      }
+
+      const buildPromise = buildPayload();
+      nearbyAirportInFlight.set(cacheKey, buildPromise);
+      const payload = await buildPromise;
+      nearbyAirportInFlight.delete(cacheKey);
+      setCachedNearbyAirportPayload(cacheKey, payload);
+      return res.json(payload);
     } catch (error) {
+      if (error && typeof req.query.lat !== "undefined" && typeof req.query.lon !== "undefined") {
+        const lat = toNumber(req.query.lat);
+        const lon = toNumber(req.query.lon);
+        const radiusNm = Math.max(10, Math.min(250, toNumber(req.query.radiusNm) ?? 60));
+        const limit = Math.max(3, Math.min(15, Math.round(toNumber(req.query.limit) ?? 8)));
+        if (lat !== null && lon !== null) {
+          nearbyAirportInFlight.delete(getNearbyAirportCacheKey(lat, lon, radiusNm, limit));
+        }
+      }
       console.error("Nearby airport search failed:", error);
       res.status(500).json({ error: "Failed to search nearby airports" });
     }
@@ -21245,3 +21278,27 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
 
 
+function getNearbyAirportCacheKey(lat: number, lon: number, radiusNm: number, limit: number) {
+  const roundedLat = lat.toFixed(2);
+  const roundedLon = lon.toFixed(2);
+  const roundedRadius = Math.round(radiusNm);
+  return `${roundedLat}|${roundedLon}|${roundedRadius}|${limit}`;
+}
+
+function getCachedNearbyAirportPayload<T>(key: string): T | null {
+  const cached = nearbyAirportCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    nearbyAirportCache.delete(key);
+    return null;
+  }
+  return cached.data as T;
+}
+
+function setCachedNearbyAirportPayload<T>(key: string, data: T) {
+  nearbyAirportCache.set(key, { data, expiresAt: Date.now() + NEARBY_AIRPORT_CACHE_TTL_MS });
+  if (nearbyAirportCache.size > NEARBY_AIRPORT_CACHE_MAX) {
+    const oldestKey = nearbyAirportCache.keys().next().value as string | undefined;
+    if (oldestKey) nearbyAirportCache.delete(oldestKey);
+  }
+}

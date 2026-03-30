@@ -265,6 +265,22 @@ function isAirportDiagramPlate(plate: PlateRecord) {
   );
 }
 
+function pickPreferredAirportDiagram(plates: PlateRecord[]) {
+  const exact = plates.find(isAirportDiagramPlate);
+  if (exact) return exact;
+
+  const fallback = plates.find((plate) => {
+    const name = String(plate.name || "").toUpperCase();
+    const type = String(plate.type || "").toUpperCase();
+    return (
+      ["AIRPORT", "DIAGRAM", "APD", "PARKING", "HOT", "LAHSO", "RAMP"].some((token) => name.includes(token)) ||
+      ["AIRPORT", "DIAGRAM", "APD", "PARKING", "HOT", "LAHSO"].some((token) => type.includes(token))
+    );
+  });
+
+  return fallback || null;
+}
+
 function pickAirportFrequency(
   response: AirportFrequencyResponse | null | undefined,
   keywords: string[],
@@ -1095,6 +1111,13 @@ function AirportSurfacePreview({
         >
           Surface schematic
         </Button>
+        {!liveDiagram && !diagramLoading ? (
+          <Button asChild type="button" size="sm" variant="outline" className="border-[#1E2D42] bg-[#111820] text-[#7A9BB8]">
+            <a href={`/approach-plates?icao=${encodeURIComponent(preview.airportIcao)}`} target="_blank" rel="noopener noreferrer">
+              Browse plates
+            </a>
+          </Button>
+        ) : null}
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
         <div>
@@ -1495,8 +1518,7 @@ function FlightDemoVisionSurface({
         side="right"
         formatValue={(value) => Math.max(0, Math.round(value / 10) * 10).toString()}
       />
-      <div className="absolute inset-x-4 top-4 flex items-start justify-between gap-3">
-        <div className="max-w-[220px] rounded-2xl border border-[#1E2D42] bg-[#091018]/82 px-4 py-3">
+      <div className="absolute left-4 top-4 z-20 max-w-[190px] rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-4 py-3 backdrop-blur">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Vision guidance</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {nextWaypoint ? `Track ${nextWaypoint}` : "Route tunnel active"}
@@ -1504,10 +1526,10 @@ function FlightDemoVisionSurface({
           <div className="mt-1 text-xs text-[#7A9BB8]">
             {phaseLabel} - {nextWaypointDistanceNm != null ? `${nextWaypointDistanceNm.toFixed(1)} NM to next fix` : "Monitoring current leg"}
           </div>
-        </div>
-        <div className="flex max-w-[240px] flex-col gap-2">
+      </div>
+      <div className="absolute right-4 top-4 z-20 flex max-w-[208px] flex-col gap-2">
           {runwayCue ? (
-            <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/82 px-4 py-3 text-right">
+            <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-4 py-3 text-right backdrop-blur">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Approach</div>
               <div className="mt-1 font-mono text-xl text-[#F5A623]">RWY {runwayCue.runwayId}</div>
               <div className="mt-1 text-xs text-[#7A9BB8]">
@@ -1519,15 +1541,14 @@ function FlightDemoVisionSurface({
               </div>
             </div>
           ) : null}
-          <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/82 px-4 py-3 text-right">
+          <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-4 py-3 text-right backdrop-blur">
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Remain</div>
             <div className="mt-1 font-mono text-xl text-[#F5A623]">{remainingRouteNm.toFixed(1)} NM</div>
             <div className="mt-1 text-xs text-[#7A9BB8]">{speedTrend}</div>
           </div>
-        </div>
       </div>
       {terrainState ? (
-        <div className="absolute bottom-[108px] left-[96px] z-20 max-w-[228px] rounded-2xl border border-[#1E2D42] bg-[#091018]/84 px-4 py-3">
+        <div className="absolute bottom-[116px] left-[114px] z-20 max-w-[210px] rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-4 py-3 backdrop-blur">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Terrain guidance</div>
           <div
             className={`mt-1 text-sm font-semibold ${
@@ -1563,7 +1584,7 @@ function FlightDemoVisionSurface({
         </div>
       ) : null}
       {selectedTrafficTarget ? (
-        <div className="absolute bottom-[108px] right-[96px] z-20 max-w-[228px] rounded-2xl border border-[#1E2D42] bg-[#091018]/84 px-4 py-3 text-right">
+        <div className="absolute bottom-[116px] right-[114px] z-20 max-w-[210px] rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-4 py-3 text-right backdrop-blur">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Traffic</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {selectedTrafficTarget.callsign} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
@@ -1593,7 +1614,7 @@ function FlightDemoVisionSurface({
         </div>
       </div>
       {selectedDiversion ? (
-        <div className="absolute left-1/2 top-[14%] z-20 min-w-[210px] -translate-x-1/2 rounded-full border border-[#1E2D42] bg-[#091018]/78 px-4 py-2 text-center">
+        <div className="absolute left-1/2 top-[7.5%] z-20 min-w-[196px] -translate-x-1/2 rounded-full border border-[#1E2D42] bg-[#091018]/72 px-4 py-2 text-center backdrop-blur">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Best diversion</div>
           <div className="mt-0.5 text-sm font-semibold text-[#E8EDF4]">
             {selectedDiversion.icao} - {selectedDiversion.distanceNm.toFixed(1)} NM - {selectedDiversion.flightCategory || "WX --"}
@@ -1633,6 +1654,7 @@ export default function SyntheticVisionPage() {
   const [departurePlatesLoading, setDeparturePlatesLoading] = useState(false);
   const [arrivalPlatesLoading, setArrivalPlatesLoading] = useState(false);
   const lastNearbyFetchRef = useRef<{ lat: number; lon: number; fetchedAt: number } | null>(null);
+  const nearbyFetchInFlightRef = useRef(false);
 
   useEffect(() => {
     trackEvent("synthetic_vision_demo_view", { page: "/synthetic-vision" });
@@ -1905,6 +1927,7 @@ export default function SyntheticVisionPage() {
       setProgressNm(0);
       setDiversionCandidates([]);
       lastNearbyFetchRef.current = null;
+      nearbyFetchInFlightRef.current = false;
       setRunning(true);
       trackEvent("synthetic_vision_demo_build", {
         departure: departureMeta.icao,
@@ -2265,11 +2288,11 @@ export default function SyntheticVisionPage() {
     };
   }, [arrivalAirport, arrivalFrequencies, arrivalRunway, departureAirport, departureFrequencies, departureRunway, flightPhase, progressPct]);
   const departureAirportDiagram = useMemo(
-    () => departurePlates.find(isAirportDiagramPlate) || null,
+    () => pickPreferredAirportDiagram(departurePlates),
     [departurePlates],
   );
   const arrivalAirportDiagram = useMemo(
-    () => arrivalPlates.find(isAirportDiagramPlate) || null,
+    () => pickPreferredAirportDiagram(arrivalPlates),
     [arrivalPlates],
   );
   const activeAirportDiagram = useMemo(
@@ -2333,6 +2356,7 @@ export default function SyntheticVisionPage() {
   useEffect(() => {
     if (!flightFrame?.ownship) return;
     const ownship = flightFrame.ownship;
+    if (nearbyFetchInFlightRef.current) return;
     const lastFetch = lastNearbyFetchRef.current;
     const movedNm = lastFetch
       ? greatCircleNm(
@@ -2341,13 +2365,19 @@ export default function SyntheticVisionPage() {
         )
       : Infinity;
     const staleMs = lastFetch ? Date.now() - lastFetch.fetchedAt : Infinity;
-    if (movedNm < 18 && staleMs < 30000) return;
+    if (movedNm < 1 && staleMs < 45000) return;
 
     let cancelled = false;
+    nearbyFetchInFlightRef.current = true;
+    lastNearbyFetchRef.current = {
+      lat: ownship.lat,
+      lon: ownship.lon,
+      fetchedAt: Date.now(),
+    };
     setDiversionLoading(true);
     void fetch(
       apiUrl(
-        `/api/airports/nearby?lat=${ownship.lat.toFixed(4)}&lon=${ownship.lon.toFixed(4)}&radiusNm=70&limit=4`,
+        `/api/airports/nearby?lat=${ownship.lat.toFixed(3)}&lon=${ownship.lon.toFixed(3)}&radiusNm=70&limit=4`,
       ),
     )
       .then(async (response) => {
@@ -2370,6 +2400,7 @@ export default function SyntheticVisionPage() {
         }
       })
       .finally(() => {
+        nearbyFetchInFlightRef.current = false;
         if (!cancelled) setDiversionLoading(false);
       });
 

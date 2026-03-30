@@ -18,6 +18,22 @@ interface Message {
   };
 }
 
+function normalizeMessage(raw: any): Message {
+  return {
+    id: String(raw?.id || ''),
+    rentalId: String(raw?.rentalId || ''),
+    senderId: String(raw?.senderId || ''),
+    message: String(raw?.message ?? raw?.content ?? ''),
+    createdAt:
+      typeof raw?.createdAt === 'string'
+        ? raw.createdAt
+        : raw?.createdAt instanceof Date
+          ? raw.createdAt.toISOString()
+          : new Date().toISOString(),
+    sender: raw?.sender,
+  };
+}
+
 interface RentalMessagingProps {
   rentalId: string;
   userId: string;
@@ -40,7 +56,7 @@ export function RentalMessaging({ rentalId, userId }: RentalMessagingProps) {
 
   useEffect(() => {
     if (initialMessages) {
-      setMessages(initialMessages);
+      setMessages(initialMessages.map(normalizeMessage));
     }
   }, [initialMessages]);
 
@@ -56,7 +72,7 @@ export function RentalMessaging({ rentalId, userId }: RentalMessagingProps) {
 
         // Listen for new messages
         onMessage((data: Message) => {
-          setMessages((prev) => [...prev, data]);
+          setMessages((prev) => [...prev, normalizeMessage(data)]);
           // Scroll to bottom when new message arrives
           setTimeout(() => {
             flatListRef.current?.scrollToEnd({ animated: true });

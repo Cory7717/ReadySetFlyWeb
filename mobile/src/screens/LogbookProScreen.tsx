@@ -522,6 +522,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   secondaryButtonText: { color: colors.text, fontWeight: '600' },
+  primaryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primaryStrong,
+    marginTop: spacing.sm,
+  },
+  primaryButtonText: { color: '#ffffff', fontWeight: '700' },
   infoBanner: {
     backgroundColor: colors.primarySoft,
     borderRadius: radius.lg,

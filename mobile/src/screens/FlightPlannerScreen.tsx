@@ -466,6 +466,10 @@ function shouldSkipPositionRefresh(
   return movedNm < options.minDistanceNm;
 }
 
+function toRad(deg: number) {
+  return (deg * Math.PI) / 180;
+}
+
 function isWithinConus(lat: number, lon: number) {
   return lat >= 14.56 && lat <= 56.78 && lon >= -152.11 && lon <= -52.92;
 }
@@ -1441,7 +1445,8 @@ export default function FlightPlannerScreen() {
       flightDeckAutoPanelRef.current = null;
       return;
     }
-    if (flightDeckVisibleAlert.severity !== 'warning' || flightDeckAutoPanelRef.current === alertKey) {
+    const alertSeverity = flightDeckVisibleAlert?.severity;
+    if (alertSeverity !== 'warning' || flightDeckAutoPanelRef.current === alertKey) {
       return;
     }
     flightDeckAutoPanelRef.current = alertKey;
@@ -2406,6 +2411,27 @@ export default function FlightPlannerScreen() {
   }, [routePoints]);
 
   useEffect(() => {
+    if (!isFlightDeck || mapStyle !== 'standard') return;
+    setMapStyle('sectional');
+  }, [isFlightDeck, mapStyle]);
+
+  useEffect(() => {
+    if (!isFlightDeck || flightDeckView !== 'map' || !activeOwnship || !mapRef.current) return;
+    const speedKts = activeOwnship.speedKts ?? simulationCruiseKts;
+    const latitudeDelta = speedKts >= 160 ? 0.28 : speedKts >= 110 ? 0.22 : 0.16;
+    const longitudeDelta = speedKts >= 160 ? 0.22 : speedKts >= 110 ? 0.18 : 0.14;
+    mapRef.current.animateToRegion(
+      {
+        latitude: activeOwnship.lat,
+        longitude: activeOwnship.lon,
+        latitudeDelta,
+        longitudeDelta,
+      },
+      450,
+    );
+  }, [activeOwnship?.heading, activeOwnship?.lat, activeOwnship?.lon, activeOwnship?.speedKts, flightDeckView, isFlightDeck, simulationCruiseKts]);
+
+  useEffect(() => {
     if (!routePoints.length && !hasPrimaryIcao) return;
 
     const bboxSource = buildBboxFromPoints(routePoints);
@@ -2648,7 +2674,7 @@ export default function FlightPlannerScreen() {
         </View>
 
         <View style={styles.heroActionRow}>
-          <TouchableOpacity style={styles.heroPrimaryAction} onPress={buildRoute} disabled={loading}>
+          <TouchableOpacity style={styles.heroPrimaryAction} onPress={() => void buildRoute()} disabled={loading}>
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.heroPrimaryActionText}>Build route</Text>}
           </TouchableOpacity>
           <TouchableOpacity
@@ -2822,7 +2848,7 @@ export default function FlightPlannerScreen() {
             <Text style={styles.suggestionHint}>Midpoint is disabled when custom waypoints or stops are entered.</Text>
           )}
         </View>
-        <TouchableOpacity style={styles.primaryButton} onPress={buildRoute} disabled={loading}>
+        <TouchableOpacity style={styles.primaryButton} onPress={() => void buildRoute()} disabled={loading}>
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Build Route</Text>}
         </TouchableOpacity>
         <TouchableOpacity style={styles.secondaryButton} onPress={fetchWeather} disabled={weatherLoading}>
@@ -3732,7 +3758,7 @@ export default function FlightPlannerScreen() {
           <Text style={styles.sectionTitle}>Route Legs</Text>
           {routeSummary.legs.map((leg) => (
             <View key={`${leg.from}-${leg.to}`} style={styles.legRow}>
-              <Text style={styles.legText}>{leg.from} -> {leg.to}</Text>
+              <Text style={styles.legText}>{`${leg.from} -> ${leg.to}`}</Text>
               <Text style={styles.legText}>{leg.nm.toFixed(1)} NM</Text>
             </View>
           ))}
@@ -4869,6 +4895,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#ffffff',
+    marginTop: 6,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  statsCard: {
+    flex: 1,
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  statsLabel: {
+    ...typography.muted,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.7,
+  },
+  statsValue: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: '700',
     marginTop: 6,
   },
   heroActionRow: {

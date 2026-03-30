@@ -89,7 +89,11 @@ export function useRegister() {
       firstName?: string;
       lastName?: string;
     }) => {
-      const response = await apiEndpoints.mobileAuth.register(data);
+      const response = await apiEndpoints.mobileAuth.register({
+        ...data,
+        firstName: data.firstName ?? '',
+        lastName: data.lastName ?? '',
+      });
       return response.data;
     },
     onSuccess: async (data) => {

@@ -91,12 +91,12 @@ export default function BookingScreen({ route, navigation }: Props) {
 
   const aircraftName = useMemo(() => {
     if (!aircraft) return 'Aircraft booking';
-    return `${aircraft.make || ''} ${aircraft.model || ''}`.trim() || aircraft.type || 'Aircraft booking';
+    return `${aircraft.make || ''} ${aircraft.model || ''}`.trim() || aircraft.registration || 'Aircraft booking';
   }, [aircraft]);
 
   const registration = useMemo(() => {
     if (!aircraft) return 'Registration pending';
-    return aircraft.registration || aircraft.nNumber || 'Registration pending';
+    return aircraft.registration || 'Registration pending';
   }, [aircraft]);
 
   const locationLabel = useMemo(() => {

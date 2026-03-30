@@ -111,12 +111,12 @@ export default function AircraftDetailScreen({ route, navigation }: Props) {
 
   const aircraftTitle = useMemo(() => {
     if (!aircraft) return 'Aircraft';
-    return aircraft.type || `${aircraft.make || ''} ${aircraft.model || ''}`.trim() || 'Aircraft';
+    return `${aircraft.make || ''} ${aircraft.model || ''}`.trim() || aircraft.registration || 'Aircraft';
   }, [aircraft]);
 
   const registration = useMemo(() => {
     if (!aircraft) return 'Registration pending';
-    return aircraft.nNumber || aircraft.registration || 'Registration pending';
+    return aircraft.registration || 'Registration pending';
   }, [aircraft]);
 
   const locationLabel = useMemo(() => {
@@ -179,7 +179,7 @@ export default function AircraftDetailScreen({ route, navigation }: Props) {
             </Text>
           </View>
           <View style={styles.heroActions}>
-            {aircraft.available ? (
+            {aircraft.isListed ? (
               <View style={styles.heroBadge}>
                 <Text style={styles.heroBadgeText}>Available</Text>
               </View>
@@ -217,7 +217,7 @@ export default function AircraftDetailScreen({ route, navigation }: Props) {
           ) : null}
         </View>
 
-        {aircraft.available ? (
+        {aircraft.isListed ? (
           <TouchableOpacity
             style={styles.primaryAction}
             onPress={() => navigation.navigate('Booking', { aircraftId })}
@@ -278,10 +278,10 @@ export default function AircraftDetailScreen({ route, navigation }: Props) {
                 : 'Check with owner'}
             </Text>
           </View>
-          {aircraft.requirements ? (
+          {aircraft.description ? (
             <View style={styles.requirementNotes}>
               <Text style={styles.requirementNotesLabel}>Owner notes</Text>
-              <Text style={styles.requirementNotesText}>{aircraft.requirements}</Text>
+              <Text style={styles.requirementNotesText}>{aircraft.description}</Text>
             </View>
           ) : null}
         </View>
@@ -332,7 +332,7 @@ export default function AircraftDetailScreen({ route, navigation }: Props) {
         )}
       </SectionCard>
 
-      {aircraft.available ? (
+      {aircraft.isListed ? (
         <View style={styles.footerActionWrap}>
           <TouchableOpacity
             style={styles.footerAction}

@@ -226,7 +226,7 @@ export function rankTrafficTargets<T extends { lat: number; lon: number; altitud
       const distanceScore = distanceNm <= 2 ? 70 : distanceNm <= 5 ? 45 : distanceNm <= 10 ? 25 : 10;
       const verticalScore = verticalGap <= 500 ? 30 : verticalGap <= 1000 ? 20 : verticalGap <= 2000 ? 10 : 0;
       const threatScore = distanceScore + verticalScore;
-      const threatLevel =
+      const threatLevel: 'immediate' | 'advisory' | 'monitor' =
         threatScore >= 80 ? 'immediate' : threatScore >= 45 ? 'advisory' : 'monitor';
 
       return {

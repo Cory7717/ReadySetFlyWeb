@@ -272,7 +272,7 @@ export default function MyRentalsScreen({ navigation }: any) {
         }
       />
 
-      {selectedRental && (
+      {selectedRental && selectedRental.ownerId ? (
         <ReviewDialog
           visible={reviewDialogVisible}
           onClose={() => {
@@ -283,7 +283,7 @@ export default function MyRentalsScreen({ navigation }: any) {
           revieweeId={selectedRental.ownerId}
           revieweeName="Aircraft Owner"
         />
-      )}
+      ) : null}
     </View>
   );
 }

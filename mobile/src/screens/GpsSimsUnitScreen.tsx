@@ -493,6 +493,7 @@ const styles = StyleSheet.create({
     color: '#93c5fd',
   },
   title: { ...typography.display, color: '#fff', marginTop: spacing.sm },
+  subtitle: { ...typography.body, marginTop: spacing.sm, color: '#dbe4f0' },
   heroSubtitle: { ...typography.body, marginTop: spacing.sm, color: '#dbe4f0' },
   noticeCard: {
     marginTop: spacing.lg,

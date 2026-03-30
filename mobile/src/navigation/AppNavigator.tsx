@@ -22,7 +22,7 @@ type AppTabParamList = {
   Profile: ProfileStackParamList;
 };
 
-const linking: LinkingOptions<AppTabParamList> = {
+const linking: LinkingOptions<any> = {
   prefixes: ['readysetfly://', 'https://readysetfly.us', 'https://www.readysetfly.us'],
   config: {
     screens: {

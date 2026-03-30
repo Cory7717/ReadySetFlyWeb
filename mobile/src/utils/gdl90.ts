@@ -93,7 +93,7 @@ export type Gdl90Listener = {
 };
 
 export function createGdl90Listener(port: number, onTraffic: (target: TrafficTarget) => void, onError?: (err: unknown) => void): Gdl90Listener {
-  const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+  const socket = dgram.createSocket({ type: 'udp4', reusePort: true });
 
   socket.on('message', (msg: Buffer) => {
     decodeFrames(new Uint8Array(msg), (frame) => {

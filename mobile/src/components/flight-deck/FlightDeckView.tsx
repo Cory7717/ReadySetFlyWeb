@@ -64,6 +64,9 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
     visibleTrafficTargets = [],
     selectedDiversion,
     selectedDiversionRunwaySummary,
+    destinationBriefingLoading,
+    destinationRunwayCue,
+    destinationRunwayOverlay,
     selectedDiversionBestComm,
     selectedTrafficTrend,
     mapTacticalSummary = {
@@ -214,6 +217,41 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 ]}
               />
             ))}
+            {destinationRunwayCue ? (
+              <>
+                <View
+                  style={[
+                    styles.flightDeckVisionRunwayCenterline,
+                    {
+                      left: `${destinationRunwayCue.centerlineLeftPct}%`,
+                      top: `${destinationRunwayCue.centerlineTopPct}%`,
+                      height: `${destinationRunwayCue.centerlineHeightPct}%`,
+                    },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.flightDeckVisionRunwayBox,
+                    {
+                      left: `${destinationRunwayCue.leftPct}%`,
+                      top: `${destinationRunwayCue.topPct}%`,
+                      width: `${destinationRunwayCue.widthPct}%`,
+                      height: `${destinationRunwayCue.heightPct}%`,
+                    },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.flightDeckVisionRunwayThreshold,
+                    {
+                      left: `${destinationRunwayCue.leftPct}%`,
+                      top: `${destinationRunwayCue.topPct + destinationRunwayCue.heightPct * 0.5}%`,
+                      width: `${destinationRunwayCue.widthPct}%`,
+                    },
+                  ]}
+                />
+              </>
+            ) : null}
             <View style={styles.flightDeckVisionTerrainBand}>
               {visionTerrainColumns.map((column: any) => (
                 <View
@@ -313,6 +351,26 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
             <View style={styles.flightDeckVisionGuidanceChip}>
               <Text style={styles.flightDeckVisionGuidanceText}>{visionGuidance}</Text>
             </View>
+            {destinationRunwayCue ? (
+              <View style={styles.flightDeckVisionApproachChip}>
+                <Text style={styles.flightDeckVisionApproachTitle}>Approach</Text>
+                <Text style={styles.flightDeckVisionApproachText}>
+                  RWY {destinationRunwayCue.runwayId} - {destinationRunwayCue.distanceLabel}
+                </Text>
+                <Text style={styles.flightDeckVisionApproachMeta}>
+                  {Math.abs(destinationRunwayCue.alignmentDeltaDeg) < 4
+                    ? 'Aligned on final'
+                    : destinationRunwayCue.alignmentDeltaDeg > 0
+                      ? `Correct left ${Math.round(Math.abs(destinationRunwayCue.alignmentDeltaDeg))} deg`
+                      : `Correct right ${Math.round(Math.abs(destinationRunwayCue.alignmentDeltaDeg))} deg`}
+                </Text>
+              </View>
+            ) : destinationBriefingLoading ? (
+              <View style={styles.flightDeckVisionApproachChip}>
+                <Text style={styles.flightDeckVisionApproachTitle}>Approach</Text>
+                <Text style={styles.flightDeckVisionApproachText}>Loading runway briefing</Text>
+              </View>
+            ) : null}
             {visionTrafficCue ? (
               <View
                 style={{
@@ -501,6 +559,21 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               strokeColor={colors.flightAccent}
               strokeWidth={4}
             />
+            {destinationRunwayOverlay ? (
+              <>
+                <Polyline
+                  coordinates={destinationRunwayOverlay.centerline}
+                  strokeColor="rgba(232, 237, 244, 0.86)"
+                  strokeWidth={2}
+                  lineDashPattern={[8, 8]}
+                />
+                <Polyline
+                  coordinates={destinationRunwayOverlay.runwayBar}
+                  strokeColor={colors.flightAccent}
+                  strokeWidth={4}
+                />
+              </>
+            ) : null}
             {activeOwnship && selectedTrafficTarget ? (
               <Polyline
                 coordinates={[
@@ -751,6 +824,18 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                   {flightDeckTargetAltitudeFt ? ` - bug ${flightDeckTargetAltitudeFt} ft` : ''}
                 </Text>
                 <Text style={styles.flightDeckMapActionRecommendation}>{mapTacticalSummary.recommendation}</Text>
+              </View>
+            ) : null}
+            {flightDeckView === 'map' && destinationRunwayCue ? (
+              <View style={styles.flightDeckApproachCard}>
+                <View style={styles.flightDeckApproachCardHeader}>
+                  <Text style={styles.flightDeckApproachCardEyebrow}>Approach</Text>
+                  <Text style={styles.flightDeckApproachCardBadge}>{destinationRunwayCue.distanceLabel}</Text>
+                </View>
+                <Text style={styles.flightDeckApproachCardTitle}>Runway {destinationRunwayCue.runwayId}</Text>
+                <Text style={styles.flightDeckApproachCardText}>
+                  Final centerline is drawn on the overhead map for live track-up following.
+                </Text>
               </View>
             ) : null}
 

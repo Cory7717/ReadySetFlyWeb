@@ -154,12 +154,43 @@ type NearbyDiversionResponse = {
 };
 
 type RunwayBriefingResponse = {
+  icao?: string | null;
   runwayInUse?: string | null;
   advisory?: {
     runway?: string | null;
+    heading?: number | null;
     headwind?: number | null;
     crosswind?: number | null;
   } | null;
+  runways?: Array<{
+    leIdent?: string | null;
+    heIdent?: string | null;
+    leHeading?: number | null;
+    heHeading?: number | null;
+    lengthFt?: number | null;
+    surface?: string | null;
+  }> | null;
+};
+
+type DestinationRunwayCue = {
+  runwayId: string;
+  distanceNm: number;
+  runwayHeadingDeg: number;
+  alignmentDeltaDeg: number;
+  leftPct: number;
+  topPct: number;
+  widthPct: number;
+  heightPct: number;
+  centerlineLeftPct: number;
+  centerlineTopPct: number;
+  centerlineHeightPct: number;
+  distanceLabel: string;
+};
+
+type DestinationRunwayOverlay = {
+  runwayId: string;
+  centerline: Array<{ latitude: number; longitude: number }>;
+  runwayBar: Array<{ latitude: number; longitude: number }>;
 };
 
 type TerrainProfileResponse = {
@@ -470,6 +501,73 @@ function toRad(deg: number) {
   return (deg * Math.PI) / 180;
 }
 
+function normalizeRunwayIdent(value?: string | null) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/^RWY\s*/i, '')
+    .trim();
+}
+
+function resolveDestinationRunway(briefing: RunwayBriefingResponse | null | undefined) {
+  if (!briefing) return null;
+  const desiredId = normalizeRunwayIdent(briefing.advisory?.runway || briefing.runwayInUse);
+  const runways = Array.isArray(briefing.runways) ? briefing.runways : [];
+
+  for (const runway of runways) {
+    const leIdent = normalizeRunwayIdent(runway.leIdent);
+    const heIdent = normalizeRunwayIdent(runway.heIdent);
+    if (desiredId && desiredId === leIdent && runway.leHeading != null) {
+      return {
+        runwayId: desiredId,
+        headingDeg: runway.leHeading,
+        lengthFt: runway.lengthFt ?? null,
+        surface: runway.surface ?? null,
+      };
+    }
+    if (desiredId && desiredId === heIdent && runway.heHeading != null) {
+      return {
+        runwayId: desiredId,
+        headingDeg: runway.heHeading,
+        lengthFt: runway.lengthFt ?? null,
+        surface: runway.surface ?? null,
+      };
+    }
+  }
+
+  if (briefing.advisory?.heading != null) {
+    return {
+      runwayId: desiredId || normalizeRunwayIdent(briefing.advisory?.runway) || 'RWY',
+      headingDeg: briefing.advisory.heading,
+      lengthFt: null,
+      surface: null,
+    };
+  }
+
+  const fallback = runways
+    .flatMap((runway) => [
+      runway.leHeading != null
+        ? {
+            runwayId: normalizeRunwayIdent(runway.leIdent) || 'RWY',
+            headingDeg: runway.leHeading,
+            lengthFt: runway.lengthFt ?? null,
+            surface: runway.surface ?? null,
+          }
+        : null,
+      runway.heHeading != null
+        ? {
+            runwayId: normalizeRunwayIdent(runway.heIdent) || 'RWY',
+            headingDeg: runway.heHeading,
+            lengthFt: runway.lengthFt ?? null,
+            surface: runway.surface ?? null,
+          }
+        : null,
+    ])
+    .filter(Boolean)
+    .sort((a, b) => (b?.lengthFt || 0) - (a?.lengthFt || 0))[0];
+
+  return fallback || null;
+}
+
 function isWithinConus(lat: number, lon: number) {
   return lat >= 14.56 && lat <= 56.78 && lon >= -152.11 && lon <= -52.92;
 }
@@ -589,6 +687,8 @@ export default function FlightPlannerScreen() {
   const [selectedDiversionIcao, setSelectedDiversionIcao] = useState<string | null>(null);
   const [selectedDiversionBriefing, setSelectedDiversionBriefing] = useState<RunwayBriefingResponse | null>(null);
   const [selectedDiversionBriefingLoading, setSelectedDiversionBriefingLoading] = useState(false);
+  const [destinationBriefing, setDestinationBriefing] = useState<RunwayBriefingResponse | null>(null);
+  const [destinationBriefingLoading, setDestinationBriefingLoading] = useState(false);
   const [terrainProfile, setTerrainProfile] = useState<TerrainProfileResponse | null>(null);
   const [terrainProfileLoading, setTerrainProfileLoading] = useState(false);
   const [obstacleScan, setObstacleScan] = useState<NearbyObstacleResponse | null>(null);
@@ -739,6 +839,10 @@ export default function FlightPlannerScreen() {
     }
     return 'Runway advisory pending';
   }, [selectedDiversionBriefing, selectedDiversionBriefingLoading]);
+  const destinationRunway = useMemo(
+    () => resolveDestinationRunway(destinationBriefing),
+    [destinationBriefing]
+  );
   useEffect(() => {
     if (!activeOwnship || !rankedTrafficTargets.length) {
       setTrafficTrendMap({});
@@ -1755,6 +1859,33 @@ export default function FlightPlannerScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    const destinationIcao = destination.trim().toUpperCase();
+    if (!ICAO_REGEX.test(destinationIcao)) {
+      setDestinationBriefing(null);
+      setDestinationBriefingLoading(false);
+      return;
+    }
+    setDestinationBriefingLoading(true);
+    api
+      .get<RunwayBriefingResponse>(`/api/airports/${destinationIcao}/runway-briefing`)
+      .then((res) => {
+        if (cancelled) return;
+        setDestinationBriefing(res.data || null);
+        setDestinationBriefingLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDestinationBriefing(null);
+        setDestinationBriefingLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [destination]);
+
+  useEffect(() => {
+    let cancelled = false;
     if (!terrainPathParam) {
       setTerrainProfile(null);
       setTerrainProfileLoading(false);
@@ -2433,6 +2564,80 @@ export default function FlightPlannerScreen() {
       { duration: 450 },
     );
   }, [activeOwnship?.heading, activeOwnship?.lat, activeOwnship?.lon, activeOwnship?.speedKts, flightDeckView, isFlightDeck, simulationCruiseKts]);
+  const destinationRunwayCue = useMemo<DestinationRunwayCue | null>(() => {
+    const destinationPoint = routePoints[routePoints.length - 1];
+    if (!activeOwnship || !destinationPoint || !destinationRunway) return null;
+    const distanceNm = getDistanceNmFromLatLon(
+      { lat: activeOwnship.lat, lon: activeOwnship.lon },
+      { lat: destinationPoint.latitude, lon: destinationPoint.longitude },
+    );
+    if ((flightPhase !== 'arrival' && distanceNm > 18) || distanceNm > 30) return null;
+    const bearingToAirport = bearingBetweenPoints(
+      { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
+      { latitude: destinationPoint.latitude, longitude: destinationPoint.longitude },
+    );
+    const approachCourseErrorDeg = normalizeHeadingDelta(bearingToAirport - destinationRunway.headingDeg);
+    const currentHeading = activeOwnship.heading ?? destinationRunway.headingDeg;
+    const alignmentDeltaDeg = normalizeHeadingDelta(currentHeading - destinationRunway.headingDeg);
+    const distanceFactor = clamp((18 - Math.min(distanceNm, 18)) / 18, 0, 1);
+    const widthPct = 10 + distanceFactor * 20;
+    const heightPct = 3.5 + distanceFactor * 10;
+    const leftCenterPct = 50 + clamp(approachCourseErrorDeg * 0.72, -18, 18);
+    const destinationElevationFt = terrainProfile?.samples?.[terrainProfile.samples.length - 1]?.elevationFt ?? 0;
+    const currentAltitudeFt = activeOwnship.altitudeFt ?? simulationAltitudeFt;
+    const glideslopeTargetFt = destinationElevationFt + distanceNm * 318 + 50;
+    const glideslopeErrorFt = currentAltitudeFt - glideslopeTargetFt;
+    const topCenterPct = clamp(58 - distanceFactor * 17 + glideslopeErrorFt / 145, 23, 74);
+    return {
+      runwayId: destinationRunway.runwayId,
+      distanceNm,
+      runwayHeadingDeg: destinationRunway.headingDeg,
+      alignmentDeltaDeg,
+      leftPct: clamp(leftCenterPct - widthPct / 2, 8, 92 - widthPct),
+      topPct: clamp(topCenterPct - heightPct / 2, 16, 82 - heightPct),
+      widthPct,
+      heightPct,
+      centerlineLeftPct: leftCenterPct,
+      centerlineTopPct: clamp(topCenterPct - (10 + distanceFactor * 11), 14, 64),
+      centerlineHeightPct: 10 + distanceFactor * 16,
+      distanceLabel: `${distanceNm.toFixed(1)} NM`,
+    };
+  }, [activeOwnship, destinationRunway, flightPhase, routePoints, simulationAltitudeFt, terrainProfile?.samples]);
+  const destinationRunwayOverlay = useMemo<DestinationRunwayOverlay | null>(() => {
+    const destinationPoint = routePoints[routePoints.length - 1];
+    if (!destinationPoint || !destinationRunway || !destinationRunwayCue) return null;
+    const reciprocal = (destinationRunway.headingDeg + 180) % 360;
+    const approachLengthNm = flightPhase === 'arrival' ? 8 : 5;
+    const finalApproachStart = offsetLatLonByNm(
+      destinationPoint.latitude,
+      destinationPoint.longitude,
+      Math.cos(toRad(reciprocal)) * approachLengthNm,
+      Math.sin(toRad(reciprocal)) * approachLengthNm,
+    );
+    const leftThreshold = offsetLatLonByNm(
+      destinationPoint.latitude,
+      destinationPoint.longitude,
+      Math.cos(toRad(destinationRunway.headingDeg - 90)) * 0.12,
+      Math.sin(toRad(destinationRunway.headingDeg - 90)) * 0.12,
+    );
+    const rightThreshold = offsetLatLonByNm(
+      destinationPoint.latitude,
+      destinationPoint.longitude,
+      Math.cos(toRad(destinationRunway.headingDeg + 90)) * 0.12,
+      Math.sin(toRad(destinationRunway.headingDeg + 90)) * 0.12,
+    );
+    return {
+      runwayId: destinationRunway.runwayId,
+      centerline: [
+        { latitude: finalApproachStart.lat, longitude: finalApproachStart.lon },
+        { latitude: destinationPoint.latitude, longitude: destinationPoint.longitude },
+      ],
+      runwayBar: [
+        { latitude: leftThreshold.lat, longitude: leftThreshold.lon },
+        { latitude: rightThreshold.lat, longitude: rightThreshold.lon },
+      ],
+    };
+  }, [destinationRunway, destinationRunwayCue, flightPhase, routePoints]);
 
   useEffect(() => {
     if (!routePoints.length && !hasPrimaryIcao) return;
@@ -2553,6 +2758,10 @@ export default function FlightPlannerScreen() {
     visibleTrafficTargets,
     selectedDiversion,
     selectedDiversionRunwaySummary,
+    destinationBriefing,
+    destinationBriefingLoading,
+    destinationRunwayCue,
+    destinationRunwayOverlay,
     selectedDiversionBestComm,
     selectedTrafficTrend,
     mapTacticalSummary,
@@ -3938,6 +4147,25 @@ const styles = StyleSheet.create({
   flightDeckVisionTunnelBandWarning: {
     backgroundColor: 'rgba(232, 69, 60, 0.12)',
   },
+  flightDeckVisionRunwayCenterline: {
+    position: 'absolute',
+    width: 2,
+    marginLeft: -1,
+    borderRadius: 999,
+    backgroundColor: 'rgba(232,237,244,0.84)',
+  },
+  flightDeckVisionRunwayBox: {
+    position: 'absolute',
+    borderWidth: 2,
+    borderColor: colors.flightText,
+    backgroundColor: 'rgba(232,237,244,0.08)',
+  },
+  flightDeckVisionRunwayThreshold: {
+    position: 'absolute',
+    height: 3,
+    marginTop: -1.5,
+    backgroundColor: colors.flightAccent,
+  },
   flightDeckVisionFlightPathMarker: {
     position: 'absolute',
     top: '47%',
@@ -4121,6 +4349,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.4,
+  },
+  flightDeckVisionApproachChip: {
+    position: 'absolute',
+    top: spacing.lg,
+    right: spacing.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(10,14,20,0.82)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+    maxWidth: 184,
+  },
+  flightDeckVisionApproachTitle: {
+    color: colors.flightTextMuted,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    fontWeight: '700',
+  },
+  flightDeckVisionApproachText: {
+    color: colors.flightText,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  flightDeckVisionApproachMeta: {
+    color: colors.flightCaution,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 4,
+    fontWeight: '600',
   },
   flightDeckVisionGroundCaution: {
     backgroundColor: '#5D4628',
@@ -4496,6 +4756,46 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginTop: 8,
+  },
+  flightDeckApproachCard: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.xl,
+    backgroundColor: 'rgba(10,14,20,0.92)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+    maxWidth: 232,
+  },
+  flightDeckApproachCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  flightDeckApproachCardEyebrow: {
+    color: colors.flightTextMuted,
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  flightDeckApproachCardBadge: {
+    color: colors.flightAccent,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  flightDeckApproachCardTitle: {
+    color: colors.flightText,
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  flightDeckApproachCardText: {
+    color: colors.flightTextMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 6,
   },
   flightTrafficMarkerWrap: {
     alignItems: 'center',

@@ -43,6 +43,7 @@ import { buildCorsOptions } from "./corsOptions";
 import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
 import { createStubTfmsProvider } from "./services/tfms/providers/stub";
 import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
+import { getSharedCacheJson, setSharedCacheJson } from "./redisCache";
 import { createDbTfmsProvider } from "./services/tfms/providers/db";
 import { computeTfmsRisk } from "./services/tfms/risk";
 import { partners } from "./config/partners";
@@ -2247,20 +2248,34 @@ const airportMetaCache = new Map<string, { data: AirportMeta; expiresAt: number 
 const STATION_CACHE_URL = "https://aviationweather.gov/data/cache/stations.cache.json.gz";
 const STATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let stationCache: { data: AirportSearchResult[]; expiresAt: number } | null = null;
+let stationCachePromise: Promise<AirportSearchResult[]> | null = null;
 const AIRPORTS_CACHE_URL = "https://ourairports.com/data/airports.csv";
 const AIRPORTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let airportTimezoneCache: { data: Map<string, string>; expiresAt: number } | null = null;
+let airportTimezoneCachePromise: Promise<Map<string, string>> | null = null;
 let airportReferenceCache: { data: Map<string, AirportReference>; expiresAt: number } | null = null;
+let airportReferenceCachePromise: Promise<Map<string, AirportReference>> | null = null;
 const RUNWAY_CACHE_URL = "https://ourairports.com/data/runways.csv";
 const RUNWAY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let runwayCache: { data: Map<string, RunwayMeta[]>; expiresAt: number } | null = null;
+let runwayCachePromise: Promise<Map<string, RunwayMeta[]>> | null = null;
 const AIRPORT_FREQUENCIES_CACHE_URL = "https://ourairports.com/data/airport-frequencies.csv";
 const AIRPORT_FREQUENCIES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let airportFrequencyCache: { data: Map<string, AirportFrequencyMeta[]>; expiresAt: number } | null = null;
+let airportFrequencyCachePromise: Promise<Map<string, AirportFrequencyMeta[]>> | null = null;
 const NEARBY_AIRPORT_CACHE_TTL_MS = 45 * 1000;
 const NEARBY_AIRPORT_CACHE_MAX = 200;
 const nearbyAirportCache = new Map<string, { data: any; expiresAt: number }>();
 const nearbyAirportInFlight = new Map<string, Promise<any>>();
+const REDIS_CACHE_PREFIX = "rsf:v1";
+const ROUTE_SUGGESTION_CACHE_TTL_MS = 15 * 60 * 1000;
+const ROUTE_SUGGESTION_CACHE_MAX = 250;
+const routeSuggestionCache = new Map<string, { data: any; expiresAt: number }>();
+const RUNWAY_BRIEFING_CACHE_TTL_MS = 2 * 60 * 1000;
+const runwayBriefingCache = new Map<string, { data: any; expiresAt: number }>();
+const runwayBriefingInFlight = new Map<string, Promise<any>>();
+const plateMetadataInFlight = new Map<string, Promise<PlateMeta[]>>();
+let operationalCachePrewarmPromise: Promise<{ ok: string[]; failed: string[] }> | null = null;
 const NOTAM_CACHE_TTL_MS = 2 * 60 * 1000;
 const notamCache = new Map<string, { data: any; expiresAt: number }>();
 const TFR_CACHE_TTL_MS = 60 * 60 * 1000;
@@ -3283,45 +3298,54 @@ function isToweredFrequencyType(type?: string | null, description?: string | nul
 async function loadStationCache(): Promise<AirportSearchResult[]> {
   const now = Date.now();
   if (stationCache && stationCache.expiresAt > now) return stationCache.data;
+  if (stationCachePromise) return stationCachePromise;
 
-  const response = await fetch(STATION_CACHE_URL, {
-    headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load station cache: ${response.status}`);
+  stationCachePromise = (async () => {
+    const response = await fetch(STATION_CACHE_URL, {
+      headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load station cache: ${response.status}`);
+    }
+
+    const compressed = Buffer.from(await response.arrayBuffer());
+    const jsonText = zlib.gunzipSync(compressed).toString("utf-8");
+    const parsed = JSON.parse(jsonText);
+    const rows = Array.isArray(parsed) ? parsed : parsed?.data ?? [];
+
+    const mapped: AirportSearchResult[] = rows
+      .map((row: any) => {
+        const icao =
+          row.icaoId ??
+          row.icao ??
+          row.stationId ??
+          row.station ??
+          row.site ??
+          row.siteId ??
+          row.iataId;
+        const lat = Number(row.latitude ?? row.lat ?? row.latitude_dec ?? row.lat_dec ?? row.latDec);
+        const lon = Number(row.longitude ?? row.lon ?? row.longitude_dec ?? row.lon_dec ?? row.lonDec);
+        if (!icao || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+        return {
+          icao: String(icao).toUpperCase(),
+          name: row.name ?? row.site ?? row.stationName ?? row.facilityName ?? null,
+          city: row.city ?? null,
+          state: row.state ?? row.stateCode ?? null,
+          lat,
+          lon,
+        } as AirportSearchResult;
+      })
+      .filter(Boolean);
+
+    stationCache = { data: mapped, expiresAt: Date.now() + STATION_CACHE_TTL_MS };
+    return mapped;
+  })();
+
+  try {
+    return await stationCachePromise;
+  } finally {
+    stationCachePromise = null;
   }
-
-  const compressed = Buffer.from(await response.arrayBuffer());
-  const jsonText = zlib.gunzipSync(compressed).toString("utf-8");
-  const parsed = JSON.parse(jsonText);
-  const rows = Array.isArray(parsed) ? parsed : parsed?.data ?? [];
-
-  const mapped: AirportSearchResult[] = rows
-    .map((row: any) => {
-      const icao =
-        row.icaoId ??
-        row.icao ??
-        row.stationId ??
-        row.station ??
-        row.site ??
-        row.siteId ??
-        row.iataId;
-      const lat = Number(row.latitude ?? row.lat ?? row.latitude_dec ?? row.lat_dec ?? row.latDec);
-      const lon = Number(row.longitude ?? row.lon ?? row.longitude_dec ?? row.lon_dec ?? row.lonDec);
-      if (!icao || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-      return {
-        icao: String(icao).toUpperCase(),
-        name: row.name ?? row.site ?? row.stationName ?? row.facilityName ?? null,
-        city: row.city ?? null,
-        state: row.state ?? row.stateCode ?? null,
-        lat,
-        lon,
-      } as AirportSearchResult;
-    })
-    .filter(Boolean);
-
-  stationCache = { data: mapped, expiresAt: now + STATION_CACHE_TTL_MS };
-  return mapped;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -3356,48 +3380,57 @@ async function loadAirportTimezoneCache(): Promise<Map<string, string>> {
   if (airportTimezoneCache && airportTimezoneCache.expiresAt > now) {
     return airportTimezoneCache.data;
   }
+  if (airportTimezoneCachePromise) return airportTimezoneCachePromise;
 
-  const response = await fetch(AIRPORTS_CACHE_URL, {
-    headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load airports data: ${response.status}`);
-  }
-
-  const text = await response.text();
-  const lines = text.split(/\r?\n/).filter(Boolean);
-  const map = new Map<string, string>();
-  if (lines.length === 0) {
-    airportTimezoneCache = { data: map, expiresAt: now + AIRPORTS_CACHE_TTL_MS };
-    return map;
-  }
-
-  const header = parseCsvLine(lines[0]).map((value) => value.trim().toLowerCase());
-  const idxIdent = header.indexOf("ident");
-  const idxGps = header.indexOf("gps_code");
-  const idxLocal = header.indexOf("local_code");
-  const idxIata = header.indexOf("iata_code");
-  const idxTimezone = header.indexOf("timezone");
-
-  for (let i = 1; i < lines.length; i += 1) {
-    const row = parseCsvLine(lines[i]);
-    if (row.length < 5) continue;
-    const timezone = idxTimezone >= 0 ? row[idxTimezone]?.trim() : "";
-    if (!timezone) continue;
-    const ident = idxIdent >= 0 ? row[idxIdent]?.trim().toUpperCase() : "";
-    const gpsCode = idxGps >= 0 ? row[idxGps]?.trim().toUpperCase() : "";
-    const localCode = idxLocal >= 0 ? row[idxLocal]?.trim().toUpperCase() : "";
-    const iataCode = idxIata >= 0 ? row[idxIata]?.trim().toUpperCase() : "";
-    const candidates = [gpsCode, ident, localCode, iataCode].filter(Boolean);
-    candidates.forEach((code) => {
-      if (!map.has(code)) {
-        map.set(code, timezone);
-      }
+  airportTimezoneCachePromise = (async () => {
+    const response = await fetch(AIRPORTS_CACHE_URL, {
+      headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
     });
-  }
+    if (!response.ok) {
+      throw new Error(`Failed to load airports data: ${response.status}`);
+    }
 
-  airportTimezoneCache = { data: map, expiresAt: now + AIRPORTS_CACHE_TTL_MS };
-  return map;
+    const text = await response.text();
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    const map = new Map<string, string>();
+    if (lines.length === 0) {
+      airportTimezoneCache = { data: map, expiresAt: Date.now() + AIRPORTS_CACHE_TTL_MS };
+      return map;
+    }
+
+    const header = parseCsvLine(lines[0]).map((value) => value.trim().toLowerCase());
+    const idxIdent = header.indexOf("ident");
+    const idxGps = header.indexOf("gps_code");
+    const idxLocal = header.indexOf("local_code");
+    const idxIata = header.indexOf("iata_code");
+    const idxTimezone = header.indexOf("timezone");
+
+    for (let i = 1; i < lines.length; i += 1) {
+      const row = parseCsvLine(lines[i]);
+      if (row.length < 5) continue;
+      const timezone = idxTimezone >= 0 ? row[idxTimezone]?.trim() : "";
+      if (!timezone) continue;
+      const ident = idxIdent >= 0 ? row[idxIdent]?.trim().toUpperCase() : "";
+      const gpsCode = idxGps >= 0 ? row[idxGps]?.trim().toUpperCase() : "";
+      const localCode = idxLocal >= 0 ? row[idxLocal]?.trim().toUpperCase() : "";
+      const iataCode = idxIata >= 0 ? row[idxIata]?.trim().toUpperCase() : "";
+      const candidates = [gpsCode, ident, localCode, iataCode].filter(Boolean);
+      candidates.forEach((code) => {
+        if (!map.has(code)) {
+          map.set(code, timezone);
+        }
+      });
+    }
+
+    airportTimezoneCache = { data: map, expiresAt: Date.now() + AIRPORTS_CACHE_TTL_MS };
+    return map;
+  })();
+
+  try {
+    return await airportTimezoneCachePromise;
+  } finally {
+    airportTimezoneCachePromise = null;
+  }
 }
 
 async function loadAirportReferenceCache(): Promise<Map<string, AirportReference>> {
@@ -3405,184 +3438,215 @@ async function loadAirportReferenceCache(): Promise<Map<string, AirportReference
   if (airportReferenceCache && airportReferenceCache.expiresAt > now) {
     return airportReferenceCache.data;
   }
+  if (airportReferenceCachePromise) return airportReferenceCachePromise;
 
-  const response = await fetch(AIRPORTS_CACHE_URL, {
-    headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load airports data: ${response.status}`);
-  }
-
-  const text = await response.text();
-  const lines = text.split(/\r?\n/).filter(Boolean);
-  const map = new Map<string, AirportReference>();
-  if (lines.length === 0) {
-    airportReferenceCache = { data: map, expiresAt: now + AIRPORTS_CACHE_TTL_MS };
-    return map;
-  }
-
-  const header = parseCsvLine(lines[0]).map((value) => value.trim().toLowerCase());
-  const idx = (name: string) => header.indexOf(name);
-
-  const idxIdent = idx("ident");
-  const idxGps = idx("gps_code");
-  const idxLocal = idx("local_code");
-  const idxIata = idx("iata_code");
-  const idxName = idx("name");
-  const idxCity = idx("municipality");
-  const idxRegion = idx("iso_region");
-  const idxLat = idx("latitude_deg");
-  const idxLon = idx("longitude_deg");
-  const idxTimezone = idx("timezone");
-
-  for (let i = 1; i < lines.length; i += 1) {
-    const row = parseCsvLine(lines[i]);
-    const lat = idxLat >= 0 ? Number(row[idxLat]) : NaN;
-    const lon = idxLon >= 0 ? Number(row[idxLon]) : NaN;
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-
-    const ident = idxIdent >= 0 ? row[idxIdent]?.trim().toUpperCase() : "";
-    const gpsCode = idxGps >= 0 ? row[idxGps]?.trim().toUpperCase() : "";
-    const localCode = idxLocal >= 0 ? row[idxLocal]?.trim().toUpperCase() : "";
-    const iataCode = idxIata >= 0 ? row[idxIata]?.trim().toUpperCase() : "";
-    const name = idxName >= 0 ? row[idxName]?.trim() : "";
-    const city = idxCity >= 0 ? row[idxCity]?.trim() : "";
-    const region = idxRegion >= 0 ? row[idxRegion]?.trim() : "";
-    const timezone = idxTimezone >= 0 ? row[idxTimezone]?.trim() : "";
-
-    if (!ident && !gpsCode && !localCode && !iataCode) continue;
-
-    let state: string | null = null;
-    if (region.startsWith("US-")) {
-      state = region.slice(3);
-    } else if (region.includes("-")) {
-      state = region.split("-")[1] || null;
+  airportReferenceCachePromise = (async () => {
+    const response = await fetch(AIRPORTS_CACHE_URL, {
+      headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load airports data: ${response.status}`);
     }
 
-    const canonical = ident || gpsCode || localCode || iataCode;
-    const reference: AirportReference = {
-      icao: canonical,
-      name: name || null,
-      city: city || null,
-      state: state || null,
-      lat,
-      lon,
-      timezone: timezone || null,
-    };
+    const text = await response.text();
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    const map = new Map<string, AirportReference>();
+    if (lines.length === 0) {
+      airportReferenceCache = { data: map, expiresAt: Date.now() + AIRPORTS_CACHE_TTL_MS };
+      return map;
+    }
 
-    const candidates = [gpsCode, ident, localCode, iataCode].filter(Boolean);
-    candidates.forEach((code) => {
-      if (!map.has(code)) {
-        map.set(code, reference);
+    const header = parseCsvLine(lines[0]).map((value) => value.trim().toLowerCase());
+    const idx = (name: string) => header.indexOf(name);
+
+    const idxIdent = idx("ident");
+    const idxGps = idx("gps_code");
+    const idxLocal = idx("local_code");
+    const idxIata = idx("iata_code");
+    const idxName = idx("name");
+    const idxCity = idx("municipality");
+    const idxRegion = idx("iso_region");
+    const idxLat = idx("latitude_deg");
+    const idxLon = idx("longitude_deg");
+    const idxTimezone = idx("timezone");
+
+    for (let i = 1; i < lines.length; i += 1) {
+      const row = parseCsvLine(lines[i]);
+      const lat = idxLat >= 0 ? Number(row[idxLat]) : NaN;
+      const lon = idxLon >= 0 ? Number(row[idxLon]) : NaN;
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+      const ident = idxIdent >= 0 ? row[idxIdent]?.trim().toUpperCase() : "";
+      const gpsCode = idxGps >= 0 ? row[idxGps]?.trim().toUpperCase() : "";
+      const localCode = idxLocal >= 0 ? row[idxLocal]?.trim().toUpperCase() : "";
+      const iataCode = idxIata >= 0 ? row[idxIata]?.trim().toUpperCase() : "";
+      const name = idxName >= 0 ? row[idxName]?.trim() : "";
+      const city = idxCity >= 0 ? row[idxCity]?.trim() : "";
+      const region = idxRegion >= 0 ? row[idxRegion]?.trim() : "";
+      const timezone = idxTimezone >= 0 ? row[idxTimezone]?.trim() : "";
+
+      if (!ident && !gpsCode && !localCode && !iataCode) continue;
+
+      let state: string | null = null;
+      if (region.startsWith("US-")) {
+        state = region.slice(3);
+      } else if (region.includes("-")) {
+        state = region.split("-")[1] || null;
       }
-    });
-  }
 
-  airportReferenceCache = { data: map, expiresAt: now + AIRPORTS_CACHE_TTL_MS };
-  return map;
+      const canonical = ident || gpsCode || localCode || iataCode;
+      const reference: AirportReference = {
+        icao: canonical,
+        name: name || null,
+        city: city || null,
+        state: state || null,
+        lat,
+        lon,
+        timezone: timezone || null,
+      };
+
+      const candidates = [gpsCode, ident, localCode, iataCode].filter(Boolean);
+      candidates.forEach((code) => {
+        if (!map.has(code)) {
+          map.set(code, reference);
+        }
+      });
+    }
+
+    airportReferenceCache = { data: map, expiresAt: Date.now() + AIRPORTS_CACHE_TTL_MS };
+    return map;
+  })();
+
+  try {
+    return await airportReferenceCachePromise;
+  } finally {
+    airportReferenceCachePromise = null;
+  }
 }
 
 async function loadRunwayCache(): Promise<Map<string, RunwayMeta[]>> {
   const now = Date.now();
   if (runwayCache && runwayCache.expiresAt > now) return runwayCache.data;
+  if (runwayCachePromise) return runwayCachePromise;
 
-  const response = await fetch(RUNWAY_CACHE_URL, {
-    headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load runways data: ${response.status}`);
-  }
-
-  const csvText = await response.text();
-  const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (lines.length === 0) return new Map();
-
-  const header = parseCsvLine(lines[0]);
-  const idx = (name: string) => header.indexOf(name);
-
-  const airportIdentIdx = idx("airport_ident");
-  const lengthIdx = idx("length_ft");
-  const surfaceIdx = idx("surface");
-  const closedIdx = idx("closed");
-  const leIdentIdx = idx("le_ident");
-  const heIdentIdx = idx("he_ident");
-  const leHeadingIdx = idx("le_heading_degT");
-  const heHeadingIdx = idx("he_heading_degT");
-
-  const dataMap = new Map<string, RunwayMeta[]>();
-
-  for (let i = 1; i < lines.length; i += 1) {
-    const row = parseCsvLine(lines[i]);
-    const airportIdent = row[airportIdentIdx]?.toUpperCase();
-    if (!airportIdent) continue;
-    const isClosed = row[closedIdx] === "1";
-    if (isClosed) continue;
-
-    const runway: RunwayMeta = {
-      leIdent: row[leIdentIdx] || null,
-      heIdent: row[heIdentIdx] || null,
-      leHeading: row[leHeadingIdx] ? Number(row[leHeadingIdx]) : null,
-      heHeading: row[heHeadingIdx] ? Number(row[heHeadingIdx]) : null,
-      lengthFt: row[lengthIdx] ? Number(row[lengthIdx]) : null,
-      surface: row[surfaceIdx] || null,
-    };
-
-    if (!dataMap.has(airportIdent)) {
-      dataMap.set(airportIdent, []);
+  runwayCachePromise = (async () => {
+    const response = await fetch(RUNWAY_CACHE_URL, {
+      headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load runways data: ${response.status}`);
     }
-    dataMap.get(airportIdent)!.push(runway);
-  }
 
-  runwayCache = { data: dataMap, expiresAt: now + RUNWAY_CACHE_TTL_MS };
-  return dataMap;
+    const csvText = await response.text();
+    const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    if (lines.length === 0) {
+      const empty = new Map<string, RunwayMeta[]>();
+      runwayCache = { data: empty, expiresAt: Date.now() + RUNWAY_CACHE_TTL_MS };
+      return empty;
+    }
+
+    const header = parseCsvLine(lines[0]);
+    const idx = (name: string) => header.indexOf(name);
+
+    const airportIdentIdx = idx("airport_ident");
+    const lengthIdx = idx("length_ft");
+    const surfaceIdx = idx("surface");
+    const closedIdx = idx("closed");
+    const leIdentIdx = idx("le_ident");
+    const heIdentIdx = idx("he_ident");
+    const leHeadingIdx = idx("le_heading_degT");
+    const heHeadingIdx = idx("he_heading_degT");
+
+    const dataMap = new Map<string, RunwayMeta[]>();
+
+    for (let i = 1; i < lines.length; i += 1) {
+      const row = parseCsvLine(lines[i]);
+      const airportIdent = row[airportIdentIdx]?.toUpperCase();
+      if (!airportIdent) continue;
+      const isClosed = row[closedIdx] === "1";
+      if (isClosed) continue;
+
+      const runway: RunwayMeta = {
+        leIdent: row[leIdentIdx] || null,
+        heIdent: row[heIdentIdx] || null,
+        leHeading: row[leHeadingIdx] ? Number(row[leHeadingIdx]) : null,
+        heHeading: row[heHeadingIdx] ? Number(row[heHeadingIdx]) : null,
+        lengthFt: row[lengthIdx] ? Number(row[lengthIdx]) : null,
+        surface: row[surfaceIdx] || null,
+      };
+
+      if (!dataMap.has(airportIdent)) {
+        dataMap.set(airportIdent, []);
+      }
+      dataMap.get(airportIdent)!.push(runway);
+    }
+
+    runwayCache = { data: dataMap, expiresAt: Date.now() + RUNWAY_CACHE_TTL_MS };
+    return dataMap;
+  })();
+
+  try {
+    return await runwayCachePromise;
+  } finally {
+    runwayCachePromise = null;
+  }
 }
 
 async function loadAirportFrequencyCache(): Promise<Map<string, AirportFrequencyMeta[]>> {
   const now = Date.now();
   if (airportFrequencyCache && airportFrequencyCache.expiresAt > now) return airportFrequencyCache.data;
+  if (airportFrequencyCachePromise) return airportFrequencyCachePromise;
 
-  const response = await fetch(AIRPORT_FREQUENCIES_CACHE_URL, {
-    headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load airport frequencies data: ${response.status}`);
-  }
-
-  const csvText = await response.text();
-  const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  const map = new Map<string, AirportFrequencyMeta[]>();
-  if (lines.length === 0) {
-    airportFrequencyCache = { data: map, expiresAt: now + AIRPORT_FREQUENCIES_CACHE_TTL_MS };
-    return map;
-  }
-
-  const header = parseCsvLine(lines[0]);
-  const idx = (name: string) => header.indexOf(name);
-  const airportIdentIdx = idx("airport_ident");
-  const typeIdx = idx("type");
-  const descriptionIdx = idx("description");
-  const frequencyIdx = idx("frequency_mhz");
-
-  for (let i = 1; i < lines.length; i += 1) {
-    const row = parseCsvLine(lines[i]);
-    const airportIdent = row[airportIdentIdx]?.trim().toUpperCase();
-    if (!airportIdent) continue;
-
-    const item: AirportFrequencyMeta = {
-      airportIdent,
-      type: row[typeIdx]?.trim() || null,
-      description: row[descriptionIdx]?.trim() || null,
-      frequencyMhz: row[frequencyIdx] ? Number(row[frequencyIdx]) : null,
-    };
-
-    if (!map.has(airportIdent)) {
-      map.set(airportIdent, []);
+  airportFrequencyCachePromise = (async () => {
+    const response = await fetch(AIRPORT_FREQUENCIES_CACHE_URL, {
+      headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load airport frequencies data: ${response.status}`);
     }
-    map.get(airportIdent)!.push(item);
-  }
 
-  airportFrequencyCache = { data: map, expiresAt: now + AIRPORT_FREQUENCIES_CACHE_TTL_MS };
-  return map;
+    const csvText = await response.text();
+    const lines = csvText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+    const map = new Map<string, AirportFrequencyMeta[]>();
+    if (lines.length === 0) {
+      airportFrequencyCache = { data: map, expiresAt: Date.now() + AIRPORT_FREQUENCIES_CACHE_TTL_MS };
+      return map;
+    }
+
+    const header = parseCsvLine(lines[0]);
+    const idx = (name: string) => header.indexOf(name);
+    const airportIdentIdx = idx("airport_ident");
+    const typeIdx = idx("type");
+    const descriptionIdx = idx("description");
+    const frequencyIdx = idx("frequency_mhz");
+
+    for (let i = 1; i < lines.length; i += 1) {
+      const row = parseCsvLine(lines[i]);
+      const airportIdent = row[airportIdentIdx]?.trim().toUpperCase();
+      if (!airportIdent) continue;
+
+      const item: AirportFrequencyMeta = {
+        airportIdent,
+        type: row[typeIdx]?.trim() || null,
+        description: row[descriptionIdx]?.trim() || null,
+        frequencyMhz: row[frequencyIdx] ? Number(row[frequencyIdx]) : null,
+      };
+
+      if (!map.has(airportIdent)) {
+        map.set(airportIdent, []);
+      }
+      map.get(airportIdent)!.push(item);
+    }
+
+    airportFrequencyCache = { data: map, expiresAt: Date.now() + AIRPORT_FREQUENCIES_CACHE_TTL_MS };
+    return map;
+  })();
+
+  try {
+    return await airportFrequencyCachePromise;
+  } finally {
+    airportFrequencyCachePromise = null;
+  }
 }
 
 function buildNotamUrl(template: string, icao: string) {
@@ -3857,52 +3921,69 @@ async function extractAirportXmlForIcao(response: Response, icao: string): Promi
 async function fetchPlateMetadataForIcao(icao: string): Promise<PlateMeta[]> {
   const cached = getCachedPlates(icao);
   if (cached) return cached;
-
   const normalizedIcao = normalizeIcao(icao);
-  const metaUrl = getDtppMetaUrl();
-  const pdfBase = getPdfBaseUrl().replace(/\/+$/, "");
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
-  const response = await fetch(metaUrl, {
-    signal: controller.signal,
-    headers: {
-      "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
-      "Accept": "application/xml,text/xml;q=0.9,*/*;q=0.8",
-    },
-  });
-  clearTimeout(timeout);
-
-  if (!response.ok || !response.body) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Failed to fetch metadata: ${response.status} ${body}`);
+  const shared = await getSharedCacheJson<PlateMeta[]>(buildRedisCacheKey("plates-meta", normalizedIcao));
+  if (shared) {
+    setCachedPlates(icao, shared);
+    return shared;
   }
+  const inFlight = plateMetadataInFlight.get(normalizedIcao);
+  if (inFlight) return inFlight;
 
-  const airportXml = await extractAirportXmlForIcao(response, normalizedIcao);
-  if (!airportXml) {
-    setCachedPlates(icao, []);
-    return [];
-  }
+  const promise = (async () => {
+    const metaUrl = getDtppMetaUrl();
+    const pdfBase = getPdfBaseUrl().replace(/\/+$/, "");
 
-  const recordMatches = airportXml.match(/<record>[\s\S]*?<\/record>/gi) || [];
-  const plates: PlateMeta[] = [];
-
-  for (const record of recordMatches) {
-    const pdfName = extractTagValue(record, "pdf_name");
-    if (!pdfName) continue;
-    const name = extractTagValue(record, "chart_name") || pdfName;
-    const type = extractTagValue(record, "chart_code") || inferPlateType(name);
-    const effectiveDate = extractTagValue(record, "amdtdate");
-    plates.push({
-      name,
-      type,
-      effectiveDate,
-      url: `${pdfBase}/${pdfName}`,
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    const response = await fetch(metaUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+        "Accept": "application/xml,text/xml;q=0.9,*/*;q=0.8",
+      },
     });
-  }
+    clearTimeout(timeout);
 
-  setCachedPlates(icao, plates);
-  return plates;
+    if (!response.ok || !response.body) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Failed to fetch metadata: ${response.status} ${body}`);
+    }
+
+    const airportXml = await extractAirportXmlForIcao(response, normalizedIcao);
+    if (!airportXml) {
+      setCachedPlates(icao, []);
+      return [];
+    }
+
+    const recordMatches = airportXml.match(/<record>[\s\S]*?<\/record>/gi) || [];
+    const plates: PlateMeta[] = [];
+
+    for (const record of recordMatches) {
+      const pdfName = extractTagValue(record, "pdf_name");
+      if (!pdfName) continue;
+      const name = extractTagValue(record, "chart_name") || pdfName;
+      const type = extractTagValue(record, "chart_code") || inferPlateType(name);
+      const effectiveDate = extractTagValue(record, "amdtdate");
+      plates.push({
+        name,
+        type,
+        effectiveDate,
+        url: `${pdfBase}/${pdfName}`,
+      });
+    }
+
+    setCachedPlates(icao, plates);
+    await setSharedCacheJson(buildRedisCacheKey("plates-meta", normalizedIcao), plates, PLATE_CACHE_TTL_MS / 1000);
+    return plates;
+  })();
+
+  plateMetadataInFlight.set(normalizedIcao, promise);
+  try {
+    return await promise;
+  } finally {
+    plateMetadataInFlight.delete(normalizedIcao);
+  }
 }
 
 // Multer setup for file uploads with disk storage
@@ -14289,6 +14370,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       res.setHeader("x-rsf-airport-search", "1");
+      res.setHeader("Cache-Control", "public, max-age=120, stale-while-revalidate=600");
       const stations = await loadStationCache();
       const terms = query.split(" ").filter(Boolean);
 
@@ -14330,8 +14412,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (lat === null || lon === null) {
         return res.status(400).json({ error: "lat and lon are required" });
       }
+      res.setHeader("Cache-Control", "public, max-age=20, stale-while-revalidate=60");
       const cacheKey = getNearbyAirportCacheKey(lat, lon, radiusNm, limit);
-      const cachedPayload = getCachedNearbyAirportPayload<any>(cacheKey);
+      const cachedPayload = await getCachedNearbyAirportPayload<any>(cacheKey);
       if (cachedPayload) {
         return res.json(cachedPayload);
       }
@@ -14581,7 +14664,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       nearbyAirportInFlight.set(cacheKey, buildPromise);
       const payload = await buildPromise;
       nearbyAirportInFlight.delete(cacheKey);
-      setCachedNearbyAirportPayload(cacheKey, payload);
+      await setCachedNearbyAirportPayload(cacheKey, payload);
       return res.json(payload);
     } catch (error) {
       if (error && typeof req.query.lat !== "undefined" && typeof req.query.lon !== "undefined") {
@@ -14614,6 +14697,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!/^[A-Z0-9]{3,4}$/.test(departure) || !/^[A-Z0-9]{3,4}$/.test(destination)) {
         return res.json(emptyResponse);
       }
+      res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=1800");
 
       const cruiseKtas = Math.max(40, toNumber(req.query.cruiseKtas) ?? 110);
       const fuelBurnGph = Math.max(0.1, toNumber(req.query.fuelBurnGph) ?? 8);
@@ -14622,6 +14706,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const reserveMinutesRaw = toNumber(req.query.reserveMinutes);
       const reserveMinutes = Math.max(0, Math.min(180, reserveMinutesRaw ?? 45));
       const fuelGallons = Math.max(0, fuelOnBoard ?? usableFuelGal);
+      const routeCacheKey = getRouteSuggestionCacheKey({
+        departure,
+        destination,
+        cruiseKtas,
+        fuelBurnGph,
+        usableFuelGal,
+        fuelGallons,
+        reserveMinutes,
+      });
+      const cachedRoutePayload = await getCachedMapPayload<any>(
+        routeSuggestionCache,
+        routeCacheKey,
+        ROUTE_SUGGESTION_CACHE_TTL_MS,
+        "route-suggestions",
+      );
+      if (cachedRoutePayload) {
+        return res.json(cachedRoutePayload);
+      }
 
       const stations = await loadStationCache();
       const referenceMap = await loadAirportReferenceCache().catch(() => null);
@@ -14878,7 +14980,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           })
         : { plannedStops: [] as string[], waypoints: [] as string[] };
 
-      return res.json({
+      const payload = {
         departure: departureStation.icao,
         destination: destinationStation.icao,
         waypoints: directVariant.waypoints,
@@ -14898,7 +15000,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           suggestedStopCount: directVariant.plannedStops.length,
           coastlineSuggestedStopCount: coastlineVariant.plannedStops.length,
         },
-      });
+      };
+      await setCachedMapPayload(
+        routeSuggestionCache,
+        routeCacheKey,
+        payload,
+        ROUTE_SUGGESTION_CACHE_TTL_MS,
+        ROUTE_SUGGESTION_CACHE_MAX,
+        "route-suggestions",
+      );
+      return res.json(payload);
     } catch (error) {
       console.error("Route suggestion failed:", error);
       res.status(500).json({ error: "Failed to generate route suggestions" });
@@ -15787,6 +15898,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
+      res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
 
       const runwayMap = await loadRunwayCache();
       const runways = runwayMap.get(requestedIcao) || [];
@@ -15803,6 +15915,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
+      res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
 
       const frequencyMap = await loadAirportFrequencyCache();
       const candidates = buildIcaoCandidates(requestedIcao);
@@ -15839,70 +15952,103 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!/^[A-Z0-9]{3,4}$/.test(requestedIcao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
-
-      const runwayMap = await loadRunwayCache();
-      const runways = runwayMap.get(requestedIcao) || [];
-
-      const candidates = buildIcaoCandidates(requestedIcao);
-      let metar: any | null = null;
-      for (const candidate of candidates) {
-        const cached = weatherCache.get(candidate);
-        if (cached) {
-          metar = cached.data?.metar || null;
-          if (metar) break;
-        }
+      res.setHeader("Cache-Control", "public, max-age=120, stale-while-revalidate=600");
+      const briefingCacheKey = getRunwayBriefingCacheKey(requestedIcao);
+      const cachedBriefing = await getCachedMapPayload<any>(
+        runwayBriefingCache,
+        briefingCacheKey,
+        RUNWAY_BRIEFING_CACHE_TTL_MS,
+        "runway-briefings",
+      );
+      if (cachedBriefing) {
+        return res.json(cachedBriefing);
+      }
+      const inFlightBriefing = runwayBriefingInFlight.get(briefingCacheKey);
+      if (inFlightBriefing) {
+        return res.json(await inFlightBriefing);
       }
 
-      if (!metar) {
-        const metarRes = await fetchWithTimeout(
-          `https://aviationweather.gov/api/data/metar?ids=${requestedIcao}&format=json`,
-          { headers: { "User-Agent": "ReadySetFly/1.0" } },
-          6000
-        ).catch(() => null);
-        if (metarRes && metarRes.ok) {
-          const body = await metarRes.text();
-          const trimmed = body.trim();
-          if (trimmed && !trimmed.startsWith("<")) {
-            try {
-              const metarData = JSON.parse(trimmed);
-              metar = Array.isArray(metarData) && metarData.length > 0 ? metarData[0] : null;
-            } catch (error) {
-              logDebug(`Runway briefing METAR parse error for ${requestedIcao}:`, error);
+      const buildPromise = (async () => {
+        const runwayMap = await loadRunwayCache();
+        const runways = runwayMap.get(requestedIcao) || [];
+
+        const candidates = buildIcaoCandidates(requestedIcao);
+        let metar: any | null = null;
+        for (const candidate of candidates) {
+          const cached = weatherCache.get(candidate);
+          if (cached) {
+            metar = cached.data?.metar || null;
+            if (metar) break;
+          }
+        }
+
+        if (!metar) {
+          const metarRes = await fetchWithTimeout(
+            `https://aviationweather.gov/api/data/metar?ids=${requestedIcao}&format=json`,
+            { headers: { "User-Agent": "ReadySetFly/1.0" } },
+            6000
+          ).catch(() => null);
+          if (metarRes && metarRes.ok) {
+            const body = await metarRes.text();
+            const trimmed = body.trim();
+            if (trimmed && !trimmed.startsWith("<")) {
+              try {
+                const metarData = JSON.parse(trimmed);
+                metar = Array.isArray(metarData) && metarData.length > 0 ? metarData[0] : null;
+              } catch (error) {
+                logDebug(`Runway briefing METAR parse error for ${requestedIcao}:`, error);
+              }
             }
           }
         }
+
+        const runwayInUse = extractRunwayInUseFromMetar(metar);
+        const wind = parseMetarWind(metar);
+        const hasWind =
+          wind.direction !== null &&
+          wind.speed !== null &&
+          Number.isFinite(wind.direction) &&
+          Number.isFinite(wind.speed);
+
+        const advisory = hasWind && runways.length > 0 && wind.speed !== null
+          ? computeRunwayAdvisory(runways, wind.direction!, wind.speed)
+          : null;
+
+        const payload = {
+          icao: requestedIcao,
+          runwayInUse,
+          wind: {
+            direction: wind.direction,
+            speed: wind.speed,
+            gust: wind.gust,
+          },
+          advisory: advisory
+            ? {
+                runway: advisory.runway,
+                heading: advisory.heading,
+                headwind: Number(advisory.headwind.toFixed(1)),
+                crosswind: Number(advisory.crosswind.toFixed(1)),
+              }
+            : null,
+          runways,
+        };
+        await setCachedMapPayload(
+          runwayBriefingCache,
+          briefingCacheKey,
+          payload,
+          RUNWAY_BRIEFING_CACHE_TTL_MS,
+          undefined,
+          "runway-briefings",
+        );
+        return payload;
+      })();
+
+      runwayBriefingInFlight.set(briefingCacheKey, buildPromise);
+      try {
+        return res.json(await buildPromise);
+      } finally {
+        runwayBriefingInFlight.delete(briefingCacheKey);
       }
-
-      const runwayInUse = extractRunwayInUseFromMetar(metar);
-      const wind = parseMetarWind(metar);
-      const hasWind =
-        wind.direction !== null &&
-        wind.speed !== null &&
-        Number.isFinite(wind.direction) &&
-        Number.isFinite(wind.speed);
-
-      const advisory = hasWind && runways.length > 0 && wind.speed !== null
-        ? computeRunwayAdvisory(runways, wind.direction!, wind.speed)
-        : null;
-
-      res.json({
-        icao: requestedIcao,
-        runwayInUse,
-        wind: {
-          direction: wind.direction,
-          speed: wind.speed,
-          gust: wind.gust,
-        },
-        advisory: advisory
-          ? {
-              runway: advisory.runway,
-              heading: advisory.heading,
-              headwind: Number(advisory.headwind.toFixed(1)),
-              crosswind: Number(advisory.crosswind.toFixed(1)),
-            }
-          : null,
-        runways,
-      });
     } catch (error) {
       console.error("Runway briefing failed:", error);
       res.status(500).json({ error: "Failed to fetch runway briefing" });
@@ -16896,6 +17042,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       if (!/^[A-Z0-9]{3,4}$/.test(icao)) {
         return res.status(400).json({ error: "Invalid ICAO code format" });
       }
+      res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
 
       const plates = await fetchPlateMetadataForIcao(icao);
       res.json({
@@ -21285,20 +21432,147 @@ function getNearbyAirportCacheKey(lat: number, lon: number, radiusNm: number, li
   return `${roundedLat}|${roundedLon}|${roundedRadius}|${limit}`;
 }
 
-function getCachedNearbyAirportPayload<T>(key: string): T | null {
-  const cached = nearbyAirportCache.get(key);
-  if (!cached) return null;
-  if (cached.expiresAt <= Date.now()) {
-    nearbyAirportCache.delete(key);
-    return null;
-  }
-  return cached.data as T;
+function getRouteSuggestionCacheKey(query: {
+  departure: string;
+  destination: string;
+  cruiseKtas: number;
+  fuelBurnGph: number;
+  usableFuelGal: number;
+  fuelGallons: number;
+  reserveMinutes: number;
+}) {
+  return [
+    query.departure,
+    query.destination,
+    query.cruiseKtas.toFixed(1),
+    query.fuelBurnGph.toFixed(1),
+    query.usableFuelGal.toFixed(1),
+    query.fuelGallons.toFixed(1),
+    query.reserveMinutes.toFixed(1),
+  ].join("|");
 }
 
-function setCachedNearbyAirportPayload<T>(key: string, data: T) {
+function getRunwayBriefingCacheKey(icao: string) {
+  return normalizeIcao(icao);
+}
+
+function buildRedisCacheKey(namespace: string, key: string) {
+  return `${REDIS_CACHE_PREFIX}:${namespace}:${key}`;
+}
+
+async function getCachedMapPayload<T>(
+  cache: Map<string, { data: T; expiresAt: number }>,
+  key: string,
+  ttlMs: number,
+  redisNamespace?: string,
+): Promise<T | null> {
+  const cached = cache.get(key);
+  if (cached) {
+    if (Date.now() > cached.expiresAt) {
+      cache.delete(key);
+    } else {
+      return cached.data;
+    }
+  }
+
+  if (!redisNamespace) return null;
+  const shared = await getSharedCacheJson<T>(buildRedisCacheKey(redisNamespace, key));
+  if (shared === null) return null;
+  cache.set(key, { data: shared, expiresAt: Date.now() + ttlMs });
+  return shared;
+}
+
+async function setCachedMapPayload<T>(
+  cache: Map<string, { data: T; expiresAt: number }>,
+  key: string,
+  data: T,
+  ttlMs: number,
+  maxEntries?: number,
+  redisNamespace?: string,
+) {
+  cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  if (typeof maxEntries === "number" && cache.size > maxEntries) {
+    const oldestKey = cache.keys().next().value as string | undefined;
+    if (oldestKey) cache.delete(oldestKey);
+  }
+
+  if (redisNamespace) {
+    await setSharedCacheJson(buildRedisCacheKey(redisNamespace, key), data, ttlMs / 1000);
+  }
+}
+
+function parseIcaoListEnv(raw: string | undefined): string[] {
+  return String(raw || "")
+    .split(",")
+    .map((value) => normalizeIcao(value))
+    .filter((value): value is string => Boolean(value));
+}
+
+export async function prewarmOperationalCaches(): Promise<{ ok: string[]; failed: string[] }> {
+  if (operationalCachePrewarmPromise) {
+    return operationalCachePrewarmPromise;
+  }
+
+  operationalCachePrewarmPromise = (async () => {
+    const tasks: Array<{ name: string; run: () => Promise<unknown> }> = [
+      { name: "airport-stations", run: () => loadStationCache() },
+      { name: "airport-timezones", run: () => loadAirportTimezoneCache() },
+      { name: "airport-reference", run: () => loadAirportReferenceCache() },
+      { name: "airport-runways", run: () => loadRunwayCache() },
+      { name: "airport-frequencies", run: () => loadAirportFrequencyCache() },
+    ];
+
+    const prewarmPlateAirports = parseIcaoListEnv(process.env.PREWARM_PLATE_AIRPORTS);
+    prewarmPlateAirports.forEach((icao) => {
+      tasks.push({
+        name: `plates:${icao}`,
+        run: () => fetchPlateMetadataForIcao(icao),
+      });
+    });
+
+    const results = await Promise.allSettled(tasks.map((task) => task.run()));
+    const ok: string[] = [];
+    const failed: string[] = [];
+    results.forEach((result, index) => {
+      const name = tasks[index]?.name ?? `task-${index + 1}`;
+      if (result.status === "fulfilled") {
+        ok.push(name);
+      } else {
+        failed.push(name);
+      }
+    });
+
+    return { ok, failed };
+  })();
+
+  try {
+    return await operationalCachePrewarmPromise;
+  } finally {
+    operationalCachePrewarmPromise = null;
+  }
+}
+
+async function getCachedNearbyAirportPayload<T>(key: string): Promise<T | null> {
+  const cached = nearbyAirportCache.get(key);
+  if (cached) {
+    if (cached.expiresAt <= Date.now()) {
+      nearbyAirportCache.delete(key);
+    } else {
+      return cached.data as T;
+    }
+  }
+
+  const shared = await getSharedCacheJson<T>(buildRedisCacheKey("nearby-airports", key));
+  if (shared === null) return null;
+  nearbyAirportCache.set(key, { data: shared, expiresAt: Date.now() + NEARBY_AIRPORT_CACHE_TTL_MS });
+  return shared;
+}
+
+async function setCachedNearbyAirportPayload<T>(key: string, data: T) {
   nearbyAirportCache.set(key, { data, expiresAt: Date.now() + NEARBY_AIRPORT_CACHE_TTL_MS });
   if (nearbyAirportCache.size > NEARBY_AIRPORT_CACHE_MAX) {
     const oldestKey = nearbyAirportCache.keys().next().value as string | undefined;
     if (oldestKey) nearbyAirportCache.delete(oldestKey);
   }
+  await setSharedCacheJson(buildRedisCacheKey("nearby-airports", key), data, NEARBY_AIRPORT_CACHE_TTL_MS / 1000);
 }

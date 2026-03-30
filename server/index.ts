@@ -15,7 +15,7 @@ if (!isProd) {
 }
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
-import { registerRoutes } from "./routes";
+import { prewarmOperationalCaches, registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startFinanceAlertsJob } from "./jobs/financeAlerts";
 import { buildCorsOptions } from "./corsOptions";
@@ -29,6 +29,30 @@ app.use(cors(buildCorsOptions()));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+app.get("/healthz", (_req, res) => {
+  const memory = process.memoryUsage();
+  res.json({
+    ok: true,
+    uptimeSec: Math.round(process.uptime()),
+    rssMb: Math.round(memory.rss / 1024 / 1024),
+    heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
+    heapTotalMb: Math.round(memory.heapTotal / 1024 / 1024),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/api/healthz", (_req, res) => {
+  const memory = process.memoryUsage();
+  res.json({
+    ok: true,
+    uptimeSec: Math.round(process.uptime()),
+    rssMb: Math.round(memory.rss / 1024 / 1024),
+    heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
+    heapTotalMb: Math.round(memory.heapTotal / 1024 / 1024),
+    timestamp: new Date().toISOString(),
+  });
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -85,6 +109,9 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
+  server.requestTimeout = 30000;
   server.listen({
     port,
     host: "0.0.0.0",
@@ -92,6 +119,23 @@ app.use((req, res, next) => {
   }, async () => {
     log(`serving on port ${port}`);
     startFinanceAlertsJob();
+    const prewarmEnabled = String(process.env.PREWARM_AIRPORT_DATA ?? "true").toLowerCase() !== "false";
+    if (prewarmEnabled) {
+      void prewarmOperationalCaches()
+        .then((summary) => {
+          const okCount = summary.ok.length;
+          const failedCount = summary.failed.length;
+          log(`airport cache prewarm complete: ${okCount} ok, ${failedCount} failed`);
+          if (failedCount > 0) {
+            log(`airport cache prewarm failures: ${summary.failed.join(", ")}`);
+          }
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          log(`airport cache prewarm failed: ${message}`);
+        });
+    }
+
     const swimRunMode = String(process.env.SWIM_RUN_MODE ?? "").toLowerCase();
     const shouldStartSwim = swimRunMode !== "worker" && swimRunMode !== "disabled" && swimRunMode !== "off";
     const swimRunInApi = String(process.env.SWIM_RUN_IN_API ?? "").toLowerCase();
@@ -117,6 +161,10 @@ app.use((req, res, next) => {
     }
 
     if (!shouldStartSwim || swimRunInApi === "false") return;
+    if (isProd && swimRunInApi !== "true") {
+      log("SWIM NOTAM worker disabled in API service for production. Run it as a dedicated worker service or set SWIM_RUN_IN_API=true to override.");
+      return;
+    }
 
     const startInProcess = swimRunInApi === "true" || !isProd;
     if (startInProcess) {

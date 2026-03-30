@@ -182,6 +182,7 @@ type DemoRunwayOverlay = {
 type DemoSurfacePreview = {
   airportIcao: string;
   runwayId: string;
+  runwayHeadingDeg: number;
   mode: "departure" | "arrival";
   progressPct: number;
   headline: string;
@@ -233,6 +234,16 @@ function formatAltitudeDelta(deltaFt: number) {
 
 function formatFrequency(frequencyMhz: number | null | undefined) {
   return typeof frequencyMhz === "number" ? frequencyMhz.toFixed(3) : "--";
+}
+
+function getOppositeRunwayIdent(runwayId: string) {
+  const match = normalizeRunwayIdent(runwayId).match(/^(\d{1,2})([LCR])?$/);
+  if (!match) return null;
+  const runwayNumber = Number(match[1]);
+  if (!Number.isFinite(runwayNumber) || runwayNumber < 1 || runwayNumber > 36) return null;
+  const reciprocal = ((runwayNumber + 18 - 1) % 36) + 1;
+  const suffix = match[2] === "L" ? "R" : match[2] === "R" ? "L" : match[2] === "C" ? "C" : "";
+  return `${String(reciprocal).padStart(2, "0")}${suffix}`;
 }
 
 function pickAirportFrequency(
@@ -534,18 +545,60 @@ function FlightDemoMapSurface({
         .map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`)
         .join(" ")
     : "";
+  const rangeRings = [11, 21, 31];
+  const mapTitle = flightPhase.startsWith("surface") ? "Surface chart" : "Chart follow";
 
   return (
     <div className="relative h-[420px] overflow-hidden rounded-[24px] border border-slate-800 bg-[#0A0E14]">
       <svg viewBox="0 0 100 100" className="h-full w-full">
         <defs>
           <linearGradient id="rsf-demo-map-bg" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#091018" />
-            <stop offset="65%" stopColor="#0A0E14" />
+            <stop offset="0%" stopColor="#0B1320" />
+            <stop offset="58%" stopColor="#0A1018" />
             <stop offset="100%" stopColor="#060A10" />
+          </linearGradient>
+          <linearGradient id="rsf-demo-route-fill" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="rgba(200,146,42,0.28)" />
+            <stop offset="100%" stopColor="rgba(200,146,42,0)" />
           </linearGradient>
         </defs>
         <rect width="100" height="100" fill="url(#rsf-demo-map-bg)" />
+        <path
+          d="M0 16 L18 10 L34 13 L49 8 L60 14 L74 11 L100 16 L100 0 L0 0 Z"
+          fill="rgba(74,159,212,0.08)"
+        />
+        <path
+          d="M0 86 L18 80 L35 83 L48 77 L62 80 L78 75 L100 80 L100 100 L0 100 Z"
+          fill="rgba(35,56,78,0.42)"
+        />
+        <path
+          d="M8 71 L18 67 L26 69 L36 63 L49 66 L60 61 L72 64 L83 59 L93 61"
+          fill="none"
+          stroke="rgba(122,155,184,0.16)"
+          strokeWidth="0.55"
+          strokeDasharray="2.4 2.4"
+        />
+        <path
+          d="M14 24 L24 29 L35 25 L47 31 L58 27 L71 33 L86 29"
+          fill="none"
+          stroke="rgba(74,159,212,0.2)"
+          strokeWidth="0.5"
+          strokeDasharray="2.2 1.8"
+        />
+        <path
+          d="M20 18 L28 36 L22 58 L14 76"
+          fill="none"
+          stroke="rgba(74,159,212,0.14)"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M78 14 L70 29 L74 44 L84 59 L81 79"
+          fill="none"
+          stroke="rgba(0,212,160,0.08)"
+          strokeWidth="0.9"
+          strokeLinecap="round"
+        />
         {terrainState ? (
           <>
             <ellipse
@@ -576,28 +629,34 @@ function FlightDemoMapSurface({
             />
           </>
         ) : null}
-        {Array.from({ length: 8 }).map((_, index) => (
-          <line
-            key={`grid-v-${index}`}
-            x1={10 + index * 10}
-            y1="0"
-            x2={10 + index * 10}
-            y2="100"
-            stroke="rgba(122,155,184,0.08)"
-            strokeWidth="0.3"
+        {rangeRings.map((radius) => (
+          <circle
+            key={`range-ring-${radius}`}
+            cx="50"
+            cy="78"
+            r={radius}
+            fill="none"
+            stroke="rgba(74,159,212,0.12)"
+            strokeWidth="0.38"
           />
         ))}
-        {Array.from({ length: 8 }).map((_, index) => (
-          <line
-            key={`grid-h-${index}`}
-            x1="0"
-            y1={8 + index * 11}
-            x2="100"
-            y2={8 + index * 11}
-            stroke="rgba(122,155,184,0.08)"
-            strokeWidth="0.3"
-          />
-        ))}
+        <path
+          d="M50 78 L42 14 L58 14 Z"
+          fill="rgba(74,159,212,0.06)"
+          stroke="rgba(74,159,212,0.12)"
+          strokeWidth="0.35"
+        />
+        <line x1="50" y1="10" x2="50" y2="78" stroke="rgba(232,237,244,0.08)" strokeWidth="0.35" />
+        <line x1="18" y1="78" x2="82" y2="78" stroke="rgba(232,237,244,0.05)" strokeWidth="0.35" />
+        <polyline
+          points={polylinePoints}
+          fill="none"
+          stroke="url(#rsf-demo-route-fill)"
+          strokeWidth="4.2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          opacity="0.7"
+        />
         <polyline
           points={polylinePoints}
           fill="none"
@@ -606,6 +665,16 @@ function FlightDemoMapSurface({
           strokeLinejoin="round"
           strokeLinecap="round"
         />
+        {projected.length > 1 ? (
+          <polyline
+            points={projected.slice(0, Math.min(projected.length, 3)).map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ")}
+            fill="none"
+            stroke="rgba(200,146,42,0.25)"
+            strokeWidth="3.4"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ) : null}
         {runwayOverlay ? (
           <>
             <polyline
@@ -715,10 +784,12 @@ function FlightDemoMapSurface({
           <path d="M0 -4.2 L2.9 3.2 L0 1.4 L-2.9 3.2 Z" fill="#E8EDF4" stroke="#0A0E14" strokeWidth="0.45" />
           <circle cx="0" cy="0" r="5.8" fill="none" stroke="rgba(74,159,212,0.22)" strokeWidth="0.55" />
         </g>
+        <text x="8" y="15" fill="rgba(122,155,184,0.48)" fontSize="2.2" letterSpacing="0.18">SECTOR A</text>
+        <text x="79" y="86" fill="rgba(122,155,184,0.48)" fontSize="2.2" letterSpacing="0.18">TERRAIN</text>
       </svg>
       <div className="pointer-events-none absolute inset-x-4 top-4 flex items-center justify-between">
         <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
-          {flightPhase.startsWith("surface") ? "Surface follow" : "Map follow"}
+          {mapTitle}
         </div>
         <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
           {runwayOverlayLabel || (runwayCue ? `Final ${runwayCue.runwayId}` : "Track up")}
@@ -846,6 +917,95 @@ function FlightDemoHudStrip({
   );
 }
 
+function FlightDemoAirportDiagram({ preview }: { preview: DemoSurfacePreview }) {
+  const reciprocalRunwayId = getOppositeRunwayIdent(preview.runwayId);
+  const rotation = preview.runwayHeadingDeg;
+
+  return (
+    <div className="relative overflow-hidden rounded-[20px] border border-[#1E2D42] bg-[linear-gradient(180deg,#07101A_0%,#0A131D_100%)] p-4">
+      <div className="absolute left-4 top-4 rounded-full border border-[#1E2D42] bg-[#091018]/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7A9BB8]">
+        Surface schematic
+      </div>
+      <svg viewBox="0 0 140 100" className="h-[300px] w-full">
+        <defs>
+          <filter id="rsf-taxi-glow">
+            <feGaussianBlur stdDeviation="1.2" />
+          </filter>
+        </defs>
+        <rect x="8" y="10" width="124" height="80" rx="12" fill="#0B1119" stroke="rgba(30,45,66,0.9)" strokeWidth="0.8" />
+        <g transform={`rotate(${rotation} 70 50)`}>
+          <rect x="58" y="12" width="24" height="76" rx="4" fill="#19212C" stroke="rgba(232,237,244,0.18)" strokeWidth="0.7" />
+          <rect x="60" y="16" width="20" height="5" rx="1.8" fill="#E8EDF4" opacity="0.9" />
+          <rect x="60" y="79" width="20" height="5" rx="1.8" fill="#E8EDF4" opacity="0.9" />
+          <line x1="70" y1="17" x2="70" y2="83" stroke="rgba(232,237,244,0.74)" strokeWidth="1" strokeDasharray="3 3" />
+          <text x="70" y="29" textAnchor="middle" fill="#F5A623" fontSize="5.2" letterSpacing="0.25">{preview.runwayId}</text>
+          {reciprocalRunwayId ? (
+            <text x="70" y="74" textAnchor="middle" fill="#F5A623" fontSize="5.2" letterSpacing="0.25">{reciprocalRunwayId}</text>
+          ) : null}
+          <path d="M25 71 L54 71 L54 63 L24 63 Q20 63 20 67 Q20 71 25 71 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" />
+          <path d="M84 31 L114 31 Q120 31 120 25 L120 19 Q120 15 116 15 L87 15 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" />
+          <path d="M83 50 L110 50 L116 56 L116 66 L104 66 L83 66 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" opacity="0.8" />
+          <path d="M54 67 L60 67" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
+          <path d="M80 23 L86 23" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
+          <path d="M80 58 L84 58" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
+          <line x1="56" y1="59.5" x2="84" y2="59.5" stroke={preview.holdShortActive ? "#E8453C" : "#F5A623"} strokeWidth="1.5" />
+          <line x1="56" y1="61.9" x2="84" y2="61.9" stroke="rgba(245,166,35,0.7)" strokeWidth="1.1" />
+          <path
+            d={`M ${preview.secondaryRoute.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+            fill="none"
+            stroke="rgba(74,159,212,0.38)"
+            strokeWidth="1.1"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="2.4 2"
+          />
+          <path
+            d={`M ${preview.route.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+            fill="none"
+            stroke="rgba(200,146,42,0.55)"
+            strokeWidth="4.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            filter="url(#rsf-taxi-glow)"
+          />
+          <path
+            d={`M ${preview.route.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+            fill="none"
+            stroke="#C8922A"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx={preview.ownship.x + 20} cy={preview.ownship.y + 1} r="3.3" fill="#E8EDF4" stroke="#0A0E14" strokeWidth="0.8" />
+          <path
+            d={`M ${preview.ownship.x + 20} ${preview.ownship.y - 4.2} L ${preview.ownship.x + 22.8} ${preview.ownship.y + 3.3} L ${preview.ownship.x + 20} ${preview.ownship.y + 1.4} L ${preview.ownship.x + 17.2} ${preview.ownship.y + 3.3} Z`}
+            fill="#E8EDF4"
+            stroke="#0A0E14"
+            strokeWidth="0.45"
+            transform={`rotate(${preview.ownship.headingDeg} ${preview.ownship.x + 20} ${preview.ownship.y + 1})`}
+          />
+          {preview.runwayOccupied ? (
+            <g>
+              <rect x="64.5" y="39" width="11" height="6" rx="1.6" fill="rgba(232,69,60,0.2)" stroke="#E8453C" strokeWidth="0.7" />
+              <text x="70" y="43.1" textAnchor="middle" fill="#E8EDF4" fontSize="3.2" letterSpacing="0.1">OCC</text>
+            </g>
+          ) : null}
+          <text x="28" y="59" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.2">RAMP</text>
+          <text x="45" y="57" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">A</text>
+          <text x="88" y="28" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">B</text>
+          <text x="92" y="55" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">C</text>
+        </g>
+        <g transform="translate(118 18)">
+          <circle cx="0" cy="0" r="10" fill="#0A0E14" stroke="#1E2D42" strokeWidth="0.8" />
+          <path d="M0 -6 L0 6 M-6 0 L6 0" stroke="rgba(232,237,244,0.18)" strokeWidth="0.6" />
+          <path d="M0 -7 L2.4 -1.5 L0 -3 L-2.4 -1.5 Z" fill="#E8EDF4" />
+          <text x="0" y="-10.8" textAnchor="middle" fill="#7A9BB8" fontSize="3.1" letterSpacing="0.18">N</text>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
 function AirportSurfacePreview({ preview }: { preview: DemoSurfacePreview | null }) {
   if (!preview) {
     return (
@@ -873,7 +1033,7 @@ function AirportSurfacePreview({ preview }: { preview: DemoSurfacePreview | null
               Runway data live
             </div>
             <div className="rounded-full border border-[#1E2D42] bg-[#091018] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7A9BB8]">
-              Diagram preview
+              Surface schematic
             </div>
           </div>
         </div>
@@ -882,61 +1042,7 @@ function AirportSurfacePreview({ preview }: { preview: DemoSurfacePreview | null
         </div>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="relative overflow-hidden rounded-[20px] border border-[#1E2D42] bg-[linear-gradient(180deg,#0A1428_0%,#0A111B_100%)] p-4">
-          <svg viewBox="0 0 100 62" className="h-[210px] w-full">
-            <rect x="6" y="7" width="88" height="48" rx="6" fill="#0B1119" stroke="rgba(30,45,66,0.75)" strokeWidth="0.6" />
-            <rect x="44" y="10" width="12" height="42" rx="2.5" fill="#131B26" stroke="rgba(232,237,244,0.14)" strokeWidth="0.5" />
-            <line x1="50" y1="12" x2="50" y2="50" stroke="rgba(232,237,244,0.76)" strokeWidth="0.8" strokeDasharray="2.2 2.2" />
-            <rect x="38" y="31" width="12" height="8" rx="1.8" fill="rgba(200,146,42,0.18)" stroke="#C8922A" strokeWidth="0.7" />
-            <path d="M 18 48 L 30 48 L 40 40 L 50 40" fill="none" stroke="#4A9FD4" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M 50 22 L 60 22 L 70 14 L 84 14" fill="none" stroke="#4A9FD4" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.5" />
-            <path
-              d={`M ${preview.secondaryRoute.map((point) => `${point.x} ${point.y}`).join(" L ")}`}
-              fill="none"
-              stroke="rgba(74,159,212,0.55)"
-              strokeWidth="1.1"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray="2.2 1.8"
-            />
-            <line
-              x1="42"
-              y1="28.4"
-              x2="58"
-              y2="28.4"
-              stroke={preview.holdShortActive ? "#E8453C" : "#F5A623"}
-              strokeWidth="1.1"
-            />
-            <line x1="42" y1="29.9" x2="58" y2="29.9" stroke="rgba(245,166,35,0.65)" strokeWidth="0.8" />
-            <path
-              d={`M ${preview.route.map((point) => `${point.x} ${point.y}`).join(" L ")}`}
-              fill="none"
-              stroke="#C8922A"
-              strokeWidth="2.1"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <circle cx={preview.ownship.x} cy={preview.ownship.y} r="2.8" fill="#E8EDF4" stroke="#0A0E14" strokeWidth="0.7" />
-            <path
-              d={`M ${preview.ownship.x} ${preview.ownship.y - 4.6} L ${preview.ownship.x + 2.4} ${preview.ownship.y + 2.8} L ${preview.ownship.x} ${preview.ownship.y + 1.2} L ${preview.ownship.x - 2.4} ${preview.ownship.y + 2.8} Z`}
-              fill="#E8EDF4"
-              stroke="#0A0E14"
-              strokeWidth="0.45"
-              transform={`rotate(${preview.ownship.headingDeg} ${preview.ownship.x} ${preview.ownship.y})`}
-            />
-            <text x="52" y="20" fill="#F5A623" fontSize="3.2" letterSpacing="0.18">{preview.runwayId}</text>
-            <text x="14" y="52" fill="#7A9BB8" fontSize="2.8" letterSpacing="0.14">RAMP</text>
-            <text x="78" y="12" fill="#7A9BB8" fontSize="2.8" letterSpacing="0.14">HOLD</text>
-            <text x="31" y="44" fill="#7A9BB8" fontSize="2.5" letterSpacing="0.12">A</text>
-            <text x="60" y="20" fill="#7A9BB8" fontSize="2.5" letterSpacing="0.12">B</text>
-            {preview.runwayOccupied ? (
-              <g>
-                <rect x="46.5" y="18" width="7" height="4.3" rx="1.2" fill="rgba(232,69,60,0.18)" stroke="#E8453C" strokeWidth="0.6" />
-                <text x="50" y="21" textAnchor="middle" fill="#E8EDF4" fontSize="2.1" letterSpacing="0.08">OCC</text>
-              </g>
-            ) : null}
-          </svg>
-        </div>
+        <FlightDemoAirportDiagram preview={preview} />
         <div className="space-y-3">
           <div className="rounded-[20px] border border-[#1E2D42] bg-[#091018] px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Surface guidance</div>
@@ -947,7 +1053,7 @@ function AirportSurfacePreview({ preview }: { preview: DemoSurfacePreview | null
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Runway and comms</div>
             <div className="mt-2 text-sm font-semibold text-[#E8EDF4]">{preview.runwayMeta}</div>
             <div className="mt-1 text-xs text-[#7A9BB8]">
-              Runway advisory and airport frequencies are API-backed. Surface pathing is a product demo layer.
+              Runway advisory and airport frequencies are API-backed. Surface geometry is a polished schematic layer pending true airport-diagram data.
             </div>
             <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-[#7A9BB8]">
               <div>
@@ -1306,7 +1412,7 @@ function FlightDemoVisionSurface({
         formatValue={(value) => Math.max(0, Math.round(value / 10) * 10).toString()}
       />
       <div className="absolute inset-x-4 top-4 flex items-start justify-between gap-3">
-        <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/88 px-4 py-3">
+        <div className="max-w-[220px] rounded-2xl border border-[#1E2D42] bg-[#091018]/82 px-4 py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Vision guidance</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {nextWaypoint ? `Track ${nextWaypoint}` : "Route tunnel active"}
@@ -1315,9 +1421,9 @@ function FlightDemoVisionSurface({
             {phaseLabel} - {nextWaypointDistanceNm != null ? `${nextWaypointDistanceNm.toFixed(1)} NM to next fix` : "Monitoring current leg"}
           </div>
         </div>
-        <div className="flex max-w-[300px] flex-col gap-2">
+        <div className="flex max-w-[240px] flex-col gap-2">
           {runwayCue ? (
-            <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/92 px-4 py-3 text-right">
+            <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/82 px-4 py-3 text-right">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Approach</div>
               <div className="mt-1 font-mono text-xl text-[#F5A623]">RWY {runwayCue.runwayId}</div>
               <div className="mt-1 text-xs text-[#7A9BB8]">
@@ -1329,7 +1435,7 @@ function FlightDemoVisionSurface({
               </div>
             </div>
           ) : null}
-          <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/88 px-4 py-3 text-right">
+          <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/82 px-4 py-3 text-right">
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Remain</div>
             <div className="mt-1 font-mono text-xl text-[#F5A623]">{remainingRouteNm.toFixed(1)} NM</div>
             <div className="mt-1 text-xs text-[#7A9BB8]">{speedTrend}</div>
@@ -1337,7 +1443,7 @@ function FlightDemoVisionSurface({
         </div>
       </div>
       {terrainState ? (
-        <div className="absolute bottom-[110px] left-4 z-20 max-w-[260px] rounded-2xl border border-[#1E2D42] bg-[#091018]/92 px-4 py-3">
+        <div className="absolute bottom-[108px] left-[96px] z-20 max-w-[228px] rounded-2xl border border-[#1E2D42] bg-[#091018]/84 px-4 py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Terrain guidance</div>
           <div
             className={`mt-1 text-sm font-semibold ${
@@ -1373,7 +1479,7 @@ function FlightDemoVisionSurface({
         </div>
       ) : null}
       {selectedTrafficTarget ? (
-        <div className="absolute bottom-[110px] right-4 z-20 max-w-[248px] rounded-2xl border border-[#1E2D42] bg-[#091018]/92 px-4 py-3 text-right">
+        <div className="absolute bottom-[108px] right-[96px] z-20 max-w-[228px] rounded-2xl border border-[#1E2D42] bg-[#091018]/84 px-4 py-3 text-right">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Traffic</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {selectedTrafficTarget.callsign} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
@@ -1403,7 +1509,7 @@ function FlightDemoVisionSurface({
         </div>
       </div>
       {selectedDiversion ? (
-        <div className="absolute left-1/2 top-[18%] z-20 min-w-[220px] -translate-x-1/2 rounded-full border border-[#1E2D42] bg-[#091018]/88 px-4 py-2 text-center">
+        <div className="absolute left-1/2 top-[14%] z-20 min-w-[210px] -translate-x-1/2 rounded-full border border-[#1E2D42] bg-[#091018]/78 px-4 py-2 text-center">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Best diversion</div>
           <div className="mt-0.5 text-sm font-semibold text-[#E8EDF4]">
             {selectedDiversion.icao} - {selectedDiversion.distanceNm.toFixed(1)} NM - {selectedDiversion.flightCategory || "WX --"}
@@ -1984,6 +2090,7 @@ export default function SyntheticVisionPage() {
     return {
       airportIcao: airport.icao,
       runwayId: runway.runwayId,
+      runwayHeadingDeg: runway.headingDeg,
       mode,
       progressPct: taxiProgress,
       headline: departureSurface ? "Departure surface tracking to runway hold-short." : "Arrival rollout transitions into taxi-in guidance.",

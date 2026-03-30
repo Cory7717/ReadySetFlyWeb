@@ -172,6 +172,15 @@ type RunwayBriefingResponse = {
   }> | null;
 };
 
+type AirportFrequencyResponse = {
+  icao?: string | null;
+  frequencies?: Array<{
+    type?: string | null;
+    description?: string | null;
+    frequencyMhz?: number | null;
+  }> | null;
+};
+
 type DestinationRunwayCue = {
   runwayId: string;
   distanceNm: number;
@@ -191,6 +200,46 @@ type DestinationRunwayOverlay = {
   runwayId: string;
   centerline: Array<{ latitude: number; longitude: number }>;
   runwayBar: Array<{ latitude: number; longitude: number }>;
+};
+
+type FlightDeckSurfacePoint = {
+  x: number;
+  y: number;
+};
+
+type FlightDeckSurfacePreview = {
+  airportIcao: string;
+  runwayId: string;
+  runwayHeadingDeg: number;
+  mode: 'departure' | 'arrival';
+  progressPct: number;
+  headline: string;
+  support: string;
+  routeCall: string;
+  clearanceLabel: string;
+  holdShortActive: boolean;
+  runwayOccupied: boolean;
+  runwayMeta: string;
+  groundFreq: string;
+  towerFreq: string;
+  atisFreq: string;
+  ownship: { x: number; y: number; headingDeg: number };
+  route: FlightDeckSurfacePoint[];
+  secondaryRoute: FlightDeckSurfacePoint[];
+};
+
+type FlightDeckRunwayOpsSummary = {
+  airportIcao: string;
+  runwayId: string;
+  runwayHeadingDeg: number;
+  runwayMeta: string;
+  phaseCall: string;
+  headwindKt: number | null;
+  crosswindKt: number | null;
+  groundFreq: string;
+  towerFreq: string;
+  atisFreq: string;
+  sourceLabel: string;
 };
 
 type TerrainProfileResponse = {
@@ -268,7 +317,7 @@ type WindsAloftMeta = {
   warnings?: string[];
 };
 
-type FlightDeckPanel = 'status' | 'layers' | 'traffic' | 'diversions';
+type FlightDeckPanel = 'status' | 'surface' | 'layers' | 'traffic' | 'diversions';
 type FlightDeckView = 'map' | 'vision';
 type FlightDeckActionTone = 'default' | 'accent' | 'caution' | 'warning';
 
@@ -327,6 +376,27 @@ function pickBestDiversionFrequency(
     return 9;
   };
   return [...entries].sort((a, b) => rank(a) - rank(b))[0] || null;
+}
+
+function pickAirportFrequency(
+  response: AirportFrequencyResponse | null | undefined,
+  keywords: string[],
+) {
+  const entries = Array.isArray(response?.frequencies) ? response.frequencies : [];
+  const loweredKeywords = keywords.map((keyword) => keyword.toLowerCase());
+  return (
+    entries.find((entry) => {
+      const type = String(entry?.type || '').toLowerCase();
+      const description = String(entry?.description || '').toLowerCase();
+      return loweredKeywords.some((keyword) => type.includes(keyword) || description.includes(keyword));
+    }) || null
+  );
+}
+
+function formatFrequency(frequencyMhz: number | null | undefined) {
+  return typeof frequencyMhz === 'number' && Number.isFinite(frequencyMhz)
+    ? frequencyMhz.toFixed(3)
+    : '--';
 }
 
 function formatAltitudeDelta(altitudeDeltaFt: number | null | undefined) {
@@ -687,8 +757,14 @@ export default function FlightPlannerScreen() {
   const [selectedDiversionIcao, setSelectedDiversionIcao] = useState<string | null>(null);
   const [selectedDiversionBriefing, setSelectedDiversionBriefing] = useState<RunwayBriefingResponse | null>(null);
   const [selectedDiversionBriefingLoading, setSelectedDiversionBriefingLoading] = useState(false);
+  const [departureBriefing, setDepartureBriefing] = useState<RunwayBriefingResponse | null>(null);
+  const [departureBriefingLoading, setDepartureBriefingLoading] = useState(false);
   const [destinationBriefing, setDestinationBriefing] = useState<RunwayBriefingResponse | null>(null);
   const [destinationBriefingLoading, setDestinationBriefingLoading] = useState(false);
+  const [departureFrequencies, setDepartureFrequencies] = useState<AirportFrequencyResponse | null>(null);
+  const [departureFrequenciesLoading, setDepartureFrequenciesLoading] = useState(false);
+  const [destinationFrequencies, setDestinationFrequencies] = useState<AirportFrequencyResponse | null>(null);
+  const [destinationFrequenciesLoading, setDestinationFrequenciesLoading] = useState(false);
   const [terrainProfile, setTerrainProfile] = useState<TerrainProfileResponse | null>(null);
   const [terrainProfileLoading, setTerrainProfileLoading] = useState(false);
   const [obstacleScan, setObstacleScan] = useState<NearbyObstacleResponse | null>(null);
@@ -839,6 +915,10 @@ export default function FlightPlannerScreen() {
     }
     return 'Runway advisory pending';
   }, [selectedDiversionBriefing, selectedDiversionBriefingLoading]);
+  const departureRunway = useMemo(
+    () => resolveDestinationRunway(departureBriefing),
+    [departureBriefing]
+  );
   const destinationRunway = useMemo(
     () => resolveDestinationRunway(destinationBriefing),
     [destinationBriefing]
@@ -1859,6 +1939,60 @@ export default function FlightPlannerScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    const departureIcao = departure.trim().toUpperCase();
+    if (!ICAO_REGEX.test(departureIcao)) {
+      setDepartureBriefing(null);
+      setDepartureBriefingLoading(false);
+      return;
+    }
+    setDepartureBriefingLoading(true);
+    api
+      .get<RunwayBriefingResponse>(`/api/airports/${departureIcao}/runway-briefing`)
+      .then((res) => {
+        if (cancelled) return;
+        setDepartureBriefing(res.data || null);
+        setDepartureBriefingLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDepartureBriefing(null);
+        setDepartureBriefingLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [departure]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const departureIcao = departure.trim().toUpperCase();
+    if (!ICAO_REGEX.test(departureIcao)) {
+      setDepartureFrequencies(null);
+      setDepartureFrequenciesLoading(false);
+      return;
+    }
+    setDepartureFrequenciesLoading(true);
+    api
+      .get<AirportFrequencyResponse>(`/api/airports/${departureIcao}/frequencies`)
+      .then((res) => {
+        if (cancelled) return;
+        setDepartureFrequencies(res.data || null);
+        setDepartureFrequenciesLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDepartureFrequencies(null);
+        setDepartureFrequenciesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [departure]);
+
+  useEffect(() => {
+    let cancelled = false;
     const destinationIcao = destination.trim().toUpperCase();
     if (!ICAO_REGEX.test(destinationIcao)) {
       setDestinationBriefing(null);
@@ -1877,6 +2011,33 @@ export default function FlightPlannerScreen() {
         if (cancelled) return;
         setDestinationBriefing(null);
         setDestinationBriefingLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [destination]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const destinationIcao = destination.trim().toUpperCase();
+    if (!ICAO_REGEX.test(destinationIcao)) {
+      setDestinationFrequencies(null);
+      setDestinationFrequenciesLoading(false);
+      return;
+    }
+    setDestinationFrequenciesLoading(true);
+    api
+      .get<AirportFrequencyResponse>(`/api/airports/${destinationIcao}/frequencies`)
+      .then((res) => {
+        if (cancelled) return;
+        setDestinationFrequencies(res.data || null);
+        setDestinationFrequenciesLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDestinationFrequencies(null);
+        setDestinationFrequenciesLoading(false);
       });
 
     return () => {
@@ -2638,6 +2799,164 @@ export default function FlightPlannerScreen() {
       ],
     };
   }, [destinationRunway, destinationRunwayCue, flightPhase, routePoints]);
+  const departureRunwayOverlay = useMemo<DestinationRunwayOverlay | null>(() => {
+    const departurePoint = routePoints[0];
+    if (!departurePoint || !departureRunway || flightPhase !== 'departure') return null;
+    const runwayExit = offsetLatLonByNm(
+      departurePoint.latitude,
+      departurePoint.longitude,
+      Math.cos(toRad(departureRunway.headingDeg)) * 6.2,
+      Math.sin(toRad(departureRunway.headingDeg)) * 6.2,
+    );
+    const leftThreshold = offsetLatLonByNm(
+      departurePoint.latitude,
+      departurePoint.longitude,
+      Math.cos(toRad(departureRunway.headingDeg - 90)) * 0.12,
+      Math.sin(toRad(departureRunway.headingDeg - 90)) * 0.12,
+    );
+    const rightThreshold = offsetLatLonByNm(
+      departurePoint.latitude,
+      departurePoint.longitude,
+      Math.cos(toRad(departureRunway.headingDeg + 90)) * 0.12,
+      Math.sin(toRad(departureRunway.headingDeg + 90)) * 0.12,
+    );
+    return {
+      runwayId: departureRunway.runwayId,
+      centerline: [
+        { latitude: departurePoint.latitude, longitude: departurePoint.longitude },
+        { latitude: runwayExit.lat, longitude: runwayExit.lon },
+      ],
+      runwayBar: [
+        { latitude: leftThreshold.lat, longitude: leftThreshold.lon },
+        { latitude: rightThreshold.lat, longitude: rightThreshold.lon },
+      ],
+    };
+  }, [departureRunway, flightPhase, routePoints]);
+  const activeRunwayOverlay = flightPhase === 'arrival' ? destinationRunwayOverlay : departureRunwayOverlay;
+  const activeRunwayOverlayLabel = flightPhase === 'arrival'
+    ? destinationRunway ? `Final ${destinationRunway.runwayId}` : null
+    : departureRunway ? `Dep ${departureRunway.runwayId}` : null;
+  const flightDeckSurfacePreview = useMemo<FlightDeckSurfacePreview | null>(() => {
+    const departureSurface = flightPhase === 'departure';
+    const airport = departureSurface ? routePoints[0] : routePoints[routePoints.length - 1];
+    const runway = departureSurface ? departureRunway : destinationRunway;
+    const frequencies = departureSurface ? departureFrequencies : destinationFrequencies;
+    const progressPct = routeProgress?.progressPct ?? 0;
+    if (!airport || !runway || !routeProgress || (flightPhase !== 'departure' && flightPhase !== 'arrival')) return null;
+    const groundFrequency = pickAirportFrequency(frequencies, ['ground', 'gnd', 'taxi']);
+    const towerFrequency = pickAirportFrequency(frequencies, ['tower', 'twr']);
+    const atisFrequency = pickAirportFrequency(frequencies, ['atis', 'awos', 'asos']);
+    const taxiProgress = departureSurface
+      ? clamp(progressPct / 8, 0, 1)
+      : clamp((progressPct - 92) / 8, 0, 1);
+    const route = departureSurface
+      ? [
+          { x: 18, y: 48 },
+          { x: 28, y: 48 },
+          { x: 40, y: 40 },
+          { x: 50, y: 40 },
+          { x: 50, y: 31 },
+        ]
+      : [
+          { x: 50, y: 31 },
+          { x: 50, y: 40 },
+          { x: 40, y: 40 },
+          { x: 28, y: 48 },
+          { x: 18, y: 48 },
+        ];
+    const secondaryRoute = departureSurface
+      ? [
+          { x: 50, y: 22 },
+          { x: 60, y: 22 },
+          { x: 70, y: 14 },
+          { x: 84, y: 14 },
+        ]
+      : [
+          { x: 84, y: 14 },
+          { x: 70, y: 14 },
+          { x: 60, y: 22 },
+          { x: 50, y: 22 },
+        ];
+    const ownship = route.reduce<FlightDeckSurfacePreview['ownship']>(
+      (current, _point, index) => {
+        if (index === route.length - 1) return current;
+        const start = route[index];
+        const end = route[index + 1];
+        const segmentStart = index / (route.length - 1);
+        const segmentEnd = (index + 1) / (route.length - 1);
+        if (taxiProgress < segmentStart || taxiProgress > segmentEnd) return current;
+        const localT = clamp((taxiProgress - segmentStart) / Math.max(segmentEnd - segmentStart, 0.001), 0, 1);
+        return {
+          x: start.x + (end.x - start.x) * localT,
+          y: start.y + (end.y - start.y) * localT,
+          headingDeg: Math.atan2(end.y - start.y, end.x - start.x) * (180 / Math.PI) + 90,
+        };
+      },
+      { x: route[0].x, y: route[0].y, headingDeg: departureSurface ? 45 : 225 },
+    );
+    const holdShortActive = departureSurface && taxiProgress >= 0.72 && taxiProgress < 0.92;
+    const runwayOccupied = departureSurface ? taxiProgress > 0.93 : taxiProgress < 0.18;
+    return {
+      airportIcao: airport.icao,
+      runwayId: runway.runwayId,
+      runwayHeadingDeg: runway.headingDeg,
+      mode: departureSurface ? 'departure' : 'arrival',
+      progressPct: taxiProgress,
+      headline: departureSurface
+        ? 'Departure surface tracking to runway hold-short.'
+        : 'Arrival rollout transitions into taxi-in guidance.',
+      support: departureSurface
+        ? `Previewing taxi-out flow, hold-short state, and runway ${runway.runwayId} entry.`
+        : `Previewing runway ${runway.runwayId} exit, occupancy state, and taxi-in from the landing surface.`,
+      routeCall: departureSurface
+        ? `Taxi via Alpha to runway ${runway.runwayId}. Hold short until cleared.`
+        : `Exit runway ${runway.runwayId}, then taxi via Alpha to parking.`,
+      clearanceLabel: departureSurface
+        ? holdShortActive
+          ? `Hold short runway ${runway.runwayId}. Await tower release.`
+          : runwayOccupied
+            ? `Entering runway ${runway.runwayId}. Confirm takeoff clearance.`
+            : `Taxi clearance active via Alpha.`
+        : runwayOccupied
+          ? `Runway ${runway.runwayId} still occupied during rollout.`
+          : `Clear of runway ${runway.runwayId}. Continue taxi-in via Alpha.`,
+      holdShortActive,
+      runwayOccupied,
+      runwayMeta: `${runway.lengthFt ? `${runway.lengthFt.toLocaleString()} ft` : 'Length N/A'} - ${runway.surface || 'Surface N/A'}`,
+      groundFreq: formatFrequency(groundFrequency?.frequencyMhz),
+      towerFreq: formatFrequency(towerFrequency?.frequencyMhz),
+      atisFreq: formatFrequency(atisFrequency?.frequencyMhz),
+      ownship,
+      route,
+      secondaryRoute,
+    };
+  }, [departureFrequencies, departureRunway, destinationFrequencies, destinationRunway, flightPhase, routePoints, routeProgress]);
+  const flightDeckRunwayOpsSummary = useMemo<FlightDeckRunwayOpsSummary | null>(() => {
+    const departureSurface = flightPhase === 'departure';
+    const airport = departureSurface ? routePoints[0] : routePoints[routePoints.length - 1];
+    const runway = departureSurface ? departureRunway : destinationRunway;
+    const briefing = departureSurface ? departureBriefing : destinationBriefing;
+    const frequencies = departureSurface ? departureFrequencies : destinationFrequencies;
+    if (!airport || !runway || (flightPhase !== 'departure' && flightPhase !== 'arrival')) return null;
+    const groundFrequency = pickAirportFrequency(frequencies, ['ground', 'gnd', 'taxi']);
+    const towerFrequency = pickAirportFrequency(frequencies, ['tower', 'twr']);
+    const atisFrequency = pickAirportFrequency(frequencies, ['atis', 'awos', 'asos']);
+    return {
+      airportIcao: airport.icao,
+      runwayId: runway.runwayId,
+      runwayHeadingDeg: runway.headingDeg,
+      runwayMeta: `${runway.lengthFt ? `${runway.lengthFt.toLocaleString()} ft` : 'Length N/A'} - ${runway.surface || 'Surface N/A'}`,
+      phaseCall: departureSurface
+        ? `Departure runway ${runway.runwayId} staged for taxi-out and lineup.`
+        : `Arrival runway ${runway.runwayId} staged for final, rollout, and taxi-in.`,
+      headwindKt: briefing?.advisory?.headwind ?? null,
+      crosswindKt: briefing?.advisory?.crosswind ?? null,
+      groundFreq: formatFrequency(groundFrequency?.frequencyMhz),
+      towerFreq: formatFrequency(towerFrequency?.frequencyMhz),
+      atisFreq: formatFrequency(atisFrequency?.frequencyMhz),
+      sourceLabel: briefing?.advisory || briefing?.runwayInUse ? 'briefing live' : 'runway staged',
+    };
+  }, [departureBriefing, departureFrequencies, departureRunway, destinationBriefing, destinationFrequencies, destinationRunway, flightPhase, routePoints]);
 
   useEffect(() => {
     if (!routePoints.length && !hasPrimaryIcao) return;
@@ -2758,10 +3077,18 @@ export default function FlightPlannerScreen() {
     visibleTrafficTargets,
     selectedDiversion,
     selectedDiversionRunwaySummary,
+    departureBriefing,
+    departureBriefingLoading,
     destinationBriefing,
     destinationBriefingLoading,
     destinationRunwayCue,
     destinationRunwayOverlay,
+    activeRunwayOverlay,
+    activeRunwayOverlayLabel,
+    departureFrequenciesLoading,
+    destinationFrequenciesLoading,
+    flightDeckSurfacePreview,
+    flightDeckRunwayOpsSummary,
     selectedDiversionBestComm,
     selectedTrafficTrend,
     mapTacticalSummary,
@@ -4597,6 +4924,13 @@ const styles = StyleSheet.create({
   flightDeckChipTextActive: {
     color: colors.flightText,
   },
+  flightDeckChipWarning: {
+    backgroundColor: 'rgba(232,69,60,0.14)',
+    borderColor: 'rgba(232,69,60,0.52)',
+  },
+  flightDeckChipTextWarning: {
+    color: colors.flightWarning,
+  },
   flightDeckBottomStack: {
     position: 'absolute',
     left: spacing.md,
@@ -4796,6 +5130,166 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     marginTop: 6,
+  },
+  flightDeckRunwayOpsCard: {
+    alignSelf: 'flex-start',
+    padding: spacing.md,
+    borderRadius: radius.xl,
+    backgroundColor: 'rgba(10,14,20,0.92)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+    maxWidth: 268,
+  },
+  flightDeckSurfaceCard: {
+    marginBottom: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.flightSurface,
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightDeckSurfaceDiagram: {
+    marginTop: spacing.sm,
+    borderRadius: radius.xl,
+    padding: spacing.sm,
+    backgroundColor: 'rgba(7,16,26,0.96)',
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
+  },
+  flightDeckSurfaceDiagramFrame: {
+    position: 'relative',
+    height: 220,
+    borderRadius: radius.lg,
+    backgroundColor: '#0B1119',
+    borderWidth: 1,
+    borderColor: 'rgba(30,45,66,0.9)',
+    overflow: 'hidden',
+  },
+  flightDeckSurfaceRunway: {
+    position: 'absolute',
+    left: '44%',
+    top: '8%',
+    width: '12%',
+    height: '74%',
+    borderRadius: radius.md,
+    backgroundColor: '#19212C',
+    borderWidth: 1,
+    borderColor: 'rgba(232,237,244,0.16)',
+  },
+  flightDeckSurfaceRunwayCenterline: {
+    position: 'absolute',
+    left: '49.7%',
+    top: '12%',
+    width: 2,
+    height: '66%',
+    backgroundColor: 'rgba(232,237,244,0.72)',
+  },
+  flightDeckSurfaceRunwayLabelTop: {
+    position: 'absolute',
+    top: '16%',
+    left: '58%',
+    color: colors.flightCaution,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  flightDeckSurfaceRunwayLabelBottom: {
+    position: 'absolute',
+    bottom: '12%',
+    left: '58%',
+    color: colors.flightCaution,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  flightDeckSurfaceHoldShort: {
+    position: 'absolute',
+    left: '38%',
+    top: '46%',
+    width: '24%',
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: colors.flightCaution,
+  },
+  flightDeckSurfaceHoldShortActive: {
+    backgroundColor: colors.flightWarning,
+  },
+  flightDeckSurfaceRoute: {
+    position: 'absolute',
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: colors.flightAccent,
+  },
+  flightDeckSurfaceSecondaryRoute: {
+    position: 'absolute',
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(74,159,212,0.6)',
+  },
+  flightDeckSurfaceOwnship: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    marginLeft: -14,
+    marginTop: -14,
+    borderRadius: 14,
+    backgroundColor: colors.flightText,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.flightBackground,
+  },
+  flightDeckSurfaceOccupiedBadge: {
+    position: 'absolute',
+    top: '22%',
+    left: '47%',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(232,69,60,0.22)',
+    borderWidth: 1,
+    borderColor: colors.flightWarning,
+  },
+  flightDeckSurfaceOccupiedText: {
+    color: colors.flightText,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  flightDeckSurfaceRampLabel: {
+    position: 'absolute',
+    left: '10%',
+    bottom: '9%',
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  flightDeckSurfaceTaxiLabelA: {
+    position: 'absolute',
+    left: '31%',
+    top: '58%',
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  flightDeckSurfaceTaxiLabelB: {
+    position: 'absolute',
+    left: '63%',
+    top: '23%',
+    color: colors.flightTextMuted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  flightDeckSurfaceStatusRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  flightDeckSurfaceStatusCard: {
+    flex: 1,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.flightSurfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.flightBorder,
   },
   flightTrafficMarkerWrap: {
     alignItems: 'center',

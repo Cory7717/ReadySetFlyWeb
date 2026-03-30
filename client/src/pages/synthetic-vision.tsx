@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import {
   ArrowRight,
   Clock3,
+  FileText,
   Gauge,
   Map as MapIcon,
   Navigation,
@@ -152,6 +153,13 @@ type RunwayBriefingResponse = {
   }> | null;
 };
 
+type PlateRecord = {
+  name: string;
+  type: string;
+  effectiveDate?: string | null;
+  url: string;
+};
+
 type DemoRunwaySelection = {
   runwayId: string;
   headingDeg: number;
@@ -244,6 +252,17 @@ function getOppositeRunwayIdent(runwayId: string) {
   const reciprocal = ((runwayNumber + 18 - 1) % 36) + 1;
   const suffix = match[2] === "L" ? "R" : match[2] === "R" ? "L" : match[2] === "C" ? "C" : "";
   return `${String(reciprocal).padStart(2, "0")}${suffix}`;
+}
+
+function isAirportDiagramPlate(plate: PlateRecord) {
+  const type = String(plate.type || "").toUpperCase();
+  const name = String(plate.name || "").toUpperCase();
+  return (
+    type.includes("AIRPORT") ||
+    ["APD", "DIAGRAM", "HOT", "LAHSO", "PARKING"].some((token) => type.includes(token)) ||
+    name.includes("AIRPORT DIAGRAM") ||
+    name.includes("AIRPORT")
+  );
 }
 
 function pickAirportFrequency(
@@ -1006,7 +1025,21 @@ function FlightDemoAirportDiagram({ preview }: { preview: DemoSurfacePreview }) 
   );
 }
 
-function AirportSurfacePreview({ preview }: { preview: DemoSurfacePreview | null }) {
+function AirportSurfacePreview({
+  preview,
+  liveDiagram,
+  diagramLoading,
+}: {
+  preview: DemoSurfacePreview | null;
+  liveDiagram: PlateRecord | null;
+  diagramLoading: boolean;
+}) {
+  const [surfaceView, setSurfaceView] = useState<"schematic" | "live">("schematic");
+
+  useEffect(() => {
+    setSurfaceView(liveDiagram ? "live" : "schematic");
+  }, [liveDiagram?.url, preview?.airportIcao, preview?.runwayId]);
+
   if (!preview) {
     return (
       <div className="rounded-[24px] border border-[#1E2D42] bg-[#0C121B]/96 p-5">
@@ -1041,8 +1074,42 @@ function AirportSurfacePreview({ preview }: { preview: DemoSurfacePreview | null
           {preview.mode === "departure" ? "Taxi out" : "Taxi in"}
         </div>
       </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={surfaceView === "live" && liveDiagram ? "border-[#4A9FD4] bg-[#1A2332] text-[#E8EDF4]" : "border-[#1E2D42] bg-[#111820] text-[#7A9BB8]"}
+          onClick={() => setSurfaceView("live")}
+          disabled={!liveDiagram}
+        >
+          <FileText className="mr-2 h-4 w-4" />
+          FAA diagram
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className={surfaceView === "schematic" ? "border-[#C8922A] bg-[#1A2332] text-[#E8EDF4]" : "border-[#1E2D42] bg-[#111820] text-[#7A9BB8]"}
+          onClick={() => setSurfaceView("schematic")}
+        >
+          Surface schematic
+        </Button>
+      </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-        <FlightDemoAirportDiagram preview={preview} />
+        <div>
+          {surfaceView === "live" && liveDiagram ? (
+            <div className="overflow-hidden rounded-[20px] border border-[#1E2D42] bg-white">
+              <iframe
+                title={`${preview.airportIcao} airport diagram`}
+                src={`${apiUrl(`/api/plates/proxy?url=${encodeURIComponent(liveDiagram.url)}`)}#toolbar=0&navpanes=0&scrollbar=0`}
+                className="h-[360px] w-full"
+              />
+            </div>
+          ) : (
+            <FlightDemoAirportDiagram preview={preview} />
+          )}
+        </div>
         <div className="space-y-3">
           <div className="rounded-[20px] border border-[#1E2D42] bg-[#091018] px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Surface guidance</div>
@@ -1053,7 +1120,9 @@ function AirportSurfacePreview({ preview }: { preview: DemoSurfacePreview | null
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Runway and comms</div>
             <div className="mt-2 text-sm font-semibold text-[#E8EDF4]">{preview.runwayMeta}</div>
             <div className="mt-1 text-xs text-[#7A9BB8]">
-              Runway advisory and airport frequencies are API-backed. Surface geometry is a polished schematic layer pending true airport-diagram data.
+              {liveDiagram
+                ? "FAA airport diagram is available alongside the RSF surface schematic. Runway advisory and airport frequencies remain API-backed."
+                : "Runway advisory and airport frequencies are API-backed. Surface geometry is a polished schematic layer pending a matching live airport diagram."}
             </div>
             <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-[#7A9BB8]">
               <div>
@@ -1068,6 +1137,21 @@ function AirportSurfacePreview({ preview }: { preview: DemoSurfacePreview | null
                 <div className="uppercase tracking-[0.16em]">ATIS</div>
                 <div className="mt-1 font-mono text-[#E8EDF4]">{preview.atisFreq}</div>
               </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[#7A9BB8]">
+              <div>
+                {diagramLoading ? "Loading live diagram..." : liveDiagram ? `${liveDiagram.name} ${liveDiagram.effectiveDate ? `- effective ${liveDiagram.effectiveDate}` : ""}` : "No matching FAA airport diagram returned for this field."}
+              </div>
+              {liveDiagram ? (
+                <a
+                  href={apiUrl(`/api/plates/proxy?url=${encodeURIComponent(liveDiagram.url)}`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-[#4A9FD4] hover:text-[#7CC4F0]"
+                >
+                  Open PDF
+                </a>
+              ) : null}
             </div>
           </div>
           <div className="rounded-[20px] border border-[#1E2D42] bg-[#091018] px-4 py-3">
@@ -1540,10 +1624,14 @@ export default function SyntheticVisionPage() {
   const [arrivalBriefing, setArrivalBriefing] = useState<RunwayBriefingResponse | null>(null);
   const [departureFrequencies, setDepartureFrequencies] = useState<AirportFrequencyResponse | null>(null);
   const [arrivalFrequencies, setArrivalFrequencies] = useState<AirportFrequencyResponse | null>(null);
+  const [departurePlates, setDeparturePlates] = useState<PlateRecord[]>([]);
+  const [arrivalPlates, setArrivalPlates] = useState<PlateRecord[]>([]);
   const [departureBriefingLoading, setDepartureBriefingLoading] = useState(false);
   const [arrivalBriefingLoading, setArrivalBriefingLoading] = useState(false);
   const [departureFrequenciesLoading, setDepartureFrequenciesLoading] = useState(false);
   const [arrivalFrequenciesLoading, setArrivalFrequenciesLoading] = useState(false);
+  const [departurePlatesLoading, setDeparturePlatesLoading] = useState(false);
+  const [arrivalPlatesLoading, setArrivalPlatesLoading] = useState(false);
   const lastNearbyFetchRef = useRef<{ lat: number; lon: number; fetchedAt: number } | null>(null);
 
   useEffect(() => {
@@ -1588,6 +1676,34 @@ export default function SyntheticVisionPage() {
       })
       .finally(() => {
         if (!cancelled) setDepartureBriefingLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [departureInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const departure = normalizeAirportCode(departureInput);
+    if (!departure) {
+      setDeparturePlates([]);
+      setDeparturePlatesLoading(false);
+      return;
+    }
+    setDeparturePlatesLoading(true);
+    void fetch(apiUrl(`/api/plates/${encodeURIComponent(departure)}`))
+      .then(async (response) => {
+        if (!response.ok) throw new Error("departure plates unavailable");
+        return (await response.json()) as { plates?: PlateRecord[] };
+      })
+      .then((data) => {
+        if (!cancelled) setDeparturePlates(Array.isArray(data.plates) ? data.plates : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDeparturePlates([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDeparturePlatesLoading(false);
       });
     return () => {
       cancelled = true;
@@ -1644,6 +1760,34 @@ export default function SyntheticVisionPage() {
       })
       .finally(() => {
         if (!cancelled) setArrivalBriefingLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [arrivalInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const arrival = normalizeAirportCode(arrivalInput);
+    if (!arrival) {
+      setArrivalPlates([]);
+      setArrivalPlatesLoading(false);
+      return;
+    }
+    setArrivalPlatesLoading(true);
+    void fetch(apiUrl(`/api/plates/${encodeURIComponent(arrival)}`))
+      .then(async (response) => {
+        if (!response.ok) throw new Error("arrival plates unavailable");
+        return (await response.json()) as { plates?: PlateRecord[] };
+      })
+      .then((data) => {
+        if (!cancelled) setArrivalPlates(Array.isArray(data.plates) ? data.plates : []);
+      })
+      .catch(() => {
+        if (!cancelled) setArrivalPlates([]);
+      })
+      .finally(() => {
+        if (!cancelled) setArrivalPlatesLoading(false);
       });
     return () => {
       cancelled = true;
@@ -2120,6 +2264,22 @@ export default function SyntheticVisionPage() {
       secondaryRoute,
     };
   }, [arrivalAirport, arrivalFrequencies, arrivalRunway, departureAirport, departureFrequencies, departureRunway, flightPhase, progressPct]);
+  const departureAirportDiagram = useMemo(
+    () => departurePlates.find(isAirportDiagramPlate) || null,
+    [departurePlates],
+  );
+  const arrivalAirportDiagram = useMemo(
+    () => arrivalPlates.find(isAirportDiagramPlate) || null,
+    [arrivalPlates],
+  );
+  const activeAirportDiagram = useMemo(
+    () => (flightPhase === "surface-departure" || flightPhase === "departure" ? departureAirportDiagram : arrivalAirportDiagram),
+    [arrivalAirportDiagram, departureAirportDiagram, flightPhase],
+  );
+  const activeAirportDiagramLoading =
+    flightPhase === "surface-departure" || flightPhase === "departure"
+      ? departurePlatesLoading
+      : arrivalPlatesLoading;
   const phaseLabel = useMemo(() => {
     switch (flightPhase) {
       case "surface-departure":
@@ -2473,7 +2633,11 @@ export default function SyntheticVisionPage() {
 
             <FlightDemoHudStrip metrics={demoMetrics} />
             <FlightPhaseSequence activePhase={flightPhase} />
-            <AirportSurfacePreview preview={airportSurfacePreview} />
+            <AirportSurfacePreview
+              preview={airportSurfacePreview}
+              liveDiagram={activeAirportDiagram}
+              diagramLoading={activeAirportDiagramLoading}
+            />
           </div>
 
           <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">

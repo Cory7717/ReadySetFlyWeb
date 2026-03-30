@@ -9,6 +9,134 @@ type FlightDeckViewProps = {
   styles: any;
 };
 
+function FlightDeckSurfaceSchematic({ preview, styles }: { preview: any; styles: any }) {
+  if (!preview) return null;
+
+  const renderSegment = (
+    start: { x: number; y: number },
+    end: { x: number; y: number },
+    key: string,
+    style: any,
+  ) => {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const angle = `${Math.atan2(dy, dx)}rad`;
+    return (
+      <View
+        key={key}
+        style={[
+          style,
+          {
+            left: `${(start.x + end.x) / 2}%`,
+            top: `${(start.y + end.y) / 2}%`,
+            width: `${length}%`,
+            marginLeft: `${-length / 2}%`,
+            marginTop: -2,
+            transform: [{ rotate: angle }],
+          },
+        ]}
+      />
+    );
+  };
+
+  return (
+    <View style={styles.flightDeckSurfaceCard}>
+      <Text style={styles.flightDeckPanelTitle}>Airport Surface</Text>
+      <Text style={styles.flightDeckPanelText}>{preview.headline}</Text>
+      <View style={styles.flightDeckSurfaceDiagram}>
+        <View style={styles.flightDeckSurfaceDiagramFrame}>
+          <View style={styles.flightDeckSurfaceRunway} />
+          <View style={styles.flightDeckSurfaceRunwayCenterline} />
+          <Text style={styles.flightDeckSurfaceRunwayLabelTop}>{preview.runwayId}</Text>
+          <Text style={styles.flightDeckSurfaceRunwayLabelBottom}>{preview.runwayId}</Text>
+          <View
+            style={[
+              styles.flightDeckSurfaceHoldShort,
+              preview.holdShortActive ? styles.flightDeckSurfaceHoldShortActive : null,
+            ]}
+          />
+          {preview.secondaryRoute.map((point: any, index: number) => {
+            if (index === preview.secondaryRoute.length - 1) return null;
+            return renderSegment(point, preview.secondaryRoute[index + 1], `surface-secondary-${index}`, styles.flightDeckSurfaceSecondaryRoute);
+          })}
+          {preview.route.map((point: any, index: number) => {
+            if (index === preview.route.length - 1) return null;
+            return renderSegment(point, preview.route[index + 1], `surface-route-${index}`, styles.flightDeckSurfaceRoute);
+          })}
+          <View
+            style={[
+              styles.flightDeckSurfaceOwnship,
+              {
+                left: `${preview.ownship.x}%`,
+                top: `${preview.ownship.y}%`,
+                transform: [{ rotate: `${preview.ownship.headingDeg}deg` }],
+              },
+            ]}
+          >
+            <Ionicons name="navigate" size={16} color={colors.flightBackground} />
+          </View>
+          {preview.runwayOccupied ? (
+            <View style={styles.flightDeckSurfaceOccupiedBadge}>
+              <Text style={styles.flightDeckSurfaceOccupiedText}>OCC</Text>
+            </View>
+          ) : null}
+          <Text style={styles.flightDeckSurfaceRampLabel}>RAMP</Text>
+          <Text style={styles.flightDeckSurfaceTaxiLabelA}>A</Text>
+          <Text style={styles.flightDeckSurfaceTaxiLabelB}>B</Text>
+        </View>
+      </View>
+      <View style={styles.flightDeckSurfaceStatusRow}>
+        <View style={styles.flightDeckSurfaceStatusCard}>
+          <Text style={styles.flightDeckContextCardEyebrow}>Surface Guidance</Text>
+          <Text style={styles.flightDeckContextCardTitle}>{preview.routeCall}</Text>
+          <Text style={styles.flightDeckContextCardText}>{preview.support}</Text>
+        </View>
+        <View style={styles.flightDeckSurfaceStatusCard}>
+          <Text style={styles.flightDeckContextCardEyebrow}>Runway and Comms</Text>
+          <Text style={styles.flightDeckContextCardTitle}>{preview.runwayMeta}</Text>
+          <Text style={styles.flightDeckContextCardText}>
+            GND {preview.groundFreq} - TWR {preview.towerFreq} - ATIS {preview.atisFreq}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.flightDeckControlRow}>
+        <View
+          style={[
+            styles.flightDeckChip,
+            preview.holdShortActive ? styles.flightDeckChipWarning : styles.flightDeckChipActive,
+          ]}
+        >
+          <Text
+            style={[
+              styles.flightDeckChipText,
+              preview.holdShortActive ? styles.flightDeckChipTextWarning : styles.flightDeckChipTextActive,
+            ]}
+          >
+            {preview.holdShortActive ? 'Hold short' : 'Taxi cleared'}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.flightDeckChip,
+            preview.runwayOccupied ? styles.flightDeckChipWarning : null,
+          ]}
+        >
+          <Text
+            style={[
+              styles.flightDeckChipText,
+              preview.runwayOccupied ? styles.flightDeckChipTextWarning : null,
+            ]}
+          >
+            {preview.runwayOccupied ? 'Runway occupied' : 'Runway open'}
+          </Text>
+        </View>
+      </View>
+      <Text style={styles.flightDeckPanelText}>{preview.clearanceLabel}</Text>
+    </View>
+  );
+}
+
 export default function FlightDeckView({ state = {}, actions = {}, styles = {} }: FlightDeckViewProps) {
   const {
     insets,
@@ -64,9 +192,17 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
     visibleTrafficTargets = [],
     selectedDiversion,
     selectedDiversionRunwaySummary,
+    departureBriefing,
+    departureBriefingLoading,
     destinationBriefingLoading,
     destinationRunwayCue,
     destinationRunwayOverlay,
+    activeRunwayOverlay,
+    activeRunwayOverlayLabel,
+    departureFrequenciesLoading,
+    destinationFrequenciesLoading,
+    flightDeckSurfacePreview,
+    flightDeckRunwayOpsSummary,
     selectedDiversionBestComm,
     selectedTrafficTrend,
     mapTacticalSummary = {
@@ -559,16 +695,16 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
               strokeColor={colors.flightAccent}
               strokeWidth={4}
             />
-            {destinationRunwayOverlay ? (
+            {activeRunwayOverlay ? (
               <>
                 <Polyline
-                  coordinates={destinationRunwayOverlay.centerline}
+                  coordinates={activeRunwayOverlay.centerline}
                   strokeColor="rgba(232, 237, 244, 0.86)"
                   strokeWidth={2}
                   lineDashPattern={[8, 8]}
                 />
                 <Polyline
-                  coordinates={destinationRunwayOverlay.runwayBar}
+                  coordinates={activeRunwayOverlay.runwayBar}
                   strokeColor={colors.flightAccent}
                   strokeWidth={4}
                 />
@@ -838,6 +974,41 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 </Text>
               </View>
             ) : null}
+            {flightDeckView === 'map' && flightDeckRunwayOpsSummary ? (
+              <View style={styles.flightDeckRunwayOpsCard}>
+                <View style={styles.flightDeckApproachCardHeader}>
+                  <Text style={styles.flightDeckApproachCardEyebrow}>Runway Ops</Text>
+                  <Text style={styles.flightDeckApproachCardBadge}>
+                    {activeRunwayOverlayLabel || flightDeckRunwayOpsSummary.sourceLabel}
+                  </Text>
+                </View>
+                <Text style={styles.flightDeckApproachCardTitle}>
+                  {flightDeckRunwayOpsSummary.airportIcao} RWY {flightDeckRunwayOpsSummary.runwayId}
+                </Text>
+                <Text style={styles.flightDeckApproachCardText}>{flightDeckRunwayOpsSummary.phaseCall}</Text>
+                <Text style={styles.flightDeckApproachCardText}>
+                  {flightDeckRunwayOpsSummary.runwayMeta}
+                  {typeof flightDeckRunwayOpsSummary.headwindKt === 'number'
+                    ? ` - HW ${Math.round(flightDeckRunwayOpsSummary.headwindKt)} kt`
+                    : ''}
+                  {typeof flightDeckRunwayOpsSummary.crosswindKt === 'number'
+                    ? ` - XW ${Math.round(flightDeckRunwayOpsSummary.crosswindKt)} kt`
+                    : ''}
+                </Text>
+                <View style={styles.flightDeckContextCardActions}>
+                  <TouchableOpacity
+                    style={styles.flightDeckMiniChip}
+                    onPress={() => {
+                      pulseFlightDeckChrome(true);
+                      setFlightDeckDrawerOpen(true);
+                      setFlightDeckPanel('surface');
+                    }}
+                  >
+                    <Text style={styles.flightDeckMiniChipText}>Surface</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
 
             {flightDeckChromeVisible && !flightDeckDrawerOpen ? (
               <View style={styles.flightDeckQuickRail}>
@@ -967,6 +1138,7 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
           <View style={styles.flightDeckPanelTabs}>
             {([
               ['status', 'Status'],
+              ['surface', 'Surface'],
               ['layers', 'Layers'],
               ['traffic', 'Traffic'],
               ['diversions', 'Diversions'],
@@ -1037,6 +1209,43 @@ export default function FlightDeckView({ state = {}, actions = {}, styles = {} }
                 </TouchableOpacity>
               </View>
             </View>
+          )}
+
+          {flightDeckPanel === 'surface' && (
+            <>
+              <FlightDeckSurfaceSchematic preview={flightDeckSurfacePreview} styles={styles} />
+              <View style={styles.flightDeckPanel}>
+                <Text style={styles.flightDeckPanelTitle}>Runway Ops</Text>
+                {flightDeckRunwayOpsSummary ? (
+                  <>
+                    <Text style={styles.flightDeckPanelText}>
+                      {flightDeckRunwayOpsSummary.airportIcao} runway {flightDeckRunwayOpsSummary.runwayId} - {flightDeckRunwayOpsSummary.phaseCall}
+                    </Text>
+                    <Text style={styles.flightDeckPanelText}>
+                      {flightDeckRunwayOpsSummary.runwayMeta}
+                      {typeof flightDeckRunwayOpsSummary.headwindKt === 'number'
+                        ? ` - HW ${Math.round(flightDeckRunwayOpsSummary.headwindKt)} kt`
+                        : ''}
+                      {typeof flightDeckRunwayOpsSummary.crosswindKt === 'number'
+                        ? ` - XW ${Math.round(flightDeckRunwayOpsSummary.crosswindKt)} kt`
+                        : ''}
+                    </Text>
+                    <Text style={styles.flightDeckPanelText}>
+                      GND {flightDeckRunwayOpsSummary.groundFreq} - TWR {flightDeckRunwayOpsSummary.towerFreq} - ATIS {flightDeckRunwayOpsSummary.atisFreq}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.flightDeckPanelText}>
+                    {departureBriefingLoading || destinationBriefingLoading || departureFrequenciesLoading || destinationFrequenciesLoading
+                      ? 'Loading runway operations data...'
+                      : 'Runway operations data will stage when departure or arrival becomes active.'}
+                  </Text>
+                )}
+                {departureBriefing?.runwayInUse && flightDeckSurfacePreview?.mode === 'departure' ? (
+                  <Text style={styles.flightDeckPanelText}>Departure runway in use {departureBriefing.runwayInUse}</Text>
+                ) : null}
+              </View>
+            </>
           )}
 
           {flightDeckPanel === 'status' && routeProgress ? (

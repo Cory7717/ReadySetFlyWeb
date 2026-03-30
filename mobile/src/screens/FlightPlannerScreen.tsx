@@ -19,6 +19,16 @@ import { createGdl90Listener, TrafficTarget } from '../utils/gdl90';
 import { api } from '../services/api';
 import { useIsAuthenticated } from '../utils/auth';
 import {
+  buildArrivalRunwayCue,
+  buildArrivalRunwayOverlay,
+  buildDepartureRunwayOverlay,
+  buildVisionObstacleCues,
+  buildVisionTrafficCue,
+  buildVisionTerrainColumns,
+  type RunwayOverlay,
+  type VisionRunwayCue,
+} from '@shared/flight-scene';
+import {
   bearingBetweenPoints,
   clamp,
   computeMobileRouteProgress,
@@ -28,7 +38,6 @@ import {
   normalizeHeadingDelta,
   offsetLatLonByNm,
   rankTrafficTargets,
-  relativeClockPosition,
 } from '../lib/flightMath';
 import type { MobileRouteProgressSummary } from '../lib/flightMath';
 import FlightDeckView from '../components/flight-deck/FlightDeckView';
@@ -181,26 +190,8 @@ type AirportFrequencyResponse = {
   }> | null;
 };
 
-type DestinationRunwayCue = {
-  runwayId: string;
-  distanceNm: number;
-  runwayHeadingDeg: number;
-  alignmentDeltaDeg: number;
-  leftPct: number;
-  topPct: number;
-  widthPct: number;
-  heightPct: number;
-  centerlineLeftPct: number;
-  centerlineTopPct: number;
-  centerlineHeightPct: number;
-  distanceLabel: string;
-};
-
-type DestinationRunwayOverlay = {
-  runwayId: string;
-  centerline: Array<{ latitude: number; longitude: number }>;
-  runwayBar: Array<{ latitude: number; longitude: number }>;
-};
+type DestinationRunwayCue = VisionRunwayCue;
+type DestinationRunwayOverlay = RunwayOverlay;
 
 type FlightDeckSurfacePoint = {
   x: number;
@@ -1159,88 +1150,51 @@ export default function FlightPlannerScreen() {
   const visionTerrainColumns = useMemo(() => {
     const samples = terrainProfile?.samples ?? [];
     const ownshipAltitude = activeOwnship?.altitudeFt ?? simulationAltitudeFt;
-    if (!samples.length || !Number.isFinite(ownshipAltitude)) return [];
-    const maxElevation = Math.max(...samples.map((sample) => sample.elevationFt ?? 0), 1);
-    return samples.slice(0, 14).map((sample, index, arr) => {
-      const elevation = sample.elevationFt ?? 0;
-      const ratio = Math.max(0.08, Math.min(0.92, elevation / Math.max(maxElevation, ownshipAltitude)));
-      const danger = ownshipAltitude - elevation;
-      return {
-        key: `terrain-column-${index}`,
-        leftPct: arr.length <= 1 ? 50 : (index / (arr.length - 1)) * 100,
-        heightPct: Math.max(10, Math.min(60, ratio * 68)),
-        risk:
-          danger < 1000 ? 'warning' : danger < 2000 ? 'caution' : 'nominal',
-      };
+    return buildVisionTerrainColumns({
+      samples,
+      ownshipAltitudeFt: ownshipAltitude,
+      maxColumns: 14,
+      keyPrefix: 'terrain-column',
     });
   }, [activeOwnship?.altitudeFt, simulationAltitudeFt, terrainProfile?.samples]);
   const visionObstacleCues = useMemo(() => {
     const obstacles = obstacleScan?.obstacles ?? [];
     if (!obstacles.length || !activeOwnship) return [];
-    return obstacles.slice(0, 3).map((obstacle, index) => {
-      const bearingToObstacle = bearingBetweenPoints(
-        { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
-        { latitude: obstacle.lat, longitude: obstacle.lon },
-      );
-      const bearingDelta = normalizeHeadingDelta(bearingToObstacle - (activeOwnship.heading ?? 0));
-      const xPct = Math.max(14, Math.min(86, 50 + bearingDelta / 2.2));
-      const obstacleAltitude = obstacle.amslFt ?? obstacle.aglFt ?? 0;
-      const altitudeDelta = obstacleAltitude - (activeOwnship.altitudeFt ?? simulationAltitudeFt);
-      const yPct = Math.max(26, Math.min(76, 54 + altitudeDelta / 180));
-      return {
-        key: `vision-obstacle-${obstacle.id}-${index}`,
-        xPct,
-        yPct,
-        risk: altitudeDelta > -700 ? 'warning' : altitudeDelta > -1500 ? 'caution' : 'nominal',
-      };
+    return buildVisionObstacleCues({
+      ownship: {
+        lat: activeOwnship.lat,
+        lon: activeOwnship.lon,
+        heading: activeOwnship.heading ?? 0,
+        altitudeFt: activeOwnship.altitudeFt ?? simulationAltitudeFt,
+      },
+      obstacles,
+      maxCues: 3,
     });
   }, [activeOwnship, obstacleScan?.obstacles, simulationAltitudeFt]);
   const visionTrafficCue = useMemo(() => {
     if (!selectedTrafficTarget || !activeOwnship) return null;
-    const bearingToTraffic = bearingBetweenPoints(
-      { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
-      { latitude: selectedTrafficTarget.lat, longitude: selectedTrafficTarget.lon },
-    );
-    const bearingDelta = normalizeHeadingDelta(bearingToTraffic - (activeOwnship.heading ?? 0));
-    const absBearingDelta = Math.abs(bearingDelta);
-    const sector =
-      absBearingDelta <= 20
-        ? 'ahead'
-        : absBearingDelta <= 70
-          ? bearingDelta < 0
-            ? 'left crossing'
-            : 'right crossing'
-          : absBearingDelta >= 135
-            ? 'aft sector'
-            : bearingDelta < 0
-              ? 'left'
-              : 'right';
-    const trend = trafficTrendMap[selectedTrafficTarget.id];
-    const vectorDxPct = clamp((trend?.bearingRateDegPerMin ?? 0) / 8, -8, 8);
-    const vectorDyPct =
-      trend?.distanceRateNmPerMin == null
-        ? 0
-        : trend.distanceRateNmPerMin < 0
-          ? 8
-          : trend.distanceRateNmPerMin > 0
-            ? -8
-            : 0;
-    return {
-      xPct: clamp(50 + bearingDelta / 1.8, 18, 82),
-      yPct: clamp(48 - (selectedTrafficTarget.altitudeDeltaFt ?? 0) / 220, 18, 72),
-      threat: selectedTrafficTarget.threatLevel,
-      sector,
-      clock: relativeClockPosition(bearingDelta),
-      closureText:
-        trend?.closureText ||
-        (selectedTrafficTarget.distanceNm <= 2 && absBearingDelta <= 35
-          ? 'Converging'
-          : selectedTrafficTarget.distanceNm <= 4
-            ? 'Near sector'
-            : 'Monitor'),
-      vectorDxPct,
-      vectorDyPct,
-    };
+    const closureOverride =
+      trafficTrendMap[selectedTrafficTarget.id]?.closureText ||
+      undefined;
+    return buildVisionTrafficCue({
+      ownship: {
+        lat: activeOwnship.lat,
+        lon: activeOwnship.lon,
+        heading: activeOwnship.heading ?? 0,
+        altitudeFt: activeOwnship.altitudeFt ?? simulationAltitudeFt,
+      },
+      target: {
+        id: selectedTrafficTarget.id,
+        lat: selectedTrafficTarget.lat,
+        lon: selectedTrafficTarget.lon,
+        altitudeDeltaFt: selectedTrafficTarget.altitudeDeltaFt,
+        distanceNm: selectedTrafficTarget.distanceNm,
+        threatLevel: selectedTrafficTarget.threatLevel,
+      },
+      bearingRateDegPerMin: trafficTrendMap[selectedTrafficTarget.id]?.bearingRateDegPerMin ?? 0,
+      distanceRateNmPerMin: trafficTrendMap[selectedTrafficTarget.id]?.distanceRateNmPerMin,
+      closureText: closureOverride,
+    });
   }, [activeOwnship, selectedTrafficTarget, trafficTrendMap]);
   const visionRouteGuidance = useMemo(() => {
     if (!activeOwnship || !nextWaypointMeta || !routeProgress) return null;
@@ -2728,109 +2682,48 @@ export default function FlightPlannerScreen() {
   const destinationRunwayCue = useMemo<DestinationRunwayCue | null>(() => {
     const destinationPoint = routePoints[routePoints.length - 1];
     if (!activeOwnship || !destinationPoint || !destinationRunway) return null;
-    const distanceNm = getDistanceNmFromLatLon(
-      { lat: activeOwnship.lat, lon: activeOwnship.lon },
-      { lat: destinationPoint.latitude, lon: destinationPoint.longitude },
-    );
-    if ((flightPhase !== 'arrival' && distanceNm > 18) || distanceNm > 30) return null;
-    const bearingToAirport = bearingBetweenPoints(
-      { latitude: activeOwnship.lat, longitude: activeOwnship.lon },
-      { latitude: destinationPoint.latitude, longitude: destinationPoint.longitude },
-    );
-    const approachCourseErrorDeg = normalizeHeadingDelta(bearingToAirport - destinationRunway.headingDeg);
-    const currentHeading = activeOwnship.heading ?? destinationRunway.headingDeg;
-    const alignmentDeltaDeg = normalizeHeadingDelta(currentHeading - destinationRunway.headingDeg);
-    const distanceFactor = clamp((18 - Math.min(distanceNm, 18)) / 18, 0, 1);
-    const widthPct = 10 + distanceFactor * 20;
-    const heightPct = 3.5 + distanceFactor * 10;
-    const leftCenterPct = 50 + clamp(approachCourseErrorDeg * 0.72, -18, 18);
+    if (flightPhase !== 'arrival' && flightPhase !== 'surface-arrival') return null;
     const destinationElevationFt = terrainProfile?.samples?.[terrainProfile.samples.length - 1]?.elevationFt ?? 0;
     const currentAltitudeFt = activeOwnship.altitudeFt ?? simulationAltitudeFt;
-    const glideslopeTargetFt = destinationElevationFt + distanceNm * 318 + 50;
-    const glideslopeErrorFt = currentAltitudeFt - glideslopeTargetFt;
-    const topCenterPct = clamp(58 - distanceFactor * 17 + glideslopeErrorFt / 145, 23, 74);
-    return {
-      runwayId: destinationRunway.runwayId,
-      distanceNm,
-      runwayHeadingDeg: destinationRunway.headingDeg,
-      alignmentDeltaDeg,
-      leftPct: clamp(leftCenterPct - widthPct / 2, 8, 92 - widthPct),
-      topPct: clamp(topCenterPct - heightPct / 2, 16, 82 - heightPct),
-      widthPct,
-      heightPct,
-      centerlineLeftPct: leftCenterPct,
-      centerlineTopPct: clamp(topCenterPct - (10 + distanceFactor * 11), 14, 64),
-      centerlineHeightPct: 10 + distanceFactor * 16,
-      distanceLabel: `${distanceNm.toFixed(1)} NM`,
-    };
+    return buildArrivalRunwayCue({
+      ownship: {
+        lat: activeOwnship.lat,
+        lon: activeOwnship.lon,
+        heading: activeOwnship.heading ?? destinationRunway.headingDeg,
+        altitudeFt: currentAltitudeFt,
+      },
+      airport: {
+        latitude: destinationPoint.latitude,
+        longitude: destinationPoint.longitude,
+      },
+      runway: destinationRunway,
+      destinationElevationFt,
+      activeRangeNm: 18,
+      maxDistanceNm: 30,
+    });
   }, [activeOwnship, destinationRunway, flightPhase, routePoints, simulationAltitudeFt, terrainProfile?.samples]);
   const destinationRunwayOverlay = useMemo<DestinationRunwayOverlay | null>(() => {
     const destinationPoint = routePoints[routePoints.length - 1];
     if (!destinationPoint || !destinationRunway || !destinationRunwayCue) return null;
-    const reciprocal = (destinationRunway.headingDeg + 180) % 360;
-    const approachLengthNm = flightPhase === 'arrival' ? 8 : 5;
-    const finalApproachStart = offsetLatLonByNm(
-      destinationPoint.latitude,
-      destinationPoint.longitude,
-      Math.cos(toRad(reciprocal)) * approachLengthNm,
-      Math.sin(toRad(reciprocal)) * approachLengthNm,
-    );
-    const leftThreshold = offsetLatLonByNm(
-      destinationPoint.latitude,
-      destinationPoint.longitude,
-      Math.cos(toRad(destinationRunway.headingDeg - 90)) * 0.12,
-      Math.sin(toRad(destinationRunway.headingDeg - 90)) * 0.12,
-    );
-    const rightThreshold = offsetLatLonByNm(
-      destinationPoint.latitude,
-      destinationPoint.longitude,
-      Math.cos(toRad(destinationRunway.headingDeg + 90)) * 0.12,
-      Math.sin(toRad(destinationRunway.headingDeg + 90)) * 0.12,
-    );
-    return {
-      runwayId: destinationRunway.runwayId,
-      centerline: [
-        { latitude: finalApproachStart.lat, longitude: finalApproachStart.lon },
-        { latitude: destinationPoint.latitude, longitude: destinationPoint.longitude },
-      ],
-      runwayBar: [
-        { latitude: leftThreshold.lat, longitude: leftThreshold.lon },
-        { latitude: rightThreshold.lat, longitude: rightThreshold.lon },
-      ],
-    };
+    return buildArrivalRunwayOverlay({
+      airport: {
+        latitude: destinationPoint.latitude,
+        longitude: destinationPoint.longitude,
+      },
+      runway: destinationRunway,
+      approachLengthNm: flightPhase === 'arrival' ? 8 : 5,
+    });
   }, [destinationRunway, destinationRunwayCue, flightPhase, routePoints]);
   const departureRunwayOverlay = useMemo<DestinationRunwayOverlay | null>(() => {
     const departurePoint = routePoints[0];
     if (!departurePoint || !departureRunway || flightPhase !== 'departure') return null;
-    const runwayExit = offsetLatLonByNm(
-      departurePoint.latitude,
-      departurePoint.longitude,
-      Math.cos(toRad(departureRunway.headingDeg)) * 6.2,
-      Math.sin(toRad(departureRunway.headingDeg)) * 6.2,
-    );
-    const leftThreshold = offsetLatLonByNm(
-      departurePoint.latitude,
-      departurePoint.longitude,
-      Math.cos(toRad(departureRunway.headingDeg - 90)) * 0.12,
-      Math.sin(toRad(departureRunway.headingDeg - 90)) * 0.12,
-    );
-    const rightThreshold = offsetLatLonByNm(
-      departurePoint.latitude,
-      departurePoint.longitude,
-      Math.cos(toRad(departureRunway.headingDeg + 90)) * 0.12,
-      Math.sin(toRad(departureRunway.headingDeg + 90)) * 0.12,
-    );
-    return {
-      runwayId: departureRunway.runwayId,
-      centerline: [
-        { latitude: departurePoint.latitude, longitude: departurePoint.longitude },
-        { latitude: runwayExit.lat, longitude: runwayExit.lon },
-      ],
-      runwayBar: [
-        { latitude: leftThreshold.lat, longitude: leftThreshold.lon },
-        { latitude: rightThreshold.lat, longitude: rightThreshold.lon },
-      ],
-    };
+    return buildDepartureRunwayOverlay({
+      airport: {
+        latitude: departurePoint.latitude,
+        longitude: departurePoint.longitude,
+      },
+      runway: departureRunway,
+    });
   }, [departureRunway, flightPhase, routePoints]);
   const activeRunwayOverlay = flightPhase === 'arrival' ? destinationRunwayOverlay : departureRunwayOverlay;
   const activeRunwayOverlayLabel = flightPhase === 'arrival'

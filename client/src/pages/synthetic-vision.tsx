@@ -1408,6 +1408,25 @@ function FlightDemoVisionSurface({
   const trafficCueY = trafficProjection
     ? clamp(52 - trafficProjection.forwardNm * 2.8 - selectedTrafficTarget!.altitudeDeltaFt / 180, 22, 80)
     : null;
+  const terrainBands = terrainState
+    ? [
+        {
+          d: `M 0 100 L 0 ${clamp(76 - terrainState.terrainAheadFt / 280, 38, 72)} C 12 ${clamp(58 - terrainState.obstacleAheadFt / 360, 28, 62)}, 24 ${clamp(82 - terrainState.terrainAheadFt / 320, 40, 78)}, 36 ${clamp(70 - terrainState.obstacleAheadFt / 350, 32, 66)} C 48 ${clamp(60 - terrainState.terrainAheadFt / 330, 28, 60)}, 60 ${clamp(84 - terrainState.obstacleAheadFt / 340, 44, 80)}, 72 ${clamp(72 - terrainState.terrainAheadFt / 310, 36, 70)} C 84 ${clamp(64 - terrainState.obstacleAheadFt / 360, 30, 64)}, 92 ${clamp(80 - terrainState.terrainAheadFt / 350, 42, 78)}, 100 ${clamp(74 - terrainState.obstacleAheadFt / 420, 38, 76)} L 100 100 Z`,
+          fill: "rgba(94, 67, 41, 0.92)",
+        },
+        {
+          d: `M 0 100 L 0 ${clamp(86 - terrainState.terrainAheadFt / 420, 56, 82)} C 18 ${clamp(78 - terrainState.obstacleAheadFt / 500, 50, 78)}, 36 ${clamp(92 - terrainState.terrainAheadFt / 520, 58, 88)}, 52 ${clamp(82 - terrainState.obstacleAheadFt / 480, 52, 80)} C 68 ${clamp(72 - terrainState.terrainAheadFt / 450, 46, 74)}, 84 ${clamp(90 - terrainState.obstacleAheadFt / 520, 58, 86)}, 100 ${clamp(84 - terrainState.terrainAheadFt / 460, 54, 84)} L 100 100 Z`,
+          fill: "rgba(58, 40, 23, 0.88)",
+        },
+      ]
+    : [];
+  const obstacleColumn = terrainState
+    ? {
+        leftPct: clamp(58 + (terrainState.obstacleAheadFt - terrainState.terrainAheadFt) / 140, 48, 74),
+        topPct: clamp(62 - terrainState.obstacleAheadFt / 170, 34, 68),
+        heightPct: clamp(14 + terrainState.obstacleAheadFt / 260, 18, 40),
+      }
+    : null;
 
   return (
     <div className="relative h-[420px] overflow-hidden rounded-[24px] border border-slate-800 bg-[#060A10]">
@@ -1417,6 +1436,23 @@ function FlightDemoVisionSurface({
       >
         <div className="absolute inset-0 bg-[linear-gradient(180deg,#071225_0%,#12315A_32%,#28558A_49%,#C58B54_49.6%,#695034_50.2%,#45311F_74%,#21170F_100%)]" />
         <div className="absolute inset-x-0 top-1/2 h-[2px] bg-white/85 shadow-[0_0_18px_rgba(255,255,255,0.18)]" />
+        {terrainBands.length ? (
+          <svg className="absolute inset-x-0 bottom-0 h-[54%] w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+            {terrainBands.map((band, index) => (
+              <path key={`terrain-band-${index}`} d={band.d} fill={band.fill} />
+            ))}
+          </svg>
+        ) : null}
+        {obstacleColumn ? (
+          <div
+            className="absolute w-[3px] rounded-full bg-[#E8453C]/85 shadow-[0_0_18px_rgba(232,69,60,0.35)]"
+            style={{
+              left: `${obstacleColumn.leftPct}%`,
+              top: `${obstacleColumn.topPct}%`,
+              height: `${obstacleColumn.heightPct}%`,
+            }}
+          />
+        ) : null}
         {pitchLadder.map((value) => (
           <div
             key={`pitch-${value}`}
@@ -1518,7 +1554,7 @@ function FlightDemoVisionSurface({
         side="right"
         formatValue={(value) => Math.max(0, Math.round(value / 10) * 10).toString()}
       />
-      <div className="absolute left-4 top-4 z-20 max-w-[190px] rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-4 py-3 backdrop-blur">
+      <div className="absolute left-3 top-3 z-20 max-w-[152px] rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 backdrop-blur md:left-4 md:top-4 md:max-w-[190px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Vision guidance</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {nextWaypoint ? `Track ${nextWaypoint}` : "Route tunnel active"}
@@ -1527,9 +1563,9 @@ function FlightDemoVisionSurface({
             {phaseLabel} - {nextWaypointDistanceNm != null ? `${nextWaypointDistanceNm.toFixed(1)} NM to next fix` : "Monitoring current leg"}
           </div>
       </div>
-      <div className="absolute right-4 top-4 z-20 flex max-w-[208px] flex-col gap-2">
+      <div className="absolute right-3 top-3 z-20 flex max-w-[150px] flex-col gap-2 md:right-4 md:top-4 md:max-w-[208px]">
           {runwayCue ? (
-            <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-4 py-3 text-right backdrop-blur">
+            <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 text-right backdrop-blur md:px-4 md:py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Approach</div>
               <div className="mt-1 font-mono text-xl text-[#F5A623]">RWY {runwayCue.runwayId}</div>
               <div className="mt-1 text-xs text-[#7A9BB8]">
@@ -1541,14 +1577,14 @@ function FlightDemoVisionSurface({
               </div>
             </div>
           ) : null}
-          <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-4 py-3 text-right backdrop-blur">
+          <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 text-right backdrop-blur md:px-4 md:py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Remain</div>
             <div className="mt-1 font-mono text-xl text-[#F5A623]">{remainingRouteNm.toFixed(1)} NM</div>
             <div className="mt-1 text-xs text-[#7A9BB8]">{speedTrend}</div>
           </div>
       </div>
       {terrainState ? (
-        <div className="absolute bottom-[116px] left-[114px] z-20 max-w-[210px] rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-4 py-3 backdrop-blur">
+        <div className="absolute bottom-[98px] left-3 right-[34%] z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 backdrop-blur md:bottom-[116px] md:left-[114px] md:right-auto md:max-w-[210px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Terrain guidance</div>
           <div
             className={`mt-1 text-sm font-semibold ${
@@ -1584,7 +1620,7 @@ function FlightDemoVisionSurface({
         </div>
       ) : null}
       {selectedTrafficTarget ? (
-        <div className="absolute bottom-[116px] right-[114px] z-20 max-w-[210px] rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-4 py-3 text-right backdrop-blur">
+        <div className="absolute bottom-[98px] left-[34%] right-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 text-right backdrop-blur md:bottom-[116px] md:left-auto md:right-[114px] md:max-w-[210px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Traffic</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {selectedTrafficTarget.callsign} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
@@ -1614,7 +1650,7 @@ function FlightDemoVisionSurface({
         </div>
       </div>
       {selectedDiversion ? (
-        <div className="absolute left-1/2 top-[7.5%] z-20 min-w-[196px] -translate-x-1/2 rounded-full border border-[#1E2D42] bg-[#091018]/72 px-4 py-2 text-center backdrop-blur">
+        <div className="absolute left-1/2 top-[17%] z-20 w-[min(68%,220px)] -translate-x-1/2 rounded-full border border-[#1E2D42] bg-[#091018]/72 px-4 py-2 text-center backdrop-blur md:top-[7.5%] md:min-w-[196px] md:w-auto">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Best diversion</div>
           <div className="mt-0.5 text-sm font-semibold text-[#E8EDF4]">
             {selectedDiversion.icao} - {selectedDiversion.distanceNm.toFixed(1)} NM - {selectedDiversion.flightCategory || "WX --"}
@@ -2123,6 +2159,36 @@ export default function SyntheticVisionPage() {
       distanceLabel: `${distanceNm.toFixed(1)} NM`,
     };
   }, [arrivalAirport, arrivalRunway, flightFrame?.ownship, flightPhase]);
+  const departureRunwayCue = useMemo<DemoRunwayCue | null>(() => {
+    if (!flightFrame?.ownship || !departureAirport || !departureRunway) return null;
+    const distanceNm = greatCircleNm(
+      { latitude: flightFrame.ownship.lat, longitude: flightFrame.ownship.lon },
+      { latitude: departureAirport.latitude, longitude: departureAirport.longitude },
+    );
+    if ((flightPhase !== "surface-departure" && flightPhase !== "departure") || distanceNm > 6) return null;
+    const alignmentDeltaDeg = smallestAngleDiff(departureRunway.headingDeg, flightFrame.ownship.heading);
+    const distanceFactor = clamp((6 - Math.min(distanceNm, 6)) / 6, 0, 1);
+    const widthPct = 8 + distanceFactor * 20;
+    const heightPct = 2.5 + distanceFactor * 9;
+    const leftCenterPct = 50 - clamp(alignmentDeltaDeg * 0.5, -12, 12);
+    const topCenterPct = clamp(67 - distanceFactor * 10 - flightFrame.ownship.altitudeFt / 700, 48, 74);
+    return {
+      runwayId: departureRunway.runwayId,
+      distanceNm,
+      alignmentDeltaDeg,
+      leftPct: clamp(leftCenterPct - widthPct / 2, 8, 92 - widthPct),
+      topPct: clamp(topCenterPct - heightPct / 2, 18, 82 - heightPct),
+      widthPct,
+      heightPct,
+      centerlineLeftPct: leftCenterPct,
+      centerlineTopPct: clamp(topCenterPct - (6 + distanceFactor * 10), 16, 70),
+      centerlineHeightPct: 7 + distanceFactor * 14,
+      distanceLabel: distanceNm < 1 ? `${(distanceNm * 6076).toFixed(0)} FT` : `${distanceNm.toFixed(1)} NM`,
+    };
+  }, [departureAirport, departureRunway, flightFrame?.ownship, flightPhase]);
+  const activeVisionRunwayCue = flightPhase === "surface-departure" || flightPhase === "departure"
+    ? departureRunwayCue
+    : arrivalRunwayCue;
   const arrivalRunwayOverlay = useMemo<DemoRunwayOverlay | null>(() => {
     if (!arrivalAirport || !arrivalRunway || !arrivalRunwayCue) return null;
     const reciprocal = (arrivalRunway.headingDeg + 180) % 360;
@@ -2658,7 +2724,7 @@ export default function SyntheticVisionPage() {
                 terrainState={terrainState}
                 selectedTrafficTarget={selectedTrafficTarget}
                 selectedDiversion={selectedDiversion}
-                runwayCue={arrivalRunwayCue}
+                runwayCue={activeVisionRunwayCue}
               />
             ) : null}
 

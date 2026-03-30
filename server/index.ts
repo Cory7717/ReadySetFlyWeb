@@ -18,20 +18,14 @@ import cors from "cors";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startFinanceAlertsJob } from "./jobs/financeAlerts";
+import { buildCorsOptions } from "./corsOptions";
 
 const app = express();
 // Behind Render's proxy; required for secure cookies/session in OAuth flows
 app.set("trust proxy", 1);
 
-// CORS configuration - allow requests from frontend
-app.use(cors({
-  origin: process.env.NODE_ENV === "production" 
-    ? ["https://readysetfly.us", "https://www.readysetfly.us"]
-    : ["http://localhost:5173", "http://localhost:5000"],
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
+// CORS configuration - allow same-origin production traffic and explicit web origins.
+app.use(cors(buildCorsOptions()));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

@@ -1,10 +1,28 @@
-// Centralized API base + helpers to avoid hitting GitHub Pages in production
-// In dev, the Vite proxy handles relative `/api` calls, so keep base empty on localhost.
+// Centralized API base + helpers.
+// Prefer same-origin for the live web app so `readysetfly.us` can use its own `/api`
+// path without forcing browser CORS to the Render API origin.
 
-const DEFAULT_API_BASE =
-  typeof window !== "undefined" && window.location.hostname.includes("localhost")
-    ? ""
-    : "https://readysetfly-api.onrender.com";
+function resolveDefaultApiBase(): string {
+  if (typeof window === "undefined") {
+    return "https://readysetfly-api.onrender.com";
+  }
+
+  const hostname = window.location.hostname.toLowerCase();
+  const isLocalHost =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]";
+
+  const prefersSameOrigin =
+    isLocalHost ||
+    hostname === "readysetfly.us" ||
+    hostname === "www.readysetfly.us" ||
+    hostname.endsWith(".onrender.com");
+
+  return prefersSameOrigin ? "" : "https://readysetfly-api.onrender.com";
+}
+
+const DEFAULT_API_BASE = resolveDefaultApiBase();
 
 const API_BASE =
   // Highest priority: explicit env override

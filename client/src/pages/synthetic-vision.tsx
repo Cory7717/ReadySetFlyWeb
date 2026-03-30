@@ -449,6 +449,7 @@ function FlightDemoMapSurface({
   terrainState,
   runwayCue,
   runwayOverlay,
+  runwayOverlayLabel,
 }: {
   routePoints: DemoRoutePoint[];
   ownship: { lat: number; lon: number; heading: number };
@@ -462,6 +463,7 @@ function FlightDemoMapSurface({
   terrainState: DemoTerrainState | null;
   runwayCue: DemoRunwayCue | null;
   runwayOverlay: DemoRunwayOverlay | null;
+  runwayOverlayLabel: string | null;
 }) {
   const rangeAheadNm = clamp(Math.max(remainingRouteNm * 0.42, 18), 18, 64);
   const rangeSideNm = Math.max(14, rangeAheadNm * 0.72);
@@ -719,7 +721,7 @@ function FlightDemoMapSurface({
           {flightPhase.startsWith("surface") ? "Surface follow" : "Map follow"}
         </div>
         <div className="rounded-full border border-slate-800 bg-slate-950/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-300">
-          {runwayCue ? `Final ${runwayCue.runwayId}` : "Track up"}
+          {runwayOverlayLabel || (runwayCue ? `Final ${runwayCue.runwayId}` : "Track up")}
         </div>
       </div>
       <div className="pointer-events-none absolute inset-x-4 bottom-4 grid gap-3 md:grid-cols-3">
@@ -866,6 +868,14 @@ function AirportSurfacePreview({ preview }: { preview: DemoSurfacePreview | null
             {preview.airportIcao} runway {preview.runwayId}
           </div>
           <div className="mt-1 text-sm text-[#7A9BB8]">{preview.headline}</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <div className="rounded-full border border-[#1E2D42] bg-[#091018] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#4A9FD4]">
+              Runway data live
+            </div>
+            <div className="rounded-full border border-[#1E2D42] bg-[#091018] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7A9BB8]">
+              Diagram preview
+            </div>
+          </div>
         </div>
         <div className="rounded-full border border-[#1E2D42] bg-[#091018] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#C8922A]">
           {preview.mode === "departure" ? "Taxi out" : "Taxi in"}
@@ -936,6 +946,9 @@ function AirportSurfacePreview({ preview }: { preview: DemoSurfacePreview | null
           <div className="rounded-[20px] border border-[#1E2D42] bg-[#091018] px-4 py-3">
             <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Runway and comms</div>
             <div className="mt-2 text-sm font-semibold text-[#E8EDF4]">{preview.runwayMeta}</div>
+            <div className="mt-1 text-xs text-[#7A9BB8]">
+              Runway advisory and airport frequencies are API-backed. Surface pathing is a product demo layer.
+            </div>
             <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-[#7A9BB8]">
               <div>
                 <div className="uppercase tracking-[0.16em]">Ground</div>
@@ -1867,6 +1880,47 @@ export default function SyntheticVisionPage() {
       ],
     };
   }, [arrivalAirport, arrivalRunway, arrivalRunwayCue]);
+  const departureRunwayOverlay = useMemo<DemoRunwayOverlay | null>(() => {
+    if (!departureAirport || !departureRunway || (flightPhase !== "surface-departure" && flightPhase !== "departure")) return null;
+    const runwayExit = offsetPointByBearing(
+      { lat: departureAirport.latitude, lon: departureAirport.longitude },
+      departureRunway.headingDeg,
+      6.2,
+    );
+    const leftThreshold = offsetPointByBearing(
+      { lat: departureAirport.latitude, lon: departureAirport.longitude },
+      departureRunway.headingDeg - 90,
+      0.12,
+    );
+    const rightThreshold = offsetPointByBearing(
+      { lat: departureAirport.latitude, lon: departureAirport.longitude },
+      departureRunway.headingDeg + 90,
+      0.12,
+    );
+    return {
+      runwayId: departureRunway.runwayId,
+      centerline: [
+        { latitude: departureAirport.latitude, longitude: departureAirport.longitude },
+        { latitude: runwayExit.lat, longitude: runwayExit.lon },
+      ],
+      runwayBar: [
+        { latitude: leftThreshold.lat, longitude: leftThreshold.lon },
+        { latitude: rightThreshold.lat, longitude: rightThreshold.lon },
+      ],
+    };
+  }, [departureAirport, departureRunway, flightPhase]);
+  const activeMapRunwayOverlay = flightPhase === "arrival" || flightPhase === "surface-arrival"
+    ? arrivalRunwayOverlay
+    : departureRunwayOverlay;
+  const activeMapRunwayOverlayLabel = useMemo(() => {
+    if (flightPhase === "surface-departure" || flightPhase === "departure") {
+      return departureRunway ? `Dep ${departureRunway.runwayId}` : null;
+    }
+    if (flightPhase === "arrival" || flightPhase === "surface-arrival") {
+      return arrivalRunway ? `Final ${arrivalRunway.runwayId}` : null;
+    }
+    return null;
+  }, [arrivalRunway, departureRunway, flightPhase]);
   const airportSurfacePreview = useMemo<DemoSurfacePreview | null>(() => {
     const departureSurface = flightPhase === "surface-departure" || flightPhase === "departure";
     const airport = departureSurface ? departureAirport : arrivalAirport;
@@ -2288,7 +2342,8 @@ export default function SyntheticVisionPage() {
                 selectedDiversion={selectedDiversion}
                 terrainState={terrainState}
                 runwayCue={arrivalRunwayCue}
-                runwayOverlay={arrivalRunwayOverlay}
+                runwayOverlay={activeMapRunwayOverlay}
+                runwayOverlayLabel={activeMapRunwayOverlayLabel}
               />
             ) : null}
 
@@ -2417,6 +2472,17 @@ export default function SyntheticVisionPage() {
                         {phaseLabel}
                       </Badge>
                     </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="rounded-full border border-[#1E2D42] bg-[#091018] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#4A9FD4]">
+                        Briefing live
+                      </div>
+                      <div className="rounded-full border border-[#1E2D42] bg-[#091018] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#4A9FD4]">
+                        Comms live
+                      </div>
+                      <div className="rounded-full border border-[#1E2D42] bg-[#091018] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7A9BB8]">
+                        Diagram demo
+                      </div>
+                    </div>
                     <div className="mt-4">
                       <FlightDemoRunwayMini
                         runwayHeadingDeg={airportOpsSummary.runwayHeadingDeg}
@@ -2491,24 +2557,28 @@ export default function SyntheticVisionPage() {
                 <div className="rounded-2xl border border-[#1E2D42] bg-[#0A0E14] px-4 py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Approach</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Runway guidance</div>
                       <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
-                        {arrivalRunwayCue
-                          ? `Runway ${arrivalRunwayCue.runwayId} - ${arrivalRunwayCue.distanceLabel}`
-                          : arrivalBriefingLoading
-                            ? "Loading runway advisory"
+                        {flightPhase === "surface-departure" || flightPhase === "departure"
+                          ? departureRunway
+                            ? `Departure runway ${departureRunway.runwayId} corridor active`
+                            : "Departure runway staging"
+                          : arrivalRunwayCue
+                            ? `Final runway ${arrivalRunwayCue.runwayId} active`
                             : arrivalRunway
-                              ? `Runway ${arrivalRunway.runwayId} staged`
-                              : "No runway briefing"}
+                              ? `Arrival runway ${arrivalRunway.runwayId} staged`
+                              : "Arrival runway staging"}
                       </div>
                       <div className="mt-1 text-xs text-[#7A9BB8]">
-                        {arrivalRunwayCue
-                          ? `${Math.abs(arrivalRunwayCue.alignmentDeltaDeg) < 4 ? "Aligned on final" : "Approach correction active"} with runway box and top-down centerline.`
-                          : "Web demo now mirrors the mobile approach symbology path."}
+                        {flightPhase === "surface-departure" || flightPhase === "departure"
+                          ? "Map mode now carries the departure runway centerline and departure corridor through the climb transition."
+                          : arrivalRunwayCue
+                            ? `${Math.abs(arrivalRunwayCue.alignmentDeltaDeg) < 4 ? "Aligned on final" : "Approach correction active"} with runway box and top-down centerline.`
+                            : "Approach guidance is staged from the arrival runway briefing."}
                       </div>
                     </div>
                     <Badge className="border-[#1E2D42] bg-[#111820] text-[#7A9BB8] hover:bg-[#111820]">
-                      {arrivalRunwayCue ? "active" : "standby"}
+                      {flightPhase === "surface-departure" || flightPhase === "departure" ? "departure" : arrivalRunwayCue ? "active" : "standby"}
                     </Badge>
                   </div>
                 </div>
@@ -2523,6 +2593,24 @@ export default function SyntheticVisionPage() {
                 it remains a product demonstration surface.
               </AlertDescription>
             </Alert>
+
+            <div className="rounded-[24px] border border-[#1E2D42] bg-[#0C121B]/96 p-5 text-sm text-[#7A9BB8]">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Data sources</div>
+              <div className="mt-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  <div className="mt-1 h-2 w-2 rounded-full bg-[#4A9FD4]" />
+                  <div>Airport runway advisory and runway metadata are live API responses.</div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="mt-1 h-2 w-2 rounded-full bg-[#4A9FD4]" />
+                  <div>Ground, tower, and ATIS frequencies are live API responses.</div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <div className="mt-1 h-2 w-2 rounded-full bg-[#C8922A]" />
+                  <div>Airport surface geometry is still a polished demo layer, not a live georeferenced airport diagram.</div>
+                </div>
+              </div>
+            </div>
 
             <div className="rounded-[24px] border border-[#1E2D42] bg-[#0C121B]/96 p-5 text-sm text-[#7A9BB8]">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Route assist</div>

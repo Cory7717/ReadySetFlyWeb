@@ -39,6 +39,7 @@ import { getEntitlementsForUser, isSuperAdminEmail, mapPayPalStatusToMembership,
 import { maybeSyncLogbookProSubscription } from "./paypal-subscription-sync";
 import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
 import { resolveTfmsAccess } from "./lib/tier";
+import { buildCorsOptions } from "./corsOptions";
 import { resolveTfmsProviderKey, type TfmsOverlay, type TfmsStatus } from "./services/tfms/provider";
 import { createStubTfmsProvider } from "./services/tfms/providers/stub";
 import { createSoftAuthRateLimiter } from "./middleware/rateLimit";
@@ -4136,22 +4137,8 @@ const isVerified = async (req: any, res: any, next: any) => {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   startPlateCacheCron();
-  // CORS: allow frontend origins and send credentials for session cookies
-  const defaultOrigins = [
-    "https://readysetfly.us",
-    "https://www.readysetfly.us",
-    "http://localhost:5173",
-    "http://localhost:4173",
-  ];
-  const envOrigins = process.env.WEB_ORIGIN ? process.env.WEB_ORIGIN.split(",") : [];
-  const allowedOrigins = Array.from(
-    new Set([...envOrigins.map((o) => o.trim()).filter(Boolean), ...defaultOrigins]),
-  );
-
-  app.use(cors({
-    origin: allowedOrigins,
-    credentials: true,
-  }));
+  // CORS is also applied at app boot. Keep this aligned for routes registered later in startup.
+  app.use(cors(buildCorsOptions()));
 
   // Auth middleware
   await setupAuth(app);

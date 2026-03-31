@@ -14357,6 +14357,81 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   const weatherCache = new Map<string, { data: any; timestamp: number }>();
   const WEATHER_CACHE_TTL = 3 * 60 * 1000; // 3 minutes
 
+  function getFreshCachedMetar(candidate: string): any | null {
+    const cached = weatherCache.get(candidate);
+    if (!cached) return null;
+    if ((Date.now() - cached.timestamp) >= WEATHER_CACHE_TTL) return null;
+    return cached.data?.metar ?? null;
+  }
+
+  async function primeMetarsForNearbyCandidates(candidates: string[]): Promise<Map<string, any>> {
+    const metars = new Map<string, any>();
+    const normalizedCandidates = Array.from(
+      new Set(
+        candidates
+          .map((value) => normalizeIcao(value))
+          .filter((value): value is string => Boolean(value))
+      )
+    );
+
+    const missing: string[] = [];
+    for (const candidate of normalizedCandidates) {
+      const cachedMetar = getFreshCachedMetar(candidate);
+      if (cachedMetar) {
+        metars.set(candidate, cachedMetar);
+      } else {
+        missing.push(candidate);
+      }
+    }
+
+    if (missing.length === 0) {
+      return metars;
+    }
+
+    const metarRes = await fetchWithTimeout(
+      `https://aviationweather.gov/api/data/metar?ids=${missing.join(",")}&format=json`,
+      { headers: { "User-Agent": "ReadySetFly/1.0" } },
+      2500
+    ).catch(() => null);
+
+    if (!metarRes || !metarRes.ok) {
+      return metars;
+    }
+
+    const body = await metarRes.text().catch(() => "");
+    const trimmed = body.trim();
+    if (!trimmed || trimmed.startsWith("<")) {
+      return metars;
+    }
+
+    try {
+      const metarData = JSON.parse(trimmed);
+      const rows = Array.isArray(metarData) ? metarData : [];
+      const now = Date.now();
+      for (const row of rows) {
+        const icao = normalizeIcao(
+          String(row?.icaoId || row?.icao || row?.stationId || row?.station || "")
+        );
+        if (!icao) continue;
+        metars.set(icao, row);
+        weatherCache.set(icao, {
+          data: { icao, metar: row, taf: null, cached: false },
+          timestamp: now,
+        });
+      }
+
+      while (weatherCache.size > 100) {
+        const oldestKey = weatherCache.keys().next().value as string | undefined;
+        if (!oldestKey) break;
+        weatherCache.delete(oldestKey);
+      }
+    } catch {
+      // Ignore malformed batched METAR payloads for nearby enrichment.
+    }
+
+    return metars;
+  }
+
   function parseBbox(raw: string | null): { west: number; south: number; east: number; north: number } | null {
     if (!raw) return null;
     const parts = raw.split(",").map((value) => Number(value));
@@ -14561,42 +14636,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           return a.distanceNm - b.distanceNm;
         });
 
+        const enrichmentCandidates = provisional.slice(0, Math.max(limit + 2, 6));
+        const metarsByIcao = await primeMetarsForNearbyCandidates(
+          enrichmentCandidates.map((candidate) => buildIcaoCandidates(candidate.station.icao)[0] || candidate.station.icao)
+        );
         const enrichedCandidates = await Promise.all(
-          provisional.slice(0, Math.max(limit + 4, 8)).map(async (candidate) => {
+          enrichmentCandidates.map(async (candidate) => {
             let metar: any | null = null;
             for (const icaoCandidate of buildIcaoCandidates(candidate.station.icao)) {
-              const cached = weatherCache.get(icaoCandidate);
-              if (cached?.data?.metar) {
-                metar = cached.data.metar;
-                break;
-              }
-            }
-
-            if (!metar) {
-              for (const icaoCandidate of buildIcaoCandidates(candidate.station.icao)) {
-                const metarRes = await fetchWithTimeout(
-                  `https://aviationweather.gov/api/data/metar?ids=${icaoCandidate}&format=json`,
-                  { headers: { "User-Agent": "ReadySetFly/1.0" } },
-                  2500
-                ).catch(() => null);
-                if (!metarRes || !metarRes.ok) continue;
-                const body = await metarRes.text().catch(() => "");
-                const trimmed = body.trim();
-                if (!trimmed || trimmed.startsWith("<")) continue;
-                try {
-                  const metarData = JSON.parse(trimmed);
-                  metar = Array.isArray(metarData) && metarData.length > 0 ? metarData[0] : null;
-                  if (metar) {
-                    weatherCache.set(icaoCandidate, {
-                      data: { metar, taf: null, cached: false },
-                      timestamp: Date.now(),
-                    });
-                    break;
-                  }
-                } catch {
-                  // Ignore malformed METAR payloads for diversion enrichment.
-                }
-              }
+              metar = metarsByIcao.get(icaoCandidate) || getFreshCachedMetar(icaoCandidate);
+              if (metar) break;
             }
 
             const runwayCandidates = runwayMap

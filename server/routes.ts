@@ -4155,6 +4155,13 @@ const airportLookupRateLimiter = createIpRateLimiter({
   message: "Too many airport lookups. Please try again shortly.",
 });
 
+const publicAirportReadRateLimiter = createIpRateLimiter({
+  windowMs: 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_AIRPORT_PUBLIC_READ_MAX || 360),
+  dailyMax: Number(process.env.RATE_LIMIT_AIRPORT_PUBLIC_READ_DAILY_MAX || 20000),
+  message: "Airport requests are briefly saturated. Please try again shortly.",
+});
+
 const aircraftProfileRateLimiter = createIpRateLimiter({
   windowMs: 60 * 1000,
   max: 30,
@@ -4185,7 +4192,8 @@ const weatherRateLimiter = createSoftAuthRateLimiter({
 });
 
 const airportSearchRateLimiter = createSoftAuthRateLimiter({
-  anonMax: Number(process.env.RATE_LIMIT_AIRPORT_SEARCH_ANON_MAX || process.env.RATE_LIMIT_ANON_MAX || 60),
+  anonMax: Number(process.env.RATE_LIMIT_AIRPORT_SEARCH_ANON_MAX || 1200),
+  authMax: Number(process.env.RATE_LIMIT_AIRPORT_SEARCH_AUTH_MAX || 4000),
   key: "airport_search",
 });
 
@@ -14361,7 +14369,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     return best;
   }
 
-  app.get("/api/airports/search", airportSearchRateLimiter, airportLookupRateLimiter, async (req, res) => {
+  app.get("/api/airports/search", airportSearchRateLimiter, publicAirportReadRateLimiter, async (req, res) => {
     try {
       const rawQuery = String(req.query.q || "");
       const query = normalizeSearch(rawQuery);
@@ -14403,7 +14411,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/airports/nearby", airportSearchRateLimiter, airportLookupRateLimiter, async (req, res) => {
+  app.get("/api/airports/nearby", airportSearchRateLimiter, publicAirportReadRateLimiter, async (req, res) => {
     try {
       const lat = toNumber(req.query.lat);
       const lon = toNumber(req.query.lon);
@@ -14681,7 +14689,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/airports/route-suggestions", airportSearchRateLimiter, airportLookupRateLimiter, async (req, res) => {
+  app.get("/api/airports/route-suggestions", airportSearchRateLimiter, publicAirportReadRateLimiter, async (req, res) => {
     try {
       const departure = normalizeIcao(String(req.query.departure || ""));
       const destination = normalizeIcao(String(req.query.destination || ""));
@@ -16979,8 +16987,16 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
   // Approach Plates (FAA d-TPP metadata, on-demand)
   const platesRateLimiter = createIpRateLimiter({
     windowMs: 60 * 1000,
-    max: 30,
-    message: "Too many plate requests, please try again later",
+    max: Number(process.env.RATE_LIMIT_PLATES_PROXY_MAX || 30),
+    dailyMax: Number(process.env.RATE_LIMIT_PLATES_PROXY_DAILY_MAX || 1000),
+    message: "Too many plate proxy requests, please try again later",
+  });
+
+  const platesMetadataRateLimiter = createIpRateLimiter({
+    windowMs: 60 * 1000,
+    max: Number(process.env.RATE_LIMIT_PLATES_METADATA_MAX || 240),
+    dailyMax: Number(process.env.RATE_LIMIT_PLATES_METADATA_DAILY_MAX || 12000),
+    message: "Too many plate metadata requests, please try again later",
   });
 
   // Streaming proxy for plate PDFs (no buffering)
@@ -17036,7 +17052,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/plates/:icao", platesRateLimiter, async (req, res) => {
+  app.get("/api/plates/:icao", platesMetadataRateLimiter, async (req, res) => {
     try {
       const icao = normalizeIcao(req.params.icao || "");
       if (!/^[A-Z0-9]{3,4}$/.test(icao)) {

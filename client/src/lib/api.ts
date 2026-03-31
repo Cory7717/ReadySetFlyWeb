@@ -1,10 +1,10 @@
 // Centralized API base + helpers.
-// Prefer same-origin for the live web app so `readysetfly.us` can use its own `/api`
-// path without forcing browser CORS to the Render API origin.
+// Prefer explicit API hosts for production domains so auth/session traffic keeps
+// flowing even when the frontend is served from a separate static site.
 
 function resolveDefaultApiBase(): string {
   if (typeof window === "undefined") {
-    return "https://readysetfly-api.onrender.com";
+    return "https://api.readysetfly.us";
   }
 
   const hostname = window.location.hostname.toLowerCase();
@@ -13,13 +13,15 @@ function resolveDefaultApiBase(): string {
     hostname === "127.0.0.1" ||
     hostname === "[::1]";
 
-  const prefersSameOrigin =
-    isLocalHost ||
-    hostname === "readysetfly.us" ||
-    hostname === "www.readysetfly.us" ||
-    hostname.endsWith(".onrender.com");
+  if (hostname === "readysetfly.us" || hostname === "www.readysetfly.us") {
+    return "https://api.readysetfly.us";
+  }
 
-  return prefersSameOrigin ? "" : "https://readysetfly-api.onrender.com";
+  if (hostname === "readysetfly-web.onrender.com") {
+    return "https://readysetfly-api.onrender.com";
+  }
+
+  return isLocalHost ? "" : "https://readysetfly-api.onrender.com";
 }
 
 const DEFAULT_API_BASE = resolveDefaultApiBase();

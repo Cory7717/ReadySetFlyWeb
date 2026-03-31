@@ -328,8 +328,15 @@ export default function Landing() {
   const hasProCore = !!(user as any)?.entitlements?.isPro;
   const hasProPlus = !!(user as any)?.entitlements?.isProPlus;
   const isPaidUser = hasProCore || hasProPlus;
-  const showFullMembershipSection = !hasProCore && !hasProPlus;
-  const showProPlusUpgradeSection = hasProCore && !hasProPlus;
+  const showFullMembershipSection = false;
+  const showProPlusUpgradeSection = false;
+  const membershipPageHref = "/logbook/pro";
+  const membershipCtaLabel = hasProCore && !hasProPlus ? "Upgrade to Pro+" : isPaidUser ? "Manage Membership" : "Subscribe Now";
+  const membershipCtaDescription = hasProCore && !hasProPlus
+    ? "Move into the training stack, advanced sims, and higher-end pilot workflow tools."
+    : isPaidUser
+      ? "Open your RSF Pro page to manage plan details, trials, and membership settings."
+      : "Open the dedicated RSF Pro page for plan details, feature breakdowns, and subscription links.";
   const fuelAirports = useMemo(
     () =>
       (fuelPrices?.results ?? [])
@@ -1045,98 +1052,33 @@ export default function Landing() {
       )}
       {activeMobileTab === "pricing" && (
         <div className="container mx-auto space-y-4 px-4 pt-4 md:hidden">
-          <div className="space-y-2 text-center">
-            <span className="rsf-kicker mx-auto">RSF Memberships</span>
-            <h2 className="text-2xl font-semibold">Free vs Pro Core vs Pro+</h2>
-            <p className="text-sm text-muted-foreground">
-              Start free. Upgrade when you are ready - 14-day trial, no credit card required.
-            </p>
-          </div>
-
-          <Card className="border-muted/60 bg-[linear-gradient(180deg,hsl(var(--muted)/0.4),hsl(var(--muted)/0.2))] opacity-90">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">RSF Free</CardTitle>
-              <div className="text-2xl font-bold">
-                $0<span className="text-sm font-normal text-muted-foreground">/mo</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                Marketplace, rentals, CFI directory
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                Weather, TFR, and NOTAM tools
-              </div>
-              <div className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                AI weather briefings (limited)
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-primary/40 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.12))]">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between gap-2">
-                <Badge className="w-fit">Most Popular</Badge>
-                <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-xs text-emerald-700">
-                  14-day free trial
+          <Card className="border-primary/20 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] shadow-[var(--shadow-rsf-panel)]">
+            <CardHeader className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="rsf-kicker">RSF Pro</span>
+                <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
+                  Plans moved off this page
                 </Badge>
               </div>
-              <CardTitle className="text-base">{membershipTierInfo.pro.title}</CardTitle>
-              <div className="text-2xl font-bold">
-                ${proMonthly?.toFixed(2) ?? "5.99"}
-                <span className="text-sm font-normal text-muted-foreground">/mo</span>
+              <div className="space-y-2">
+                <CardTitle className="text-xl">Open the dedicated membership page.</CardTitle>
+                <CardDescription className="text-sm">
+                  {membershipCtaDescription}
+                </CardDescription>
               </div>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              {membershipTierInfo.pro.features.map((feature) => (
-                <div key={feature} className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  {feature}
-                </div>
-              ))}
-              <Button asChild className="mt-2 w-full">
+            <CardContent className="space-y-3">
+              <Button asChild className="w-full">
                 <Link
-                  href="/logbook/pro"
-                  onClick={() => trackEvent("cta_click", { label: "mobile_pricing_tab_pro_trial", target: "/logbook/pro" })}
+                  href={membershipPageHref}
+                  onClick={() => trackEvent("cta_click", { label: "mobile_pricing_tab_membership_cta", target: membershipPageHref })}
                 >
-                  Start Pro trial
+                  {membershipCtaLabel}
                 </Link>
               </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border-[hsl(var(--accent)/0.32)] bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--accent)/0.11))]">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between gap-2">
-                <Badge variant="secondary" className="w-fit">Power Pilot</Badge>
-                <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-xs text-emerald-700">
-                  14-day free trial
-                </Badge>
-              </div>
-              <CardTitle className="text-base">{membershipTierInfo.pro_plus.title}</CardTitle>
-              <div className="text-2xl font-bold">
-                ${proPlusMonthly?.toFixed(2) ?? "11.99"}
-                <span className="text-sm font-normal text-muted-foreground">/mo</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              {membershipTierInfo.pro_plus.features.map((feature) => (
-                <div key={feature} className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  {feature}
-                </div>
-              ))}
-              <Button asChild variant="outline" className="mt-2 w-full">
-                <Link
-                  href="/logbook/pro"
-                  onClick={() => trackEvent("cta_click", { label: "mobile_pricing_tab_proplus_trial", target: "/logbook/pro" })}
-                >
-                  Start Pro+ trial
-                </Link>
-              </Button>
+              <p className="text-xs text-muted-foreground">
+                The RSF Pro page now carries the full plan details, trial language, and subscribe flows.
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -1727,7 +1669,7 @@ export default function Landing() {
 
       <div id="landing-quickstart-section" className="hidden rsf-section-band py-8 sm:py-10 md:block">
         <div className="container mx-auto px-4">
-          <div className={`grid gap-6 ${showFullMembershipSection ? "xl:grid-cols-[1.1fr_0.9fr]" : ""}`}>
+          <div className={`grid gap-6 ${!hasProPlus ? "xl:grid-cols-[minmax(0,1.12fr)_320px]" : ""}`}>
             <section className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.78))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "find" || activeMobileTab === "plan" || activeMobileTab === "log" ? "" : "hidden md:block"}`}>
                 <div className="mb-5 flex items-center justify-between rounded-[1rem] border border-white/10 bg-[linear-gradient(135deg,hsl(221_64%_23%),hsl(221_72%_38%))] px-4 py-3 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
                     <div>
@@ -1744,14 +1686,24 @@ export default function Landing() {
                       Use RSF to find aviation services, plan flights, and keep your logbook and training in one place.
                     </p>
                   </div>
-                  <Button asChild variant="outline">
-                    <Link
-                      href="/tool-hub"
-                      onClick={() => trackEvent("cta_click", { label: "quick_index_view_all_tools", target: "/tool-hub" })}
-                    >
-                      View all tools &amp; features
-                    </Link>
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button asChild variant="outline">
+                      <Link
+                        href="/tool-hub"
+                        onClick={() => trackEvent("cta_click", { label: "quick_index_view_all_tools", target: "/tool-hub" })}
+                      >
+                        View all tools &amp; features
+                      </Link>
+                    </Button>
+                    <Button asChild>
+                      <Link
+                        href={membershipPageHref}
+                        onClick={() => trackEvent("cta_click", { label: "quick_index_membership_cta", target: membershipPageHref })}
+                      >
+                        {membershipCtaLabel}
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -1903,7 +1855,7 @@ export default function Landing() {
                   </Card>
                 </div>
 
-                <div className="mt-4 hidden overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,hsl(221_52%_19%),hsl(221_34%_15%))] shadow-[var(--shadow-rsf-panel)] md:block">
+                <div className="hidden overflow-hidden rounded-[1rem] border border-white/10 bg-[linear-gradient(180deg,hsl(221_52%_19%),hsl(221_34%_15%))] shadow-[var(--shadow-rsf-panel)]">
                   <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">
                     <span>RSF overview</span>
                     <span className="text-slate-400">Muted video</span>
@@ -1921,6 +1873,38 @@ export default function Landing() {
                   </video>
                 </div>
             </section>
+
+            {!hasProPlus && (
+              <aside className="hidden md:block">
+                <Card id="landing-membership-section" className="sticky top-24 border-primary/18 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--primary)/0.08))] shadow-[var(--shadow-rsf-panel)]">
+                  <CardHeader className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="rsf-kicker">RSF Pro</span>
+                      <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary">
+                        Dedicated page
+                      </Badge>
+                    </div>
+                    <div className="space-y-2">
+                      <CardTitle className="text-xl">{membershipCtaLabel}</CardTitle>
+                      <CardDescription>{membershipCtaDescription}</CardDescription>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Button asChild className="w-full">
+                      <Link
+                        href={membershipPageHref}
+                        onClick={() => trackEvent("cta_click", { label: "landing_sidebar_membership_cta", target: membershipPageHref })}
+                      >
+                        {membershipCtaLabel}
+                      </Link>
+                    </Button>
+                    <p className="text-sm text-muted-foreground">
+                      Plan details, feature comparisons, and subscription links now live on the RSF Pro page instead of the main landing page.
+                    </p>
+                  </CardContent>
+                </Card>
+              </aside>
+            )}
 
             {showFullMembershipSection && (
             <section id="landing-membership-section" className={`rounded-[1.35rem] border border-white/12 bg-[linear-gradient(180deg,hsl(var(--card)/0.97),hsl(var(--muted)/0.74))] p-5 shadow-[var(--shadow-rsf-panel)] sm:p-6 ${activeMobileTab === "pricing" ? "" : "hidden md:block"}`}>

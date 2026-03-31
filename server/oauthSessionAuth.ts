@@ -39,6 +39,33 @@ function getGoogleCallbackUrl(): string {
   return `${getApiBaseUrl()}/api/auth/google/callback`;
 }
 
+function getSessionCookieDomain(): string | undefined {
+  const explicit = String(process.env.SESSION_COOKIE_DOMAIN || "").trim();
+  if (explicit) return explicit;
+
+  const candidates = [
+    process.env.FRONTEND_BASE_URL,
+    process.env.WEB_ORIGIN,
+    process.env.API_BASE_URL,
+    process.env.RENDER_EXTERNAL_URL,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      const hostname = new URL(candidate).hostname.toLowerCase();
+      if (hostname === "readysetfly.us" || hostname.endsWith(".readysetfly.us")) {
+        return "readysetfly.us";
+      }
+    } catch {
+      // Ignore invalid URLs in optional env vars.
+    }
+  }
+
+  return undefined;
+}
+
 function normalizeFrontendReturnTo(value: unknown): string | null {
   if (typeof value !== "string") return null;
   if (!value.startsWith("/") || value.startsWith("//")) return null;
@@ -58,6 +85,7 @@ function normalizeFrontendReturnTo(value: unknown): string | null {
 export function getSession() {
   const sessionTtlSeconds = 7 * 24 * 60 * 60; // 1 week
   const pgStore = connectPg(session);
+  const cookieDomain = getSessionCookieDomain();
 
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,
@@ -75,12 +103,11 @@ export function getSession() {
     proxy: true,
     cookie: {
       httpOnly: true,
-      // Cross-site (frontend on readysetfly.us, API on readysetfly-api.onrender.com)
-      // In production we must use SameSite=None and Secure so cookies survive cross-site in incognito.
+      // Production runs frontend + API on sibling subdomains under readysetfly.us.
+      // SameSite=None + Secure keeps OAuth/session cookies available across that split.
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       secure: process.env.NODE_ENV === "production" ? true : false,
-      // If you have both app + api on the same apex, you can set domain to .readysetfly.us
-      // Leave undefined to let the browser scope it to the API host.
+      domain: cookieDomain,
       maxAge: sessionTtlSeconds * 1000,
     },
   });

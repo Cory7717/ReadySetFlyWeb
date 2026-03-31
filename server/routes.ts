@@ -2267,10 +2267,15 @@ const NEARBY_AIRPORT_CACHE_TTL_MS = 45 * 1000;
 const NEARBY_AIRPORT_CACHE_MAX = 200;
 const nearbyAirportCache = new Map<string, { data: any; expiresAt: number }>();
 const nearbyAirportInFlight = new Map<string, Promise<any>>();
+const AIRPORT_SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
+const AIRPORT_SEARCH_CACHE_MAX = 500;
+const airportSearchCache = new Map<string, { data: AirportSearchResult[]; expiresAt: number }>();
+const airportSearchInFlight = new Map<string, Promise<AirportSearchResult[]>>();
 const REDIS_CACHE_PREFIX = "rsf:v1";
 const ROUTE_SUGGESTION_CACHE_TTL_MS = 15 * 60 * 1000;
 const ROUTE_SUGGESTION_CACHE_MAX = 250;
 const routeSuggestionCache = new Map<string, { data: any; expiresAt: number }>();
+const routeSuggestionInFlight = new Map<string, Promise<any>>();
 const RUNWAY_BRIEFING_CACHE_TTL_MS = 2 * 60 * 1000;
 const runwayBriefingCache = new Map<string, { data: any; expiresAt: number }>();
 const runwayBriefingInFlight = new Map<string, Promise<any>>();
@@ -4072,10 +4077,11 @@ interface RateLimitOptions {
   max: number;
   dailyMax?: number;
   message?: string;
+  key?: string;
 }
 
 function createIpRateLimiter(options: RateLimitOptions) {
-  const { windowMs, max, dailyMax, message = "Too many requests, please try again later" } = options;
+  const { windowMs, max, dailyMax, message = "Too many requests, please try again later", key } = options;
   const requests = new Map<string, number[]>();
 
   // Cleanup stale entries every 5 minutes to prevent memory growth
@@ -4096,12 +4102,14 @@ function createIpRateLimiter(options: RateLimitOptions) {
     const ip = req.ip || req.connection.remoteAddress;
     const now = Date.now();
     const dayInMs = 24 * 60 * 60 * 1000;
+    const routeKey = key || req.route?.path || req.path || "unknown";
+    const bucketKey = `${routeKey}:${ip}`;
     
-    if (!requests.has(ip)) {
-      requests.set(ip, []);
+    if (!requests.has(bucketKey)) {
+      requests.set(bucketKey, []);
     }
     
-    const timestamps = requests.get(ip)!;
+    const timestamps = requests.get(bucketKey)!;
     
     // Keep all timestamps within 24 hours for daily limit tracking
     const dailyTimestamps = timestamps.filter(t => now - t < dayInMs);
@@ -4134,7 +4142,7 @@ function createIpRateLimiter(options: RateLimitOptions) {
     
     // Record this request and update with all daily timestamps
     dailyTimestamps.push(now);
-    requests.set(ip, dailyTimestamps);
+    requests.set(bucketKey, dailyTimestamps);
     
     next();
   };
@@ -4155,11 +4163,28 @@ const airportLookupRateLimiter = createIpRateLimiter({
   message: "Too many airport lookups. Please try again shortly.",
 });
 
-const publicAirportReadRateLimiter = createIpRateLimiter({
+const airportSearchPublicReadRateLimiter = createIpRateLimiter({
   windowMs: 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_AIRPORT_PUBLIC_READ_MAX || 360),
+  max: Number(process.env.RATE_LIMIT_AIRPORT_PUBLIC_READ_MAX || 900),
   dailyMax: Number(process.env.RATE_LIMIT_AIRPORT_PUBLIC_READ_DAILY_MAX || 20000),
   message: "Airport requests are briefly saturated. Please try again shortly.",
+  key: "airport_search_public_read",
+});
+
+const nearbyAirportReadRateLimiter = createIpRateLimiter({
+  windowMs: 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_AIRPORT_NEARBY_PUBLIC_READ_MAX || process.env.RATE_LIMIT_AIRPORT_PUBLIC_READ_MAX || 900),
+  dailyMax: Number(process.env.RATE_LIMIT_AIRPORT_PUBLIC_READ_DAILY_MAX || 20000),
+  message: "Nearby-airport requests are briefly saturated. Please try again shortly.",
+  key: "airport_nearby_public_read",
+});
+
+const routeSuggestionReadRateLimiter = createIpRateLimiter({
+  windowMs: 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_ROUTE_SUGGESTION_PUBLIC_READ_MAX || process.env.RATE_LIMIT_AIRPORT_PUBLIC_READ_MAX || 900),
+  dailyMax: Number(process.env.RATE_LIMIT_AIRPORT_PUBLIC_READ_DAILY_MAX || 20000),
+  message: "Route-planning requests are briefly saturated. Please try again shortly.",
+  key: "route_suggestion_public_read",
 });
 
 const aircraftProfileRateLimiter = createIpRateLimiter({
@@ -14369,7 +14394,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     return best;
   }
 
-  app.get("/api/airports/search", airportSearchRateLimiter, publicAirportReadRateLimiter, async (req, res) => {
+  app.get("/api/airports/search", airportSearchRateLimiter, airportSearchPublicReadRateLimiter, async (req, res) => {
     try {
       const rawQuery = String(req.query.q || "");
       const query = normalizeSearch(rawQuery);
@@ -14378,32 +14403,52 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       res.setHeader("x-rsf-airport-search", "1");
-      res.setHeader("Cache-Control", "public, max-age=120, stale-while-revalidate=600");
-      const stations = await loadStationCache();
-      const terms = query.split(" ").filter(Boolean);
+      res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=1800");
+      const cacheKey = query;
+      const cachedPayload = await getCachedAirportSearchPayload(cacheKey);
+      if (cachedPayload) {
+        return res.json(cachedPayload);
+      }
 
-      const scored = stations
-        .map((station) => {
-          const haystack = normalizeSearch(
-            `${station.icao} ${station.name ?? ""} ${station.city ?? ""} ${station.state ?? ""}`
-          );
+      const inFlight = airportSearchInFlight.get(cacheKey);
+      if (inFlight) {
+        return res.json(await inFlight);
+      }
 
-          let score = 0;
-          if (station.icao.toLowerCase() === query) score += 100;
-          if (station.icao.toLowerCase().startsWith(query)) score += 80;
-          if (haystack.includes(query)) score += 40;
-          for (const term of terms) {
-            if (station.icao.toLowerCase().startsWith(term)) score += 30;
-            if (haystack.includes(term)) score += 10;
-          }
+      const buildPromise = (async () => {
+        const stations = await loadStationCache();
+        const terms = query.split(" ").filter(Boolean);
 
-          return score > 0 ? { station, score } : null;
-        })
-        .filter(Boolean) as { station: AirportSearchResult; score: number }[];
+        const scored = stations
+          .map((station) => {
+            const haystack = normalizeSearch(
+              `${station.icao} ${station.name ?? ""} ${station.city ?? ""} ${station.state ?? ""}`
+            );
 
-      scored.sort((a, b) => b.score - a.score);
+            let score = 0;
+            if (station.icao.toLowerCase() === query) score += 100;
+            if (station.icao.toLowerCase().startsWith(query)) score += 80;
+            if (haystack.includes(query)) score += 40;
+            for (const term of terms) {
+              if (station.icao.toLowerCase().startsWith(term)) score += 30;
+              if (haystack.includes(term)) score += 10;
+            }
 
-      const results = scored.slice(0, 12).map(({ station }) => station);
+            return score > 0 ? { station, score } : null;
+          })
+          .filter(Boolean) as { station: AirportSearchResult; score: number }[];
+
+        scored.sort((a, b) => b.score - a.score);
+
+        const results = scored.slice(0, 12).map(({ station }) => station);
+        await setCachedAirportSearchPayload(cacheKey, results);
+        return results;
+      })();
+
+      airportSearchInFlight.set(cacheKey, buildPromise);
+      const results = await buildPromise.finally(() => {
+        airportSearchInFlight.delete(cacheKey);
+      });
       return res.json(results);
     } catch (error) {
       console.error("Airport search failed:", error);
@@ -14411,7 +14456,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/airports/nearby", airportSearchRateLimiter, publicAirportReadRateLimiter, async (req, res) => {
+  app.get("/api/airports/nearby", nearbyAirportReadRateLimiter, async (req, res) => {
     try {
       const lat = toNumber(req.query.lat);
       const lon = toNumber(req.query.lon);
@@ -14689,7 +14734,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     }
   });
 
-  app.get("/api/airports/route-suggestions", airportSearchRateLimiter, publicAirportReadRateLimiter, async (req, res) => {
+  app.get("/api/airports/route-suggestions", routeSuggestionReadRateLimiter, async (req, res) => {
     try {
       const departure = normalizeIcao(String(req.query.departure || ""));
       const destination = normalizeIcao(String(req.query.destination || ""));
@@ -14733,85 +14778,91 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.json(cachedRoutePayload);
       }
 
-      const stations = await loadStationCache();
-      const referenceMap = await loadAirportReferenceCache().catch(() => null);
-      const runwayMap = await loadRunwayCache().catch(() => null);
-      const maxRunwayLengthFor = (icao: string) => {
-        if (!runwayMap) return null;
-        const candidates = buildIcaoCandidates(icao);
-        for (const candidate of candidates) {
-          const runways = runwayMap.get(candidate);
-          if (!runways?.length) continue;
-          const lengths = runways
-            .map((runway) => runway.lengthFt)
-            .filter((value): value is number => Number.isFinite(value ?? NaN));
-          if (lengths.length > 0) {
-            return Math.max(...lengths);
-          }
-        }
-        return null;
-      };
-      const hasAnyRunway = (icao: string) => {
-        if (!runwayMap) return true;
-        return maxRunwayLengthFor(icao) !== null;
-      };
-      const hasFuelStopRunway = (icao: string) => {
-        if (!runwayMap) return true;
-        const maxRunway = maxRunwayLengthFor(icao);
-        return maxRunway !== null && maxRunway >= 2500;
-      };
-      const routableStations = referenceMap
-        ? stations.filter((station) => {
-            if (!station?.icao) return false;
-            const inReference =
-              referenceMap.has(station.icao) ||
-              (station.icao.startsWith("K") && referenceMap.has(station.icao.slice(1)));
-            return inReference && hasAnyRunway(station.icao);
-          })
-        : stations;
-      const fuelStopStations = routableStations.filter((station) => hasFuelStopRunway(station.icao));
-      const findStation = (value: string) => {
-        const candidates = buildIcaoCandidates(value);
-        const station = stations.find((entry) => candidates.includes(entry.icao));
-        if (station) return station;
-        if (!referenceMap) return null;
-        for (const candidate of candidates) {
-          const fallback = referenceMap.get(candidate);
-          if (fallback && Number.isFinite(fallback.lat) && Number.isFinite(fallback.lon)) {
-            return {
-              icao: candidate,
-              name: fallback.name ?? null,
-              city: fallback.city ?? null,
-              state: fallback.state ?? null,
-              lat: fallback.lat,
-              lon: fallback.lon,
-            } as AirportSearchResult;
-          }
-        }
-        return null;
-      };
-
-      const departureStation = findStation(departure);
-      const destinationStation = findStation(destination);
-      if (!departureStation || !destinationStation) {
-        return res.json({
-          ...emptyResponse,
-          departure: departureStation?.icao ?? departure,
-          destination: destinationStation?.icao ?? destination,
-        });
+      const inFlight = routeSuggestionInFlight.get(routeCacheKey);
+      if (inFlight) {
+        return res.json(await inFlight);
       }
 
-      const routeDistanceNm = distanceNmBetween(
-        departureStation.lat,
-        departureStation.lon,
-        destinationStation.lat,
-        destinationStation.lon
-      );
-      const reserveHours = reserveMinutes / 60;
-      const enduranceHours = fuelBurnGph > 0 ? fuelGallons / fuelBurnGph : 0;
-      const availableHours = Math.max(0, enduranceHours - reserveHours);
-      const maxLegNm = availableHours * cruiseKtas;
-      const planningLegNm = maxLegNm * 0.9;
+      const buildPromise = (async () => {
+        const stations = await loadStationCache();
+        const referenceMap = await loadAirportReferenceCache().catch(() => null);
+        const runwayMap = await loadRunwayCache().catch(() => null);
+        const maxRunwayLengthFor = (icao: string) => {
+          if (!runwayMap) return null;
+          const candidates = buildIcaoCandidates(icao);
+          for (const candidate of candidates) {
+            const runways = runwayMap.get(candidate);
+            if (!runways?.length) continue;
+            const lengths = runways
+              .map((runway) => runway.lengthFt)
+              .filter((value): value is number => Number.isFinite(value ?? NaN));
+            if (lengths.length > 0) {
+              return Math.max(...lengths);
+            }
+          }
+          return null;
+        };
+        const hasAnyRunway = (icao: string) => {
+          if (!runwayMap) return true;
+          return maxRunwayLengthFor(icao) !== null;
+        };
+        const hasFuelStopRunway = (icao: string) => {
+          if (!runwayMap) return true;
+          const maxRunway = maxRunwayLengthFor(icao);
+          return maxRunway !== null && maxRunway >= 2500;
+        };
+        const routableStations = referenceMap
+          ? stations.filter((station) => {
+              if (!station?.icao) return false;
+              const inReference =
+                referenceMap.has(station.icao) ||
+                (station.icao.startsWith("K") && referenceMap.has(station.icao.slice(1)));
+              return inReference && hasAnyRunway(station.icao);
+            })
+          : stations;
+        const fuelStopStations = routableStations.filter((station) => hasFuelStopRunway(station.icao));
+        const findStation = (value: string) => {
+          const candidates = buildIcaoCandidates(value);
+          const station = stations.find((entry) => candidates.includes(entry.icao));
+          if (station) return station;
+          if (!referenceMap) return null;
+          for (const candidate of candidates) {
+            const fallback = referenceMap.get(candidate);
+            if (fallback && Number.isFinite(fallback.lat) && Number.isFinite(fallback.lon)) {
+              return {
+                icao: candidate,
+                name: fallback.name ?? null,
+                city: fallback.city ?? null,
+                state: fallback.state ?? null,
+                lat: fallback.lat,
+                lon: fallback.lon,
+              } as AirportSearchResult;
+            }
+          }
+          return null;
+        };
+
+        const departureStation = findStation(departure);
+        const destinationStation = findStation(destination);
+        if (!departureStation || !destinationStation) {
+          return {
+            ...emptyResponse,
+            departure: departureStation?.icao ?? departure,
+            destination: destinationStation?.icao ?? destination,
+          };
+        }
+
+        const routeDistanceNm = distanceNmBetween(
+          departureStation.lat,
+          departureStation.lon,
+          destinationStation.lat,
+          destinationStation.lon
+        );
+        const reserveHours = reserveMinutes / 60;
+        const enduranceHours = fuelBurnGph > 0 ? fuelGallons / fuelBurnGph : 0;
+        const availableHours = Math.max(0, enduranceHours - reserveHours);
+        const maxLegNm = availableHours * cruiseKtas;
+        const planningLegNm = maxLegNm * 0.9;
 
       let stopCount = 0;
       if (planningLegNm > 0 && routeDistanceNm > planningLegNm * 1.1) {
@@ -14988,35 +15039,42 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           })
         : { plannedStops: [] as string[], waypoints: [] as string[] };
 
-      const payload = {
-        departure: departureStation.icao,
-        destination: destinationStation.icao,
-        waypoints: directVariant.waypoints,
-        plannedStops: directVariant.plannedStops,
-        coastlineWaypoints: coastlineVariant.waypoints,
-        coastlinePlannedStops: coastlineVariant.plannedStops,
-        meta: {
-          routeDistanceNm: Number(routeDistanceNm.toFixed(1)),
-          maxLegNm: Number(maxLegNm.toFixed(1)),
-          planningLegNm: Number(planningLegNm.toFixed(1)),
-          cruiseKtas,
-          fuelBurnGph,
-          fuelGallons,
-          reserveMinutes,
-          overwaterLikely,
-          stopPlanningMode: stopCount > 0 ? "sequential_topoff" : "direct_no_stop",
-          suggestedStopCount: directVariant.plannedStops.length,
-          coastlineSuggestedStopCount: coastlineVariant.plannedStops.length,
-        },
-      };
-      await setCachedMapPayload(
-        routeSuggestionCache,
-        routeCacheKey,
-        payload,
-        ROUTE_SUGGESTION_CACHE_TTL_MS,
-        ROUTE_SUGGESTION_CACHE_MAX,
-        "route-suggestions",
-      );
+        const payload = {
+          departure: departureStation.icao,
+          destination: destinationStation.icao,
+          waypoints: directVariant.waypoints,
+          plannedStops: directVariant.plannedStops,
+          coastlineWaypoints: coastlineVariant.waypoints,
+          coastlinePlannedStops: coastlineVariant.plannedStops,
+          meta: {
+            routeDistanceNm: Number(routeDistanceNm.toFixed(1)),
+            maxLegNm: Number(maxLegNm.toFixed(1)),
+            planningLegNm: Number(planningLegNm.toFixed(1)),
+            cruiseKtas,
+            fuelBurnGph,
+            fuelGallons,
+            reserveMinutes,
+            overwaterLikely,
+            stopPlanningMode: stopCount > 0 ? "sequential_topoff" : "direct_no_stop",
+            suggestedStopCount: directVariant.plannedStops.length,
+            coastlineSuggestedStopCount: coastlineVariant.plannedStops.length,
+          },
+        };
+        await setCachedMapPayload(
+          routeSuggestionCache,
+          routeCacheKey,
+          payload,
+          ROUTE_SUGGESTION_CACHE_TTL_MS,
+          ROUTE_SUGGESTION_CACHE_MAX,
+          "route-suggestions",
+        );
+        return payload;
+      })();
+
+      routeSuggestionInFlight.set(routeCacheKey, buildPromise);
+      const payload = await buildPromise.finally(() => {
+        routeSuggestionInFlight.delete(routeCacheKey);
+      });
       return res.json(payload);
     } catch (error) {
       console.error("Route suggestion failed:", error);
@@ -21515,6 +21573,31 @@ async function setCachedMapPayload<T>(
   if (redisNamespace) {
     await setSharedCacheJson(buildRedisCacheKey(redisNamespace, key), data, ttlMs / 1000);
   }
+}
+
+async function getCachedAirportSearchPayload(key: string): Promise<AirportSearchResult[] | null> {
+  const cached = airportSearchCache.get(key);
+  if (cached) {
+    if (Date.now() > cached.expiresAt) {
+      airportSearchCache.delete(key);
+    } else {
+      return cached.data;
+    }
+  }
+
+  const shared = await getSharedCacheJson<AirportSearchResult[]>(buildRedisCacheKey("airport-search", key));
+  if (shared === null) return null;
+  airportSearchCache.set(key, { data: shared, expiresAt: Date.now() + AIRPORT_SEARCH_CACHE_TTL_MS });
+  return shared;
+}
+
+async function setCachedAirportSearchPayload(key: string, data: AirportSearchResult[]) {
+  airportSearchCache.set(key, { data, expiresAt: Date.now() + AIRPORT_SEARCH_CACHE_TTL_MS });
+  if (airportSearchCache.size > AIRPORT_SEARCH_CACHE_MAX) {
+    const oldestKey = airportSearchCache.keys().next().value as string | undefined;
+    if (oldestKey) airportSearchCache.delete(oldestKey);
+  }
+  await setSharedCacheJson(buildRedisCacheKey("airport-search", key), data, AIRPORT_SEARCH_CACHE_TTL_MS / 1000);
 }
 
 function parseIcaoListEnv(raw: string | undefined): string[] {

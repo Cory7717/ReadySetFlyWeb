@@ -21,10 +21,14 @@ const HAS_GOOGLE =
 // Helpful base URL for callback construction
 function getApiBaseUrl(): string {
   // Prefer explicit config
-  if (process.env.API_BASE_URL) return process.env.API_BASE_URL;
+  if (process.env.API_BASE_URL) {
+    return normalizeReadySetFlyApiUrl(process.env.API_BASE_URL);
+  }
 
   // Render often exposes an external URL env var depending on setup
-  if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL;
+  if (process.env.RENDER_EXTERNAL_URL) {
+    return normalizeReadySetFlyApiUrl(process.env.RENDER_EXTERNAL_URL);
+  }
 
   // Fallback local
   const port = process.env.PORT || "5000";
@@ -61,7 +65,7 @@ function getGoogleCallbackUrl(): string {
   }
 
   // Otherwise derive it.
-  return `${normalizeReadySetFlyApiUrl(getApiBaseUrl())}/api/auth/google/callback`;
+  return `${getApiBaseUrl()}/api/auth/google/callback`;
 }
 
 function getSessionCookieDomain(): string | undefined {

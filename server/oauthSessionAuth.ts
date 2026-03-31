@@ -31,12 +31,37 @@ function getApiBaseUrl(): string {
   return `http://localhost:${port}`;
 }
 
+function normalizeReadySetFlyApiUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+
+  try {
+    const parsed = new URL(trimmed);
+    const hostname = parsed.hostname.toLowerCase();
+
+    if (
+      hostname === "readysetfly-api.onrender.com" &&
+      String(process.env.NODE_ENV).toLowerCase() === "production"
+    ) {
+      parsed.hostname = "api.readysetfly.us";
+      return parsed.toString().replace(/\/$/, "");
+    }
+
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return trimmed.replace(/\/$/, "");
+  }
+}
+
 function getGoogleCallbackUrl(): string {
-  // If you explicitly provide it, we use it.
-  if (process.env.GOOGLE_REDIRECT_URL) return process.env.GOOGLE_REDIRECT_URL;
+  // Normalize stale production values so OAuth does not keep pointing at the
+  // legacy Render hostname after the custom-domain cutover.
+  if (process.env.GOOGLE_REDIRECT_URL) {
+    return normalizeReadySetFlyApiUrl(process.env.GOOGLE_REDIRECT_URL);
+  }
 
   // Otherwise derive it.
-  return `${getApiBaseUrl()}/api/auth/google/callback`;
+  return `${normalizeReadySetFlyApiUrl(getApiBaseUrl())}/api/auth/google/callback`;
 }
 
 function getSessionCookieDomain(): string | undefined {

@@ -100,14 +100,27 @@ export function interpolateRouteOwnship<T extends { latitude: number; longitude:
 
   let altitudeFt = plannedAltitudeFt;
   let verticalSpeedFpm = 0;
-  if (clampedProgress < 0.12) {
-    const climbPct = clampedProgress / 0.12;
-    altitudeFt = Math.max(900, plannedAltitudeFt * climbPct);
+  let speedKts = cruiseKts;
+  if (clampedProgress < 0.02) {
+    const taxiOutPct = clampedProgress / 0.02;
+    altitudeFt = 900;
+    verticalSpeedFpm = 0;
+    speedKts = 12 + taxiOutPct * 38;
+  } else if (clampedProgress < 0.12) {
+    const climbPct = (clampedProgress - 0.02) / 0.1;
+    altitudeFt = Math.max(1200, plannedAltitudeFt * (0.16 + climbPct * 0.84));
     verticalSpeedFpm = 700;
+    speedKts = 50 + (cruiseKts - 50) * climbPct;
+  } else if (clampedProgress > 0.985) {
+    const taxiInPct = (clampedProgress - 0.985) / 0.015;
+    altitudeFt = 900;
+    verticalSpeedFpm = 0;
+    speedKts = Math.max(10, 55 - taxiInPct * 40);
   } else if (clampedProgress > 0.88) {
     const descentPct = (clampedProgress - 0.88) / 0.12;
     altitudeFt = Math.max(1200, plannedAltitudeFt * (1 - descentPct));
     verticalSpeedFpm = -500;
+    speedKts = cruiseKts - (cruiseKts - 75) * descentPct;
   }
 
   return {
@@ -115,7 +128,7 @@ export function interpolateRouteOwnship<T extends { latitude: number; longitude:
       lat: latitude,
       lon: longitude,
       altitudeFt,
-      speedKts: cruiseKts,
+      speedKts,
       heading,
     },
     verticalSpeedFpm,

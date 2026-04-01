@@ -327,21 +327,12 @@ export default function CesiumGlobe({
     });
 
     const controller = viewer.scene.screenSpaceCameraController;
-    controller.enableZoom = false;
-    const handleWheel = (event: WheelEvent) => {
-      if (!event.ctrlKey) return;
-      event.preventDefault();
-      const height = viewer.camera.positionCartographic.height;
-      const zoomFactor = Math.max(0.05, Math.min(0.5, Math.abs(event.deltaY) / 600));
-      const amount = Math.max(200, height * zoomFactor);
-      if (event.deltaY > 0) {
-        viewer.camera.zoomOut(amount);
-      } else {
-        viewer.camera.zoomIn(amount);
-      }
-    };
-    const canvas = viewer.scene.canvas;
-    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    controller.enableZoom = true;
+    controller.enableTilt = true;
+    controller.enableTranslate = true;
+    controller.enableLook = true;
+    controller.minimumZoomDistance = 200;
+    controller.maximumZoomDistance = 20_000_000;
 
     viewer.imageryLayers.removeAll();
     viewer.imageryLayers.addImageryProvider(
@@ -362,7 +353,6 @@ export default function CesiumGlobe({
     return () => {
       cancelled = true;
       if (viewerRef.current) {
-        canvas.removeEventListener("wheel", handleWheel);
         viewerRef.current.destroy();
         viewerRef.current = null;
       }

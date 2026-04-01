@@ -237,6 +237,13 @@ function formatFrequency(frequencyMhz: number | null | undefined) {
   return typeof frequencyMhz === "number" ? frequencyMhz.toFixed(3) : "--";
 }
 
+function normalizePlateText(value: string | null | undefined) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
+}
+
 function getOppositeRunwayIdent(runwayId: string) {
   const match = normalizeRunwayIdent(runwayId).match(/^(\d{1,2})([LCR])?$/);
   if (!match) return null;
@@ -248,30 +255,17 @@ function getOppositeRunwayIdent(runwayId: string) {
 }
 
 function isAirportDiagramPlate(plate: PlateRecord) {
-  const type = String(plate.type || "").toUpperCase();
-  const name = String(plate.name || "").toUpperCase();
+  const type = normalizePlateText(plate.type);
+  const name = normalizePlateText(plate.name);
   return (
-    type.includes("AIRPORT") ||
-    ["APD", "DIAGRAM", "HOT", "LAHSO", "PARKING"].some((token) => type.includes(token)) ||
-    name.includes("AIRPORT DIAGRAM") ||
-    name.includes("AIRPORT")
+    type === "APD" ||
+    type.includes("AIRPORT DIAGRAM") ||
+    name.includes("AIRPORT DIAGRAM")
   );
 }
 
 function pickPreferredAirportDiagram(plates: PlateRecord[]) {
-  const exact = plates.find(isAirportDiagramPlate);
-  if (exact) return exact;
-
-  const fallback = plates.find((plate) => {
-    const name = String(plate.name || "").toUpperCase();
-    const type = String(plate.type || "").toUpperCase();
-    return (
-      ["AIRPORT", "DIAGRAM", "APD", "PARKING", "HOT", "LAHSO", "RAMP"].some((token) => name.includes(token)) ||
-      ["AIRPORT", "DIAGRAM", "APD", "PARKING", "HOT", "LAHSO"].some((token) => type.includes(token))
-    );
-  });
-
-  return fallback || null;
+  return plates.find(isAirportDiagramPlate) || null;
 }
 
 function pickAirportFrequency(
@@ -875,41 +869,44 @@ function FlightDemoTape({
   side: "left" | "right";
   formatValue: (value: number) => string;
 }) {
-  const ticks = Array.from({ length: 9 }, (_, index) => {
-    const tickValue = Math.round(value / step) * step + (index - 4) * step;
+  const tickCount = 13;
+  const centerIndex = Math.floor(tickCount / 2);
+  const tickSpacingPx = label === "IAS" ? 20 : 18;
+  const ticks = Array.from({ length: tickCount }, (_, index) => {
+    const tickValue = Math.round(value / step) * step + (index - centerIndex) * step;
     return {
       value: tickValue,
-      offsetPx: (tickValue - value) * -0.48,
+      offsetPx: ((tickValue - value) / step) * -tickSpacingPx,
     };
   });
 
   return (
     <div
-      className={`absolute top-1/2 z-20 hidden h-60 w-[84px] -translate-y-1/2 rounded-[22px] border border-[#1E2D42] bg-[#081019]/84 backdrop-blur md:block ${side === "left" ? "left-4" : "right-4"}`}
+      className={`absolute top-1/2 z-20 hidden h-72 w-[98px] -translate-y-1/2 rounded-[24px] border border-[#1E2D42] bg-[#081019]/90 backdrop-blur md:block ${side === "left" ? "left-5" : "right-5"}`}
     >
       <div className="absolute inset-x-0 top-3 text-center text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">
         {label}
       </div>
-      <div className="absolute inset-x-3 top-1/2 h-10 -translate-y-1/2 rounded-xl border border-[#C8922A]/40 bg-[#0D151F]/96" />
+      <div className="absolute inset-x-3.5 top-1/2 h-12 -translate-y-1/2 rounded-xl border border-[#C8922A]/50 bg-[#0D151F]/96 shadow-[0_0_16px_rgba(200,146,42,0.12)]" />
       <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center">
-        <div className="font-mono text-2xl text-[#F5A623]">{formatValue(value)}</div>
+        <div className="font-mono text-3xl leading-none text-[#F5A623]">{formatValue(value)}</div>
         <div className="text-[10px] uppercase tracking-[0.18em] text-[#7A9BB8]">{unit}</div>
       </div>
-      <div className="absolute inset-x-0 bottom-4 top-10 overflow-hidden">
+      <div className="absolute inset-x-0 bottom-5 top-11 overflow-hidden">
         {ticks.map((tick) => (
           <div
             key={`${label}-${tick.value}`}
-            className="absolute inset-x-0 flex items-center text-[11px] text-[#D6A85A]"
+            className="absolute inset-x-0 flex items-center text-xs text-[#D6A85A]"
             style={{ top: `calc(50% + ${tick.offsetPx}px)` }}
           >
             {side === "left" ? (
               <>
                 <span className="ml-3 font-mono">{formatValue(tick.value)}</span>
-                <div className="ml-auto mr-4 h-px w-4 bg-[#F5A623]/70" />
+                <div className="ml-auto mr-4 h-px w-5 bg-[#F5A623]/70" />
               </>
             ) : (
               <>
-                <div className="ml-4 h-px w-4 bg-[#F5A623]/70" />
+                <div className="ml-4 h-px w-5 bg-[#F5A623]/70" />
                 <span className="ml-auto mr-3 font-mono">{formatValue(tick.value)}</span>
               </>
             )}
@@ -1536,7 +1533,7 @@ function FlightDemoVisionSurface({
         label="IAS"
         value={ownship.speedKts}
         unit="KT"
-        step={10}
+        step={5}
         side="left"
         formatValue={(value) => Math.max(0, Math.round(value)).toString()}
       />
@@ -1548,7 +1545,7 @@ function FlightDemoVisionSurface({
         side="right"
         formatValue={(value) => Math.max(0, Math.round(value / 10) * 10).toString()}
       />
-      <div className="absolute left-3 top-3 z-20 max-w-[152px] rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 backdrop-blur md:left-4 md:top-4 md:max-w-[190px] md:px-4 md:py-3">
+      <div className="absolute left-3 top-3 z-20 max-w-[152px] rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 backdrop-blur md:left-[124px] md:top-4 md:max-w-[220px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Vision guidance</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {nextWaypoint ? `Track ${nextWaypoint}` : "Route tunnel active"}
@@ -1557,7 +1554,7 @@ function FlightDemoVisionSurface({
             {phaseLabel} - {nextWaypointDistanceNm != null ? `${nextWaypointDistanceNm.toFixed(1)} NM to next fix` : "Monitoring current leg"}
           </div>
       </div>
-      <div className="absolute right-3 top-3 z-20 flex max-w-[150px] flex-col gap-2 md:right-4 md:top-4 md:max-w-[208px]">
+      <div className="absolute right-3 top-3 z-20 flex max-w-[150px] flex-col gap-2 md:right-[124px] md:top-4 md:max-w-[220px]">
           {runwayCue ? (
             <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 text-right backdrop-blur md:px-4 md:py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Approach</div>
@@ -1578,7 +1575,7 @@ function FlightDemoVisionSurface({
           </div>
       </div>
       {terrainState ? (
-        <div className="absolute bottom-[98px] left-3 right-[34%] z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 backdrop-blur md:bottom-[116px] md:left-[114px] md:right-auto md:max-w-[210px] md:px-4 md:py-3">
+        <div className="absolute bottom-[98px] left-3 right-[34%] z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 backdrop-blur md:bottom-[124px] md:left-[124px] md:right-auto md:w-[220px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Terrain guidance</div>
           <div
             className={`mt-1 text-sm font-semibold ${
@@ -1614,7 +1611,7 @@ function FlightDemoVisionSurface({
         </div>
       ) : null}
       {selectedTrafficTarget ? (
-        <div className="absolute bottom-[98px] left-[34%] right-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 text-right backdrop-blur md:bottom-[116px] md:left-auto md:right-[114px] md:max-w-[210px] md:px-4 md:py-3">
+        <div className="absolute bottom-[98px] left-[34%] right-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 text-right backdrop-blur md:bottom-[124px] md:left-auto md:right-[124px] md:w-[220px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Traffic</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {selectedTrafficTarget.callsign} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}

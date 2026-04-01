@@ -576,6 +576,20 @@ const VERSION_STAMP_CANDIDATE_KEYS = new Set(
   ].map((value) => value.toLowerCase().replace(/[^a-z0-9]/g, "")),
 );
 
+const PROVIDER_PLAN_ID_CANDIDATE_KEYS = new Set(
+  [
+    "providerPlanId",
+    "provider_plan_id",
+    "flightIdentifier",
+    "flight_identifier",
+    "flightPlanId",
+    "flight_plan_id",
+    "planId",
+    "plan_id",
+    "id",
+  ].map((value) => value.toLowerCase().replace(/[^a-z0-9]/g, "")),
+);
+
 const collectVersionCandidatePaths = (input: unknown, maxDepth = 8) => {
   const matches: Array<{ path: string; type: string; preview: unknown }> = [];
   if (!input || typeof input !== "object") return matches;
@@ -610,6 +624,63 @@ const collectVersionCandidatePaths = (input: unknown, maxDepth = 8) => {
       const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
       const childPath = `${path}.${key}`;
       if (VERSION_STAMP_CANDIDATE_KEYS.has(normalizedKey)) {
+        let preview: unknown = child;
+        if (child && typeof child === "object") {
+          try {
+            preview = JSON.stringify(child);
+          } catch {
+            preview = "[object]";
+          }
+        }
+        matches.push({
+          path: childPath,
+          type: Array.isArray(child) ? "array" : typeof child,
+          preview,
+        });
+      }
+      if (child && typeof child === "object") {
+        queue.push({ value: child, depth: depth + 1, path: childPath });
+      }
+    }
+  }
+
+  return matches.slice(0, 20);
+};
+
+const collectProviderPlanIdCandidatePaths = (input: unknown, maxDepth = 8) => {
+  const matches: Array<{ path: string; type: string; preview: unknown }> = [];
+  if (!input || typeof input !== "object") return matches;
+
+  const queue: Array<{ value: unknown; depth: number; path: string }> = [{ value: input, depth: 0, path: "$" }];
+  const visited = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+
+    const { value, depth, path } = current;
+    if (value === null || value === undefined || depth > maxDepth) {
+      continue;
+    }
+
+    if (typeof value !== "object") {
+      continue;
+    }
+
+    if (visited.has(value)) continue;
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        queue.push({ value: item, depth: depth + 1, path: `${path}[${index}]` });
+      });
+      continue;
+    }
+
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const childPath = `${path}.${key}`;
+      if (PROVIDER_PLAN_ID_CANDIDATE_KEYS.has(normalizedKey)) {
         let preview: unknown = child;
         if (child && typeof child === "object") {
           try {
@@ -1007,8 +1078,20 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         retrievePath: config.retrievePath,
         responseKeys: summarizeObjectKeys(parsedResponse),
         metadataKeys: summarizeObjectKeys(metadataResponse),
+        responseProviderPlanIdCandidates: collectProviderPlanIdCandidatePaths(parsedResponse),
+        metadataProviderPlanIdCandidates: collectProviderPlanIdCandidatePaths(metadataResponse),
         responseVersionCandidates: collectVersionCandidatePaths(parsedResponse),
         metadataVersionCandidates: collectVersionCandidatePaths(metadataResponse),
+      }));
+    }
+
+    if (action === "file" && providerPlanId === buildProviderPlanId(plan, action)) {
+      console.info(JSON.stringify({
+        event: "leidos_file_missing_provider_plan_id",
+        action,
+        providerPlanId,
+        responseKeys: summarizeObjectKeys(parsedResponse),
+        responseProviderPlanIdCandidates: collectProviderPlanIdCandidatePaths(parsedResponse),
       }));
     }
 

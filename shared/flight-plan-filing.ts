@@ -213,10 +213,15 @@ export const extractFilingProviderPlanId = (input: unknown) => {
   const record = input as Record<string, unknown>;
   const direct =
     asTrimmedString(record.providerPlanId) ||
+    extractNestedPrimitiveString(record.providerPlanId) ||
     asTrimmedString(record.flightIdentifier) ||
+    extractNestedPrimitiveString(record.flightIdentifier) ||
     asTrimmedString(record.flightPlanId) ||
+    extractNestedPrimitiveString(record.flightPlanId) ||
     asTrimmedString(record.planId) ||
-    asTrimmedString(record.id);
+    extractNestedPrimitiveString(record.planId) ||
+    asTrimmedString(record.id) ||
+    extractNestedPrimitiveString(record.id);
 
   if (direct) return direct;
 

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 import { apiUrl } from "@/lib/api";
 import { clearTfmsOverlay, setTfmsOverlay } from "@/map/layers/tfmsOverlayLayer";
+import type { RunwayOverlay } from "@shared/flight-scene";
+import type { FeatureCollection } from "geojson";
 
 import type { PlannerPoint, PlannerTerrainHotSpot, PlannerTerrainSegment } from "@/components/flight-planner/PlannerMap";
 
@@ -31,6 +33,201 @@ const terrainRiskVisuals = {
   },
 } as const;
 
+type GlobeRunwayOverlay = {
+  overlay: RunwayOverlay;
+  label?: string | null;
+  tone?: "departure" | "arrival";
+};
+
+type GlobeOwnship = {
+  lat: number;
+  lon: number;
+  altitudeFt?: number | null;
+  headingDeg?: number | null;
+};
+
+type GlobeGeoJsonOverlay = {
+  id: string;
+  data: FeatureCollection | null | undefined;
+  strokeColor?: string;
+  fillColor?: string;
+  opacity?: number;
+};
+
+type GlobeTrafficTarget = {
+  id: string | number;
+  lat: number;
+  lon: number;
+  altitudeFt?: number | null;
+  relativeAltitudeFt?: number | null;
+  trackDeg?: number | null;
+  threatLevel?: "monitor" | "advisory" | "immediate";
+  label?: string | null;
+};
+
+type GlobeObstacle = {
+  id: string | number;
+  lat: number;
+  lon: number;
+  amslFt?: number | null;
+  aglFt?: number | null;
+  kind?: string | null;
+};
+
+type GlobeDiversionAirport = {
+  icao: string;
+  lat: number;
+  lon: number;
+  maxRunwayFt?: number | null;
+  immediateReady?: boolean;
+};
+
+function toBase64(bytes: Uint8Array) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return btoa(binary);
+}
+
+function colorFromHex(hex: string) {
+  const color = Cesium.Color.fromCssColorString(hex);
+  return [color.red, color.green, color.blue, color.alpha];
+}
+
+let simpleAircraftModelUriCache: string | null = null;
+
+function buildSimpleAircraftModelUri() {
+  if (simpleAircraftModelUriCache) return simpleAircraftModelUriCache;
+
+  // X=right wing, Y=nose-forward, Z=up for local ENU heading alignment.
+  const positions = new Float32Array([
+    0.0, 4.2, 0.0,
+    -0.35, 2.2, 0.25,
+    0.35, 2.2, 0.25,
+    -0.35, 2.2, -0.25,
+    0.35, 2.2, -0.25,
+    -4.8, 0.4, 0.0,
+    4.8, 0.4, 0.0,
+    -0.2, -2.6, 0.35,
+    0.2, -2.6, 0.35,
+    -0.2, -2.8, -0.2,
+    0.2, -2.8, -0.2,
+    -1.8, -2.1, 0.0,
+    1.8, -2.1, 0.0,
+    0.0, -3.4, 1.1,
+  ]);
+
+  const indices = new Uint16Array([
+    0, 1, 2,
+    0, 2, 4,
+    0, 4, 3,
+    0, 3, 1,
+    1, 5, 3,
+    2, 4, 6,
+    7, 8, 13,
+    7, 11, 13,
+    8, 12, 13,
+    9, 10, 11,
+    10, 12, 11,
+    7, 9, 10,
+    7, 10, 8,
+  ]);
+
+  const positionBytes = new Uint8Array(positions.buffer);
+  const indexBytes = new Uint8Array(indices.buffer);
+  const combined = new Uint8Array(positionBytes.byteLength + indexBytes.byteLength);
+  combined.set(positionBytes, 0);
+  combined.set(indexBytes, positionBytes.byteLength);
+
+  const min = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
+  const max = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
+  for (let index = 0; index < positions.length; index += 3) {
+    min[0] = Math.min(min[0], positions[index]);
+    min[1] = Math.min(min[1], positions[index + 1]);
+    min[2] = Math.min(min[2], positions[index + 2]);
+    max[0] = Math.max(max[0], positions[index]);
+    max[1] = Math.max(max[1], positions[index + 1]);
+    max[2] = Math.max(max[2], positions[index + 2]);
+  }
+
+  const gltf = {
+    asset: { version: "2.0", generator: "RSF CesiumGlobe" },
+    scene: 0,
+    scenes: [{ nodes: [0] }],
+    nodes: [{ mesh: 0 }],
+    meshes: [
+      {
+        primitives: [
+          {
+            attributes: { POSITION: 0 },
+            indices: 1,
+            material: 0,
+          },
+        ],
+      },
+    ],
+    materials: [
+      {
+        pbrMetallicRoughness: {
+          baseColorFactor: colorFromHex("#3b82f6"),
+          metallicFactor: 0.15,
+          roughnessFactor: 0.7,
+        },
+        doubleSided: true,
+      },
+    ],
+    accessors: [
+      {
+        bufferView: 0,
+        componentType: 5126,
+        count: positions.length / 3,
+        type: "VEC3",
+        min,
+        max,
+      },
+      {
+        bufferView: 1,
+        componentType: 5123,
+        count: indices.length,
+        type: "SCALAR",
+      },
+    ],
+    bufferViews: [
+      {
+        buffer: 0,
+        byteOffset: 0,
+        byteLength: positionBytes.byteLength,
+        target: 34962,
+      },
+      {
+        buffer: 0,
+        byteOffset: positionBytes.byteLength,
+        byteLength: indexBytes.byteLength,
+        target: 34963,
+      },
+    ],
+    buffers: [
+      {
+        byteLength: combined.byteLength,
+        uri: `data:application/octet-stream;base64,${toBase64(combined)}`,
+      },
+    ],
+  };
+
+  simpleAircraftModelUriCache = `data:model/gltf+json;base64,${btoa(JSON.stringify(gltf))}`;
+  return simpleAircraftModelUriCache;
+}
+
+function normalizeFeatureCollection(input: FeatureCollection | null | undefined) {
+  if (!input || input.type !== "FeatureCollection") {
+    return { type: "FeatureCollection", features: [] } as FeatureCollection;
+  }
+  return input;
+}
+
 export default function CesiumGlobe({
   points,
   heightClassName = "h-[380px]",
@@ -38,6 +235,13 @@ export default function CesiumGlobe({
   plannedAltitudeFt,
   terrainSegments = [],
   terrainHotSpots = [],
+  runwayOverlays = [],
+  ownship = null,
+  geoJsonOverlays = [],
+  trafficTargets = [],
+  obstacles = [],
+  diversionAirports = [],
+  rangeRingNm,
 }: {
   points: PlannerPoint[];
   heightClassName?: string;
@@ -45,6 +249,13 @@ export default function CesiumGlobe({
   plannedAltitudeFt?: number;
   terrainSegments?: PlannerTerrainSegment[];
   terrainHotSpots?: PlannerTerrainHotSpot[];
+  runwayOverlays?: GlobeRunwayOverlay[];
+  ownship?: GlobeOwnship | null;
+  geoJsonOverlays?: GlobeGeoJsonOverlay[];
+  trafficTargets?: GlobeTrafficTarget[];
+  obstacles?: GlobeObstacle[];
+  diversionAirports?: GlobeDiversionAirport[];
+  rangeRingNm?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
@@ -61,6 +272,7 @@ export default function CesiumGlobe({
   const overlayAbortRef = useRef<AbortController | null>(null);
   const overlayTimerRef = useRef<number | null>(null);
   const lastOverlayBboxRef = useRef<string | null>(null);
+  const geoJsonOverlayRefs = useRef<Cesium.DataSource[]>([]);
 
   const runtimeIonToken = (globalThis as any).CESIUM_ION_TOKEN as string | undefined;
   const envIonToken = import.meta.env.VITE_CESIUM_ION_TOKEN as string | undefined;
@@ -379,6 +591,65 @@ export default function CesiumGlobe({
     const viewer = viewerRef.current;
     if (!viewer) return;
 
+    geoJsonOverlayRefs.current.forEach((dataSource) => {
+      viewer.dataSources.remove(dataSource, true);
+    });
+    geoJsonOverlayRefs.current = [];
+
+    let cancelled = false;
+
+    const loadOverlays = async () => {
+      for (const overlay of geoJsonOverlays) {
+        const featureCollection = normalizeFeatureCollection(overlay.data);
+        if (!featureCollection.features.length) continue;
+
+        const dataSource = await Cesium.GeoJsonDataSource.load(featureCollection, {
+          clampToGround: true,
+        });
+        const stroke = Cesium.Color.fromCssColorString(overlay.strokeColor || "#38bdf8");
+        const fill = Cesium.Color.fromCssColorString(overlay.fillColor || overlay.strokeColor || "#38bdf8")
+          .withAlpha(Math.max(0.08, Math.min(0.75, overlay.opacity ?? 0.18)));
+
+        dataSource.entities.values.forEach((entity) => {
+          if (entity.polygon) {
+            entity.polygon.material = new Cesium.ColorMaterialProperty(fill);
+            entity.polygon.outline = new Cesium.ConstantProperty(true);
+            entity.polygon.outlineColor = new Cesium.ConstantProperty(stroke);
+          }
+          if (entity.polyline) {
+            entity.polyline.material = new Cesium.ColorMaterialProperty(stroke);
+            entity.polyline.width = new Cesium.ConstantProperty(2);
+          }
+          if (entity.point) {
+            entity.point.color = new Cesium.ConstantProperty(stroke);
+            entity.point.pixelSize = new Cesium.ConstantProperty(8);
+          }
+        });
+
+        if (cancelled) {
+          viewer.dataSources.remove(dataSource, true);
+          continue;
+        }
+        viewer.dataSources.add(dataSource);
+        geoJsonOverlayRefs.current.push(dataSource);
+      }
+    };
+
+    void loadOverlays();
+
+    return () => {
+      cancelled = true;
+      geoJsonOverlayRefs.current.forEach((dataSource) => {
+        viewer.dataSources.remove(dataSource, true);
+      });
+      geoJsonOverlayRefs.current = [];
+    };
+  }, [geoJsonOverlays]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
     viewer.entities.removeAll();
 
     if (points.length === 0) return;
@@ -516,8 +787,233 @@ export default function CesiumGlobe({
       });
     });
 
+    runwayOverlays.forEach(({ overlay, label, tone }) => {
+      const centerlineColor =
+        tone === "arrival"
+          ? Cesium.Color.fromCssColorString("#f59e0b")
+          : Cesium.Color.fromCssColorString("#22c55e");
+      const runwayBarColor =
+        tone === "arrival"
+          ? Cesium.Color.fromCssColorString("#fde68a")
+          : Cesium.Color.fromCssColorString("#86efac");
+      const centerlinePositions = Cesium.Cartesian3.fromDegreesArray(
+        overlay.centerline.flatMap((point) => [point.longitude, point.latitude]),
+      );
+      const runwayBarPositions = Cesium.Cartesian3.fromDegreesArray(
+        overlay.runwayBar.flatMap((point) => [point.longitude, point.latitude]),
+      );
+
+      viewer.entities.add({
+        polyline: {
+          positions: centerlinePositions,
+          width: tone === "arrival" ? 7 : 6,
+          material: new Cesium.PolylineGlowMaterialProperty({
+            color: centerlineColor.withAlpha(0.95),
+            glowPower: 0.22,
+          }),
+          clampToGround: true,
+        },
+      });
+
+      viewer.entities.add({
+        polyline: {
+          positions: runwayBarPositions,
+          width: 8,
+          material: runwayBarColor.withAlpha(0.95),
+          clampToGround: true,
+        },
+      });
+
+      const thresholdMidpoint = {
+        latitude: (overlay.runwayBar[0]?.latitude + overlay.runwayBar[1]?.latitude) / 2,
+        longitude: (overlay.runwayBar[0]?.longitude + overlay.runwayBar[1]?.longitude) / 2,
+      };
+      if (Number.isFinite(thresholdMidpoint.latitude) && Number.isFinite(thresholdMidpoint.longitude) && label) {
+        viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(
+            thresholdMidpoint.longitude,
+            thresholdMidpoint.latitude,
+            45,
+          ),
+          label: {
+            text: label,
+            font: "13px sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK,
+            outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            showBackground: true,
+            backgroundColor: centerlineColor.withAlpha(0.82),
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            pixelOffset: new Cesium.Cartesian2(0, -12),
+          },
+        });
+      }
+    });
+
+    if (ownship) {
+      const ownshipAltitudeMeters =
+        ownship.altitudeFt && Number.isFinite(ownship.altitudeFt)
+          ? Math.max(180, ownship.altitudeFt * 0.3048)
+          : routeAltitudeMeters;
+      const ownshipPosition = Cesium.Cartesian3.fromDegrees(ownship.lon, ownship.lat, ownshipAltitudeMeters);
+      viewer.entities.add({
+        position: ownshipPosition,
+        orientation: Cesium.Transforms.headingPitchRollQuaternion(
+          ownshipPosition,
+          new Cesium.HeadingPitchRoll(
+            Cesium.Math.toRadians(ownship.headingDeg ?? 0),
+            0,
+            0,
+          ),
+        ),
+        model: {
+          uri: buildSimpleAircraftModelUri(),
+          scale: 36,
+          minimumPixelSize: 52,
+          maximumScale: 80,
+        },
+        label: {
+          text: ownship.headingDeg != null ? `OWN ${Math.round(ownship.headingDeg).toString().padStart(3, "0")}` : "OWN",
+          font: "13px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          showBackground: true,
+          backgroundColor: Cesium.Color.fromCssColorString("#1d4ed8").withAlpha(0.85),
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -22),
+        },
+      });
+
+      if (rangeRingNm && Number.isFinite(rangeRingNm) && rangeRingNm > 0) {
+        viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(ownship.lon, ownship.lat, 0),
+          ellipse: {
+            semiMajorAxis: rangeRingNm * 1852,
+            semiMinorAxis: rangeRingNm * 1852,
+            material: Cesium.Color.fromCssColorString("#38bdf8").withAlpha(0.06),
+            outline: true,
+            outlineColor: Cesium.Color.fromCssColorString("#38bdf8").withAlpha(0.55),
+            height: 0,
+          },
+        });
+      }
+    }
+
+    trafficTargets.forEach((target) => {
+      const trafficAltitudeMeters =
+        target.altitudeFt && Number.isFinite(target.altitudeFt)
+          ? Math.max(150, target.altitudeFt * 0.3048)
+          : routeAltitudeMeters;
+      const tone =
+        target.threatLevel === "immediate"
+          ? "#ef4444"
+          : target.threatLevel === "advisory"
+            ? "#f59e0b"
+            : "#14b8a6";
+      viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(target.lon, target.lat, trafficAltitudeMeters),
+        point: {
+          pixelSize: target.threatLevel === "immediate" ? 14 : 11,
+          color: Cesium.Color.fromCssColorString(tone),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+        },
+        label: {
+          text: target.label || String(target.id),
+          font: "12px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          showBackground: true,
+          backgroundColor: Cesium.Color.fromCssColorString(tone).withAlpha(0.78),
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -14),
+        },
+      });
+    });
+
+    obstacles.forEach((obstacle) => {
+      const obstacleHeightMeters =
+        obstacle.amslFt && Number.isFinite(obstacle.amslFt)
+          ? Math.max(25, obstacle.amslFt * 0.3048)
+          : 25;
+      viewer.entities.add({
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+            obstacle.lon,
+            obstacle.lat,
+            0,
+            obstacle.lon,
+            obstacle.lat,
+            obstacleHeightMeters,
+          ]),
+          width: 3,
+          material: new Cesium.ColorMaterialProperty(Cesium.Color.fromCssColorString("#ef4444")),
+        },
+      });
+      viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(obstacle.lon, obstacle.lat, obstacleHeightMeters),
+        point: {
+          pixelSize: 10,
+          color: Cesium.Color.fromCssColorString("#ef4444"),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+        },
+        label: {
+          text: obstacle.kind || "Obstacle",
+          font: "11px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -12),
+        },
+      });
+    });
+
+    diversionAirports.forEach((airport) => {
+      const tone = airport.immediateReady ? "#14b8a6" : "#60a5fa";
+      viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, 18),
+        point: {
+          pixelSize: 10,
+          color: Cesium.Color.fromCssColorString(tone),
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+        },
+        label: {
+          text: airport.icao,
+          font: "11px sans-serif",
+          fillColor: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.BLACK,
+          outlineWidth: 3,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          showBackground: true,
+          backgroundColor: Cesium.Color.fromCssColorString(tone).withAlpha(0.76),
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -12),
+        },
+      });
+    });
+
     viewer.zoomTo(viewer.entities, new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-30), 0));
-  }, [plannedAltitudeFt, points, terrainHotSpots, terrainSegments]);
+  }, [
+    diversionAirports,
+    obstacles,
+    ownship,
+    plannedAltitudeFt,
+    points,
+    rangeRingNm,
+    runwayOverlays,
+    terrainHotSpots,
+    terrainSegments,
+    trafficTargets,
+  ]);
 
   return (
     <div className={heightClassName}>

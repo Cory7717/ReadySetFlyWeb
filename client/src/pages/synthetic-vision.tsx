@@ -5,6 +5,7 @@ import {
   Clock3,
   FileText,
   Gauge,
+  Globe2,
   Map as MapIcon,
   Navigation,
   Pause,
@@ -16,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import CesiumGlobe from "@/components/flight-planner/CesiumGlobe";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { apiUrl } from "@/lib/api";
@@ -133,7 +135,7 @@ type DemoTerrainState = {
   guidance: string;
 };
 
-type ViewMode = "map" | "vision";
+type ViewMode = "map" | "vision" | "globe";
 type DemoSpeed = "1x" | "2x" | "4x" | "8x";
 type DemoFlightPhase = "surface-departure" | "departure" | "enroute" | "arrival" | "surface-arrival";
 
@@ -2186,6 +2188,43 @@ export default function SyntheticVisionPage() {
     }
     return null;
   }, [arrivalRunway, departureRunway, flightPhase]);
+  const globeRunwayOverlays = useMemo(() => {
+    const overlays: Array<{
+      overlay: RunwayOverlay;
+      label: string;
+      tone: "departure" | "arrival";
+    }> = [];
+
+    if (departureAirport && departureRunway) {
+      overlays.push({
+        overlay: buildDepartureRunwayOverlay({
+          airport: {
+            latitude: departureAirport.latitude,
+            longitude: departureAirport.longitude,
+          },
+          runway: departureRunway,
+        }),
+        label: `DEP ${departureRunway.runwayId}`,
+        tone: "departure",
+      });
+    }
+
+    if (arrivalAirport && arrivalRunway) {
+      overlays.push({
+        overlay: buildArrivalRunwayOverlay({
+          airport: {
+            latitude: arrivalAirport.latitude,
+            longitude: arrivalAirport.longitude,
+          },
+          runway: arrivalRunway,
+        }),
+        label: `APP ${arrivalRunway.runwayId}`,
+        tone: "arrival",
+      });
+    }
+
+    return overlays;
+  }, [arrivalAirport, arrivalRunway, departureAirport, departureRunway]);
   const airportSurfacePreview = useMemo<DemoSurfacePreview | null>(() => {
     const departureSurface = flightPhase === "surface-departure" || flightPhase === "departure";
     const airport = departureSurface ? departureAirport : arrivalAirport;
@@ -2616,6 +2655,15 @@ export default function SyntheticVisionPage() {
                   <Navigation className="mr-2 h-4 w-4" />
                   Vision
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={viewMode === "globe" ? "border-[#34d399] bg-[#1A2332] text-[#E8EDF4]" : "border-[#1E2D42] bg-[#111820] text-[#7A9BB8]"}
+                  onClick={() => setViewMode("globe")}
+                >
+                  <Globe2 className="mr-2 h-4 w-4" />
+                  Globe
+                </Button>
               </div>
             </div>
 
@@ -2651,6 +2699,43 @@ export default function SyntheticVisionPage() {
                 selectedTrafficTarget={selectedTrafficTarget}
                 selectedDiversion={selectedDiversion}
                 runwayCue={activeVisionRunwayCue}
+              />
+            ) : null}
+
+            {viewMode === "globe" && flightFrame?.ownship ? (
+              <CesiumGlobe
+                points={routePoints.map((point) => ({
+                  icao: point.icao,
+                  lat: point.latitude,
+                  lon: point.longitude,
+                  label: point.name || point.icao,
+                }))}
+                heightClassName="h-[640px]"
+                plannedAltitudeFt={DEMO_ALTITUDE_FT}
+                runwayOverlays={globeRunwayOverlays}
+                trafficTargets={trafficTargets.map((target) => ({
+                  id: target.id,
+                  lat: target.lat,
+                  lon: target.lon,
+                  altitudeFt: flightFrame.ownship.altitudeFt + target.altitudeDeltaFt,
+                  relativeAltitudeFt: target.altitudeDeltaFt,
+                  threatLevel: target.threatLevel,
+                  label: target.callsign,
+                }))}
+                diversionAirports={diversionCandidates.map((airport) => ({
+                  icao: airport.icao,
+                  lat: airport.lat,
+                  lon: airport.lon,
+                  maxRunwayFt: airport.maxRunwayFt,
+                  immediateReady: airport.immediateReady,
+                }))}
+                ownship={{
+                  lat: flightFrame.ownship.lat,
+                  lon: flightFrame.ownship.lon,
+                  altitudeFt: flightFrame.ownship.altitudeFt,
+                  headingDeg: flightFrame.ownship.heading,
+                }}
+                rangeRingNm={25}
               />
             ) : null}
 

@@ -20,6 +20,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import CesiumGlobe from "@/components/flight-planner/CesiumGlobe";
 import { OpenInAppBanner } from "@/components/OpenInAppBanner";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -27,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { buildArrivalRunwayOverlay, buildDepartureRunwayOverlay } from "@shared/flight-scene";
 
 type LiveOwnship = {
   lat: number;
@@ -263,7 +265,14 @@ type RunwayBriefingResponse = {
   }>;
 };
 
-type MapStyle = "standard" | "sectional" | "radar" | "clouds";
+type RunwaySelection = {
+  runwayId: string;
+  headingDeg: number;
+  lengthFt: number | null;
+  surface: string | null;
+};
+
+type MapStyle = "standard" | "sectional" | "radar" | "clouds" | "globe";
 type TrafficFilterMode = "all" | "conflict" | "same-altitude" | "above" | "below";
 type PositionSourceMode = "device" | "bridge";
 
@@ -608,6 +617,72 @@ const buildTerrainHotSpotIcon = (risk: keyof typeof terrainRiskStyles, rank: num
 };
 
 const normalizeAirportCode = (value: string | null | undefined) => String(value || "").trim().toUpperCase();
+
+const normalizeRunwayIdent = (value: string | null | undefined) =>
+  String(value || "")
+    .toUpperCase()
+    .replace(/^RWY\s*/i, "")
+    .trim();
+
+const resolveRunwaySelection = (briefing: RunwayBriefingResponse | null | undefined): RunwaySelection | null => {
+  if (!briefing) return null;
+  const desiredId = normalizeRunwayIdent(briefing.advisory?.runway || briefing.runwayInUse);
+  const runways = Array.isArray(briefing.runways) ? briefing.runways : [];
+
+  for (const runway of runways) {
+    const leIdent = normalizeRunwayIdent(runway.leIdent);
+    const heIdent = normalizeRunwayIdent(runway.heIdent);
+    if (desiredId && desiredId === leIdent && runway.leHeading != null) {
+      return {
+        runwayId: desiredId,
+        headingDeg: runway.leHeading,
+        lengthFt: runway.lengthFt ?? null,
+        surface: runway.surface ?? null,
+      };
+    }
+    if (desiredId && desiredId === heIdent && runway.heHeading != null) {
+      return {
+        runwayId: desiredId,
+        headingDeg: runway.heHeading,
+        lengthFt: runway.lengthFt ?? null,
+        surface: runway.surface ?? null,
+      };
+    }
+  }
+
+  if (briefing.advisory?.heading != null) {
+    return {
+      runwayId: desiredId || normalizeRunwayIdent(briefing.advisory?.runway) || "RWY",
+      headingDeg: briefing.advisory.heading,
+      lengthFt: null,
+      surface: null,
+    };
+  }
+
+  const fallback = runways
+    .flatMap((runway) => [
+      runway.leHeading != null
+        ? {
+            runwayId: normalizeRunwayIdent(runway.leIdent) || "RWY",
+            headingDeg: runway.leHeading,
+            lengthFt: runway.lengthFt ?? null,
+            surface: runway.surface ?? null,
+          }
+        : null,
+      runway.heHeading != null
+        ? {
+            runwayId: normalizeRunwayIdent(runway.heIdent) || "RWY",
+            headingDeg: runway.heHeading,
+            lengthFt: runway.lengthFt ?? null,
+            surface: runway.surface ?? null,
+          }
+        : null,
+    ])
+    .filter(Boolean)
+    .sort((a, b) => (b?.lengthFt || 0) - (a?.lengthFt || 0))[0];
+
+  return fallback || null;
+};
 
 const extractRouteAirportCandidates = (plan: SavedFlightPlan | null) => {
   if (!plan) return [] as string[];
@@ -1295,6 +1370,32 @@ export default function AdsbLive() {
     setSelectedPlanId(savedPlansQuery.data[0].id);
   }, [savedPlansQuery.data, selectedPlanId]);
 
+  const departureBriefingQuery = useQuery<RunwayBriefingResponse>({
+    queryKey: ["/api/airports/runway-briefing", selectedPlan?.departure ?? null],
+    enabled: Boolean(selectedPlan?.departure),
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/airports/${encodeURIComponent(String(selectedPlan?.departure).trim().toUpperCase())}/runway-briefing`), {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Unable to load departure runway briefing.");
+      return response.json();
+    },
+    staleTime: 60 * 1000,
+  });
+
+  const arrivalBriefingQuery = useQuery<RunwayBriefingResponse>({
+    queryKey: ["/api/airports/runway-briefing", selectedPlan?.destination ?? null],
+    enabled: Boolean(selectedPlan?.destination),
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/airports/${encodeURIComponent(String(selectedPlan?.destination).trim().toUpperCase())}/runway-briefing`), {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Unable to load arrival runway briefing.");
+      return response.json();
+    },
+    staleTime: 60 * 1000,
+  });
+
   const routeCodes = useMemo(() => extractRouteAirportCandidates(selectedPlan), [selectedPlan]);
 
   const routePointsQuery = useQuery<RoutePoint[]>({
@@ -1323,6 +1424,47 @@ export default function AdsbLive() {
   });
 
   const routePoints = routePointsQuery.data ?? [];
+  const departureRunway = useMemo(() => resolveRunwaySelection(departureBriefingQuery.data), [departureBriefingQuery.data]);
+  const arrivalRunway = useMemo(() => resolveRunwaySelection(arrivalBriefingQuery.data), [arrivalBriefingQuery.data]);
+  const globeRunwayOverlays = useMemo(() => {
+    const overlays: Array<{
+      overlay: ReturnType<typeof buildDepartureRunwayOverlay>;
+      label: string;
+      tone: "departure" | "arrival";
+    }> = [];
+    const departurePoint = routePoints[0];
+    const arrivalPoint = routePoints.length ? routePoints[routePoints.length - 1] : null;
+
+    if (departurePoint && departureRunway) {
+      overlays.push({
+        overlay: buildDepartureRunwayOverlay({
+          airport: {
+            latitude: departurePoint.lat,
+            longitude: departurePoint.lon,
+          },
+          runway: departureRunway,
+        }),
+        label: `DEP ${departureRunway.runwayId}`,
+        tone: "departure",
+      });
+    }
+
+    if (arrivalPoint && arrivalRunway) {
+      overlays.push({
+        overlay: buildArrivalRunwayOverlay({
+          airport: {
+            latitude: arrivalPoint.lat,
+            longitude: arrivalPoint.lon,
+          },
+          runway: arrivalRunway,
+        }),
+        label: `APP ${arrivalRunway.runwayId}`,
+        tone: "arrival",
+      });
+    }
+
+    return overlays;
+  }, [arrivalRunway, departureRunway, routePoints]);
   const routePathParam = useMemo(
     () => routePoints.map((point) => `${point.lat.toFixed(6)},${point.lon.toFixed(6)}`).join(";"),
     [routePoints]
@@ -2033,6 +2175,7 @@ export default function AdsbLive() {
                       <SelectItem value="sectional">Sectional</SelectItem>
                       <SelectItem value="radar">Radar</SelectItem>
                       <SelectItem value="clouds">Clouds</SelectItem>
+                      <SelectItem value="globe">3D Globe</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={rangeNm} onValueChange={setRangeNm}>
@@ -2139,6 +2282,80 @@ export default function AdsbLive() {
               </div>
 
               <div className="h-[580px] overflow-hidden rounded-xl border">
+                {mapStyle === "globe" ? (
+                  <CesiumGlobe
+                    points={routePoints}
+                    heightClassName="h-full"
+                    plannedAltitudeFt={selectedPlan?.filingPlannedAltitudeFt ?? ownship?.altitudeFt ?? undefined}
+                    terrainSegments={terrainCueSegments}
+                    terrainHotSpots={terrainHotSpotMarkers}
+                    runwayOverlays={globeRunwayOverlays}
+                    geoJsonOverlays={[
+                      showTfrOverlay
+                        ? {
+                            id: "tfr",
+                            data: tfrQuery.data ?? null,
+                            strokeColor: "#ef4444",
+                            fillColor: "#ef4444",
+                            opacity: 0.18,
+                          }
+                        : null,
+                      showSuaOverlay
+                        ? {
+                            id: "sua",
+                            data: suaQuery.data ?? null,
+                            strokeColor: "#f59e0b",
+                            fillColor: "#f59e0b",
+                            opacity: 0.12,
+                          }
+                        : null,
+                    ].filter((overlay): overlay is NonNullable<typeof overlay> => Boolean(overlay))}
+                    trafficTargets={filteredTrafficTargets.map((target) => ({
+                      id: target.id,
+                      lat: target.lat,
+                      lon: target.lon,
+                      altitudeFt: target.altitudeFt,
+                      relativeAltitudeFt: target.relativeAltitudeFt,
+                      trackDeg: target.trackDeg,
+                      threatLevel: target.threatLevel,
+                      label: target.callsign || target.tail || target.id,
+                    }))}
+                    obstacles={
+                      showObstacleOverlay
+                        ? nearbyObstacles.map((obstacle) => ({
+                            id: obstacle.id,
+                            lat: obstacle.lat,
+                            lon: obstacle.lon,
+                            amslFt: obstacle.amslFt,
+                            aglFt: obstacle.aglFt,
+                            kind: obstacle.kind,
+                          }))
+                        : []
+                    }
+                    diversionAirports={
+                      showDiversionOverlay
+                        ? diversionMapMarkers.map((airport) => ({
+                            icao: airport.icao,
+                            lat: airport.lat,
+                            lon: airport.lon,
+                            maxRunwayFt: airport.maxRunwayFt,
+                            immediateReady: airport.immediateReady,
+                          }))
+                        : []
+                    }
+                    rangeRingNm={Number(rangeNm)}
+                    ownship={
+                      ownship
+                        ? {
+                            lat: ownship.lat,
+                            lon: ownship.lon,
+                            altitudeFt: ownship.altitudeFt,
+                            headingDeg: ownship.headingDeg,
+                          }
+                        : null
+                    }
+                  />
+                ) : (
                 <MapContainer center={mapCenter} zoom={8} scrollWheelZoom className="h-full w-full">
                   <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -2432,6 +2649,7 @@ export default function AdsbLive() {
                     </Fragment>
                   ))}
                 </MapContainer>
+                )}
               </div>
 
               <div className="grid gap-3 md:grid-cols-4">

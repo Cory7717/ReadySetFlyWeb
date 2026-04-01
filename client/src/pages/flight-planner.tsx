@@ -257,6 +257,50 @@ const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
   return "This plan is not currently in a live amendable state. Save your edits, then use File to submit the updated version.";
 };
 
+const getDraftAmendAvailabilityMessage = ({
+  plan,
+  flightRules,
+  route,
+  plannedDepartureAt,
+  trueAirspeedKtas,
+  plannedAltitudeFt,
+}: {
+  plan: FlightPlan | null | undefined;
+  flightRules: string;
+  route: string | null | undefined;
+  plannedDepartureAt: string | null | undefined;
+  trueAirspeedKtas: number | null | undefined;
+  plannedAltitudeFt: number | null | undefined;
+}) => {
+  if (!plan) {
+    return "Save this plan first, then file it before trying to amend it through Leidos.";
+  }
+
+  const normalizedRules = String(flightRules || "VFR").toUpperCase();
+  const draftPlan = { ...plan, filingFlightRules: normalizedRules } as FlightPlan;
+  if (!canSubmitAmendForPlan(draftPlan)) {
+    return getAmendAvailabilityMessage(draftPlan);
+  }
+
+  if (normalizedRules === "IFR" && !String(route || "").trim()) {
+    return "IFR amendments require a filed route before RSF can send the update to Leidos.";
+  }
+
+  if (!plannedDepartureAt) {
+    return "Planned departure time is required before RSF can send this amend request.";
+  }
+
+  if (!trueAirspeedKtas || trueAirspeedKtas <= 0) {
+    return "Cruise speed is required before RSF can send this amend request.";
+  }
+
+  if (!plannedAltitudeFt || plannedAltitudeFt <= 0) {
+    return "Planned altitude is required before RSF can send this amend request.";
+  }
+
+  return null;
+};
+
 const getPlannerAircraftTypeValue = ({
   manualAircraftType,
   selectedProfile,
@@ -4893,6 +4937,26 @@ export default function FlightPlanner() {
   const currentSavedPlanCanClose = canClosePlan(currentSavedPlan);
   const currentSavedPlanCanCancel = canCancelPlan(currentSavedPlan);
   const hasCurrentSavedPlan = Boolean(currentSavedPlan?.id);
+  const draftAmendAvailabilityMessage = useMemo(
+    () =>
+      getDraftAmendAvailabilityMessage({
+        plan: currentSavedPlan,
+        flightRules: filingDraft.flightRules,
+        route: activeFiledRoute || null,
+        plannedDepartureAt: form.plannedDepartureAt || null,
+        trueAirspeedKtas: Math.round(planningCruise) || null,
+        plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
+      }),
+    [
+      currentSavedPlan,
+      filingDraft.flightRules,
+      activeFiledRoute,
+      form.plannedDepartureAt,
+      planningCruise,
+      plannedAltitude,
+    ],
+  );
+  const currentDraftCanAmend = !draftAmendAvailabilityMessage;
 
   const filingActionMutation = useMutation({
     mutationFn: async ({ planId, action }: { planId: string; action: "file" | "amend" | "activate" | "cancel" | "close" }) => {
@@ -7447,10 +7511,10 @@ export default function FlightPlanner() {
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    if (!currentSavedPlanCanAmend) {
+                    if (!currentDraftCanAmend) {
                       toast({
                         title: "Live amend unavailable",
-                        description: getAmendAvailabilityMessage(currentSavedPlan),
+                        description: draftAmendAvailabilityMessage || getAmendAvailabilityMessage(currentSavedPlan),
                       });
                       return;
                     }
@@ -7460,7 +7524,7 @@ export default function FlightPlanner() {
                   }}
                   disabled={filingActionMutation.isPending || updatePlanMutation.isPending}
                 >
-                  {currentSavedPlanCanAmend ? "Amend" : "Amend unavailable"}
+                  {currentDraftCanAmend ? "Amend" : "Amend unavailable"}
                 </Button>
                 {currentSavedPlanFlightRules === "VFR" && (
                   <>
@@ -7748,7 +7812,15 @@ export default function FlightPlanner() {
                     variant="outline"
                     onClick={() => {
                       const isCurrentEditingPlan = editingPlanRef.current?.id === plan.id;
-                      const canSubmitLiveAmend = canSubmitAmendForPlan(plan);
+                      const draftMessage = getDraftAmendAvailabilityMessage({
+                        plan,
+                        flightRules: filingDraft.flightRules,
+                        route: activeFiledRoute || null,
+                        plannedDepartureAt: form.plannedDepartureAt || null,
+                        trueAirspeedKtas: Math.round(planningCruise) || null,
+                        plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
+                      });
+                      const canSubmitLiveAmend = !draftMessage;
 
                       if (isCurrentEditingPlan && canSubmitLiveAmend) {
                         setActiveTab("file");
@@ -7757,11 +7829,26 @@ export default function FlightPlanner() {
                         return;
                       }
 
+                      if (isCurrentEditingPlan && draftMessage) {
+                        toast({
+                          title: "Live amend unavailable",
+                          description: draftMessage,
+                        });
+                        return;
+                      }
+
                       beginAmendWorkflow(plan);
                     }}
                     disabled={filingActionMutation.isPending || updatePlanMutation.isPending}
                   >
-                    {canSubmitAmendForPlan(plan) ? "Amend" : "Review amend requirements"}
+                    {getDraftAmendAvailabilityMessage({
+                      plan,
+                      flightRules: filingDraft.flightRules,
+                      route: activeFiledRoute || null,
+                      plannedDepartureAt: form.plannedDepartureAt || null,
+                      trueAirspeedKtas: Math.round(planningCruise) || null,
+                      plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
+                    }) ? "Review amend requirements" : "Amend"}
                   </Button>
                   {(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>

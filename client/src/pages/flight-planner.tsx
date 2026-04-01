@@ -1342,6 +1342,7 @@ export default function FlightPlanner() {
     planId: string;
     action: "amend";
   } | null>(null);
+  const [draftPlanId, setDraftPlanId] = useState<string | null>(null);
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
   const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string } | null>(null);
@@ -1524,6 +1525,8 @@ export default function FlightPlanner() {
 
   const [editingPlan, setEditingPlan] = useState<FlightPlan | null>(null);
   const editingPlanRef = useRef<FlightPlan | null>(null);
+  const draftPlanIdRef = useRef<string | null>(null);
+  const skipNextEditingPlanHydrationRef = useRef(false);
   const [form, setForm] = useState({
     title: "",
     departure: "",
@@ -1630,6 +1633,10 @@ export default function FlightPlanner() {
   }, [editingPlan]);
 
   useEffect(() => {
+    draftPlanIdRef.current = draftPlanId;
+  }, [draftPlanId]);
+
+  useEffect(() => {
     if (tfmsTier !== "pro_plus" && tfmsOverlayEnabled) {
       setTfmsOverlayEnabled(false);
     }
@@ -1711,6 +1718,7 @@ export default function FlightPlanner() {
       if (typeof parsed?.departureRunway === "string") setDepartureRunway(parsed.departureRunway);
       if (typeof parsed?.selectedProfileId === "string") setSelectedProfileId(parsed.selectedProfileId);
       if (typeof parsed?.selectedTypeId === "string") setSelectedTypeId(parsed.selectedTypeId);
+      if (typeof parsed?.editingPlanId === "string") setDraftPlanId(parsed.editingPlanId);
       if (parsed?.fuelBurnMode === "standard" || parsed?.fuelBurnMode === "economy" || parsed?.fuelBurnMode === "performance") {
         setFuelBurnMode(parsed.fuelBurnMode);
       }
@@ -1740,6 +1748,7 @@ export default function FlightPlanner() {
         departureRunway,
         selectedProfileId,
         selectedTypeId,
+        editingPlanId: draftPlanId || editingPlanRef.current?.id || null,
         fuelBurnMode,
         reserveMinutes,
         headwind,
@@ -1763,6 +1772,7 @@ export default function FlightPlanner() {
     plannedStopsInput,
     reserveMinutes,
     routeSuggestion,
+    draftPlanId,
     selectedProfileId,
     selectedTypeId,
     waypointsInput,
@@ -1990,6 +2000,14 @@ export default function FlightPlanner() {
     () => mergePlanIntoList(savedPlans, editingPlan),
     [editingPlan, mergePlanIntoList, savedPlans]
   );
+
+  useEffect(() => {
+    if (editingPlan || !draftPlanId || savedPlans.length === 0) return;
+    const matchingPlan = savedPlans.find((plan) => plan.id === draftPlanId);
+    if (!matchingPlan) return;
+    skipNextEditingPlanHydrationRef.current = true;
+    setEditingPlan(matchingPlan);
+  }, [draftPlanId, editingPlan, savedPlans]);
 
   const { data: savedProfiles = [] } = useQuery<AircraftProfile[]>({
     queryKey: ["/api/aircraft/profiles"],
@@ -4313,6 +4331,7 @@ export default function FlightPlanner() {
     setActiveTab("route");
     setReturnToFileAfterSave(false);
     setPendingFilingActionAfterSave(null);
+    setDraftPlanId(null);
     setEditingPlan(null);
       setFilingPreview(null);
       setShowFilingPayload(false);
@@ -4687,12 +4706,19 @@ export default function FlightPlanner() {
       return;
     }
 
+    if (draftPlanIdRef.current) {
+      trackEvent("planner_save_plan", { action: "update" });
+      updatePlanMutation.mutate(draftPlanIdRef.current);
+      return;
+    }
+
     trackEvent("planner_save_plan", { action: "create" });
     createPlanMutation.mutate();
   };
 
   const beginAmendWorkflow = (plan: FlightPlan) => {
     const canSubmitLiveAmend = canSubmitAmendForPlan(plan);
+    setDraftPlanId(plan.id);
     setEditingPlan(plan);
     setReturnToFileAfterSave(false);
     setPendingFilingActionAfterSave(null);
@@ -4773,6 +4799,7 @@ export default function FlightPlanner() {
         mergePlanIntoList(current, savedPlan)
       );
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      setDraftPlanId(savedPlan.id);
       setEditingPlan(savedPlan);
       setPendingFilingActionAfterSave(null);
       if (returnToFileAfterSave) {
@@ -4847,6 +4874,7 @@ export default function FlightPlanner() {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       if (updatedPlan) {
+        setDraftPlanId(updatedPlan.id);
         setEditingPlan(updatedPlan);
       }
       if (pendingFilingActionAfterSave && updatedPlan) {
@@ -4892,7 +4920,8 @@ export default function FlightPlanner() {
         current.filter((plan) => plan.id !== deletedId)
       );
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
-      if (editingPlanRef.current?.id === deletedId) {
+      if (editingPlanRef.current?.id === deletedId || draftPlanIdRef.current === deletedId) {
+        setDraftPlanId(null);
         setEditingPlan(null);
       }
       toast({ title: "Flight plan deleted" });
@@ -4980,7 +5009,7 @@ export default function FlightPlanner() {
   const guestFlightPlanFilesRemaining = Math.max(0, 2 - guestFlightPlanFiles);
   const filingStateText = filingPreviewMutation.isPending ? "Preview building" : "Packet ready";
   const filingStateTone = filingPreviewMutation.isPending ? "text-amber-300" : "text-emerald-300";
-  const currentSavedPlan = editingPlan;
+  const currentSavedPlan = editingPlan || savedPlans.find((plan) => plan.id === draftPlanId) || null;
   const currentSavedPlanFlightRules = (currentSavedPlan?.filingFlightRules || filingDraft.flightRules || "VFR").toUpperCase();
   const currentSavedPlanStatus = filingStatusLabel(currentSavedPlan?.filingStatus);
   const currentSavedPlanCanAmend = canSubmitAmendForPlan(currentSavedPlan);
@@ -5019,6 +5048,7 @@ export default function FlightPlanner() {
         queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
           mergePlanIntoList(current, result.plan)
         );
+        setDraftPlanId(result.plan.id);
         setEditingPlan(result.plan);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
@@ -5050,6 +5080,7 @@ export default function FlightPlanner() {
         if (editingPlanRef.current?.id === result.plan.id) {
           setEditingPlan(result.plan);
         }
+        setDraftPlanId(result.plan.id);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
       toast({
@@ -5189,6 +5220,11 @@ export default function FlightPlanner() {
 
   useEffect(() => {
     if (!editingPlan) return;
+    if (skipNextEditingPlanHydrationRef.current) {
+      skipNextEditingPlanHydrationRef.current = false;
+      return;
+    }
+    setDraftPlanId(editingPlan.id);
     setForm({
       title: editingPlan.title || "",
       departure: editingPlan.departure || "",
@@ -5416,6 +5452,7 @@ export default function FlightPlanner() {
                   type="button"
                   onClick={() => {
                     setPendingFilingActionAfterSave(null);
+                    setDraftPlanId(plan.id);
                     setEditingPlan(plan);
                   }}
                   className="min-w-[230px] rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-left transition-colors hover:bg-slate-200"
@@ -7864,6 +7901,7 @@ export default function FlightPlanner() {
                       variant="outline"
                   onClick={() => {
                     setPendingFilingActionAfterSave(null);
+                    setDraftPlanId(plan.id);
                     setEditingPlan(plan);
                   }}
                     >
@@ -7919,7 +7957,8 @@ export default function FlightPlanner() {
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      const isCurrentEditingPlan = editingPlanRef.current?.id === plan.id;
+                      const isCurrentEditingPlan =
+                        editingPlanRef.current?.id === plan.id || draftPlanIdRef.current === plan.id;
                       const draftMessage = getDraftAmendAvailabilityMessage({
                         plan,
                         flightRules: filingDraft.flightRules,

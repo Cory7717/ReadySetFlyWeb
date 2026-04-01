@@ -2,8 +2,81 @@ const normalizeMetadataKey = (value: string) => value.toLowerCase().replace(/[^a
 
 const asTrimmedString = (value: unknown) => {
   if (value === null || value === undefined) return null;
+  if (typeof value === "object") return null;
   const text = String(value).trim();
   return text || null;
+};
+
+const extractNestedPrimitiveString = (input: unknown, maxDepth = 4) => {
+  if (input === null || input === undefined) return null;
+  if (typeof input !== "object") {
+    return asTrimmedString(input);
+  }
+
+  const preferredKeys = new Set(
+    [
+      "value",
+      "stamp",
+      "version",
+      "versionid",
+      "versionnumber",
+      "id",
+      "token",
+      "etag",
+      "sequencenumber",
+      "revisionnumber",
+      "lastmodified",
+      "timestamp",
+      "text",
+    ].map(normalizeMetadataKey),
+  );
+
+  const visited = new Set<unknown>();
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: input, depth: 0 }];
+  let fallbackMatch: string | null = null;
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+
+    const { value, depth } = current;
+    if (value === null || value === undefined || visited.has(value) || depth > maxDepth) {
+      continue;
+    }
+
+    if (typeof value !== "object") {
+      const match = asTrimmedString(value);
+      if (match) return match;
+      continue;
+    }
+
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        queue.push({ value: item, depth: depth + 1 });
+      }
+      continue;
+    }
+
+    const record = value as Record<string, unknown>;
+    for (const [key, child] of Object.entries(record)) {
+      const normalizedKey = normalizeMetadataKey(key);
+      const match = asTrimmedString(child);
+      if (match && preferredKeys.has(normalizedKey)) {
+        return match;
+      }
+      if (match && !fallbackMatch) {
+        fallbackMatch = match;
+      }
+    }
+
+    for (const child of Object.values(record)) {
+      queue.push({ value: child, depth: depth + 1 });
+    }
+  }
+
+  return fallbackMatch;
 };
 
 const findNestedStringValue = (
@@ -37,7 +110,7 @@ const findNestedStringValue = (
     const record = value as Record<string, unknown>;
     for (const [key, child] of Object.entries(record)) {
       if (normalizedCandidates.has(normalizeMetadataKey(key))) {
-        const match = asTrimmedString(child);
+        const match = extractNestedPrimitiveString(child);
         if (match) return match;
       }
     }

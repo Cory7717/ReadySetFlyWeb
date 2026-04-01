@@ -79,6 +79,57 @@ const extractNestedPrimitiveString = (input: unknown, maxDepth = 4) => {
   return fallbackMatch;
 };
 
+const findNestedVersionStampToken = (
+  input: unknown,
+  candidateKeys: string[],
+  maxDepth = 8,
+) => {
+  if (!input || typeof input !== "object") return null;
+
+  const normalizedCandidates = new Set(candidateKeys.map(normalizeMetadataKey));
+  const visited = new Set<unknown>();
+  const queue: Array<{ value: unknown; depth: number }> = [{ value: input, depth: 0 }];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+
+    const { value, depth } = current;
+    if (!value || typeof value !== "object" || visited.has(value) || depth > maxDepth) {
+      continue;
+    }
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        queue.push({ value: item, depth: depth + 1 });
+      }
+      continue;
+    }
+
+    const record = value as Record<string, unknown>;
+    for (const [key, child] of Object.entries(record)) {
+      if (normalizedCandidates.has(normalizeMetadataKey(key))) {
+        const nestedMatch = extractNestedPrimitiveString(child);
+        if (nestedMatch) return nestedMatch;
+        if (child && typeof child === "object") {
+          try {
+            return JSON.stringify(child);
+          } catch {
+            // fall through to continued search
+          }
+        }
+      }
+    }
+
+    for (const child of Object.values(record)) {
+      queue.push({ value: child, depth: depth + 1 });
+    }
+  }
+
+  return null;
+};
+
 const findNestedStringValue = (
   input: unknown,
   candidateKeys: string[],
@@ -124,7 +175,7 @@ const findNestedStringValue = (
 };
 
 export const extractFilingVersionStamp = (input: unknown) =>
-  findNestedStringValue(input, [
+  findNestedVersionStampToken(input, [
     "versionStamp",
     "version_stamp",
     "version",

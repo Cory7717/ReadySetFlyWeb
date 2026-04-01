@@ -74,6 +74,8 @@ type LeidosFlightServiceConfig = {
   otherInfo: string | null;
 };
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const normalizeFlightRules = (value?: string | null) => (value || "VFR").toUpperCase();
 
 const normalizePath = (value?: string | null) => {
@@ -413,6 +415,30 @@ const retrieveLeidosPlanMetadata = async (
   return retrieveLeidosPlanMetadataByProviderPlanId(providerPlanId, config);
 };
 
+const retrieveLeidosPlanMetadataWithVersionStamp = async (
+  providerPlanId: string,
+  config: LeidosFlightServiceConfig,
+) => {
+  const delaysMs = [0, 350, 1000, 2200];
+  let metadataResponse: Record<string, unknown> | null = null;
+  let versionStamp: string | null = null;
+
+  for (const delayMs of delaysMs) {
+    if (delayMs > 0) {
+      await sleep(delayMs);
+    }
+
+    metadataResponse = await retrieveLeidosPlanMetadataByProviderPlanId(providerPlanId, config);
+    versionStamp = extractFilingVersionStamp(metadataResponse);
+    if (versionStamp) break;
+  }
+
+  return {
+    metadataResponse,
+    versionStamp,
+  };
+};
+
 export const searchLeidosRoute = async ({
   departure,
   destination,
@@ -482,6 +508,10 @@ const buildStagedFallbackResult = (
   action: FlightPlanFilingAction,
   validation: FilingValidationResult,
   reason: string,
+  options?: {
+    providerPlanId?: string | null;
+    rawExtras?: Record<string, unknown>;
+  },
 ): FilingServiceResult => ({
   live: false,
   provider: "Leidos Flight Service",
@@ -491,7 +521,7 @@ const buildStagedFallbackResult = (
   nextStatus: "staged",
   warnings: validation.warnings,
   providerUrl: getProviderUrl(),
-  providerPlanId: buildProviderPlanId(plan, action),
+  providerPlanId: String(options?.providerPlanId || "").trim() || buildProviderPlanId(plan, action),
   raw: {
     action,
     planId: plan.id,
@@ -502,6 +532,7 @@ const buildStagedFallbackResult = (
     alternate: plan.alternate || null,
     validation,
     stagedReason: reason,
+    ...options?.rawExtras,
   },
 });
 
@@ -652,8 +683,12 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
 
     let effectivePlan = plan;
     if ((action === "amend" || action === "activate") && !extractVersionStamp(effectivePlan)) {
-      const retrievedMetadata = await retrieveLeidosPlanMetadata(plan, config);
-      const retrievedVersionStamp = extractFilingVersionStamp(retrievedMetadata);
+      const providerPlanId = String(plan.filingProviderPlanId || "").trim();
+      const retrieval = providerPlanId
+        ? await retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config)
+        : { metadataResponse: await retrieveLeidosPlanMetadata(plan, config), versionStamp: null as string | null };
+      const retrievedMetadata = retrieval.metadataResponse;
+      const retrievedVersionStamp = retrieval.versionStamp || extractFilingVersionStamp(retrievedMetadata);
       if (retrievedMetadata && retrievedVersionStamp) {
         effectivePlan = {
           ...plan,
@@ -668,11 +703,23 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     }
 
     if ((action === "amend" || action === "activate") && !extractVersionStamp(effectivePlan)) {
+      const providerPlanId = String(plan.filingProviderPlanId || "").trim() || buildProviderPlanId(plan, action);
+      const retrieval = providerPlanId
+        ? await retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config)
+        : { metadataResponse: null as Record<string, unknown> | null, versionStamp: null as string | null };
       return buildStagedFallbackResult(
         plan,
         action,
         validation,
         `The Leidos ${action.toUpperCase()} request needs the current versionStamp from the filed plan, so RSF kept it staged.`,
+        {
+          providerPlanId,
+          rawExtras: {
+            metadataResponse: retrieval.metadataResponse,
+            versionStamp: retrieval.versionStamp,
+            retrievedAt: retrieval.metadataResponse ? new Date().toISOString() : null,
+          },
+        },
       );
     }
 
@@ -741,8 +788,9 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
     let metadataResponse: Record<string, unknown> | null = null;
 
     if (!versionStamp && providerPlanId && (action === "file" || action === "amend" || action === "activate")) {
-      metadataResponse = await retrieveLeidosPlanMetadataByProviderPlanId(providerPlanId, config);
-      versionStamp = extractFilingVersionStamp(metadataResponse);
+      const retrieval = await retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config);
+      metadataResponse = retrieval.metadataResponse;
+      versionStamp = retrieval.versionStamp || extractFilingVersionStamp(metadataResponse);
     }
 
     return {

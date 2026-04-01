@@ -183,7 +183,19 @@ const extractClientVersionStamp = (plan: FlightPlan | null | undefined) => {
     }
   }
 
-  return extractFilingVersionStamp(raw);
+  const rawVersion = extractFilingVersionStamp(raw);
+  if (rawVersion) return rawVersion;
+
+  const history = Array.isArray(plan?.filingActionHistory) ? [...plan.filingActionHistory].reverse() : [];
+  for (const entry of history) {
+    const version =
+      extractFilingVersionStamp(entry) ||
+      extractFilingVersionStamp((entry as Record<string, unknown>)?.raw) ||
+      extractFilingVersionStamp((entry as Record<string, unknown>)?.response);
+    if (version) return version;
+  }
+
+  return null;
 };
 
 const normalizedClientFilingStatus = (plan: FlightPlan | null | undefined) =>

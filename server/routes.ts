@@ -20907,6 +20907,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.post("/api/flight-plans/:id/filing-action", isAuthenticated, async (req: any, res) => {
     try {
+      const mergePreservedFilingRaw = (existingRaw: unknown, incomingRaw: unknown) => {
+        const existingRecord =
+          existingRaw && typeof existingRaw === "object" && !Array.isArray(existingRaw)
+            ? existingRaw as Record<string, unknown>
+            : {};
+        const incomingRecord =
+          incomingRaw && typeof incomingRaw === "object" && !Array.isArray(incomingRaw)
+            ? incomingRaw as Record<string, unknown>
+            : {};
+        return {
+          ...existingRecord,
+          ...incomingRecord,
+          metadataResponse: incomingRecord.metadataResponse ?? existingRecord.metadataResponse ?? null,
+          versionStamp: incomingRecord.versionStamp ?? existingRecord.versionStamp ?? null,
+          response: incomingRecord.response ?? existingRecord.response ?? null,
+        };
+      };
+
       const userId = req.user?.claims?.sub || req.session?.userId;
       if (!userId) {
         return res.status(401).json({ error: "Unauthorized" });
@@ -20971,10 +20989,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         ? plan.filingIsLive
         : providerResult.live;
       const nextFilingRaw = preserveExistingLifecycleState
-        ? plan.filingRaw
+        ? mergePreservedFilingRaw(plan.filingRaw, providerResult.raw)
         : providerResult.raw;
       const nextProviderPlanId = preserveExistingLifecycleState
-        ? plan.filingProviderPlanId || providerResult.providerPlanId
+        ? providerResult.providerPlanId || plan.filingProviderPlanId
         : providerResult.providerPlanId;
 
       const updated = await storage.updateFlightPlan(plan.id, {

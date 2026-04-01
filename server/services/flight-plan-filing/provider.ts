@@ -469,6 +469,97 @@ const summarizeObjectKeys = (input: unknown, maxDepth = 2, depth = 0): unknown =
   return summary;
 };
 
+const VERSION_STAMP_CANDIDATE_KEYS = new Set(
+  [
+    "versionStamp",
+    "version_stamp",
+    "version",
+    "versionId",
+    "version_id",
+    "currentVersionStamp",
+    "current_version_stamp",
+    "currentVersion",
+    "current_version",
+    "flightPlanVersion",
+    "flight_plan_version",
+    "flightPlanVersionStamp",
+    "flight_plan_version_stamp",
+    "versionNumber",
+    "version_number",
+    "fpVersion",
+    "fp_version",
+    "filedVersion",
+    "filed_version",
+    "amendVersion",
+    "amend_version",
+    "etag",
+    "eTag",
+    "lastModified",
+    "last_modified",
+    "sequenceNumber",
+    "sequence_number",
+    "revisionNumber",
+    "revision_number",
+  ].map((value) => value.toLowerCase().replace(/[^a-z0-9]/g, "")),
+);
+
+const collectVersionCandidatePaths = (input: unknown, maxDepth = 8) => {
+  const matches: Array<{ path: string; type: string; preview: unknown }> = [];
+  if (!input || typeof input !== "object") return matches;
+
+  const queue: Array<{ value: unknown; depth: number; path: string }> = [{ value: input, depth: 0, path: "$" }];
+  const visited = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) break;
+
+    const { value, depth, path } = current;
+    if (value === null || value === undefined || depth > maxDepth) {
+      continue;
+    }
+
+    if (typeof value !== "object") {
+      continue;
+    }
+
+    if (visited.has(value)) continue;
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        queue.push({ value: item, depth: depth + 1, path: `${path}[${index}]` });
+      });
+      continue;
+    }
+
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const childPath = `${path}.${key}`;
+      if (VERSION_STAMP_CANDIDATE_KEYS.has(normalizedKey)) {
+        let preview: unknown = child;
+        if (child && typeof child === "object") {
+          try {
+            preview = JSON.stringify(child);
+          } catch {
+            preview = "[object]";
+          }
+        }
+        matches.push({
+          path: childPath,
+          type: Array.isArray(child) ? "array" : typeof child,
+          preview,
+        });
+      }
+      if (child && typeof child === "object") {
+        queue.push({ value: child, depth: depth + 1, path: childPath });
+      }
+    }
+  }
+
+  return matches.slice(0, 20);
+};
+
 export const searchLeidosRoute = async ({
   departure,
   destination,
@@ -747,6 +838,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
           ? (retrieval.metadataResponse as Record<string, unknown>).versionStamp ?? null
           : null,
         metadataKeys: summarizeObjectKeys(retrieval.metadataResponse),
+        versionCandidates: collectVersionCandidatePaths(retrieval.metadataResponse),
       }));
       return buildStagedFallbackResult(
         plan,
@@ -842,6 +934,8 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         retrievePath: config.retrievePath,
         responseKeys: summarizeObjectKeys(parsedResponse),
         metadataKeys: summarizeObjectKeys(metadataResponse),
+        responseVersionCandidates: collectVersionCandidatePaths(parsedResponse),
+        metadataVersionCandidates: collectVersionCandidatePaths(metadataResponse),
       }));
     }
 

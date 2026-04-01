@@ -20644,7 +20644,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const liveAvailable =
         providerDiagnostics.enabled &&
         providerDiagnostics.usernameConfigured &&
-        providerDiagnostics.passwordConfigured;
+        providerDiagnostics.passwordConfigured &&
+        Boolean(providerDiagnostics.actionPaths.file);
 
       res.json({
         live: liveAvailable,

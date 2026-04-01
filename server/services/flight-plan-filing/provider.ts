@@ -78,6 +78,17 @@ type LeidosFlightServiceConfig = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const parseMetadataRetryDelays = (value?: string | null) => {
+  const parsed = String(value || "")
+    .split(",")
+    .map((entry) => Number(entry.trim()))
+    .filter((entry) => Number.isFinite(entry) && entry >= 0);
+  if (parsed.length > 0) {
+    return Array.from(new Set(parsed));
+  }
+  return [0, 1500, 5000, 15000, 30000];
+};
+
 const normalizeFlightRules = (value?: string | null) => (value || "VFR").toUpperCase();
 
 const normalizePath = (value?: string | null) => {
@@ -467,7 +478,7 @@ const retrieveLeidosPlanMetadataWithVersionStamp = async (
   providerPlanId: string,
   config: LeidosFlightServiceConfig,
 ) => {
-  const delaysMs = [0, 350, 1000, 2200];
+  const delaysMs = parseMetadataRetryDelays(process.env.LEIDOS_FLIGHT_SERVICE_METADATA_RETRY_DELAYS_MS);
   let metadataResponse: Record<string, unknown> | null = null;
   let versionStamp: string | null = null;
 
@@ -484,6 +495,29 @@ const retrieveLeidosPlanMetadataWithVersionStamp = async (
   return {
     metadataResponse,
     versionStamp,
+  };
+};
+
+export const syncLeidosPlanMetadata = async (plan: FlightPlan) => {
+  const config = getLeidosFlightServiceConfig();
+  const providerPlanId = String(plan.filingProviderPlanId || "").trim();
+  if (!providerPlanId) {
+    return {
+      providerPlanId: null,
+      versionStamp: null,
+      metadataResponse: null as Record<string, unknown> | null,
+      message: "This plan does not have a Leidos flight identifier yet.",
+    };
+  }
+
+  const retrieval = await retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config);
+  return {
+    providerPlanId,
+    versionStamp: retrieval.versionStamp,
+    metadataResponse: retrieval.metadataResponse,
+    message: retrieval.versionStamp
+      ? "RSF refreshed the Leidos provider sync and recovered the current amend token."
+      : "RSF refreshed the Leidos provider sync, but the amend token is still not available yet.",
   };
 };
 

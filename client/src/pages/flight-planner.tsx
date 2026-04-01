@@ -255,7 +255,7 @@ const getAmendAvailabilityMessage = (plan: FlightPlan | null | undefined) => {
   }
 
   if (!extractClientVersionStamp(plan)) {
-    return "This filed record is missing the Leidos version stamp required for amend. Re-file the plan once more to refresh the provider tracking, then amend from that filed copy.";
+    return "This filed record is still waiting on the Leidos amend token. Refresh provider sync in a few minutes, then try amend again.";
   }
 
   if (rules === "IFR" && status !== "filed") {
@@ -5007,6 +5007,35 @@ export default function FlightPlanner() {
     },
   });
 
+  const filingSyncMutation = useMutation({
+    mutationFn: async (planId: string) => {
+      const res = await apiRequest("POST", `/api/flight-plans/${planId}/filing-sync`);
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      if (result?.plan) {
+        queryClient.setQueryData<FlightPlan[]>(["/api/flight-plans"], (current = []) =>
+          mergePlanIntoList(current, result.plan)
+        );
+        if (editingPlanRef.current?.id === result.plan.id) {
+          setEditingPlan(result.plan);
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      toast({
+        title: result?.versionStamp ? "Provider sync refreshed" : "Provider sync checked",
+        description: result?.message || "RSF refreshed the Leidos provider state.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Provider sync failed",
+        description: summarizePlannerError(error?.message),
+        variant: "destructive",
+      });
+    },
+  });
+
   const insertComfortStopMutation = useMutation({
     mutationFn: async ({
       from,
@@ -7524,7 +7553,7 @@ export default function FlightPlanner() {
                   size="sm"
                   variant="outline"
                   onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "file" })}
-                  disabled={filingActionMutation.isPending}
+                  disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
                 >
                   File
                 </Button>
@@ -7543,9 +7572,17 @@ export default function FlightPlanner() {
                     setPendingFilingActionAfterSave({ planId: currentSavedPlan!.id, action: "amend" });
                     updatePlanMutation.mutate(currentSavedPlan!.id);
                   }}
-                  disabled={filingActionMutation.isPending || updatePlanMutation.isPending}
+                  disabled={filingActionMutation.isPending || updatePlanMutation.isPending || filingSyncMutation.isPending}
                 >
                   {currentDraftCanAmend ? "Amend" : "Amend unavailable"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => filingSyncMutation.mutate(currentSavedPlan!.id)}
+                  disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
+                >
+                  {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
                 </Button>
                 {currentSavedPlanFlightRules === "VFR" && (
                   <>
@@ -7553,7 +7590,7 @@ export default function FlightPlanner() {
                       size="sm"
                       variant="outline"
                       onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "activate" })}
-                      disabled={filingActionMutation.isPending || !currentSavedPlanCanActivate}
+                      disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !currentSavedPlanCanActivate}
                     >
                       Activate
                     </Button>
@@ -7561,7 +7598,7 @@ export default function FlightPlanner() {
                       size="sm"
                       variant="outline"
                       onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "close" })}
-                      disabled={filingActionMutation.isPending || !currentSavedPlanCanClose}
+                      disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !currentSavedPlanCanClose}
                     >
                       Close
                     </Button>
@@ -7571,7 +7608,7 @@ export default function FlightPlanner() {
                   size="sm"
                   variant="outline"
                   onClick={() => filingActionMutation.mutate({ planId: currentSavedPlan!.id, action: "cancel" })}
-                  disabled={filingActionMutation.isPending || !currentSavedPlanCanCancel}
+                  disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !currentSavedPlanCanCancel}
                 >
                   Cancel
                 </Button>
@@ -7824,7 +7861,7 @@ export default function FlightPlanner() {
                     size="sm"
                     variant="outline"
                     onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "file" })}
-                    disabled={filingActionMutation.isPending}
+                    disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
                   >
                     File
                   </Button>
@@ -7860,7 +7897,7 @@ export default function FlightPlanner() {
 
                       beginAmendWorkflow(plan);
                     }}
-                    disabled={filingActionMutation.isPending || updatePlanMutation.isPending}
+                    disabled={filingActionMutation.isPending || updatePlanMutation.isPending || filingSyncMutation.isPending}
                   >
                     {getDraftAmendAvailabilityMessage({
                       plan,
@@ -7871,13 +7908,21 @@ export default function FlightPlanner() {
                       plannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
                     }) ? "Review amend requirements" : "Amend"}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => filingSyncMutation.mutate(plan.id)}
+                    disabled={filingActionMutation.isPending || filingSyncMutation.isPending}
+                  >
+                    {filingSyncMutation.isPending ? "Refreshing sync..." : "Refresh provider sync"}
+                  </Button>
                   {(plan.filingFlightRules || "VFR").toUpperCase() === "VFR" && (
                     <>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "activate" })}
-                        disabled={filingActionMutation.isPending || !canActivatePlan(plan)}
+                        disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !canActivatePlan(plan)}
                       >
                         Activate
                       </Button>
@@ -7885,7 +7930,7 @@ export default function FlightPlanner() {
                         size="sm"
                         variant="outline"
                         onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "close" })}
-                        disabled={filingActionMutation.isPending || !canClosePlan(plan)}
+                        disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !canClosePlan(plan)}
                       >
                         Close
                       </Button>
@@ -7895,7 +7940,7 @@ export default function FlightPlanner() {
                     size="sm"
                     variant="outline"
                     onClick={() => filingActionMutation.mutate({ planId: plan.id, action: "cancel" })}
-                    disabled={filingActionMutation.isPending || !canCancelPlan(plan)}
+                    disabled={filingActionMutation.isPending || filingSyncMutation.isPending || !canCancelPlan(plan)}
                   >
                     Cancel
                   </Button>

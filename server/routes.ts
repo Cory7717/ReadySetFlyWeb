@@ -55,6 +55,7 @@ import {
   getLeidosFlightServiceDiagnostics,
   getLeidosFlightServicePlanDebug,
   searchLeidosRoute,
+  syncLeidosPlanMetadata,
   validateFlightPlanForAction,
   verifyLeidosWebhookAuthorization,
 } from "./services/flight-plan-filing/provider";
@@ -21035,6 +21036,58 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       const isTimeout = /timed out before Flight Service responded|connect timeout|timed out/i.test(message);
       res.status(isTimeout ? 504 : 500).json({
         error: message,
+      });
+    }
+  });
+
+  app.post("/api/flight-plans/:id/filing-sync", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub || req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const plan = await storage.getFlightPlanById(req.params.id);
+      if (!plan) {
+        return res.status(404).json({ error: "Flight plan not found" });
+      }
+      if (plan.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const syncResult = await syncLeidosPlanMetadata(plan as any);
+      const now = new Date();
+      const currentRaw =
+        plan.filingRaw && typeof plan.filingRaw === "object" && !Array.isArray(plan.filingRaw)
+          ? plan.filingRaw as Record<string, unknown>
+          : {};
+      const nextRaw = {
+        ...currentRaw,
+        providerPlanId: syncResult.providerPlanId ?? currentRaw.providerPlanId ?? null,
+        versionStamp: syncResult.versionStamp ?? currentRaw.versionStamp ?? null,
+        metadataResponse: syncResult.metadataResponse ?? currentRaw.metadataResponse ?? null,
+        retrievedAt: now.toISOString(),
+      };
+
+      const updated = await storage.updateFlightPlan(plan.id, {
+        filingProviderPlanId: syncResult.providerPlanId ?? plan.filingProviderPlanId,
+        filingLastProviderSyncAt: now,
+        filingRaw: nextRaw as any,
+      } as any);
+
+      res.json({
+        ok: true,
+        message: syncResult.message,
+        versionStamp: syncResult.versionStamp,
+        providerPlanId: syncResult.providerPlanId,
+        plan: updated,
+      });
+    } catch (error: any) {
+      console.error("Failed to sync flight plan provider metadata:", error);
+      res.status(500).json({
+        error: error instanceof Error && error.message
+          ? error.message
+          : "Failed to sync flight plan provider metadata",
       });
     }
   });

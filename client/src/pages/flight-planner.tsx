@@ -10,6 +10,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1352,6 +1362,7 @@ export default function FlightPlanner() {
     action: "amend";
   } | null>(null);
   const [draftPlanId, setDraftPlanId] = useState<string | null>(null);
+  const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<FlightPlan | null>(null);
   const [showFilingPayload, setShowFilingPayload] = useState(false);
   const [filingPreview, setFilingPreview] = useState<FilingPreviewResponse | null>(null);
   const [pendingSectionJump, setPendingSectionJump] = useState<{ id: string; eventName: string } | null>(null);
@@ -4935,6 +4946,7 @@ export default function FlightPlanner() {
         current.filter((plan) => plan.id !== deletedId)
       );
       queryClient.invalidateQueries({ queryKey: ["/api/flight-plans"] });
+      setDeleteConfirmPlan((current) => (current?.id === deletedId ? null : current));
       if (editingPlanRef.current?.id === deletedId || draftPlanIdRef.current === deletedId) {
         setDraftPlanId(null);
         setEditingPlan(null);
@@ -4942,6 +4954,7 @@ export default function FlightPlanner() {
       toast({ title: "Flight plan deleted" });
     },
     onError: (error: any) => {
+      setDeleteConfirmPlan(null);
       toast({ title: "Delete failed", description: error.message, variant: "destructive" });
     },
   });
@@ -5360,6 +5373,7 @@ export default function FlightPlanner() {
   }, [selectedProfile, editingPlan]);
 
   return (
+    <>
     <PageShell
       kicker="Plan"
       title="Plan a Flight"
@@ -7922,7 +7936,11 @@ export default function FlightPlanner() {
                     >
                       Edit
                     </Button>
-                    <Button size="sm" variant="destructive" onClick={() => deleteMutation.mutate(plan.id)}>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setDeleteConfirmPlan(plan)}
+                    >
                       Delete
                     </Button>
                   </div>
@@ -9109,5 +9127,38 @@ export default function FlightPlanner() {
         </div>
       )}
     </PageShell>
+    <AlertDialog
+      open={Boolean(deleteConfirmPlan)}
+      onOpenChange={(open) => {
+        if (!open && !deleteMutation.isPending) {
+          setDeleteConfirmPlan(null);
+        }
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete this flight plan?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {deleteConfirmPlan
+              ? `This will permanently remove "${deleteConfirmPlan.title}" from your saved plans in RSF.`
+              : "This will permanently remove this flight plan from your saved plans in RSF."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(event) => {
+              event.preventDefault();
+              if (!deleteConfirmPlan) return;
+              deleteMutation.mutate(deleteConfirmPlan.id);
+            }}
+            disabled={deleteMutation.isPending || !deleteConfirmPlan}
+          >
+            {deleteMutation.isPending ? "Deleting..." : "Delete flight plan"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

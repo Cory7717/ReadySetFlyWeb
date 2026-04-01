@@ -315,6 +315,64 @@ const extractHtmlText = (value: string) => decodeHtmlEntities(
 const truncateText = (value: string, maxLength = 280) =>
   value.length > maxLength ? `${value.slice(0, maxLength - 1).trimEnd()}…` : value;
 
+const asTrimmedString = (value: unknown) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "object") return null;
+  const text = String(value).trim();
+  return text || null;
+};
+
+const flattenLeidosMessageArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  const messages: string[] = [];
+
+  for (const item of value) {
+    if (item === null || item === undefined) continue;
+    if (typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
+      const text = String(item).trim();
+      if (text) messages.push(text);
+      continue;
+    }
+    if (Array.isArray(item)) {
+      const nestedText = item
+        .map((part) => String(part ?? "").trim())
+        .filter(Boolean)
+        .join(": ");
+      if (nestedText) messages.push(nestedText);
+      continue;
+    }
+    if (typeof item === "object") {
+      const record = item as Record<string, unknown>;
+      const code = asTrimmedString(record.code);
+      const message =
+        asTrimmedString(record.message) ||
+        asTrimmedString(record.text) ||
+        asTrimmedString(record.description);
+      const combined = [code, message].filter(Boolean).join(": ");
+      if (combined) {
+        messages.push(combined);
+        continue;
+      }
+      try {
+        const serialized = JSON.stringify(item);
+        if (serialized && serialized !== "{}") messages.push(serialized);
+      } catch {
+        // ignore unserializable item
+      }
+    }
+  }
+
+  return messages;
+};
+
+const extractLeidosResponseMessages = (parsedResponse: Record<string, unknown>) =>
+  Array.from(
+    new Set([
+      ...flattenLeidosMessageArray(parsedResponse.returnCodedMessage),
+      ...flattenLeidosMessageArray(parsedResponse.returnMessage),
+    ]),
+  ).filter(Boolean);
+
 const summarizeProviderError = (parsedResponse: Record<string, unknown>, response: Response) => {
   const rawText = typeof parsedResponse.text === "string" ? parsedResponse.text : "";
   if (rawText) {
@@ -328,16 +386,12 @@ const summarizeProviderError = (parsedResponse: Record<string, unknown>, respons
     return truncateText(rawText.replace(/\s+/g, " ").trim());
   }
 
-  const codedMessages = Array.isArray(parsedResponse.returnCodedMessage)
-    ? parsedResponse.returnCodedMessage.map((item) => String(item || "").trim()).filter(Boolean)
-    : [];
+  const codedMessages = flattenLeidosMessageArray(parsedResponse.returnCodedMessage);
   if (codedMessages.length > 0) {
     return truncateText(codedMessages.join(" | "));
   }
 
-  const plainMessages = Array.isArray(parsedResponse.returnMessage)
-    ? parsedResponse.returnMessage.map((item) => String(item || "").trim()).filter(Boolean)
-    : [];
+  const plainMessages = flattenLeidosMessageArray(parsedResponse.returnMessage);
   if (plainMessages.length > 0) {
     return truncateText(plainMessages.join(" | "));
   }
@@ -1057,6 +1111,31 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       throw new Error(`Leidos ${action.toUpperCase()} request failed with status ${response.status}${responseDetail ? `: ${responseDetail}` : ""}`);
     }
 
+    const responseMessages = extractLeidosResponseMessages(parsedResponse);
+    const providerReturnStatus =
+      typeof parsedResponse.returnStatus === "boolean" ? parsedResponse.returnStatus : null;
+
+    if (providerReturnStatus === false) {
+      return buildStagedFallbackResult(
+        plan,
+        action,
+        validation,
+        responseMessages.length > 0
+          ? `Leidos returned an unsuccessful ${action.toUpperCase()} response: ${responseMessages.join(" | ")}`
+          : `Leidos returned an unsuccessful ${action.toUpperCase()} response without a usable flight identifier.`,
+        {
+          providerPlanId: plan.filingProviderPlanId || null,
+          rawExtras: {
+            requestUrl,
+            requestPayload: Object.fromEntries(requestBody.entries()),
+            response: parsedResponse,
+            responseMessages,
+            returnStatus: providerReturnStatus,
+          },
+        },
+      );
+    }
+
     const providerPlanId =
       extractFilingProviderPlanId(parsedResponse) ||
       plan.filingProviderPlanId ||
@@ -1076,6 +1155,8 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         action,
         providerPlanId,
         retrievePath: config.retrievePath,
+        responseMessages,
+        returnStatus: providerReturnStatus,
         responseKeys: summarizeObjectKeys(parsedResponse),
         metadataKeys: summarizeObjectKeys(metadataResponse),
         responseProviderPlanIdCandidates: collectProviderPlanIdCandidatePaths(parsedResponse),
@@ -1092,7 +1173,27 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         providerPlanId,
         responseKeys: summarizeObjectKeys(parsedResponse),
         responseProviderPlanIdCandidates: collectProviderPlanIdCandidatePaths(parsedResponse),
+        responseMessages,
+        returnStatus: providerReturnStatus,
       }));
+      return buildStagedFallbackResult(
+        plan,
+        action,
+        validation,
+        responseMessages.length > 0
+          ? `Leidos accepted the FILE response over HTTP but did not return a usable flightIdentifier: ${responseMessages.join(" | ")}`
+          : "Leidos accepted the FILE response over HTTP but did not return a usable flightIdentifier, so RSF kept the record staged.",
+        {
+          providerPlanId: null,
+          rawExtras: {
+            requestUrl,
+            requestPayload: Object.fromEntries(requestBody.entries()),
+            response: parsedResponse,
+            responseMessages,
+            returnStatus: providerReturnStatus,
+          },
+        },
+      );
     }
 
     return {

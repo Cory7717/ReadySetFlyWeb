@@ -2228,6 +2228,7 @@ export const flightPlans = pgTable("flight_plans", {
   filingLastProviderSyncAt: timestamp("filing_last_provider_sync_at"),
   filingRaw: jsonb("filing_raw"),
   filingActionHistory: jsonb("filing_action_history").$type<Array<Record<string, unknown>>>().default(sql`'[]'::jsonb`),
+  plannerState: jsonb("planner_state").$type<Record<string, unknown> | null>(),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -2655,6 +2656,7 @@ export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   filingLastProviderSyncAt: true,
   filingRaw: true,
   filingActionHistory: true,
+  plannerState: true,
   createdAt: true,
   updatedAt: true,
 }).extend({

@@ -201,6 +201,26 @@ const extractClientVersionStamp = (plan: FlightPlan | null | undefined) => {
 const normalizedClientFilingStatus = (plan: FlightPlan | null | undefined) =>
   String(plan?.filingStatus || "").toLowerCase();
 
+const buildPlannerStateSnapshot = ({
+  selectedProfileId,
+  selectedTypeId,
+  customProfile,
+}: {
+  selectedProfileId: string;
+  selectedTypeId: string;
+  customProfile: {
+    name: string;
+    cruiseKtasOverride: string;
+    fuelBurnOverrideGph: string;
+    usableFuelOverrideGal: string;
+    maxGrossWeightOverrideLb: string;
+  };
+}) => ({
+  selectedProfileId,
+  selectedTypeId,
+  customProfile,
+});
+
 const hasLiveProviderPlan = (plan: FlightPlan | null | undefined) =>
   Boolean(plan?.filingIsLive && plan?.filingProviderPlanId);
 
@@ -4733,6 +4753,11 @@ export default function FlightPlanner() {
           filingPlannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
           filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
           filingEnduranceMinutes: Math.round(enduranceMinutes) || null,
+          plannerState: buildPlannerStateSnapshot({
+            selectedProfileId,
+            selectedTypeId,
+            customProfile,
+          }),
           plannedDepartureAt: form.plannedDepartureAt
             ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
             : null,
@@ -4799,6 +4824,11 @@ export default function FlightPlanner() {
         filingPlannedAltitudeFt: plannedAltitude ? Number(plannedAltitude) : null,
         filingEstimatedEnrouteMinutes: Math.round(eteMinutes) || null,
         filingEnduranceMinutes: Math.round(enduranceMinutes) || null,
+        plannerState: buildPlannerStateSnapshot({
+          selectedProfileId,
+          selectedTypeId,
+          customProfile,
+        }),
         plannedDepartureAt: form.plannedDepartureAt
           ? toUtcIso(form.plannedDepartureAt, departureTimeZone)
           : null,
@@ -5192,6 +5222,26 @@ export default function FlightPlanner() {
     setWaypointsInput(savedRouteIsAirportOnly ? normalizedSavedRoute : "");
     setPlannedStopsInput("");
     setPlannedAltitude(editingPlan.filingPlannedAltitudeFt ? String(editingPlan.filingPlannedAltitudeFt) : "");
+    const plannerState =
+      editingPlan.plannerState && typeof editingPlan.plannerState === "object" && !Array.isArray(editingPlan.plannerState)
+        ? editingPlan.plannerState as Record<string, any>
+        : null;
+    if (plannerState?.customProfile && typeof plannerState.customProfile === "object") {
+      setCustomProfile((prev) => ({
+        ...prev,
+        ...plannerState.customProfile,
+      }));
+    }
+    if (typeof plannerState?.selectedProfileId === "string") {
+      setSelectedProfileId(plannerState.selectedProfileId);
+    }
+    if (typeof plannerState?.selectedTypeId === "string") {
+      setSelectedTypeId(plannerState.selectedTypeId);
+    }
+    if (typeof plannerState?.selectedProfileId === "string" || typeof plannerState?.selectedTypeId === "string") {
+      setArrivalAuto(false);
+      return;
+    }
     const normalizedTail = normalizeAircraftLabel(editingPlan.tailNumber);
     const normalizedAircraftType = normalizeAircraftLabel(editingPlan.aircraftType);
     const matchingProfile = savedProfiles.find((profile) => {

@@ -2656,7 +2656,6 @@ export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   filingLastProviderSyncAt: true,
   filingRaw: true,
   filingActionHistory: true,
-  plannerState: true,
   createdAt: true,
   updatedAt: true,
 }).extend({
@@ -2677,6 +2676,7 @@ export const insertFlightPlanSchema = createInsertSchema(flightPlans).omit({
   filingPlannedAltitudeFt: z.coerce.number().int().min(0).optional().nullable(),
   filingEstimatedEnrouteMinutes: z.coerce.number().int().min(0).optional().nullable(),
   filingEnduranceMinutes: z.coerce.number().int().min(0).optional().nullable(),
+  plannerState: z.record(z.any()).optional().nullable(),
   filingStatus: z.enum(flightPlanFilingStatuses).optional(),
 });
 

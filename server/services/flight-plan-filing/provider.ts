@@ -743,6 +743,9 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         providerPlanId,
         retrievePath: config.retrievePath,
         versionStamp: retrieval.versionStamp,
+        metadataVersionStamp: retrieval.metadataResponse && typeof retrieval.metadataResponse === "object"
+          ? (retrieval.metadataResponse as Record<string, unknown>).versionStamp ?? null
+          : null,
         metadataKeys: summarizeObjectKeys(retrieval.metadataResponse),
       }));
       return buildStagedFallbackResult(

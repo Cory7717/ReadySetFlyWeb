@@ -54,8 +54,17 @@ export const extractFilingVersionStamp = (input: unknown) =>
   findNestedStringValue(input, [
     "versionStamp",
     "version_stamp",
+    "version",
+    "versionId",
+    "version_id",
     "currentVersionStamp",
     "current_version_stamp",
+    "currentVersion",
+    "current_version",
+    "flightPlanVersion",
+    "flight_plan_version",
+    "flightPlanVersionStamp",
+    "flight_plan_version_stamp",
     "versionNumber",
     "version_number",
   ]);

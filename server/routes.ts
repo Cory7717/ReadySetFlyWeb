@@ -400,6 +400,31 @@ async function fetchTerrainElevationFt(lat: number, lon: number): Promise<number
   return null;
 }
 
+const TERRAIN_POINT_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+const TERRAIN_PROFILE_CACHE_TTL_MS = 1000 * 60 * 10;
+const terrainPointCache = new Map<string, { expiresAt: number; elevationFt: number | null }>();
+const terrainProfileCache = new Map<string, { expiresAt: number; payload: { source: string; samples: Array<{ lat: number; lon: number; elevationFt: number | null }>; maxElevationFt: number | null; sampledPointCount: number; partial: boolean } }>();
+const terrainProfileInFlight = new Map<string, Promise<{ source: string; samples: Array<{ lat: number; lon: number; elevationFt: number | null }>; maxElevationFt: number | null; sampledPointCount: number; partial: boolean }>>();
+
+function getTerrainPointCacheKey(lat: number, lon: number) {
+  return `${lat.toFixed(4)},${lon.toFixed(4)}`;
+}
+
+async function fetchTerrainElevationFtCached(lat: number, lon: number): Promise<number | null> {
+  const key = getTerrainPointCacheKey(lat, lon);
+  const cached = terrainPointCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.elevationFt;
+  }
+
+  const elevationFt = await fetchTerrainElevationFt(lat, lon);
+  terrainPointCache.set(key, {
+    expiresAt: Date.now() + TERRAIN_POINT_CACHE_TTL_MS,
+    elevationFt,
+  });
+  return elevationFt;
+}
+
 async function loadCachedObstacles(): Promise<CachedObstacleRecord[]> {
   if (obstacleCache && obstacleCache.loadedAt + FAA_DDOF_CACHE_TTL_MS > Date.now()) {
     return obstacleCache.rows;
@@ -15679,27 +15704,71 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       const sampleCount = Math.max(8, Math.min(Number(req.query.samples) || 18, 48));
-      const sampledPath = sampleRouteLine(routePoints, sampleCount);
-      const elevations = await Promise.all(
-        sampledPath.map(async (point) => ({
-          lat: point.lat,
-          lon: point.lon,
-          elevationFt: await fetchTerrainElevationFt(point.lat, point.lon),
-        }))
-      );
+      const cacheKey = `${pathParam}|${sampleCount}`;
+      const cached = terrainProfileCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return res.json(cached.payload);
+      }
 
-      const maxElevationFt = elevations.reduce<number | null>((max, point) => {
-        if (point.elevationFt === null) return max;
-        if (max === null) return point.elevationFt;
-        return Math.max(max, point.elevationFt);
-      }, null);
+      const inFlight = terrainProfileInFlight.get(cacheKey);
+      if (inFlight) {
+        return res.json(await inFlight);
+      }
 
-      res.json({
-        source: "USGS EPQS / 3DEP",
-        samples: elevations,
-        maxElevationFt,
-        sampledPointCount: elevations.length,
+      const buildPromise = (async () => {
+        const sampledPath = sampleRouteLine(routePoints, sampleCount);
+        const settled = await Promise.allSettled(
+          sampledPath.map(async (point) => ({
+            lat: point.lat,
+            lon: point.lon,
+            elevationFt: await fetchTerrainElevationFtCached(point.lat, point.lon),
+          }))
+        );
+
+        const elevations = settled.map((result, index) => {
+          const point = sampledPath[index];
+          if (result.status === "fulfilled") {
+            return result.value;
+          }
+          return {
+            lat: point.lat,
+            lon: point.lon,
+            elevationFt: null,
+          };
+        });
+
+        const validElevationCount = elevations.filter((point) => point.elevationFt != null).length;
+        if (validElevationCount < 2) {
+          throw new Error("Terrain profile is temporarily unavailable from USGS.");
+        }
+
+        const maxElevationFt = elevations.reduce<number | null>((max, point) => {
+          if (point.elevationFt === null) return max;
+          if (max === null) return point.elevationFt;
+          return Math.max(max, point.elevationFt);
+        }, null);
+
+        const payload = {
+          source: "USGS EPQS / 3DEP",
+          samples: elevations,
+          maxElevationFt,
+          sampledPointCount: elevations.length,
+          partial: validElevationCount !== elevations.length,
+        };
+
+        terrainProfileCache.set(cacheKey, {
+          expiresAt: Date.now() + TERRAIN_PROFILE_CACHE_TTL_MS,
+          payload,
+        });
+        return payload;
+      })();
+
+      terrainProfileInFlight.set(cacheKey, buildPromise);
+      const payload = await buildPromise.finally(() => {
+        terrainProfileInFlight.delete(cacheKey);
       });
+
+      res.json(payload);
     } catch (error: any) {
       console.error("Terrain profile fetch failed:", error);
       res.status(502).json({ error: error?.message || "Failed to fetch terrain profile" });

@@ -1,6 +1,34 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { apiUrl } from "./api";
 
+function collectValidationMessages(value: unknown, acc: string[] = []): string[] {
+  if (!value) return acc;
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (normalized) acc.push(normalized);
+    return acc;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectValidationMessages(item, acc));
+    return acc;
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (Array.isArray(record._errors)) {
+      record._errors.forEach((item) => collectValidationMessages(item, acc));
+    }
+    Object.entries(record).forEach(([key, nested]) => {
+      if (key === "_errors") return;
+      collectValidationMessages(nested, acc);
+    });
+  }
+
+  return acc;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -8,9 +36,20 @@ async function throwIfResNotOk(res: Response) {
     if (contentType.includes("application/json")) {
       try {
         const payload = JSON.parse(text);
-        const message =
-          (payload && typeof payload === "object" && "error" in payload && payload.error)
-            ? String(payload.error)
+        const validationMessages =
+          payload && typeof payload === "object" && "validation" in payload
+            ? collectValidationMessages((payload as Record<string, unknown>).validation)
+            : [];
+        const errorField =
+          payload && typeof payload === "object" && "error" in payload
+            ? (payload as Record<string, unknown>).error
+            : null;
+        const message = typeof errorField === "string" && errorField.trim()
+          ? (validationMessages.length > 0
+              ? `${errorField.trim()} ${validationMessages.join(" ")}`
+              : errorField.trim())
+          : validationMessages.length > 0
+            ? validationMessages.join(" ")
             : JSON.stringify(payload);
         throw new Error(message || res.statusText);
       } catch {

@@ -371,15 +371,15 @@ const parseProviderResponse = async (response: Response) => {
   return { text };
 };
 
-const retrieveLeidosPlanMetadata = async (
-  plan: FlightPlan,
+const retrieveLeidosPlanMetadataByProviderPlanId = async (
+  providerPlanId: string,
   config: LeidosFlightServiceConfig,
 ): Promise<Record<string, unknown> | null> => {
-  const providerPlanId = String(plan.filingProviderPlanId || '').trim();
-  if (!providerPlanId || !config.username || !config.password) return null;
+  const trimmedProviderPlanId = String(providerPlanId || '').trim();
+  if (!trimmedProviderPlanId || !config.username || !config.password) return null;
 
   const baseUrl = config.baseUrl.endsWith('/') ? config.baseUrl : `${config.baseUrl}/`;
-  const url = new URL(`FP/${encodeURIComponent(providerPlanId)}/retrieve`, baseUrl);
+  const url = new URL(`FP/${encodeURIComponent(trimmedProviderPlanId)}/retrieve`, baseUrl);
   url.searchParams.set('versionRequested', '20240801');
 
   const basic = Buffer.from(`${config.username}:${config.password}`).toString('base64');
@@ -402,6 +402,15 @@ const retrieveLeidosPlanMetadata = async (
     return null;
   }
   return parsedResponse;
+};
+
+const retrieveLeidosPlanMetadata = async (
+  plan: FlightPlan,
+  config: LeidosFlightServiceConfig,
+): Promise<Record<string, unknown> | null> => {
+  const providerPlanId = String(plan.filingProviderPlanId || '').trim();
+  if (!providerPlanId || !config.username || !config.password) return null;
+  return retrieveLeidosPlanMetadataByProviderPlanId(providerPlanId, config);
 };
 
 export const searchLeidosRoute = async ({
@@ -728,7 +737,13 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       extractFilingProviderPlanId(parsedResponse) ||
       plan.filingProviderPlanId ||
       buildProviderPlanId(plan, action);
-    const versionStamp = extractFilingVersionStamp(parsedResponse);
+    let versionStamp = extractFilingVersionStamp(parsedResponse);
+    let metadataResponse: Record<string, unknown> | null = null;
+
+    if (!versionStamp && providerPlanId && (action === "file" || action === "amend" || action === "activate")) {
+      metadataResponse = await retrieveLeidosPlanMetadataByProviderPlanId(providerPlanId, config);
+      versionStamp = extractFilingVersionStamp(metadataResponse);
+    }
 
     return {
       live: true,
@@ -745,6 +760,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         requestPayload: Object.fromEntries(requestBody.entries()),
         providerPlanId,
         versionStamp,
+        metadataResponse,
         response: parsedResponse,
       },
     };

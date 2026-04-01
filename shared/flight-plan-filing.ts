@@ -67,6 +67,20 @@ export const extractFilingVersionStamp = (input: unknown) =>
     "flight_plan_version_stamp",
     "versionNumber",
     "version_number",
+    "fpVersion",
+    "fp_version",
+    "filedVersion",
+    "filed_version",
+    "amendVersion",
+    "amend_version",
+    "etag",
+    "eTag",
+    "lastModified",
+    "last_modified",
+    "sequenceNumber",
+    "sequence_number",
+    "revisionNumber",
+    "revision_number",
   ]);
 
 export const extractFilingProviderPlanId = (input: unknown) => {

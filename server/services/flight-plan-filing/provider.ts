@@ -39,6 +39,7 @@ export type LeidosFlightServiceDiagnostics = {
   webhookUsernameConfigured: boolean;
   webhookPasswordConfigured: boolean;
   actionPaths: Record<FlightPlanFilingAction, string | null>;
+  retrievePath: string | null;
 };
 
 export type LeidosRouteSearchResult = {
@@ -66,6 +67,7 @@ type LeidosFlightServiceConfig = {
   password: string | null;
   accountEmail: string | null;
   actionPaths: Record<FlightPlanFilingAction, string | null>;
+  retrievePath: string | null;
   webhookUsername: string | null;
   webhookPassword: string | null;
   wakeTurbulence: string;
@@ -111,6 +113,7 @@ const getLeidosFlightServiceConfig = (): LeidosFlightServiceConfig => {
       cancel: normalizePath(process.env.LEIDOS_FLIGHT_SERVICE_CANCEL_PATH),
       close: normalizePath(process.env.LEIDOS_FLIGHT_SERVICE_CLOSE_PATH),
     },
+    retrievePath: normalizePath(process.env.LEIDOS_FLIGHT_SERVICE_RETRIEVE_PATH) || "FP/{providerPlanId}/retrieve",
     webhookUsername: String(process.env.LEIDOS_FLIGHT_SERVICE_WEBHOOK_USERNAME || "").trim() || null,
     webhookPassword: String(process.env.LEIDOS_FLIGHT_SERVICE_WEBHOOK_PASSWORD || "").trim() || null,
     wakeTurbulence: String(process.env.LEIDOS_FLIGHT_SERVICE_WAKE_TURBULENCE || "MEDIUM").trim() || "MEDIUM",
@@ -133,6 +136,7 @@ export const getLeidosFlightServiceDiagnostics = (): LeidosFlightServiceDiagnost
     webhookUsernameConfigured: Boolean(config.webhookUsername),
     webhookPasswordConfigured: Boolean(config.webhookPassword),
     actionPaths: config.actionPaths,
+    retrievePath: config.retrievePath,
   };
 };
 
@@ -378,10 +382,15 @@ const retrieveLeidosPlanMetadataByProviderPlanId = async (
   config: LeidosFlightServiceConfig,
 ): Promise<Record<string, unknown> | null> => {
   const trimmedProviderPlanId = String(providerPlanId || '').trim();
-  if (!trimmedProviderPlanId || !config.username || !config.password) return null;
+  if (!trimmedProviderPlanId || !config.username || !config.password || !config.retrievePath) return null;
 
-  const baseUrl = config.baseUrl.endsWith('/') ? config.baseUrl : `${config.baseUrl}/`;
-  const url = new URL(`FP/${encodeURIComponent(trimmedProviderPlanId)}/retrieve`, baseUrl);
+  const resolvedPath = config.retrievePath
+    .replaceAll("{flightIdentifier}", encodeURIComponent(trimmedProviderPlanId))
+    .replaceAll("{providerPlanId}", encodeURIComponent(trimmedProviderPlanId))
+    .replaceAll("{planId}", encodeURIComponent(trimmedProviderPlanId));
+  const url = resolvedPath.startsWith("http://") || resolvedPath.startsWith("https://")
+    ? new URL(resolvedPath)
+    : new URL(resolvedPath, config.baseUrl.endsWith("/") ? config.baseUrl : `${config.baseUrl}/`);
   url.searchParams.set('versionRequested', '20240801');
 
   const basic = Buffer.from(`${config.username}:${config.password}`).toString('base64');
@@ -437,6 +446,27 @@ const retrieveLeidosPlanMetadataWithVersionStamp = async (
     metadataResponse,
     versionStamp,
   };
+};
+
+const summarizeObjectKeys = (input: unknown, maxDepth = 2, depth = 0): unknown => {
+  if (!input || typeof input !== "object") return null;
+  if (Array.isArray(input)) {
+    return input.slice(0, 5).map((item) => summarizeObjectKeys(item, maxDepth, depth + 1));
+  }
+  if (depth >= maxDepth) {
+    return Object.keys(input as Record<string, unknown>).sort();
+  }
+
+  const record = input as Record<string, unknown>;
+  const summary: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record).slice(0, 25)) {
+    if (!value || typeof value !== "object") {
+      summary[key] = typeof value;
+      continue;
+    }
+    summary[key] = summarizeObjectKeys(value, maxDepth, depth + 1);
+  }
+  return summary;
 };
 
 export const searchLeidosRoute = async ({
@@ -707,6 +737,14 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       const retrieval = providerPlanId
         ? await retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config)
         : { metadataResponse: null as Record<string, unknown> | null, versionStamp: null as string | null };
+      console.info(JSON.stringify({
+        event: "leidos_missing_version_stamp_before_action",
+        action,
+        providerPlanId,
+        retrievePath: config.retrievePath,
+        versionStamp: retrieval.versionStamp,
+        metadataKeys: summarizeObjectKeys(retrieval.metadataResponse),
+      }));
       return buildStagedFallbackResult(
         plan,
         action,
@@ -791,6 +829,17 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
       const retrieval = await retrieveLeidosPlanMetadataWithVersionStamp(providerPlanId, config);
       metadataResponse = retrieval.metadataResponse;
       versionStamp = retrieval.versionStamp || extractFilingVersionStamp(metadataResponse);
+    }
+
+    if (!versionStamp) {
+      console.info(JSON.stringify({
+        event: "leidos_live_action_missing_version_stamp",
+        action,
+        providerPlanId,
+        retrievePath: config.retrievePath,
+        responseKeys: summarizeObjectKeys(parsedResponse),
+        metadataKeys: summarizeObjectKeys(metadataResponse),
+      }));
     }
 
     return {

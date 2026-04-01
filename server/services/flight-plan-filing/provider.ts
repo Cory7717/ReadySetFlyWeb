@@ -427,6 +427,18 @@ const normalizeLeidosEquipmentCode = (value?: string | null) => {
   return normalized || null;
 };
 
+const normalizeLeidosAircraftColor = (value?: string | null) => {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+  const tokens = normalized.split(" ").filter(Boolean);
+  return tokens.slice(0, 3).join(" ");
+};
+
 const normalizeWakeTurbulenceCategory = (value?: string | null) => {
   const normalized = String(value || "").trim().toUpperCase();
   if (!normalized) return null;
@@ -522,7 +534,7 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("fuelOnBoard", minutesToIsoDuration(plan.filingEnduranceMinutes));
     append("pilotData", plan.filingPilotName);
     append("peopleOnBoardExtended", plan.filingSoulsOnBoard);
-    append("aircraftColor", plan.filingAircraftColor);
+    append("aircraftColor", normalizeLeidosAircraftColor(plan.filingAircraftColor));
     append("typeOfFlight", plan.filingTypeOfFlight || config.typeOfFlight);
     append("surveillanceEquipment", plan.filingSurveillanceEquipment || config.surveillanceEquipment);
     append("pilotInCommandExtended", plan.filingPilotName);

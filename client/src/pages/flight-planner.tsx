@@ -204,10 +204,12 @@ const normalizedClientFilingStatus = (plan: FlightPlan | null | undefined) =>
 const buildPlannerStateSnapshot = ({
   selectedProfileId,
   selectedTypeId,
+  selectedTypeIcao,
   customProfile,
 }: {
   selectedProfileId: string;
   selectedTypeId: string;
+  selectedTypeIcao: string | null;
   customProfile: {
     name: string;
     cruiseKtasOverride: string;
@@ -218,6 +220,7 @@ const buildPlannerStateSnapshot = ({
 }) => ({
   selectedProfileId,
   selectedTypeId,
+  selectedTypeIcao,
   customProfile,
 });
 
@@ -4782,6 +4785,7 @@ export default function FlightPlanner() {
           plannerState: buildPlannerStateSnapshot({
             selectedProfileId,
             selectedTypeId,
+            selectedTypeIcao: selectedType?.icaoType?.trim() || null,
             customProfile,
           }),
           plannedDepartureAt: form.plannedDepartureAt
@@ -4854,6 +4858,7 @@ export default function FlightPlanner() {
         plannerState: buildPlannerStateSnapshot({
           selectedProfileId,
           selectedTypeId,
+          selectedTypeIcao: selectedType?.icaoType?.trim() || null,
           customProfile,
         }),
         plannedDepartureAt: form.plannedDepartureAt

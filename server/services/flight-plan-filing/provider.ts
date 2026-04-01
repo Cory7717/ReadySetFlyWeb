@@ -412,6 +412,38 @@ const resolveActionPath = (baseUrl: string, actionPath: string, plan: FlightPlan
     : new URL(resolvedPath, baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`).toString();
 };
 
+const getPlannerStateRecord = (plan: FlightPlan) => {
+  const plannerState = (plan as Record<string, unknown>)?.plannerState;
+  return plannerState && typeof plannerState === "object" && !Array.isArray(plannerState)
+    ? plannerState as Record<string, unknown>
+    : null;
+};
+
+const normalizeLeidosEquipmentCode = (value?: string | null) => {
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  return normalized || null;
+};
+
+const getLeidosAircraftTypeCode = (plan: FlightPlan) => {
+  const plannerState = getPlannerStateRecord(plan);
+  const selectedTypeIcao =
+    plannerState && typeof plannerState.selectedTypeIcao === "string"
+      ? plannerState.selectedTypeIcao.trim().toUpperCase()
+      : "";
+  if (selectedTypeIcao) return selectedTypeIcao;
+
+  const aircraftType = String(plan.aircraftType || "").trim();
+  const parentheticalMatch = aircraftType.match(/\(([A-Z0-9]{2,6})\)\s*$/i);
+  if (parentheticalMatch?.[1]) {
+    return parentheticalMatch[1].trim().toUpperCase();
+  }
+
+  return aircraftType || null;
+};
+
 const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
   const params = new URLSearchParams();
 
@@ -434,9 +466,9 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("departureInstant", formatDepartureInstant(plan.plannedDepartureAt));
     append("flightDuration", minutesToIsoDuration(plan.filingEstimatedEnrouteMinutes));
     append("speedKnots", plan.filingTrueAirspeedKtas);
-    append("aircraftType", plan.aircraftType);
+    append("aircraftType", getLeidosAircraftTypeCode(plan));
     append("wakeTurbulence", plan.filingWakeTurbulence || config.wakeTurbulence);
-    append("aircraftEquipment", plan.filingEquipment);
+    append("aircraftEquipment", normalizeLeidosEquipmentCode(plan.filingEquipment));
     append("route", plan.route || "DCT");
     append("remarks", plan.filingRemarks || plan.notes);
     append("fuelOnBoard", minutesToIsoDuration(plan.filingEnduranceMinutes));
@@ -886,6 +918,9 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   }
   if ((action === "file" || action === "amend") && !plan.filingPlannedAltitudeFt) {
     errors.push("Planned altitude is required before sending this filing action to Leidos.");
+  }
+  if ((action === "file" || action === "amend") && rules === "VFR" && Number(plan.filingPlannedAltitudeFt || 0) >= 18000) {
+    errors.push("VFR flight plans cannot be filed at or above FL180. Use IFR or choose a lower altitude.");
   }
 
   if ((action === "file" || action === "amend" || action === "activate") && !plan.plannedDepartureAt) {

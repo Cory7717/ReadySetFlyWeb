@@ -1758,7 +1758,7 @@ export default function FlightPlanner() {
       return;
     }
     if (value.length === 4 && ICAO_REGEX.test(value)) {
-      setDepartureResolved("");
+      setDepartureResolved(value);
       return;
     }
     setDepartureResolved("");
@@ -1844,7 +1844,7 @@ export default function FlightPlanner() {
       return;
     }
     if (value.length === 4 && ICAO_REGEX.test(value)) {
-      setDestinationResolved("");
+      setDestinationResolved(value);
       return;
     }
     setDestinationResolved("");
@@ -2110,18 +2110,42 @@ export default function FlightPlanner() {
   }, [suggestedStops, plannedStopsInput]);
   const shouldOrderSuggestions = isUsingSuggestedWaypoints || isUsingSuggestedStops;
 
+  const autoSuggestedIntermediates = useMemo(() => {
+    if (!departureResolved || !destinationResolved) return [];
+    if (plannedStops.length > 0 || waypoints.length > 0 || filedRouteAirportTokens.length > 0) return [];
+    return [...suggestedStops, ...suggestedWaypoints]
+      .map((icao) => icao.trim().toUpperCase())
+      .filter(Boolean)
+      .filter((icao, index, arr) => ICAO_REGEX.test(icao) && arr.indexOf(icao) === index);
+  }, [
+    departureResolved,
+    destinationResolved,
+    plannedStops.length,
+    waypoints.length,
+    filedRouteAirportTokens,
+    suggestedStops,
+    suggestedWaypoints,
+  ]);
+
+  const routeIntermediates = useMemo(() => {
+    if (plannedStops.length > 0 || waypoints.length > 0) {
+      return [...plannedStops, ...waypoints];
+    }
+    if (filedRouteAirportTokens.length > 0) {
+      return filedRouteAirportTokens;
+    }
+    return autoSuggestedIntermediates;
+  }, [plannedStops, waypoints, filedRouteAirportTokens, autoSuggestedIntermediates]);
+
   const routeSequenceRaw = useMemo(() => {
-    const intermediateAirports = plannedStops.length > 0 || waypoints.length > 0
-      ? [...plannedStops, ...waypoints]
-      : filedRouteAirportTokens;
     return [
       departureResolved.trim().toUpperCase(),
-      ...intermediateAirports,
+      ...routeIntermediates,
       destinationResolved.trim().toUpperCase(),
     ]
       .filter(Boolean)
       .filter((icao) => ICAO_REGEX.test(icao));
-  }, [departureResolved, destinationResolved, plannedStops, waypoints, filedRouteAirportTokens]);
+  }, [departureResolved, destinationResolved, routeIntermediates]);
 
   const routeIcaos = useMemo(() => {
     return Array.from(new Set(routeSequenceRaw));
@@ -2213,9 +2237,7 @@ export default function FlightPlanner() {
   }, [airportFrequencyQueries, routeIcaos]);
 
   const orderedIntermediates = useMemo(() => {
-    const combined = (plannedStops.length > 0 || waypoints.length > 0
-      ? [...plannedStops, ...waypoints]
-      : filedRouteAirportTokens).filter((icao) => ICAO_REGEX.test(icao));
+    const combined = routeIntermediates.filter((icao) => ICAO_REGEX.test(icao));
     if (!shouldOrderSuggestions) return combined;
     const departureKey = departureResolved.trim().toUpperCase();
     const departurePoint = airportMap.get(departureKey);
@@ -2263,7 +2285,7 @@ export default function FlightPlanner() {
         return a.order - b.order;
       })
       .map((item) => item.icao);
-  }, [plannedStops, waypoints, filedRouteAirportTokens, shouldOrderSuggestions, airportMap, departureResolved, destinationResolved]);
+  }, [routeIntermediates, shouldOrderSuggestions, airportMap, departureResolved, destinationResolved]);
 
   const orderedPlannedStops = useMemo(
     () => orderedIntermediates.filter((icao) => plannedStops.includes(icao)),
@@ -2553,7 +2575,7 @@ export default function FlightPlanner() {
 
   const suggestedWaypoint = useMemo(() => {
     if (routeSuggestion !== "midpoint") return null;
-    if (waypoints.length > 0 || plannedStops.length > 0) return null;
+    if (routeIntermediates.length > 0) return null;
     if (airportPoints.length < 2) return null;
     const start = airportPoints[0];
     const end = airportPoints[airportPoints.length - 1];
@@ -2575,7 +2597,7 @@ export default function FlightPlanner() {
       lon: (lon3 * 180) / Math.PI,
     };
     return midpoint;
-  }, [airportPoints, routeSuggestion, waypoints.length]);
+  }, [airportPoints, routeSuggestion, routeIntermediates.length]);
 
   const routePoints: PlannerPoint[] = useMemo(() => {
     if (!suggestedWaypoint) return airportPoints;
@@ -2616,8 +2638,10 @@ export default function FlightPlanner() {
   const reserveFuel = (Number(reserveMinutes) / 60) * planningBurn;
   const tripFuel = eteHours * planningBurn;
   const totalFuel = tripFuel + reserveFuel;
-  const eteMinutes = eteHours ? Math.round(eteHours * 60) : 0;
-  const canAutoArrival = Boolean(form.plannedDepartureAt && eteMinutes);
+  const eteMinutes = totalDistance > 0 && Number.isFinite(eteHours)
+    ? Math.max(1, Math.round(eteHours * 60))
+    : 0;
+  const canAutoArrival = Boolean(form.plannedDepartureAt && totalDistance > 0 && groundspeed > 0);
   const generatedRouteCore = useMemo(
     () =>
       [plannedStopsInput, waypointsInput]
@@ -5564,6 +5588,11 @@ export default function FlightPlanner() {
               <p className="text-xs text-muted-foreground">
                 Optional planning aids only. Add ICAO codes separated by space or comma, or use the helper suggestions below and edit as needed.
               </p>
+              {autoSuggestedIntermediates.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  RSF is previewing the helper route on the map and in ETE until you enter custom waypoints, planned stops, or a filed airport route.
+                </p>
+              )}
               {routeSuggestionQuery.isFetching && departureResolved && destinationResolved && (
                 <div className="text-xs text-muted-foreground">Calculating route-assist waypoints...</div>
               )}

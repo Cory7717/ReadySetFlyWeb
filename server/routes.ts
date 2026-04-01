@@ -53,6 +53,7 @@ import { aiToolsRouter } from "./routes/aiTools";
 import {
   flightPlanFilingProvider,
   getLeidosFlightServiceDiagnostics,
+  getLeidosFlightServicePlanDebug,
   searchLeidosRoute,
   validateFlightPlanForAction,
   verifyLeidosWebhookAuthorization,
@@ -20636,6 +20637,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     } catch (error) {
       console.error("Failed to build Leidos Flight Service diagnostics:", error);
       res.status(500).json({ error: "Failed to build Leidos Flight Service diagnostics" });
+    }
+  });
+
+  app.get("/api/admin/leidos-flight-service/debug/:planId", isAuthenticated, isSuperAdmin, async (req: any, res) => {
+    try {
+      const plan = await storage.getFlightPlanById(String(req.params.planId || ""));
+      if (!plan) {
+        return res.status(404).json({ error: "Flight plan not found" });
+      }
+
+      res.json(getLeidosFlightServicePlanDebug(plan as any));
+    } catch (error) {
+      console.error("Failed to build Leidos Flight Service plan debug:", error);
+      res.status(500).json({ error: "Failed to build Leidos Flight Service plan debug" });
     }
   });
 

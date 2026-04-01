@@ -140,6 +140,45 @@ export const getLeidosFlightServiceDiagnostics = (): LeidosFlightServiceDiagnost
   };
 };
 
+export const getLeidosFlightServicePlanDebug = (plan: FlightPlan) => {
+  const config = getLeidosFlightServiceConfig();
+  const resolvedActionPaths = Object.fromEntries(
+    Object.entries(config.actionPaths).map(([action, actionPath]) => [
+      action,
+      actionPath ? resolveActionPath(config.baseUrl, actionPath, plan) : null,
+    ]),
+  );
+  const resolvedRetrievePath = config.retrievePath
+    ? config.retrievePath
+      .replaceAll("{flightIdentifier}", encodeURIComponent(String(plan.filingProviderPlanId || "").trim()))
+      .replaceAll("{providerPlanId}", encodeURIComponent(String(plan.filingProviderPlanId || "").trim()))
+      .replaceAll("{planId}", encodeURIComponent(plan.id))
+    : null;
+
+  return {
+    diagnostics: getLeidosFlightServiceDiagnostics(),
+    planId: plan.id,
+    filingStatus: plan.filingStatus,
+    filingIsLive: plan.filingIsLive,
+    filingPendingAction: plan.filingPendingAction,
+    filingProvider: plan.filingProvider,
+    providerPlanId: plan.filingProviderPlanId || null,
+    versionStamp: extractVersionStamp(plan),
+    configuredPaths: {
+      ...config.actionPaths,
+      retrieve: config.retrievePath,
+    },
+    resolvedPaths: {
+      ...resolvedActionPaths,
+      retrieve: resolvedRetrievePath
+        ? (resolvedRetrievePath.startsWith("http://") || resolvedRetrievePath.startsWith("https://")
+          ? resolvedRetrievePath
+          : new URL(resolvedRetrievePath, config.baseUrl.endsWith("/") ? config.baseUrl : `${config.baseUrl}/`).toString())
+        : null,
+    },
+  };
+};
+
 const getProviderUrl = () => getLeidosFlightServiceConfig().baseUrl;
 
 const getLiveNextStatus = (action: FlightPlanFilingAction): FlightPlanFilingStatus => {

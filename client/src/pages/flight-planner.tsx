@@ -1,5 +1,5 @@
 ﻿
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
+import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -1064,10 +1064,11 @@ function ScratchField({
   multiline = false,
   tall = false,
 }: ScratchFieldProps) {
+  const fieldId = useId();
   return (
     <div className="space-y-1">
       <div className="flex items-baseline gap-2">
-        <label className="text-sm font-semibold text-white">
+        <label htmlFor={fieldId} className="text-sm font-semibold text-white">
           {label}
         </label>
         {hint && (
@@ -1076,6 +1077,10 @@ function ScratchField({
       </div>
       {multiline ? (
         <textarea
+          id={fieldId}
+          aria-label={label}
+          title={label}
+          placeholder={label}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={tall ? 4 : 2}
@@ -1084,6 +1089,10 @@ function ScratchField({
         />
       ) : (
         <input
+          id={fieldId}
+          aria-label={label}
+          title={label}
+          placeholder={label}
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}

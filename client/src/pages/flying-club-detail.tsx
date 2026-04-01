@@ -926,6 +926,8 @@ export default function FlyingClubDetailPage() {
                 ) : (
                   <>
                     <select
+                      aria-label="Club aircraft for reservation"
+                      title="Club aircraft for reservation"
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                       value={reservationForm.aircraftId}
                       onChange={(event) => setReservationForm((current) => ({ ...current, aircraftId: event.target.value }))}
@@ -989,6 +991,8 @@ export default function FlyingClubDetailPage() {
                           </div>
                           {data.canManage ? (
                             <select
+                              aria-label={`Aircraft status for ${aircraft.displayName}`}
+                              title={`Aircraft status for ${aircraft.displayName}`}
                               className="flex h-9 rounded-md border border-input bg-background px-2 py-1 text-sm"
                               value={aircraft.status}
                               onChange={(event) => updateAircraftStatus(aircraft.id, event.target.value)}
@@ -1099,7 +1103,7 @@ export default function FlyingClubDetailPage() {
                     <div className="text-sm text-muted-foreground">Active club membership is required to report squawks.</div>
                   ) : (
                     <>
-                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={squawkForm.aircraftId} onChange={(event) => setSquawkForm((current) => ({ ...current, aircraftId: event.target.value }))}>
+                      <select aria-label="Club aircraft for squawk" title="Club aircraft for squawk" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={squawkForm.aircraftId} onChange={(event) => setSquawkForm((current) => ({ ...current, aircraftId: event.target.value }))}>
                         <option value="">Select club aircraft</option>
                         {aircraftOptions.map((aircraft) => (
                           <option key={aircraft.id} value={aircraft.id}>{aircraft.displayName}</option>
@@ -1108,7 +1112,7 @@ export default function FlyingClubDetailPage() {
                       <Input value={squawkForm.title} onChange={(event) => setSquawkForm((current) => ({ ...current, title: event.target.value }))} placeholder="Squawk title" />
                       <Textarea value={squawkForm.description} onChange={(event) => setSquawkForm((current) => ({ ...current, description: event.target.value }))} placeholder="Describe the discrepancy" rows={4} />
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={squawkForm.severity} onChange={(event) => setSquawkForm((current) => ({ ...current, severity: event.target.value }))}>
+                        <select aria-label="Squawk severity" title="Squawk severity" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={squawkForm.severity} onChange={(event) => setSquawkForm((current) => ({ ...current, severity: event.target.value }))}>
                           <option value="info">Info</option>
                           <option value="minor">Minor</option>
                           <option value="major">Major</option>
@@ -1168,14 +1172,14 @@ export default function FlyingClubDetailPage() {
                   </div>
                   {data.canManage ? (
                     <>
-                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={maintenanceForm.aircraftId} onChange={(event) => setMaintenanceForm((current) => ({ ...current, aircraftId: event.target.value }))}>
+                      <select aria-label="Club aircraft for maintenance item" title="Club aircraft for maintenance item" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={maintenanceForm.aircraftId} onChange={(event) => setMaintenanceForm((current) => ({ ...current, aircraftId: event.target.value }))}>
                         <option value="">Select club aircraft</option>
                         {aircraftOptions.map((aircraft) => (
                           <option key={aircraft.id} value={aircraft.id}>{aircraft.displayName}</option>
                         ))}
                       </select>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={maintenanceForm.itemType} onChange={(event) => setMaintenanceForm((current) => ({ ...current, itemType: event.target.value }))}>
+                        <select aria-label="Maintenance item type" title="Maintenance item type" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={maintenanceForm.itemType} onChange={(event) => setMaintenanceForm((current) => ({ ...current, itemType: event.target.value }))}>
                           <option value="maintenance">Maintenance</option>
                           <option value="inspection">Inspection</option>
                           <option value="ad">AD</option>
@@ -1209,7 +1213,7 @@ export default function FlyingClubDetailPage() {
                     <div className="text-sm text-muted-foreground">Only club managers can create blackout windows.</div>
                   ) : (
                     <>
-                      <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={blackoutForm.aircraftId} onChange={(event) => setBlackoutForm((current) => ({ ...current, aircraftId: event.target.value }))}>
+                      <select aria-label="Club aircraft for blackout window" title="Club aircraft for blackout window" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={blackoutForm.aircraftId} onChange={(event) => setBlackoutForm((current) => ({ ...current, aircraftId: event.target.value }))}>
                         <option value="">Select club aircraft</option>
                         {aircraftOptions.map((aircraft) => (
                           <option key={aircraft.id} value={aircraft.id}>{aircraft.displayName}</option>

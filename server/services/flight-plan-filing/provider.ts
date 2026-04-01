@@ -244,7 +244,7 @@ const appendLeidosAltitudeFields = (params: URLSearchParams, altitudeFt?: number
     params.append("altitudeTypeF", String(Math.round(roundedAltitude / 100)));
     return;
   }
-  params.append("altitudeTypeA", String(roundedAltitude));
+  params.append("altitudeTypeA", String(Math.round(roundedAltitude / 100)));
 };
 
 const parseJsonLikeRecord = (value: unknown) => {
@@ -427,6 +427,23 @@ const normalizeLeidosEquipmentCode = (value?: string | null) => {
   return normalized || null;
 };
 
+const normalizeWakeTurbulenceCategory = (value?: string | null) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!normalized) return null;
+  if (["L", "LIGHT"].includes(normalized)) return "LIGHT";
+  if (["M", "MEDIUM"].includes(normalized)) return "MEDIUM";
+  if (["H", "HEAVY"].includes(normalized)) return "HEAVY";
+  if (["J", "SUPER"].includes(normalized)) return "SUPER";
+  return normalized;
+};
+
+const inferWakeTurbulenceCategoryFromWeightLb = (maxGrossWeightLb?: number | null) => {
+  if (!maxGrossWeightLb || !Number.isFinite(maxGrossWeightLb) || maxGrossWeightLb <= 0) return null;
+  if (maxGrossWeightLb <= 15500) return "LIGHT";
+  if (maxGrossWeightLb > 300000) return "HEAVY";
+  return "MEDIUM";
+};
+
 const getLeidosAircraftTypeCode = (plan: FlightPlan) => {
   const plannerState = getPlannerStateRecord(plan);
   const selectedTypeIcao =
@@ -442,6 +459,37 @@ const getLeidosAircraftTypeCode = (plan: FlightPlan) => {
   }
 
   return aircraftType || null;
+};
+
+const getLeidosWakeTurbulence = (plan: FlightPlan, config: LeidosFlightServiceConfig) => {
+  const plannerState = getPlannerStateRecord(plan);
+  const selectedProfileMaxGrossWeightLb =
+    plannerState && typeof plannerState.selectedProfileMaxGrossWeightLb === "number"
+      ? plannerState.selectedProfileMaxGrossWeightLb
+      : null;
+  const selectedTypeMaxGrossWeightLb =
+    plannerState && typeof plannerState.selectedTypeMaxGrossWeightLb === "number"
+      ? plannerState.selectedTypeMaxGrossWeightLb
+      : null;
+  const customProfile =
+    plannerState && plannerState.customProfile && typeof plannerState.customProfile === "object" && !Array.isArray(plannerState.customProfile)
+      ? plannerState.customProfile as Record<string, unknown>
+      : null;
+  const customMaxGrossWeightCandidate = customProfile
+    ? Number(customProfile.maxGrossWeightOverrideLb)
+    : null;
+  const customMaxGrossWeightLb =
+    customMaxGrossWeightCandidate !== null && Number.isFinite(customMaxGrossWeightCandidate) && customMaxGrossWeightCandidate > 0
+      ? customMaxGrossWeightCandidate
+      : null;
+  const inferredWakeTurbulence = inferWakeTurbulenceCategoryFromWeightLb(
+    selectedProfileMaxGrossWeightLb ??
+    customMaxGrossWeightLb ??
+    selectedTypeMaxGrossWeightLb,
+  );
+  return inferredWakeTurbulence ||
+    normalizeWakeTurbulenceCategory(plan.filingWakeTurbulence) ||
+    normalizeWakeTurbulenceCategory(config.wakeTurbulence);
 };
 
 const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingAction, config: LeidosFlightServiceConfig) => {
@@ -467,7 +515,7 @@ const buildLeidosActionPayload = (plan: FlightPlan, action: FlightPlanFilingActi
     append("flightDuration", minutesToIsoDuration(plan.filingEstimatedEnrouteMinutes));
     append("speedKnots", plan.filingTrueAirspeedKtas);
     append("aircraftType", getLeidosAircraftTypeCode(plan));
-    append("wakeTurbulence", plan.filingWakeTurbulence || config.wakeTurbulence);
+    append("wakeTurbulence", getLeidosWakeTurbulence(plan, config));
     append("aircraftEquipment", normalizeLeidosEquipmentCode(plan.filingEquipment));
     append("route", plan.route || "DCT");
     append("remarks", plan.filingRemarks || plan.notes);

@@ -205,11 +205,15 @@ const buildPlannerStateSnapshot = ({
   selectedProfileId,
   selectedTypeId,
   selectedTypeIcao,
+  selectedTypeMaxGrossWeightLb,
+  selectedProfileMaxGrossWeightLb,
   customProfile,
 }: {
   selectedProfileId: string;
   selectedTypeId: string;
   selectedTypeIcao: string | null;
+  selectedTypeMaxGrossWeightLb: number | null;
+  selectedProfileMaxGrossWeightLb: number | null;
   customProfile: {
     name: string;
     cruiseKtasOverride: string;
@@ -221,6 +225,8 @@ const buildPlannerStateSnapshot = ({
   selectedProfileId,
   selectedTypeId,
   selectedTypeIcao,
+  selectedTypeMaxGrossWeightLb,
+  selectedProfileMaxGrossWeightLb,
   customProfile,
 });
 
@@ -4786,6 +4792,8 @@ export default function FlightPlanner() {
             selectedProfileId,
             selectedTypeId,
             selectedTypeIcao: selectedType?.icaoType?.trim() || null,
+            selectedTypeMaxGrossWeightLb: selectedType?.max_gross_weight_lb_effective ?? null,
+            selectedProfileMaxGrossWeightLb: selectedProfile?.max_gross_weight_lb_effective ?? null,
             customProfile,
           }),
           plannedDepartureAt: form.plannedDepartureAt
@@ -4859,6 +4867,8 @@ export default function FlightPlanner() {
           selectedProfileId,
           selectedTypeId,
           selectedTypeIcao: selectedType?.icaoType?.trim() || null,
+          selectedTypeMaxGrossWeightLb: selectedType?.max_gross_weight_lb_effective ?? null,
+          selectedProfileMaxGrossWeightLb: selectedProfile?.max_gross_weight_lb_effective ?? null,
           customProfile,
         }),
         plannedDepartureAt: form.plannedDepartureAt

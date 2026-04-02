@@ -350,6 +350,8 @@ function Router() {
 
 function AppShell() {
   const { isAuthenticated } = useAuth();
+  const [location] = useLocation();
+  const isNoiseAndFuryPage = location.startsWith("/noiseandfury");
   useEffect(() => {
     setAuthState(isAuthenticated);
     if (!isAuthenticated && isSoftAuthEnabled()) {
@@ -361,20 +363,20 @@ function AppShell() {
     <ThemeProvider defaultTheme="light">
       <TooltipProvider>
         <div className="min-h-screen bg-background flex flex-col">
-          <Header />
-          <FreeAccountValueBar />
+          {!isNoiseAndFuryPage && <Header />}
+          {!isNoiseAndFuryPage && <FreeAccountValueBar />}
           <div className="flex-1">
             <AnalyticsTracker />
             <ScrollToTopOnRoute />
             <Router />
           </div>
-          <Footer />
+          {!isNoiseAndFuryPage && <Footer />}
         </div>
-        <AuthGateModal />
-        <AiWeatherTranslatorAnnouncement />
-        <MembershipGrantAnnouncement />
-        <SignupNudgeBanner />
-        <ScrollToTopButton />
+        {!isNoiseAndFuryPage && <AuthGateModal />}
+        {!isNoiseAndFuryPage && <AiWeatherTranslatorAnnouncement />}
+        {!isNoiseAndFuryPage && <MembershipGrantAnnouncement />}
+        {!isNoiseAndFuryPage && <SignupNudgeBanner />}
+        {!isNoiseAndFuryPage && <ScrollToTopButton />}
         <Toaster />
       </TooltipProvider>
     </ThemeProvider>

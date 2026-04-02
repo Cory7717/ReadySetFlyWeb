@@ -301,6 +301,7 @@ export async function sendContactFormEmail(data: {
   subject: string;
   message: string;
   recipientEmail?: string;
+  ccEmail?: string | string[];
 }) {
   const { getUncachableResendClient } = await import('./resendClient');
   const { client: resend, fromEmail } = await getUncachableResendClient();
@@ -378,6 +379,7 @@ Ready Set Fly - Connecting Pilots with Aircraft
     await resend.emails.send({
       from: fromEmail,
       to: supportEmail,
+      cc: data.ccEmail,
       subject: `Contact Form: ${data.subject}`,
       html: htmlBody,
       text: textBody,

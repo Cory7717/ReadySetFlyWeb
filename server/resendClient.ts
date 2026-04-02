@@ -1,6 +1,7 @@
 type BrevoEmailPayload = {
   from: string;
   to: string | string[];
+  cc?: string | string[];
   subject: string;
   html?: string;
   text?: string;
@@ -40,6 +41,7 @@ async function sendBrevoEmail(apiKey: string, payload: BrevoEmailPayload) {
   const replyToValue = payload.replyTo || process.env.BREVO_REPLY_TO;
   const replyTo = replyToValue ? parseNameEmail(replyToValue) : null;
   const toList = Array.isArray(payload.to) ? payload.to : [payload.to];
+  const ccList = payload.cc ? (Array.isArray(payload.cc) ? payload.cc : [payload.cc]) : [];
 
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -51,6 +53,7 @@ async function sendBrevoEmail(apiKey: string, payload: BrevoEmailPayload) {
     body: JSON.stringify({
       sender,
       to: toList.map((email) => ({ email })),
+      cc: ccList.length ? ccList.map((email) => ({ email })) : undefined,
       subject: payload.subject,
       htmlContent: payload.html,
       textContent: payload.text,

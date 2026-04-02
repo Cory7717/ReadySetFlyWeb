@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -83,9 +82,9 @@ const teamProfiles = [
     bio: "Creator and writer of Noise & Fury. Developed the scripts and series bible with a prestige-drama approach rooted in emotional truth, period texture, and respect for the people at the center of the story.",
   },
   {
-    role: "Co-Creator",
+    role: "Producer / Co-Creator & Writer",
     name: "Cesar Rameriz",
-    bio: "Co-creator of the series concept and long-form dramatic world. Helps shape the story architecture, character trajectories, and the larger emotional design of the season.",
+    bio: "Producer, co-creator, and writer helping shape the series concept, long-form dramatic world, and season architecture. His body of work includes Road to Juarez.",
   },
   {
     role: "Producer",
@@ -161,7 +160,7 @@ export default function NoiseAndFuryPage() {
         <img
           src={HERO_IMAGE_PATH}
           alt="Noise and Fury amplifiers"
-          className="absolute inset-0 h-full w-full object-cover object-center"
+          className="absolute inset-0 h-full w-full object-cover object-top"
         />
         <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,6,7,0.18)_0%,rgba(6,6,7,0.48)_34%,rgba(6,6,7,0.78)_70%,rgba(6,6,7,0.96)_100%)]" />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,6,5,0.78)_0%,rgba(8,6,5,0.28)_42%,rgba(8,6,5,0.14)_62%,rgba(8,6,5,0.82)_100%)]" />
@@ -178,21 +177,9 @@ export default function NoiseAndFuryPage() {
           <div className="mt-8 flex flex-1 items-end">
             <div className="mx-auto w-full max-w-6xl">
               <div className="max-w-4xl space-y-6">
-                <div className="flex flex-wrap gap-3">
-                  <Badge className="border border-[#D3A869]/35 bg-[#D3A869]/10 px-3 py-1 text-[#E0BF84]">
-                    Investor Overview
-                  </Badge>
-                  <Badge className="border border-white/10 bg-black/28 px-3 py-1 text-[#E3D3C1]">
-                    Prestige Limited Series
-                  </Badge>
-                  <Badge className="border border-white/10 bg-black/28 px-3 py-1 text-[#E3D3C1]">
-                    Confidential Project Materials
-                  </Badge>
-                </div>
-
                 <div className="space-y-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.42em] text-[#E0BF84]">
-                    The music. The pain. The truth.
+                  <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[#E0BF84]">
+                    Investor Overview
                   </div>
                   <h1 className="max-w-4xl font-display text-5xl font-semibold tracking-[-0.06em] text-white sm:text-6xl lg:text-8xl">
                     Noise &amp; Fury
@@ -210,7 +197,7 @@ export default function NoiseAndFuryPage() {
                   </div>
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur">
                     <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">Written By</div>
-                    <div className="mt-2 text-base font-semibold text-white">Cory Armer</div>
+                    <div className="mt-2 text-base font-semibold text-white">Cory Armer and Cesar Rameriz</div>
                   </div>
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur">
                     <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">Packaging Round</div>

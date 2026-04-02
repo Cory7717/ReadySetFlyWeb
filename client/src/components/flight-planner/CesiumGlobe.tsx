@@ -242,6 +242,8 @@ export default function CesiumGlobe({
   obstacles = [],
   diversionAirports = [],
   rangeRingNm,
+  cameraMode = "overview",
+  cameraRangeNm,
 }: {
   points: PlannerPoint[];
   heightClassName?: string;
@@ -256,6 +258,8 @@ export default function CesiumGlobe({
   obstacles?: GlobeObstacle[];
   diversionAirports?: GlobeDiversionAirport[];
   rangeRingNm?: number;
+  cameraMode?: "overview" | "follow-ownship";
+  cameraRangeNm?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
@@ -710,8 +714,23 @@ export default function CesiumGlobe({
     viewer.entities.add({
       polyline: {
         positions: polylinePositions,
-        width: terrainSegments.length > 0 ? 2 : 4,
-        material: Cesium.Color.fromCssColorString("#67e8f9"),
+        width: terrainSegments.length > 0 ? 10 : 12,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          color: Cesium.Color.fromCssColorString("#67e8f9").withAlpha(0.26),
+          glowPower: 0.22,
+          taperPower: 0.78,
+        }),
+      },
+    });
+
+    viewer.entities.add({
+      polyline: {
+        positions: polylinePositions,
+        width: terrainSegments.length > 0 ? 3 : 5,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          color: Cesium.Color.fromCssColorString("#67e8f9"),
+          glowPower: 0.08,
+        }),
       },
     });
 
@@ -912,7 +931,12 @@ export default function CesiumGlobe({
           outlineWidth: 2,
         },
         label: {
-          text: target.label || String(target.id),
+          text:
+            `${target.label || String(target.id)}${
+              target.relativeAltitudeFt != null
+                ? ` ${target.relativeAltitudeFt > 0 ? "+" : ""}${Math.round(target.relativeAltitudeFt)}`
+                : ""
+            }`,
           font: "12px sans-serif",
           fillColor: Cesium.Color.WHITE,
           outlineColor: Cesium.Color.BLACK,
@@ -924,6 +948,30 @@ export default function CesiumGlobe({
           pixelOffset: new Cesium.Cartesian2(0, -14),
         },
       });
+
+      if (target.trackDeg != null && Number.isFinite(target.trackDeg)) {
+        const vectorLengthMeters = 6 * 1852;
+        const headingRad = Cesium.Math.toRadians(target.trackDeg);
+        const endLon = target.lon + (Math.sin(headingRad) * vectorLengthMeters) / (111320 * Math.cos((target.lat * Math.PI) / 180));
+        const endLat = target.lat + (Math.cos(headingRad) * vectorLengthMeters) / 111320;
+        viewer.entities.add({
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+              target.lon,
+              target.lat,
+              trafficAltitudeMeters,
+              endLon,
+              endLat,
+              trafficAltitudeMeters,
+            ]),
+            width: target.threatLevel === "immediate" ? 3 : 2,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              color: Cesium.Color.fromCssColorString(tone).withAlpha(0.92),
+              glowPower: 0.14,
+            }),
+          },
+        });
+      }
     });
 
     obstacles.forEach((obstacle) => {
@@ -991,8 +1039,27 @@ export default function CesiumGlobe({
       });
     });
 
-    viewer.zoomTo(viewer.entities, new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-30), 0));
+    if (cameraMode === "follow-ownship" && ownship) {
+      const ownshipAltitudeMeters =
+        ownship.altitudeFt && Number.isFinite(ownship.altitudeFt)
+          ? Math.max(180, ownship.altitudeFt * 0.3048)
+          : routeAltitudeMeters;
+      const ownshipPosition = Cesium.Cartesian3.fromDegrees(ownship.lon, ownship.lat, ownshipAltitudeMeters);
+      const rangeMeters = Math.max(18_000, (cameraRangeNm ?? 48) * 1852);
+      viewer.camera.lookAt(
+        ownshipPosition,
+        new Cesium.HeadingPitchRange(
+          Cesium.Math.toRadians(ownship.headingDeg ?? 0),
+          Cesium.Math.toRadians(-38),
+          rangeMeters,
+        ),
+      );
+    } else {
+      viewer.zoomTo(viewer.entities, new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-30), 0));
+    }
   }, [
+    cameraMode,
+    cameraRangeNm,
     diversionAirports,
     obstacles,
     ownship,
@@ -1033,6 +1100,9 @@ export default function CesiumGlobe({
           </label>
           {!hasIonToken && (
             <div className="text-[11px] text-slate-500">Terrain needs Ion token.</div>
+          )}
+          {cameraMode === "follow-ownship" && (
+            <div className="text-[11px] text-slate-500">Camera following ownship corridor.</div>
           )}
         </div>
         <div ref={containerRef} className="h-full w-full" />

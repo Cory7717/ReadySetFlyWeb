@@ -935,6 +935,16 @@ function FlightDemoAirportDiagram({ preview }: { preview: DemoSurfacePreview }) 
   const followZoom = preview.mode === "departure" ? 1.68 : 1.52;
   const sceneTranslateX = followAnchor.x - ownshipWorld.x * followZoom;
   const sceneTranslateY = followAnchor.y - ownshipWorld.y * followZoom;
+  const routePath = preview.route.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x + 20} ${point.y + 1}`).join(" ");
+  const secondaryPath = preview.secondaryRoute.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x + 20} ${point.y + 1}`).join(" ");
+  const completedPath = preview.completedRoute.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x + 20} ${point.y + 1}`).join(" ");
+  const upcomingPath = preview.upcomingRoute.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x + 20} ${point.y + 1}`).join(" ");
+  const apronPath = preview.mode === "departure"
+    ? "M 14 60 L 36 60 L 44 66 L 44 84 L 10 84 L 10 66 Z"
+    : "M 92 10 L 122 10 L 128 18 L 128 38 L 104 38 L 92 28 Z";
+  const branchPath = preview.mode === "departure"
+    ? "M 72 22 L 92 22 L 108 14 L 124 14"
+    : "M 48 58 L 30 58 L 18 66 L 10 66";
 
   return (
     <div className="relative overflow-hidden rounded-[20px] border border-[#1E2D42] bg-[linear-gradient(180deg,#07101A_0%,#0A131D_100%)] p-4">
@@ -957,6 +967,7 @@ function FlightDemoAirportDiagram({ preview }: { preview: DemoSurfacePreview }) 
         <g clipPath="url(#rsf-taxi-follow-window)">
           <g transform={`translate(${sceneTranslateX.toFixed(2)} ${sceneTranslateY.toFixed(2)}) scale(${followZoom.toFixed(3)})`}>
             <g transform={`rotate(${rotation} 70 50)`}>
+              <path d={apronPath} fill="#222D38" stroke="rgba(120,142,164,0.48)" strokeWidth="1" />
               <rect x="58" y="12" width="24" height="76" rx="4" fill="#19212C" stroke="rgba(232,237,244,0.18)" strokeWidth="0.7" />
               <rect x="60" y="16" width="20" height="5" rx="1.8" fill="#E8EDF4" opacity="0.9" />
               <rect x="60" y="79" width="20" height="5" rx="1.8" fill="#E8EDF4" opacity="0.9" />
@@ -965,42 +976,42 @@ function FlightDemoAirportDiagram({ preview }: { preview: DemoSurfacePreview }) 
               {reciprocalRunwayId ? (
                 <text x="70" y="74" textAnchor="middle" fill="#F5A623" fontSize="5.2" letterSpacing="0.25">{reciprocalRunwayId}</text>
               ) : null}
-              <path d="M25 71 L54 71 L54 63 L24 63 Q20 63 20 67 Q20 71 25 71 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" />
-              <path d="M84 31 L114 31 Q120 31 120 25 L120 19 Q120 15 116 15 L87 15 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" />
-              <path d="M83 50 L110 50 L116 56 L116 66 L104 66 L83 66 Z" fill="#162536" stroke="#4A9FD4" strokeWidth="1" opacity="0.8" />
-              <path d="M54 67 L60 67" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
-              <path d="M80 23 L86 23" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
-              <path d="M80 58 L84 58" fill="none" stroke="#4A9FD4" strokeWidth="1.1" />
+              <path d={routePath} fill="none" stroke="#2B3642" strokeWidth="14" strokeLinecap="round" strokeLinejoin="round" />
+              <path d={secondaryPath} fill="none" stroke="#26313D" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
+              <path d={branchPath} fill="none" stroke="#26313D" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
+              <path d={routePath} fill="none" stroke="rgba(126,146,166,0.42)" strokeWidth="15.6" strokeLinecap="round" strokeLinejoin="round" opacity="0.45" />
+              <path d={secondaryPath} fill="none" stroke="rgba(126,146,166,0.38)" strokeWidth="13.2" strokeLinecap="round" strokeLinejoin="round" opacity="0.42" />
               <line x1="56" y1="59.5" x2="84" y2="59.5" stroke={preview.holdShortActive ? "#E8453C" : "#F5A623"} strokeWidth="1.5" />
               <line x1="56" y1="61.9" x2="84" y2="61.9" stroke="rgba(245,166,35,0.7)" strokeWidth="1.1" />
               <path
-                d={`M ${preview.secondaryRoute.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+                d={secondaryPath}
                 fill="none"
-                stroke="rgba(74,159,212,0.34)"
+                stroke="rgba(255,205,92,0.55)"
                 strokeWidth="1.1"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeDasharray="2.4 2"
               />
               <path
-                d={`M ${preview.route.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+                d={routePath}
                 fill="none"
-                stroke="rgba(74,159,212,0.18)"
-                strokeWidth="4.8"
+                stroke="rgba(255,205,92,0.42)"
+                strokeWidth="1.4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                strokeDasharray="3.2 3.2"
               />
               <path
-                d={`M ${preview.completedRoute.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+                d={completedPath}
                 fill="none"
-                stroke="rgba(74,159,212,0.56)"
-                strokeWidth="2"
+                stroke="rgba(74,159,212,0.62)"
+                strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeDasharray="3.2 2.2"
+                strokeDasharray="5 2.4"
               />
               <path
-                d={`M ${preview.upcomingRoute.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+                d={upcomingPath}
                 fill="none"
                 stroke="rgba(200,146,42,0.55)"
                 strokeWidth="5.2"
@@ -1009,13 +1020,15 @@ function FlightDemoAirportDiagram({ preview }: { preview: DemoSurfacePreview }) 
                 filter="url(#rsf-taxi-glow)"
               />
               <path
-                d={`M ${preview.upcomingRoute.map((point) => `${point.x + 20} ${point.y + 1}`).join(" L ")}`}
+                d={upcomingPath}
                 fill="none"
                 stroke="#C8922A"
                 strokeWidth="2.6"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
+              <path d={routePath} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+              <path d={secondaryPath} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />
               <circle cx={preview.ownship.x + 20} cy={preview.ownship.y + 1} r="3.3" fill="#E8EDF4" stroke="#0A0E14" strokeWidth="0.8" />
               <path
                 d={`M ${preview.ownship.x + 20} ${preview.ownship.y - 4.2} L ${preview.ownship.x + 22.8} ${preview.ownship.y + 3.3} L ${preview.ownship.x + 20} ${preview.ownship.y + 1.4} L ${preview.ownship.x + 17.2} ${preview.ownship.y + 3.3} Z`}
@@ -1030,10 +1043,19 @@ function FlightDemoAirportDiagram({ preview }: { preview: DemoSurfacePreview }) 
                   <text x="70" y="43.1" textAnchor="middle" fill="#E8EDF4" fontSize="3.2" letterSpacing="0.1">OCC</text>
                 </g>
               ) : null}
-              <text x="28" y="59" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.2">RAMP</text>
-              <text x="45" y="57" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">A</text>
-              <text x="88" y="28" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">B</text>
-              <text x="92" y="55" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.22">C</text>
+              <text x="26" y="72" fill="#7A9BB8" fontSize="3.4" letterSpacing="0.2">APRON</text>
+              <g>
+                <rect x="41" y="51" width="10" height="5.4" rx="1.2" fill="#F5A623" />
+                <text x="46" y="54.9" textAnchor="middle" fill="#0A0E14" fontSize="3.2" fontWeight="700">A</text>
+              </g>
+              <g>
+                <rect x="93" y="18" width="10" height="5.4" rx="1.2" fill="#F5A623" />
+                <text x="98" y="21.9" textAnchor="middle" fill="#0A0E14" fontSize="3.2" fontWeight="700">B</text>
+              </g>
+              <g>
+                <rect x="92" y="52" width="10" height="5.4" rx="1.2" fill="#F5A623" />
+                <text x="97" y="55.9" textAnchor="middle" fill="#0A0E14" fontSize="3.2" fontWeight="700">C</text>
+              </g>
             </g>
           </g>
         </g>
@@ -2879,6 +2901,8 @@ export default function SyntheticVisionPage() {
                   headingDeg: flightFrame.ownship.heading,
                 }}
                 rangeRingNm={25}
+                cameraMode="follow-ownship"
+                cameraRangeNm={flightPhase.startsWith("surface") ? 8 : flightPhase === "arrival" ? 24 : 42}
               />
             ) : null}
 

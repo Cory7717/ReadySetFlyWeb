@@ -1122,11 +1122,11 @@ function AirportSurfacePreview({
   liveDiagram: PlateRecord | null;
   diagramLoading: boolean;
 }) {
-  const [surfaceView, setSurfaceView] = useState<"schematic" | "live">("schematic");
+  const [surfaceView, setSurfaceView] = useState<"schematic" | "live">("live");
 
   useEffect(() => {
-    setSurfaceView("schematic");
-  }, [preview?.airportIcao, preview?.runwayId]);
+    setSurfaceView(liveDiagram ? "live" : "schematic");
+  }, [liveDiagram, preview?.airportIcao, preview?.runwayId]);
 
   if (!preview) {
     return (
@@ -1463,6 +1463,11 @@ function FlightDemoVisionSurface({
   selectedDiversion: DemoDiversion | null;
   runwayCue: VisionRunwayCue | null;
 }) {
+  const isTaxiOut = flightPhase === "surface-departure";
+  const isDeparture = flightPhase === "departure";
+  const isEnroute = flightPhase === "enroute";
+  const isArrival = flightPhase === "arrival";
+  const isTaxiIn = flightPhase === "surface-arrival";
   const currentIndex = routePoints.findIndex((point) => point.icao === nextWaypoint);
   const nextLegBearing =
     currentIndex > 0 && currentIndex < routePoints.length - 1
@@ -1476,12 +1481,18 @@ function FlightDemoVisionSurface({
     -18,
     18,
   );
-  const bankDeg = clamp(routeCue * 1.15, -22, 22);
-  const pitchDeg = clamp(verticalSpeedFpm / 140, -7, 8);
+  const bankDeg = clamp(routeCue * 1.15, isArrival ? -18 : -22, isArrival ? 18 : 22);
+  const pitchDeg = clamp(verticalSpeedFpm / 140, isArrival ? -6 : -7, isDeparture ? 9 : 8);
   const sceneOffsetPx = pitchDeg * 18;
   const flightPathOffsetY = clamp((-verticalSpeedFpm / 65) - pitchDeg * 3.5, -82, 70);
   const flightPathOffsetX = clamp(routeCue * 3.2, -58, 58);
-  const gateCenters = [routeCue * 0.22, routeCue * 0.45, routeCue * 0.72, routeCue];
+  const gateCenters = isEnroute
+    ? [routeCue * 0.22, routeCue * 0.45, routeCue * 0.72, routeCue]
+    : isDeparture
+      ? [routeCue * 0.12, routeCue * 0.28, routeCue * 0.46]
+      : isArrival
+        ? [routeCue * 0.15, routeCue * 0.3]
+        : [];
   const speedTrend = verticalSpeedFpm > 150 ? "Climb" : verticalSpeedFpm < -150 ? "Descent" : "Level";
   const pitchLadder = [-20, -15, -10, -5, 5, 10, 15, 20];
   const phaseLabel =
@@ -1491,9 +1502,29 @@ function FlightDemoVisionSurface({
         ? "Departure"
         : flightPhase === "arrival"
           ? "Arrival"
-          : flightPhase === "surface-arrival"
+      : flightPhase === "surface-arrival"
             ? "Taxi in"
             : "Enroute";
+  const phaseCall =
+    isTaxiOut
+      ? "Runway entry briefing"
+      : isDeparture
+        ? "Departure corridor"
+        : isArrival
+          ? "Final approach"
+          : isTaxiIn
+            ? "Rollout and taxi-in"
+            : "Cruise corridor";
+  const phaseSupport =
+    isTaxiOut
+      ? "Hold-short, runway entry, and initial roll guidance."
+      : isDeparture
+        ? "Runway centerline and climb corridor are active."
+        : isArrival
+          ? "Runway box and centerline guidance are staged for landing."
+          : isTaxiIn
+            ? "Landing rollout is complete and taxi-in is staged."
+            : "Traffic, terrain, and route tunnel remain primary.";
   const visionTrafficCue = selectedTrafficTarget
     ? buildVisionTrafficCue({
         ownship: {
@@ -1524,6 +1555,18 @@ function FlightDemoVisionSurface({
         obstacleAheadFt: terrainState.obstacleAheadFt,
       })
     : null;
+  const showTunnel = isEnroute || isDeparture;
+  const showRunwayGuidance = Boolean(runwayCue) && (isDeparture || isArrival || isTaxiIn);
+  const trafficCardClass = showRunwayGuidance
+    ? "absolute bottom-[102px] right-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 text-right backdrop-blur md:bottom-[124px] md:right-3 md:w-[156px] md:px-3 md:py-2.5"
+    : "absolute bottom-[102px] right-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 text-right backdrop-blur md:bottom-[124px] md:right-[24px] md:w-[176px] md:px-3 md:py-2.5";
+  const terrainCardClass = showRunwayGuidance
+    ? "absolute bottom-[102px] left-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 backdrop-blur md:bottom-[124px] md:left-3 md:w-[156px] md:px-3 md:py-2.5"
+    : "absolute bottom-[102px] left-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 backdrop-blur md:bottom-[124px] md:left-[24px] md:w-[176px] md:px-3 md:py-2.5";
+  const runwayRibbonWidth = isArrival ? 26 : 18;
+  const runwayRibbonBottom = isArrival ? 6 : 11;
+  const runwayRibbonTop = isArrival ? 41 : 57;
+  const runwayRibbonLeft = 50 + routeCue * 0.18;
 
   return (
     <div className="relative h-[456px] overflow-hidden rounded-[24px] border border-slate-800 bg-[#060A10]">
@@ -1580,18 +1623,41 @@ function FlightDemoVisionSurface({
       >
         <div className="h-full w-full [clip-path:polygon(50%_100%,0_0,100%_0)] bg-[#F5A623]" />
       </div>
-      {gateCenters.map((center, index) => (
+      {showTunnel
+        ? gateCenters.map((center, index) => (
+            <div
+              key={`vision-gate-${index}`}
+              className="absolute rounded-[18px] border border-[#C8922A]/80 bg-[#C8922A]/8"
+              style={{
+                left: `${50 + center - (18 - index * 2)}%`,
+                top: `${24 + index * 12}%`,
+                width: `${36 - index * 4}%`,
+                height: `${17 - index * 1.5}%`,
+              }}
+            />
+          ))
+        : null}
+      {showRunwayGuidance ? (
         <div
-          key={`vision-gate-${index}`}
-          className="absolute rounded-[18px] border border-[#C8922A]/80 bg-[#C8922A]/8"
+          className="absolute bottom-0 z-10 -translate-x-1/2 overflow-hidden rounded-t-[22px] border border-white/15 bg-[linear-gradient(180deg,rgba(28,33,42,0.2)_0%,rgba(24,29,36,0.72)_18%,rgba(18,22,28,0.96)_100%)]"
           style={{
-            left: `${50 + center - (18 - index * 2)}%`,
-            top: `${24 + index * 12}%`,
-            width: `${36 - index * 4}%`,
-            height: `${17 - index * 1.5}%`,
+            left: `${runwayRibbonLeft}%`,
+            width: `${runwayRibbonWidth}%`,
+            top: `${runwayRibbonTop}%`,
+            bottom: `${runwayRibbonBottom}%`,
           }}
-        />
-      ))}
+        >
+          <div className="absolute inset-x-[44%] top-0 bottom-0 bg-white/60" />
+          <div className="absolute inset-x-[46%] top-0 bottom-0 bg-[#0A0E14]" />
+          {[12, 28, 44, 60, 76].map((pct) => (
+            <div
+              key={`runway-centerline-${pct}`}
+              className="absolute left-1/2 h-[10%] w-[10%] -translate-x-1/2 bg-white/90"
+              style={{ top: `${pct}%` }}
+            />
+          ))}
+        </div>
+      ) : null}
       {runwayCue ? (
         <>
           <div
@@ -1654,20 +1720,22 @@ function FlightDemoVisionSurface({
       <div className="absolute left-3 top-3 z-20 max-w-[164px] rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 backdrop-blur md:left-[148px] md:top-4 md:max-w-[236px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Vision guidance</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
-            {nextWaypoint ? `Track ${nextWaypoint}` : "Route tunnel active"}
+            {nextWaypoint ? `${phaseCall}${isEnroute ? ` to ${nextWaypoint}` : ""}` : phaseCall}
           </div>
           <div className="mt-1 text-xs text-[#7A9BB8]">
-            {phaseLabel} - {nextWaypointDistanceNm != null ? `${nextWaypointDistanceNm.toFixed(1)} NM to next fix` : "Monitoring current leg"}
+            {phaseLabel} - {nextWaypointDistanceNm != null ? `${nextWaypointDistanceNm.toFixed(1)} NM to next fix` : phaseSupport}
           </div>
       </div>
       <div className="absolute right-3 top-3 z-20 flex max-w-[148px] flex-col gap-2 md:right-[148px] md:top-4 md:max-w-[208px]">
           {runwayCue ? (
             <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 text-right backdrop-blur md:px-4 md:py-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Approach</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">{isDeparture ? "Departure" : "Runway"}</div>
               <div className="mt-1 font-mono text-xl text-[#F5A623]">RWY {runwayCue.runwayId}</div>
               <div className="mt-1 text-xs text-[#7A9BB8]">
                 {runwayCue.distanceLabel} - {Math.abs(runwayCue.alignmentDeltaDeg) < 4
-                  ? "Aligned on final"
+                  ? isDeparture
+                    ? "Track runway heading"
+                    : "Aligned on final"
                   : runwayCue.alignmentDeltaDeg > 0
                     ? `Correct left ${Math.round(Math.abs(runwayCue.alignmentDeltaDeg))} deg`
                     : `Correct right ${Math.round(Math.abs(runwayCue.alignmentDeltaDeg))} deg`}
@@ -1681,7 +1749,7 @@ function FlightDemoVisionSurface({
           </div>
       </div>
       {terrainState ? (
-        <div className="absolute bottom-[90px] left-4 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 backdrop-blur md:bottom-[116px] md:left-[160px] md:w-[214px] md:px-4 md:py-3">
+        <div className={terrainCardClass}>
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Terrain guidance</div>
           <div
             className={`mt-1 text-sm font-semibold ${
@@ -1717,7 +1785,7 @@ function FlightDemoVisionSurface({
         </div>
       ) : null}
       {selectedTrafficTarget ? (
-        <div className="absolute bottom-[90px] right-4 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 text-right backdrop-blur md:bottom-[116px] md:right-[160px] md:w-[214px] md:px-4 md:py-3">
+        <div className={trafficCardClass}>
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Traffic</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {selectedTrafficTarget.callsign} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
@@ -1764,7 +1832,7 @@ export default function SyntheticVisionPage() {
   const [departureSuggestions, setDepartureSuggestions] = useState<AirportSearchResult[]>([]);
   const [arrivalSuggestions, setArrivalSuggestions] = useState<AirportSearchResult[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("overhead");
-  const [speed, setSpeed] = useState<DemoSpeed>("4x");
+  const [speed, setSpeed] = useState<DemoSpeed>("1x");
   const [running, setRunning] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

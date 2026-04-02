@@ -108,6 +108,8 @@ export default function MapLibreAirportSurfacePreview({
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "top-right");
     map.on("load", () => {
+      window.setTimeout(() => map.resize(), 0);
+      window.setTimeout(() => map.resize(), 150);
       upsertGeoJsonLineLayer({
         map,
         sourceId: ROUTE_BASE_SOURCE_ID,
@@ -164,6 +166,17 @@ export default function MapLibreAirportSurfacePreview({
       mapRef.current = null;
     };
   }, [ownship.headingDeg, ownship.lat, ownship.lon, routeBaseGeoJson, routeDoneGeoJson, routeUpcomingGeoJson, runwayBarGeoJson, runwayCenterGeoJson]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const container = containerRef.current;
+    if (!map || !container || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      map.resize();
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -190,6 +190,10 @@ export default function MapLibreDemoMap({
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "top-right");
     map.on("load", () => {
+      window.setTimeout(() => map.resize(), 0);
+      window.setTimeout(() => map.resize(), 150);
+    });
+    map.on("load", () => {
       upsertGeoJsonLineLayer({ map, sourceId: ROUTE_SOURCE_ID, layerId: ROUTE_LAYER_ID, data: routeGeoJson, color: "#C8922A", width: 5, opacity: 0.9 });
       upsertGeoJsonLineLayer({ map, sourceId: RUNWAY_CENTER_SOURCE_ID, layerId: RUNWAY_CENTER_LAYER_ID, data: runwayCenterGeoJson, color: "#C8922A", width: 2.6, opacity: 0.88 });
       upsertGeoJsonLineLayer({ map, sourceId: RUNWAY_BAR_SOURCE_ID, layerId: RUNWAY_BAR_LAYER_ID, data: runwayBarGeoJson, color: "#F5A623", width: 5, opacity: 0.92 });
@@ -215,6 +219,17 @@ export default function MapLibreDemoMap({
       mapRef.current = null;
     };
   }, [ownship.lat, ownship.lon, routeGeoJson, runwayBarGeoJson, runwayCenterGeoJson, selectedTrafficLineGeoJson]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const container = containerRef.current;
+    if (!map || !container || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      map.resize();
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;

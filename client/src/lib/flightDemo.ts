@@ -101,26 +101,36 @@ export function interpolateRouteOwnship<T extends { latitude: number; longitude:
   let altitudeFt = plannedAltitudeFt;
   let verticalSpeedFpm = 0;
   let speedKts = cruiseKts;
-  if (clampedProgress < 0.02) {
-    const taxiOutPct = clampedProgress / 0.02;
+  if (clampedProgress < 0.015) {
+    const taxiOutPct = clampedProgress / 0.015;
     altitudeFt = 900;
     verticalSpeedFpm = 0;
-    speedKts = 12 + taxiOutPct * 38;
+    speedKts = 8 + taxiOutPct * 18;
+  } else if (clampedProgress < 0.03) {
+    const takeoffRollPct = (clampedProgress - 0.015) / 0.015;
+    altitudeFt = 900 + takeoffRollPct * 180;
+    verticalSpeedFpm = 120 + takeoffRollPct * 380;
+    speedKts = 26 + takeoffRollPct * 48;
   } else if (clampedProgress < 0.12) {
-    const climbPct = (clampedProgress - 0.02) / 0.1;
-    altitudeFt = Math.max(1200, plannedAltitudeFt * (0.16 + climbPct * 0.84));
-    verticalSpeedFpm = 700;
-    speedKts = 50 + (cruiseKts - 50) * climbPct;
-  } else if (clampedProgress > 0.985) {
-    const taxiInPct = (clampedProgress - 0.985) / 0.015;
+    const climbPct = (clampedProgress - 0.03) / 0.09;
+    altitudeFt = Math.max(1300, plannedAltitudeFt * (0.2 + climbPct * 0.8));
+    verticalSpeedFpm = 900 - climbPct * 180;
+    speedKts = 74 + (cruiseKts - 74) * clamp(climbPct * 1.05, 0, 1);
+  } else if (clampedProgress > 0.992) {
+    const taxiInPct = (clampedProgress - 0.992) / 0.008;
     altitudeFt = 900;
     verticalSpeedFpm = 0;
-    speedKts = Math.max(10, 55 - taxiInPct * 40);
-  } else if (clampedProgress > 0.88) {
-    const descentPct = (clampedProgress - 0.88) / 0.12;
-    altitudeFt = Math.max(1200, plannedAltitudeFt * (1 - descentPct));
-    verticalSpeedFpm = -500;
-    speedKts = cruiseKts - (cruiseKts - 75) * descentPct;
+    speedKts = Math.max(8, 22 - taxiInPct * 12);
+  } else if (clampedProgress > 0.94) {
+    const finalPct = (clampedProgress - 0.94) / 0.052;
+    altitudeFt = Math.max(950, 2200 - finalPct * 1300);
+    verticalSpeedFpm = -420;
+    speedKts = Math.max(76, 110 - finalPct * 28);
+  } else if (clampedProgress > 0.82) {
+    const descentPct = (clampedProgress - 0.82) / 0.12;
+    altitudeFt = Math.max(1800, plannedAltitudeFt - plannedAltitudeFt * 0.78 * descentPct);
+    verticalSpeedFpm = -520;
+    speedKts = cruiseKts - (cruiseKts - 118) * descentPct;
   }
 
   return {

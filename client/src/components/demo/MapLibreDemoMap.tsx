@@ -156,6 +156,16 @@ export default function MapLibreDemoMap({
   }, [ownship.lat, ownship.lon, selectedTrafficTarget]);
 
   const mapTitle = flightPhase.startsWith("surface") ? "Surface chart" : "Chart follow";
+  const mapStatusLabel =
+    flightPhase === "surface-departure"
+      ? "Taxi out"
+      : flightPhase === "departure"
+        ? "Departure corridor"
+        : flightPhase === "arrival"
+          ? "Arrival corridor"
+          : flightPhase === "surface-arrival"
+            ? "Taxi in"
+            : "Enroute corridor";
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -166,16 +176,16 @@ export default function MapLibreDemoMap({
       zoom: 7.4,
       attributionControl: {},
       style: createRasterBaseStyle({
-        sourceId: "osmDark",
-        layerId: "rsf-demo-osm-dark",
-        tiles: ["https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"],
-        attribution: "&copy; OpenStreetMap &copy; CARTO",
+        sourceId: "osmBase",
+        layerId: "rsf-demo-osm-base",
+        tiles: ["https://{a,b,c}.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+        attribution: "&copy; OpenStreetMap contributors",
       }),
     });
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: true, showZoom: true }), "top-right");
     map.on("load", () => {
-      upsertGeoJsonLineLayer({ map, sourceId: ROUTE_SOURCE_ID, layerId: ROUTE_LAYER_ID, data: routeGeoJson, color: "#C8922A", width: 4, opacity: 0.82 });
+      upsertGeoJsonLineLayer({ map, sourceId: ROUTE_SOURCE_ID, layerId: ROUTE_LAYER_ID, data: routeGeoJson, color: "#C8922A", width: 5, opacity: 0.9 });
       upsertGeoJsonLineLayer({ map, sourceId: RUNWAY_CENTER_SOURCE_ID, layerId: RUNWAY_CENTER_LAYER_ID, data: runwayCenterGeoJson, color: "#C8922A", width: 2.6, opacity: 0.88 });
       upsertGeoJsonLineLayer({ map, sourceId: RUNWAY_BAR_SOURCE_ID, layerId: RUNWAY_BAR_LAYER_ID, data: runwayBarGeoJson, color: "#F5A623", width: 5, opacity: 0.92 });
       upsertGeoJsonLineLayer({
@@ -205,11 +215,32 @@ export default function MapLibreDemoMap({
     const map = mapRef.current;
     if (!map) return;
     const bounds = new maplibregl.LngLatBounds([ownship.lon, ownship.lat], [ownship.lon, ownship.lat]);
+    const extendRunway = () => {
+      runwayOverlay?.centerline.forEach((point) => bounds.extend([point.longitude, point.latitude]));
+      runwayOverlay?.runwayBar.forEach((point) => bounds.extend([point.longitude, point.latitude]));
+    };
+
+    if (flightPhase === "surface-departure" || flightPhase === "departure") {
+      routePoints.slice(0, Math.min(3, routePoints.length)).forEach((point) => bounds.extend([point.longitude, point.latitude]));
+      trafficTargets.slice(0, 2).forEach((target) => bounds.extend([target.lon, target.lat]));
+      extendRunway();
+      map.fitBounds(bounds as LngLatBoundsLike, { padding: 72, duration: 0, maxZoom: flightPhase === "surface-departure" ? 15.5 : 11.8 });
+      return;
+    }
+
+    if (flightPhase === "arrival" || flightPhase === "surface-arrival") {
+      routePoints.slice(Math.max(routePoints.length - 3, 0)).forEach((point) => bounds.extend([point.longitude, point.latitude]));
+      trafficTargets.slice(0, 2).forEach((target) => bounds.extend([target.lon, target.lat]));
+      extendRunway();
+      map.fitBounds(bounds as LngLatBoundsLike, { padding: 72, duration: 0, maxZoom: flightPhase === "surface-arrival" ? 15.5 : 11.8 });
+      return;
+    }
+
     routePoints.forEach((point) => bounds.extend([point.longitude, point.latitude]));
     trafficTargets.forEach((target) => bounds.extend([target.lon, target.lat]));
     diversionCandidates.slice(0, 4).forEach((airport) => bounds.extend([airport.lon, airport.lat]));
     map.fitBounds(bounds as LngLatBoundsLike, { padding: 72, duration: 0, maxZoom: 10.5 });
-  }, [diversionCandidates, ownship.lat, ownship.lon, routePoints, trafficTargets]);
+  }, [diversionCandidates, flightPhase, ownship.lat, ownship.lon, routePoints, runwayOverlay, trafficTargets]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -369,7 +400,7 @@ export default function MapLibreDemoMap({
         </div>
       </div>
       <div className="pointer-events-none absolute left-4 top-14 rounded-full border border-[#1E2D42] bg-[#091018]/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#7A9BB8]">
-        MapLibre preview
+        {mapStatusLabel}
       </div>
       <div className="pointer-events-none absolute right-4 top-14 rounded-full border border-[#1E2D42] bg-[#091018]/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#7A9BB8]">
         {Math.round(remainingRouteNm)} NM remain

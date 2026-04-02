@@ -16,6 +16,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import MapLibreAirportSurfacePreview from "@/components/demo/MapLibreAirportSurfacePreview";
 import Demo2DMapSurface from "@/components/demo/Demo2DMapSurface";
 import type {
   DemoDiversion,
@@ -161,6 +162,12 @@ type DemoSurfacePreview = {
   completedRoute: Array<{ x: number; y: number }>;
   upcomingRoute: Array<{ x: number; y: number }>;
   secondaryRoute: Array<{ x: number; y: number }>;
+  geoOwnship: { lat: number; lon: number; headingDeg: number };
+  geoRoute: Array<{ lat: number; lon: number }>;
+  geoCompletedRoute: Array<{ lat: number; lon: number }>;
+  geoUpcomingRoute: Array<{ lat: number; lon: number }>;
+  geoRunwayCenterline: Array<{ lat: number; lon: number }>;
+  geoRunwayBar: Array<{ lat: number; lon: number }>;
   activeTaxiway: string;
   upcomingTaxiways: string[];
   progressCall: string;
@@ -170,6 +177,13 @@ const DEFAULT_DEPARTURE = "KDAL";
 const DEFAULT_ARRIVAL = "KHOU";
 const DEMO_CRUISE_KTS = 140;
 const DEMO_ALTITUDE_FT = 6500;
+const DEMO_PHASE_TARGETS: Record<DemoFlightPhase, number> = {
+  "surface-departure": 0.006,
+  departure: 0.06,
+  enroute: 0.45,
+  arrival: 0.9,
+  "surface-arrival": 0.992,
+};
 
 function normalizeAirportCode(value: string) {
   return value.trim().toUpperCase();
@@ -282,6 +296,32 @@ function normalizeRunwayIdent(value: string | null | undefined) {
     .toUpperCase()
     .replace(/^RWY\s*/i, "")
     .trim();
+}
+
+function localSurfacePointToGeo({
+  point,
+  airport,
+  runwayHeadingDeg,
+  nmPerUnit,
+}: {
+  point: { x: number; y: number };
+  airport: { latitude: number; longitude: number };
+  runwayHeadingDeg: number;
+  nmPerUnit: number;
+}) {
+  const eastUnits = point.x - 70;
+  const northUnits = 50 - point.y;
+  const distanceNm = Math.hypot(eastUnits, northUnits) * nmPerUnit;
+  if (!Number.isFinite(distanceNm) || distanceNm <= 0.0001) {
+    return { lat: airport.latitude, lon: airport.longitude };
+  }
+
+  const localBearingDeg = ((Math.atan2(eastUnits, northUnits) * 180) / Math.PI + 360) % 360;
+  return offsetPointByBearing(
+    { lat: airport.latitude, lon: airport.longitude },
+    (runwayHeadingDeg + localBearingDeg) % 360,
+    distanceNm,
+  );
 }
 
 function rotateDiagramPoint(
@@ -1164,7 +1204,20 @@ function AirportSurfacePreview({
               />
             </div>
           ) : (
-            <FlightDemoAirportDiagram preview={preview} />
+            preview.geoRoute.length > 1 ? (
+              <MapLibreAirportSurfacePreview
+                airportIcao={preview.airportIcao}
+                mode={preview.mode}
+                ownship={preview.geoOwnship}
+                route={preview.geoRoute}
+                completedRoute={preview.geoCompletedRoute}
+                upcomingRoute={preview.geoUpcomingRoute}
+                runwayCenterline={preview.geoRunwayCenterline}
+                runwayBar={preview.geoRunwayBar}
+              />
+            ) : (
+              <FlightDemoAirportDiagram preview={preview} />
+            )
           )}
         </div>
         <div className="space-y-3">
@@ -1189,7 +1242,7 @@ function AirportSurfacePreview({
             <div className="mt-1 text-xs text-[#7A9BB8]">
               {liveDiagram
                 ? "FAA airport diagram is available alongside the RSF surface schematic. Runway advisory and airport frequencies remain API-backed."
-                : "Runway advisory and airport frequencies are API-backed. Surface geometry is a polished schematic layer pending a matching live airport diagram."}
+                : "Runway advisory and airport frequencies are API-backed. Surface follow now tracks the aircraft over a live airport-anchored map while FAA diagram access remains available as a reference view."}
             </div>
             <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-[#7A9BB8]">
               <div>
@@ -1609,7 +1662,7 @@ function FlightDemoVisionSurface({
             {phaseLabel} - {nextWaypointDistanceNm != null ? `${nextWaypointDistanceNm.toFixed(1)} NM to next fix` : "Monitoring current leg"}
           </div>
       </div>
-      <div className="absolute right-3 top-3 z-20 flex max-w-[164px] flex-col gap-2 md:right-[148px] md:top-4 md:max-w-[236px]">
+      <div className="absolute right-3 top-3 z-20 flex max-w-[148px] flex-col gap-2 md:right-[148px] md:top-4 md:max-w-[208px]">
           {runwayCue ? (
             <div className="rounded-2xl border border-[#1E2D42] bg-[#091018]/74 px-3 py-2.5 text-right backdrop-blur md:px-4 md:py-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Approach</div>
@@ -1630,7 +1683,7 @@ function FlightDemoVisionSurface({
           </div>
       </div>
       {terrainState ? (
-        <div className="absolute bottom-[112px] left-3 right-[36%] z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 backdrop-blur md:bottom-[136px] md:left-[148px] md:right-auto md:w-[244px] md:px-4 md:py-3">
+        <div className="absolute bottom-[90px] left-4 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 backdrop-blur md:bottom-[116px] md:left-[160px] md:w-[214px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Terrain guidance</div>
           <div
             className={`mt-1 text-sm font-semibold ${
@@ -1666,7 +1719,7 @@ function FlightDemoVisionSurface({
         </div>
       ) : null}
       {selectedTrafficTarget ? (
-        <div className="absolute bottom-[112px] left-[36%] right-3 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/78 px-3 py-2.5 text-right backdrop-blur md:bottom-[136px] md:left-auto md:right-[148px] md:w-[244px] md:px-4 md:py-3">
+        <div className="absolute bottom-[90px] right-4 z-20 rounded-2xl border border-[#1E2D42] bg-[#091018]/76 px-3 py-2.5 text-right backdrop-blur md:bottom-[116px] md:right-[160px] md:w-[214px] md:px-4 md:py-3">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Traffic</div>
           <div className="mt-1 text-sm font-semibold text-[#E8EDF4]">
             {selectedTrafficTarget.callsign} - {selectedTrafficTarget.distanceNm.toFixed(1)} NM - {formatAltitudeDelta(selectedTrafficTarget.altitudeDeltaFt)}
@@ -1721,6 +1774,7 @@ export default function SyntheticVisionPage() {
   const [routeLabel, setRouteLabel] = useState("");
   const [routeMeta, setRouteMeta] = useState<RouteSuggestionResponse["meta"] | null>(null);
   const [progressNm, setProgressNm] = useState(0);
+  const [phaseFocus, setPhaseFocus] = useState<DemoFlightPhase | null>(null);
   const [diversionCandidates, setDiversionCandidates] = useState<DemoDiversion[]>([]);
   const [diversionLoading, setDiversionLoading] = useState(false);
   const [departureBriefing, setDepartureBriefing] = useState<RunwayBriefingResponse | null>(null);
@@ -2007,6 +2061,7 @@ export default function SyntheticVisionPage() {
       setRouteLabel(formatRouteLabel(nextRoute));
       setRouteMeta(suggestions?.meta ?? null);
       setProgressNm(0);
+      setPhaseFocus(null);
       setDiversionCandidates([]);
       lastNearbyFetchRef.current = null;
       nearbyFetchInFlightRef.current = false;
@@ -2030,6 +2085,12 @@ export default function SyntheticVisionPage() {
 
   const speedMultiplier = speed === "8x" ? 8 : speed === "4x" ? 4 : speed === "2x" ? 2 : 1;
   const totalRouteNm = useMemo(() => computeRouteDistanceNm(routePoints), [routePoints]);
+  const jumpToPhase = useCallback((phase: DemoFlightPhase) => {
+    if (!totalRouteNm || !Number.isFinite(totalRouteNm) || totalRouteNm <= 0) return;
+    setProgressNm(totalRouteNm * DEMO_PHASE_TARGETS[phase]);
+    setPhaseFocus(phase);
+    setRunning(false);
+  }, [totalRouteNm]);
   const progressPct = totalRouteNm > 0 ? clamp(progressNm / totalRouteNm, 0, 1) : 0;
   const flightFrame = useMemo(
     () => interpolateRouteOwnship(routePoints, progressPct, DEMO_CRUISE_KTS, DEMO_ALTITUDE_FT),
@@ -2057,12 +2118,13 @@ export default function SyntheticVisionPage() {
     );
   }, [flightFrame?.ownship, nextWaypointPoint]);
   const flightPhase = useMemo<DemoFlightPhase>(() => {
+    if (phaseFocus) return phaseFocus;
     if (progressPct < 0.02) return "surface-departure";
     if (progressPct < 0.12) return "departure";
     if (progressPct > 0.985) return "surface-arrival";
     if (progressPct > 0.84 || (routeProgress?.remainingRouteNm ?? Infinity) < 28) return "arrival";
     return "enroute";
-  }, [progressPct, routeProgress?.remainingRouteNm]);
+  }, [phaseFocus, progressPct, routeProgress?.remainingRouteNm]);
   const departureAirport = routePoints[0] || null;
   const arrivalAirport = routePoints.length ? routePoints[routePoints.length - 1] : null;
   const departureRunway = useMemo(() => resolveDemoRunwaySelection(departureBriefing), [departureBriefing]);
@@ -2282,6 +2344,7 @@ export default function SyntheticVisionPage() {
     const airport = departureSurface ? departureAirport : arrivalAirport;
     const runway = departureSurface ? departureRunway : arrivalRunway;
     const frequencies = departureSurface ? departureFrequencies : arrivalFrequencies;
+    const runwayOverlay = departureSurface ? departureRunwayOverlay : arrivalRunwayOverlay;
     if (!airport || !runway) return null;
     const groundFrequency = pickAirportFrequency(frequencies, ["ground", "gnd", "taxi"]);
     const towerFrequency = pickAirportFrequency(frequencies, ["tower", "twr"]);
@@ -2354,6 +2417,49 @@ export default function SyntheticVisionPage() {
       : runwayOccupied
         ? `Runway occupancy decay in progress`
         : `Taxi-in flow ${Math.round(taxiProgress * 100)}% complete`;
+
+    const runwayLengthNm = Math.max(0.7, (runway.lengthFt ?? 7000) / 6076.12);
+    const surfaceNmPerUnit = runwayLengthNm / 64;
+    const toGeoPoint = (point: { x: number; y: number }) =>
+      localSurfacePointToGeo({
+        point: { x: point.x + 20, y: point.y + 1 },
+        airport,
+        runwayHeadingDeg: runway.headingDeg,
+        nmPerUnit: surfaceNmPerUnit,
+      });
+    const geoRoute = route.map(toGeoPoint);
+    const geoCompletedRoute = completedRoute.map(toGeoPoint);
+    const geoUpcomingRoute = upcomingRoute.map(toGeoPoint);
+    const geoOwnship = toGeoPoint(ownship);
+    const geoRunwayCenterline =
+      runwayOverlay?.centerline.map((point) => ({ lat: point.latitude, lon: point.longitude })) ??
+      [
+        offsetPointByBearing(
+          { lat: airport.latitude, lon: airport.longitude },
+          (runway.headingDeg + 180) % 360,
+          runwayLengthNm * 0.5,
+        ),
+        offsetPointByBearing(
+          { lat: airport.latitude, lon: airport.longitude },
+          runway.headingDeg,
+          runwayLengthNm * 0.5,
+        ),
+      ];
+    const geoRunwayBar =
+      runwayOverlay?.runwayBar.map((point) => ({ lat: point.latitude, lon: point.longitude })) ??
+      [
+        offsetPointByBearing(
+          { lat: airport.latitude, lon: airport.longitude },
+          runway.headingDeg - 90,
+          0.12,
+        ),
+        offsetPointByBearing(
+          { lat: airport.latitude, lon: airport.longitude },
+          runway.headingDeg + 90,
+          0.12,
+        ),
+      ];
+
     return {
       airportIcao: airport.icao,
       runwayId: runway.runwayId,
@@ -2387,11 +2493,28 @@ export default function SyntheticVisionPage() {
       completedRoute,
       upcomingRoute,
       secondaryRoute,
+      geoOwnship: { ...geoOwnship, headingDeg: ownship.headingDeg },
+      geoRoute,
+      geoCompletedRoute,
+      geoUpcomingRoute,
+      geoRunwayCenterline,
+      geoRunwayBar,
       activeTaxiway,
       upcomingTaxiways,
       progressCall,
     };
-  }, [arrivalAirport, arrivalFrequencies, arrivalRunway, departureAirport, departureFrequencies, departureRunway, flightPhase, progressPct]);
+  }, [
+    arrivalAirport,
+    arrivalFrequencies,
+    arrivalRunway,
+    arrivalRunwayOverlay,
+    departureAirport,
+    departureFrequencies,
+    departureRunway,
+    departureRunwayOverlay,
+    flightPhase,
+    progressPct,
+  ]);
   const departureAirportDiagram = useMemo(
     () => pickPreferredAirportDiagram(departurePlates),
     [departurePlates],
@@ -2966,6 +3089,10 @@ export default function SyntheticVisionPage() {
                     <span>Playback speed</span>
                     <span className="font-mono text-[#E8EDF4]">{speed}</span>
                   </div>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <span>Phase mode</span>
+                    <span className="font-mono text-[#E8EDF4]">{phaseFocus ? "Pinned" : "Auto"}</span>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -2982,12 +3109,44 @@ export default function SyntheticVisionPage() {
                     className="border-[#1E2D42] bg-[#111820] text-[#E8EDF4] hover:bg-[#1A2332]"
                     onClick={() => {
                       setProgressNm(0);
+                      setPhaseFocus(null);
                       setRunning(true);
                     }}
                   >
                     <RotateCcw className="mr-2 h-4 w-4" />
                     Restart
                   </Button>
+                </div>
+                <div className="rounded-2xl border border-[#1E2D42] bg-[#0A0E14] px-4 py-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7A9BB8]">Phase jump</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {([
+                      "surface-departure",
+                      "departure",
+                      "enroute",
+                      "arrival",
+                      "surface-arrival",
+                    ] as DemoFlightPhase[]).map((phase) => (
+                      <Button
+                        key={phase}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className={flightPhase === phase ? "border-[#C8922A] bg-[#1A2332] text-[#E8EDF4]" : "border-[#1E2D42] bg-[#111820] text-[#7A9BB8]"}
+                        onClick={() => jumpToPhase(phase)}
+                      >
+                        {phase === "surface-departure"
+                          ? "Taxi out"
+                          : phase === "surface-arrival"
+                            ? "Taxi in"
+                            : phase === "departure"
+                              ? "Departure"
+                              : phase === "arrival"
+                                ? "Arrival"
+                                : "Cruise"}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
                 <FlightPhaseChecklist
                   flightPhase={flightPhase}
